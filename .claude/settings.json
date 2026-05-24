@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '### knowledge/ 自動読み込み（セッション開始）' && echo '' && echo '## profile.md' && cat knowledge/profile.md && echo '' && echo '## mistakes.md' && cat knowledge/mistakes.md"
+            "command": "echo '### knowledge/ 自動読み込み（セッション開始）' && echo '' && echo '## profile.md' && cat /home/user/Workspace/knowledge/profile.md && echo '' && echo '## mistakes.md' && cat /home/user/Workspace/knowledge/mistakes.md"
           }
         ]
       }
