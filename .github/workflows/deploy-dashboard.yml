@@ -5,7 +5,9 @@ name: Deploy Dashboard to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - claude/workspace-knowledge-base-setup-ccVKP
     paths:
       - "projects/rakuda-sensei/dashboard/**"
       - ".github/workflows/deploy-dashboard.yml"
