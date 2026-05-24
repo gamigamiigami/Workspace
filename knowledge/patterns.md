@@ -1,6 +1,6 @@
 # 成功パターン集
 
-最終更新：2026-05-23
+最終更新：2026-05-24
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
@@ -23,6 +23,45 @@
 
 **タグ：** #quiz #animation #accessibility など
 ```
+
+---
+
+## 自動化・スクリプト
+
+### [汎用] settings.json での自動 commit & push フック
+
+**用途：** セッション終了時に自動で git 操作を実行し、push 忘れを防ぐ
+
+**コード（settings.json）：**
+```json
+{
+  "stop_hook": {
+    "type": "command",
+    "script": [
+      {
+        "condition": "file_changed",
+        "command": "git add -A && git commit -m 'chore: セッション終了 - 自動保存' && git push origin HEAD || true"
+      }
+    ]
+  }
+}
+```
+
+**使用例：**
+- 毎セッション終了時に変更を自動保存
+- push 忘れの救済
+- 複数ファイル変更時の一括 commit
+
+**ポイント：**
+- `|| true` で失敗時もエラーを無視（変更がない場合も考慮）
+- `file_changed` 条件で「変更がある場合のみ」実行可能（トークン節約）
+- commit メッセージを統一するとログが見やすい
+
+**注意：** Stop フックは「セッション終了」ではなく「Claudeの返答後」に毎回発動するため、AI処理（振り返りなど）をここに入れてはいけない。軽量な git コマンドのみに限定する
+
+**使用プロジェクト：** workspace-setup
+
+**タグ：** #automation #git #hook #claude-code #workflow
 
 ---
 
