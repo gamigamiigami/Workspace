@@ -27,6 +27,7 @@ Workspace/
 │   ├── failures.md            # failures スキルの詳細参照元
 │   ├── ui-components.md       # ui-components スキルの詳細参照元
 │   ├── semiretire.md          # semiretire スキルの詳細参照元
+│   ├── task-diary.md          # セッションごとの学びログ（Stop hookが自動記録）
 │   └── log.md                 # 作業ログ（作業終了時のみ書く）
 └── projects/
     └── {project-name}/        # kebab-case
@@ -63,6 +64,7 @@ Workspace/
 | knowledge/failures.md | ハマりの原因と解決策がわかった |
 | knowledge/ui-components.md | 再利用できるUIパーツができた |
 | knowledge/mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
+| knowledge/task-diary.md | Stop hookが毎セッション自動記録（手動書き込み不要） |
 | knowledge/log.md | 作業が完了・中断した |
 
 ### mistakes.md への追記条件（3つすべて満たす時のみ）
@@ -130,3 +132,4 @@ knowledge/ や skills/ を読み書きしたら必ず報告する：
 | 2026-05-23 | 初版作成 |
 | 2026-05-24 | 選択的読み込み・mistakes.md・hookによる自動読み込みに刷新 |
 | 2026-05-24 | skillsシステム導入・CLAUDE.mdをスリム化 |
+| 2026-05-24 | Task Diary導入・Stopフックで自動振り返り・パターン昇華ルール追加 |
