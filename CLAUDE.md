@@ -11,45 +11,45 @@
 Workspace/
 ├── CLAUDE.md
 ├── .claude/
-│   └── settings.json      # セッション開始hookの設定
+│   ├── settings.json          # セッション開始hookの設定
+│   └── skills/
+│       ├── coding-rules/      # HTML/CSS/JS規約・テンプレート
+│       ├── ui-components/     # 再利用UIパーツ
+│       ├── patterns/          # 成功パターン集
+│       ├── failures/          # 失敗・ハマりポイント集
+│       ├── semiretire/        # セミリタイア・副業コンテキスト
+│       └── defuddle/          # Web取得ツール（トークン節約）
 ├── knowledge/
-│   ├── profile.md         # 基本情報・デザイン方針（hook で自動読み込み）
-│   ├── mistakes.md        # AIのミス記録（hook で自動読み込み）
-│   ├── rules.md           # コーディング規約（コード作業時のみ読む）
-│   ├── patterns.md        # 成功パターン集（実装開始前のみ読む）
-│   ├── failures.md        # 失敗・ハマりポイント集（実装開始前のみ読む）
-│   ├── ui-components.md   # 再利用UIパーツ集（UI作業時のみ読む）
-│   ├── semiretire.md      # セミリタイア計画（副業ツール作成時のみ読む）
-│   └── log.md             # 作業ログ（作業終了時のみ書く）
+│   ├── profile.md             # 基本情報（hook で自動読み込み）
+│   ├── mistakes.md            # AIのミス記録（hook で自動読み込み）
+│   ├── rules.md               # coding-rules スキルの詳細参照元
+│   ├── patterns.md            # patterns スキルの詳細参照元
+│   ├── failures.md            # failures スキルの詳細参照元
+│   ├── ui-components.md       # ui-components スキルの詳細参照元
+│   ├── semiretire.md          # semiretire スキルの詳細参照元
+│   └── log.md                 # 作業ログ（作業終了時のみ書く）
 └── projects/
-    └── {project-name}/    # kebab-case
+    └── {project-name}/        # kebab-case
         ├── README.md
         └── *.html
 ```
 
 ---
 
-## 作業開始時のチェックリスト
+## 作業開始
 
-### 自動読み込み済み（再読み不要）
 `profile.md` と `mistakes.md` はセッション開始時に hook が自動で読み込む。
 
-### タスクに応じて追加で読む
+### タスクに応じてスキルを使う
 
-| タスクの種類 | 読むファイル |
+| タスクの種類 | 使うスキル |
 |---|---|
-| HTML・コード作成 | rules.md → patterns.md → failures.md の順 |
-| UI・デザイン作業 | ui-components.md |
-| 副業・販売ツール | semiretire.md |
-| 作業ログ確認 | log.md |
+| HTML・コード作成 | `coding-rules` → `patterns` → `failures` |
+| UIパーツが必要 | `ui-components` |
+| 副業・販売ツール | `semiretire` |
+| 外部URL参照 | `defuddle` |
 
-単発の質問・雑談はすべてスキップしてよい。
-
-### 新規プロジェクト開始時に確認すること
-- 対象学年・用途
-- PC / スマホ / iPad どれで使うか
-- 印刷の必要があるか
-- 既存プロジェクトとの共通部分があるか
+単発の質問・雑談はスキルをスキップしてよい。
 
 ---
 
@@ -59,14 +59,14 @@ Workspace/
 
 | 書くファイル | 書くタイミング |
 |---|---|
-| patterns.md | うまくいった実装パターンが出た |
-| failures.md | ハマりの原因と解決策がわかった |
-| ui-components.md | 再利用できるUIパーツができた |
-| mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
-| log.md | 作業が完了・中断した |
+| knowledge/patterns.md | うまくいった実装パターンが出た |
+| knowledge/failures.md | ハマりの原因と解決策がわかった |
+| knowledge/ui-components.md | 再利用できるUIパーツができた |
+| knowledge/mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
+| knowledge/log.md | 作業が完了・中断した |
 
 ### mistakes.md への追記条件（3つすべて満たす時のみ）
-1. ユーザーからの明示的な訂正（自分の気づきではない）
+1. ユーザーからの明示的な訂正
 2. 繰り返し起こり得るパターン
 3. 「する/しない」で具体的に書ける
 
@@ -75,20 +75,6 @@ YYYY-MM-DD: [一言で何を間違えたか]
 NG: 実際にやってしまったこと
 OK: 次回からの正しい対応
 場面: このルールが適用される状況
-```
-
----
-
-## 書き込みフォーマット
-
-YAMLなし。シンプルに書く。
-
-```
-## YYYY-MM-DD | {プロジェクト名}
-
-（本文）
-
-関連：[patterns.md](./patterns.md)
 ```
 
 ### ファイルサイズのルール
@@ -119,29 +105,18 @@ YAMLなし。シンプルに書く。
 
 ## エージェントとしての行動原則
 
-### 不明点の解消
-- 完成イメージに影響する不明点は **作業開始前に一度にまとめて** 質問する
-- 「たぶんこうだろう」で進めない
-
-### 不確かな情報の扱い
+- 不明点は作業開始前に一度にまとめて質問する
 - 確信が持てない情報は「確認が必要です」と明示する
 - 推測で実装した箇所は `<!-- 要確認: 理由 -->` とコメントする
-
-### フラットな関係性
-- 指示が非効率・非現実的と判断した場合は代替案を提示する
-- 問題点があれば肯定より先に指摘する
-
-### ユーザーへの配慮
-- ユーザーはプログラミング完全初心者
-- 専門用語には必ず補足説明を入れる
-- エラーが出た場合は原因と解決手順をわかりやすく説明する
+- 指示が非効率と判断した場合は代替案を先に提示する
+- ユーザーはプログラミング完全初心者。専門用語には必ず補足説明を入れる
 
 ---
 
 ## 報告ルール
 
-knowledge/ を読み書きしたら必ず報告する：
-- 「knowledge: rules.md を読みました」
+knowledge/ や skills/ を読み書きしたら必ず報告する：
+- 「skills: coding-rules を参照しました」
 - 「knowledge: failures.md に書き込みました」
 
 サイレントで読み書きしない。
@@ -154,3 +129,4 @@ knowledge/ を読み書きしたら必ず報告する：
 |------|----------|
 | 2026-05-23 | 初版作成 |
 | 2026-05-24 | 選択的読み込み・mistakes.md・hookによる自動読み込みに刷新 |
+| 2026-05-24 | skillsシステム導入・CLAUDE.mdをスリム化 |

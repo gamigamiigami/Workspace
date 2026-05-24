@@ -24,6 +24,31 @@
 
 ## ログ
 
+### [2026-05-24] workspace-setup（このワークスペース）
+
+**作業内容：**
+- `.claude/skills/` ディレクトリを作成し、skillsシステムを導入
+- `coding-rules` / `ui-components` / `patterns` / `failures` / `semiretire` / `defuddle` の6スキルを作成
+- `CLAUDE.md` をスリム化（知識参照をスキル経由に移行）
+
+**結果：** 成功
+
+**成果物：**
+- `.claude/skills/coding-rules/SKILL.md`
+- `.claude/skills/ui-components/SKILL.md`
+- `.claude/skills/patterns/SKILL.md`
+- `.claude/skills/failures/SKILL.md`
+- `.claude/skills/semiretire/SKILL.md`
+- `.claude/skills/defuddle/SKILL.md`
+- `CLAUDE.md`（更新）
+
+**気づき・メモ：**
+- CLAUDE.mdが157行→約110行にスリム化（毎セッションのトークン消費削減）
+- コーディング詳細はスキル経由でオンデマンド読み込みになった
+- defuddleは `npm install -g defuddle-cli` が必要（環境によってはインストール済み確認が必要）
+
+---
+
 ### [2026-05-23] workspace-setup（このワークスペース）
 
 **作業内容：**
