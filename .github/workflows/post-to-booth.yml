@@ -1,14 +1,14 @@
 name: List Product on BOOTH
 
-# BOOTH商品を自動出品する
+# BOOTH商品を自動出品する（自動ログイン版）
 # 使い方: GitHub Actions > "List Product on BOOTH" > Run workflow
-# 事前準備: setup/cookie-setup-guide.md を参照してBOOTH_SESSION_COOKIEを設定
+# 事前準備: GitHub Secret に PIXIV_EMAIL と PIXIV_PASSWORD を登録するだけ
 
 on:
   workflow_dispatch:
     inputs:
       product_path:
-        description: "商品HTMLファイルのパス (例: projects/rakuda-sensei/products/joshi-chu2-worksheet/worksheet.html)"
+        description: "商品HTMLファイルのパス"
         required: true
         type: string
       pdf_path:
@@ -17,17 +17,17 @@ on:
         type: string
         default: ""
       title:
-        description: "商品タイトル（HTMLコメントから自動取得できる場合は省略可）"
+        description: "商品タイトル（HTMLコメント優先・省略可）"
         required: false
         type: string
         default: ""
       price:
-        description: "価格（円）（HTMLコメントから自動取得できる場合は省略可）"
+        description: "価格（円）（HTMLコメント優先・省略可）"
         required: false
         type: number
         default: 0
       dry_run:
-        description: "Dry run（実際には出品しない・テスト用）"
+        description: "Dry run"
         required: false
         type: boolean
         default: false
@@ -57,7 +57,8 @@ jobs:
 
       - name: List product on BOOTH
         env:
-          BOOTH_SESSION_COOKIE: ${{ secrets.BOOTH_SESSION_COOKIE }}
+          PIXIV_EMAIL: ${{ secrets.PIXIV_EMAIL }}
+          PIXIV_PASSWORD: ${{ secrets.PIXIV_PASSWORD }}
         run: |
           ARGS="${{ inputs.product_path }}"
 

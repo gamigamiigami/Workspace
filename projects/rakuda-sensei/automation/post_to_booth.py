@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 """
-BOOTH 商品自動出品スクリプト (Playwright版・完全無料)
+BOOTH 商品自動出品スクリプト (Playwright自動ログイン版・完全無料)
 
 GitHub Actions で workflow_dispatch トリガーにより実行。
-BOOTH_SESSION_COOKIE (GitHub Secret) で認証し、教材PDFをBOOTHに出品する。
+PIXIV_EMAIL / PIXIV_PASSWORD (GitHub Secret) で毎回自動ログインしてから出品する。
+(BOOTHはpixivアカウントでログインするため)
 
-【初回セットアップ（1回のみ・人間作業5分）】
-setup/cookie-setup-guide.md を参照。
+【セットアップ（1回のみ・2分）】
+GitHub > Settings > Secrets and variables > Actions に以下を登録：
+  - PIXIV_EMAIL: pixivログインメールアドレス
+  - PIXIV_PASSWORD: pixivログインパスワード
 
 【無料化の仕組み】
 - Playwright: MIT License (追加課金なし)
 - GitHub Actions: 無料枠内
-- BOOTH: セッションクッキー認証 (APIキー不要)
+- BOOTH/pixiv: メール/パスワード認証 (APIキー不要)
 """
 
-import json
 import os
 import sys
 import re
@@ -22,16 +24,15 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 
 def parse_product_meta(html_path: Path) -> dict:
-    """HTMLファイルの埋め込みコメントから商品メタ情報を取得"""
     text = html_path.read_text(encoding="utf-8")
-    meta = {
-        "title": "",
-        "price": 0,
-        "description": "",
-        "tags": [],
-    }
+    meta = {"title": "", "price": 0, "description": "", "tags": []}
 
     title_m = re.search(r"<!--\s*BOOTH_TITLE:\s*(.+?)\s*-->", text)
     if title_m:
@@ -52,6 +53,90 @@ def parse_product_meta(html_path: Path) -> dict:
     return meta
 
 
+def login_to_booth(page, email: str, password: str) -> bool:
+    """BOOTH (pixiv経由) にメール/パスワードで自動ログイン"""
+    print("🔐 BOOTH (pixiv) にログイン中...")
+    # BOOTHのログインボタンはpixivの認証ページへリダイレクトする
+    page.goto("https://accounts.pixiv.net/login?return_to=https%3A%2F%2Fmanage.booth.pm%2F",
+              wait_until="networkidle", timeout=30000)
+    page.wait_for_timeout(2000)
+
+    # メールアドレス入力
+    email_selectors = [
+        'input[autocomplete="username"]',
+        'input[type="email"]',
+        'input[placeholder*="メール"]',
+        'input[placeholder*="ID"]',
+    ]
+    email_filled = False
+    for sel in email_selectors:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(timeout=5000, state="visible")
+            el.fill(email)
+            email_filled = True
+            break
+        except Exception:
+            continue
+
+    if not email_filled:
+        print("ERROR: pixivのメール入力欄が見つかりませんでした", file=sys.stderr)
+        return False
+
+    # パスワード入力
+    password_selectors = [
+        'input[autocomplete="current-password"]',
+        'input[type="password"]',
+    ]
+    password_filled = False
+    for sel in password_selectors:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(timeout=5000, state="visible")
+            el.fill(password)
+            password_filled = True
+            break
+        except Exception:
+            continue
+
+    if not password_filled:
+        print("ERROR: pixivのパスワード入力欄が見つかりませんでした", file=sys.stderr)
+        return False
+
+    page.wait_for_timeout(800)
+
+    # ログインボタン
+    for sel in ['button[type="submit"]', 'button:has-text("ログイン")', 'button:has-text("Login")']:
+        try:
+            page.locator(sel).first.click(timeout=5000)
+            break
+        except Exception:
+            continue
+
+    page.wait_for_timeout(5000)
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except Exception:
+        pass
+
+    current_url = page.url
+    if "accounts.pixiv.net" in current_url and "login" in current_url:
+        print("ERROR: BOOTH/pixivログイン失敗。メール/パスワードを確認してください", file=sys.stderr)
+        return False
+
+    # BOOTH管理画面に到達したか確認
+    if "manage.booth.pm" not in current_url:
+        # 手動でmanage.booth.pmへ
+        page.goto("https://manage.booth.pm/", wait_until="networkidle", timeout=20000)
+        page.wait_for_timeout(2000)
+        if "login" in page.url.lower() or "accounts.pixiv.net" in page.url:
+            print("ERROR: BOOTH管理画面に到達できませんでした", file=sys.stderr)
+            return False
+
+    print("✅ BOOTHログイン成功")
+    return True
+
+
 def post_to_booth(
     product_path: str,
     pdf_path: str,
@@ -60,19 +145,13 @@ def post_to_booth(
     description: str = "",
     dry_run: bool = False,
 ) -> int:
-    cookie_json = os.environ.get("BOOTH_SESSION_COOKIE")
-    if not cookie_json:
-        print("ERROR: BOOTH_SESSION_COOKIE が設定されていません", file=sys.stderr)
-        print("  → setup/cookie-setup-guide.md を参照してGitHub Secretに登録してください", file=sys.stderr)
+    email = os.environ.get("PIXIV_EMAIL")
+    password = os.environ.get("PIXIV_PASSWORD")
+    if not email or not password:
+        print("ERROR: PIXIV_EMAIL / PIXIV_PASSWORD が設定されていません", file=sys.stderr)
+        print("  → GitHub Settings > Secrets and variables > Actions で登録してください", file=sys.stderr)
         return 1
 
-    try:
-        cookies = json.loads(cookie_json)
-    except json.JSONDecodeError as e:
-        print(f"ERROR: BOOTH_SESSION_COOKIE のJSON解析に失敗: {e}", file=sys.stderr)
-        return 1
-
-    # 商品メタ情報取得
     product_file = ROOT / product_path
     meta = {"title": title, "price": price, "description": description, "tags": []}
 
@@ -87,14 +166,12 @@ def post_to_booth(
         meta["tags"] = file_meta["tags"]
 
     if not meta["title"]:
-        print("ERROR: 商品タイトルが未設定です (--title で指定するか HTMLコメントに BOOTH_TITLE を記載)", file=sys.stderr)
+        print("ERROR: 商品タイトルが未設定です", file=sys.stderr)
         return 1
-
     if not meta["price"]:
-        print("ERROR: 価格が未設定です (--price で指定するか HTMLコメントに BOOTH_PRICE を記載)", file=sys.stderr)
+        print("ERROR: 価格が未設定です", file=sys.stderr)
         return 1
 
-    # PDFファイル確認
     pdf_file = ROOT / pdf_path if pdf_path else None
     if pdf_file and not pdf_file.exists():
         print(f"ERROR: PDFファイルが見つかりません: {pdf_file}", file=sys.stderr)
@@ -105,32 +182,26 @@ def post_to_booth(
     print(f"📎 ファイル: {pdf_path or '（なし）'}")
 
     if dry_run:
-        print("✅ Dry run完了（実際には出品していません）")
+        print("✅ Dry run完了")
         return 0
 
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
         context = browser.new_context(
             viewport={"width": 1280, "height": 900},
-            user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            user_agent=USER_AGENT,
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
         )
-        context.add_cookies(cookies)
-
         page = context.new_page()
 
         try:
-            page.goto("https://manage.booth.pm/", wait_until="networkidle", timeout=30000)
-            page.wait_for_timeout(2000)
-
-            if "login" in page.url.lower() or "accounts.booth.pm" in page.url:
-                print("ERROR: セッションクッキーが無効または期限切れです", file=sys.stderr)
-                print("  → setup/cookie-setup-guide.md を参照してクッキーを再取得してください", file=sys.stderr)
+            if not login_to_booth(page, email, password):
+                page.screenshot(path="booth-login-failed.png")
                 browser.close()
                 return 1
-
-            print("✅ BOOTH管理ログイン確認OK")
 
             # 新規商品作成ページへ
             page.goto("https://manage.booth.pm/items/new", wait_until="networkidle", timeout=30000)
@@ -149,65 +220,54 @@ def post_to_booth(
                 browser.close()
                 return 1
 
-            # 説明文入力
+            # 説明文
             if meta["description"]:
                 try:
-                    desc_area = page.locator('textarea[name="item[description]"], textarea[placeholder*="説明"], [contenteditable="true"]').first
+                    desc_area = page.locator('textarea[name="item[description]"], textarea[placeholder*="説明"]').first
                     desc_area.fill(meta["description"], timeout=5000)
                     page.wait_for_timeout(300)
                     print("✅ 説明文入力完了")
                 except Exception as e:
-                    print(f"WARNING: 説明文入力に失敗: {e}", file=sys.stderr)
+                    print(f"WARNING: 説明文入力失敗: {e}", file=sys.stderr)
 
-            # 価格入力
+            # 価格
             try:
-                price_input = page.locator('input[name="item[price]"], input[type="number"], input[placeholder*="価格"]').first
+                price_input = page.locator('input[name="item[price]"], input[type="number"]').first
                 price_input.fill(str(meta["price"]), timeout=5000)
                 page.wait_for_timeout(300)
                 print(f"✅ 価格入力完了: ¥{meta['price']}")
             except Exception as e:
-                print(f"WARNING: 価格入力に失敗: {e}", file=sys.stderr)
+                print(f"WARNING: 価格入力失敗: {e}", file=sys.stderr)
 
-            # カテゴリー設定（ダウンロードコンテンツ）
+            # カテゴリ
             try:
-                category_sel = page.locator('select[name*="category"], [class*="category"] select').first
-                # BOOTHのカテゴリーIDはサイトにより異なるため、利用可能なオプションから選択
-                category_sel.select_option(label="ダウンロードコンテンツ", timeout=5000)
-                page.wait_for_timeout(300)
-                print("✅ カテゴリー設定完了")
-            except Exception:
-                pass  # カテゴリーが見つからない場合はスキップ
-
-            # PDFファイルアップロード
-            if pdf_file and pdf_file.exists():
-                try:
-                    file_input = page.locator('input[type="file"]').first
-                    file_input.set_input_files(str(pdf_file), timeout=10000)
-                    page.wait_for_timeout(3000)  # アップロード完了待ち
-                    print(f"✅ ファイルアップロード完了: {pdf_file.name}")
-                except Exception as e:
-                    print(f"WARNING: ファイルアップロードに失敗: {e}", file=sys.stderr)
-
-            # 在庫設定（デジタルコンテンツは無制限）
-            try:
-                unlimited_option = page.locator('input[value="unlimited"], label:has-text("無制限")').first
-                unlimited_option.click(timeout=5000)
+                cat_sel = page.locator('select[name*="category"]').first
+                cat_sel.select_option(label="ダウンロードコンテンツ", timeout=5000)
                 page.wait_for_timeout(300)
             except Exception:
                 pass
 
-            # 保存・出品
-            save_btns = [
-                'button[type="submit"]:has-text("出品する")',
-                'button[type="submit"]:has-text("保存")',
-                'input[type="submit"]',
-            ]
-            submitted = False
-            for sel in save_btns:
+            # ファイルアップロード
+            if pdf_file and pdf_file.exists():
                 try:
-                    btn = page.locator(sel).first
-                    btn.wait_for(timeout=5000)
-                    btn.click()
+                    page.locator('input[type="file"]').first.set_input_files(str(pdf_file), timeout=10000)
+                    page.wait_for_timeout(3000)
+                    print(f"✅ ファイルアップロード完了: {pdf_file.name}")
+                except Exception as e:
+                    print(f"WARNING: ファイルアップロード失敗: {e}", file=sys.stderr)
+
+            # 在庫: 無制限
+            try:
+                page.locator('input[value="unlimited"], label:has-text("無制限")').first.click(timeout=5000)
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+            # 出品
+            submitted = False
+            for sel in ['button[type="submit"]:has-text("出品")', 'button[type="submit"]:has-text("保存")', 'input[type="submit"]']:
+                try:
+                    page.locator(sel).first.click(timeout=5000)
                     page.wait_for_timeout(5000)
                     submitted = True
                     break
@@ -217,7 +277,7 @@ def post_to_booth(
             if submitted and "items" in page.url:
                 print(f"✅ BOOTH出品完了！URL: {page.url}")
             else:
-                print("WARNING: 出品確認ができませんでした。スクリーンショットを確認してください", file=sys.stderr)
+                print("WARNING: 出品確認ができませんでした", file=sys.stderr)
                 page.screenshot(path="booth-post-result.png")
 
         except Exception as e:
@@ -236,23 +296,13 @@ def post_to_booth(
 
 if __name__ == "__main__":
     import argparse
-
     parser = argparse.ArgumentParser(description="BOOTHに商品を自動出品する")
-    parser.add_argument("product_path", help="商品HTMLファイルのパス（Workspaceルートからの相対パス）")
-    parser.add_argument("--pdf", default="", help="添付PDFファイルのパス")
-    parser.add_argument("--title", default="", help="商品タイトル（HTMLコメントより優先）")
-    parser.add_argument("--price", type=int, default=0, help="価格（HTMLコメントより優先）")
-    parser.add_argument("--description", default="", help="説明文（HTMLコメントより優先）")
-    parser.add_argument("--dry-run", action="store_true", help="実際には出品しない（テスト用）")
+    parser.add_argument("product_path")
+    parser.add_argument("--pdf", default="")
+    parser.add_argument("--title", default="")
+    parser.add_argument("--price", type=int, default=0)
+    parser.add_argument("--description", default="")
+    parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    sys.exit(
-        post_to_booth(
-            args.product_path,
-            args.pdf,
-            args.title,
-            args.price,
-            args.description,
-            args.dry_run,
-        )
-    )
+    sys.exit(post_to_booth(args.product_path, args.pdf, args.title, args.price, args.description, args.dry_run))

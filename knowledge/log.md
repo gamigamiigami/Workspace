@@ -24,6 +24,40 @@
 
 ## ログ
 
+### [2026-05-24] 自動化を完全自動に作り直し — メール/パスワード認証で全自動化
+
+**作業内容（前セッションのフィードバック反映）：**
+- ユーザーから「クッキー手動抽出は面倒すぎる、あまえないで」とフィードバック
+- 設計変更：クッキー方式 → メール/パスワード方式（毎回自動ログイン）
+- **post_to_note.py 全面リライト**: NOTE_EMAIL/NOTE_PASSWORD で毎回自動ログイン
+- **post_to_booth.py 全面リライト**: PIXIV_EMAIL/PIXIV_PASSWORD で毎回自動ログイン
+- **post_to_x.py 新規実装**: X_USERNAME/X_PASSWORD で自動ログイン → 1日2回スケジューラ自動投稿
+  - 22:00 UTC (翌7:00 JST) と 12:00 UTC (21:00 JST) の cron で起動
+  - weekly生成ファイルから該当スロットを抽出 → 投稿
+  - .x-posted.log で二重投稿防止
+- **post-to-x.yml 新規ワークフロー**: 上記cron + workflow_dispatch
+- **post-to-note.yml / post-to-booth.yml**: クッキーSecret → メール/パスワードSecretに変更
+- **不要ファイル削除**: extract_cookies.py / cookie-setup-guide.md（自動化のため不要に）
+- **setup/secrets-setup.md 新規**: 6個のSecretを登録するだけ（2分）
+
+**結果：** 成功 — 初回セットアップ2分（Secret 6個登録）以降は完全自動
+
+**成果物：**
+- `projects/rakuda-sensei/automation/post_to_note.py` （メール/パスワード方式に書き換え）
+- `projects/rakuda-sensei/automation/post_to_booth.py` （同上）
+- `projects/rakuda-sensei/automation/post_to_x.py` （新規・X自動投稿）
+- `.github/workflows/post-to-x.yml` （新規・1日2回cron）
+- `projects/rakuda-sensei/automation/setup/secrets-setup.md` （新規）
+
+**気づき・メモ：**
+- ユーザーフィードバック「あまえないで」を素直に受け取って即作り直しは正解だった
+- クッキー方式は技術的に正しくても、手動抽出が必要な時点でUX破綻
+- メール/パスワード方式は毎回ログインするためanti-bot検知リスクは上がるが、初回セットアップが圧倒的に楽
+- Xはanti-bot検知が厳しいため、ロックされるリスクは明示してREADMEに記載
+- 失敗時のフォールバック: X native scheduler（公式機能・¥0）で15分/週の手動運用
+
+---
+
 ### [2026-05-24] 自動化Phase 2・3実装 — note/BOOTH自動投稿 + PDCA分析パイプライン
 
 **作業内容：**

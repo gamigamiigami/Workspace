@@ -1,8 +1,8 @@
 name: Post Article to note.com
 
-# 記事MDファイルをnote.comに自動投稿する
+# 記事MDファイルをnote.comに自動投稿する（自動ログイン版）
 # 使い方: GitHub Actions > "Post Article to note.com" > Run workflow
-# 事前準備: setup/cookie-setup-guide.md を参照してNOTE_SESSION_COOKIEを設定
+# 事前準備: GitHub Secret に NOTE_EMAIL と NOTE_PASSWORD を登録するだけ
 
 on:
   workflow_dispatch:
@@ -42,7 +42,8 @@ jobs:
 
       - name: Post to note.com
         env:
-          NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
+          NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
+          NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
         run: |
           DRY_RUN_FLAG=""
           if [ "${{ inputs.dry_run }}" = "true" ]; then
