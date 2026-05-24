@@ -1,7 +1,31 @@
-# らくだ先生 自動化パイプライン（完全無料・全自動）
+# らくだ先生 自動化パイプライン（完全無料・全自動・マルチプラットフォーム）
 
-副業運用の完全自動化インフラ。
+副業運用の完全自動化インフラ。**5プラットフォーム + ダッシュボードUI**を統合管理。
 **CLAUDE.mdの「💰 お金のルール」に従い、有料サービスへの新規課金は一切しない。**
+
+## 🎯 ダッシュボード（投稿管理UI）
+
+GitHub Pagesでホストされた統合ダッシュボードから全プラットフォームを操作：
+
+**URL**: `https://gamigamiigami.github.io/Workspace/`
+（初回プッシュ後、GitHub > Settings > Pages > Source: "GitHub Actions"を選択すると有効化）
+
+機能：
+- 📅 今週のSNS投稿（X/Threads/Instagram）を一覧表示
+- 🚀 ワンクリック投稿（複数プラットフォーム同時可）
+- 📝 note記事ドラフト一覧 → ワンクリック公開
+- 🛒 BOOTH商品一覧 → ワンクリック出品
+- 📊 直近の自動化実行ログ確認
+
+## 📡 対応プラットフォーム（全部¥0）
+
+| プラットフォーム | 認証方式 | 自動化方法 | リスク |
+|---|---|---|---|
+| X (Twitter) | メール/パスワード | Playwright | 🟡 アカウントロックリスクあり |
+| **Threads** | Meta公式API | Graph API | 🟢 公式認可・安全 |
+| **Instagram** | Meta公式API | Graph API | 🟢 公式認可・安全（画像必須） |
+| note | メール/パスワード | Playwright | 🟢 比較的安全 |
+| BOOTH | pixivメール/パスワード | Playwright | 🟢 比較的安全 |
 
 ---
 
@@ -49,21 +73,26 @@
 
 ---
 
-## セットアップ（初回のみ・2分）
+## セットアップ
 
-`setup/secrets-setup.md` を参照。
-GitHubのSettings > Secrets and variables > Actions に6個のSecretを登録するだけ。
+### 必須：基本Secret登録（2分）
+`setup/secrets-setup.md` 参照。GitHubのSettings > Secrets and variables > Actions に登録：
 
 | Secret名 | 値 |
 |---|---|
-| `NOTE_EMAIL` | noteログインメール |
-| `NOTE_PASSWORD` | noteログインパスワード |
-| `PIXIV_EMAIL` | pixivログインメール（BOOTH用） |
-| `PIXIV_PASSWORD` | pixivログインパスワード |
-| `X_USERNAME` | Xユーザー名 |
-| `X_PASSWORD` | Xパスワード |
+| `NOTE_EMAIL` / `NOTE_PASSWORD` | noteログイン情報 |
+| `PIXIV_EMAIL` / `PIXIV_PASSWORD` | pixiv（BOOTH用） |
+| `X_USERNAME` / `X_PASSWORD` | Xログイン情報 |
 
-**登録すれば、以降は全自動。クッキーの抽出や手動ログインは一切不要。**
+### オプション：Meta API（Threads/Instagram用・30分）
+`setup/meta-api-setup.md` 参照。**Threads/Instagramを使う場合のみ必要**。
+
+| Secret名 | 値 |
+|---|---|
+| `THREADS_ACCESS_TOKEN` | Threads長期トークン |
+| `THREADS_USER_ID` | Threads User ID |
+| `META_ACCESS_TOKEN` | Instagram長期トークン |
+| `IG_USER_ID` | Instagram Business User ID |
 
 ---
 

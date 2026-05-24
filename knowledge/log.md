@@ -24,6 +24,50 @@
 
 ## ログ
 
+### [2026-05-24] マルチプラットフォーム対応 + 統合ダッシュボード実装
+
+**作業内容：**
+- ユーザー要望「たくさんの投稿サイト対応＋一つのツールでまとめる」を実装
+- **Threads対応追加**（Meta Graph API・公式・無料）：
+  - `post_to_threads.py`: Threads Graph APIで投稿（アカウントロックリスクなし）
+  - `.github/workflows/post-to-threads.yml`: Xと同じスロット (7:00/21:00 JST)で自動投稿
+- **Instagram対応追加**（Meta Graph API・公式・無料・画像必須）：
+  - `post_to_instagram.py`: IG Graph APIで投稿（画像URL必須）
+  - `.github/workflows/post-to-instagram.yml`: 手動トリガー
+  - 投稿元: `sns/instagram/{slug}.md` (frontmatterで画像URLとキャプション)
+- **統合ダッシュボード新規実装**：
+  - `projects/rakuda-sensei/dashboard/index.html`: メインUI
+  - `projects/rakuda-sensei/dashboard/style.css`: ラクダ色テーマ・レスポンシブ対応
+  - `projects/rakuda-sensei/dashboard/app.js`: GitHub API経由でファイル読込・workflow_dispatch起動
+  - `.github/workflows/deploy-dashboard.yml`: GitHub Pages自動デプロイ
+- **Meta APIセットアップガイド**：
+  - `automation/setup/meta-api-setup.md`: Meta Developer App登録〜長期トークン取得まで完全ドキュメント
+- **requirements.txt**: `requests>=2.31.0` 追加（Graph API用）
+- **README全面更新**: 5プラットフォーム＋ダッシュボードの説明
+
+**結果：** 成功（X/Threads/Instagram/note/BOOTH の5サイトをダッシュボードで一括管理可能）
+
+**成果物：**
+- `projects/rakuda-sensei/automation/post_to_threads.py`
+- `projects/rakuda-sensei/automation/post_to_instagram.py`
+- `projects/rakuda-sensei/automation/setup/meta-api-setup.md`
+- `projects/rakuda-sensei/dashboard/index.html`
+- `projects/rakuda-sensei/dashboard/app.js`
+- `projects/rakuda-sensei/dashboard/style.css`
+- `.github/workflows/post-to-threads.yml`
+- `.github/workflows/post-to-instagram.yml`
+- `.github/workflows/deploy-dashboard.yml`
+
+**気づき・メモ：**
+- ダッシュボードはGitHub Pages（無料）+ GitHub REST API + LocalStorageでPAT保存の構成
+- ThreadsとInstagramはMeta公式APIなのでアカウントロックリスクなし（Xだけ脆弱）
+- Instagram投稿には公開画像URLが必須 → GitHub Pages経由で自分のリポジトリの画像を配信できる
+- Meta API初回設定は30〜45分の重い手順が必要だが、60日有効でトークン延長可能
+- ダッシュボードはスマホでも動く（レスポンシブ対応）→ 移動中でも投稿管理可能
+- 「自作ツール」の真の意味は「複数プラットフォームをまとめる管理UI」だった。ユーザー要件を最初に確認すべきだった
+
+---
+
 ### [2026-05-24] 自動化を完全自動に作り直し — メール/パスワード認証で全自動化
 
 **作業内容（前セッションのフィードバック反映）：**
