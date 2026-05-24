@@ -106,3 +106,4 @@ rules.md の規約に従う（kebab-case）：
 - ハンドオフ → [handoff.md](./handoff.md)
 - コーディング規約 → [rules.md](./rules.md)
 - 成功パターン → [patterns.md](./patterns.md)
+- **note記事を制作する時** → `.claude/skills/note-writer/SKILL.md`（売れる構成・タイトル・価格・サムネのテンプレ集）
