@@ -24,6 +24,34 @@
 
 ## ログ
 
+### [2026-05-24] STEP1 一気実行 — チャネル選定／X投稿／note記事／アイコン仕様
+
+**作業内容：**
+- 販売チャネルの選定確定（BOOTH／note／Kindle の3本、集客X一本化）
+- アイコン仕様書作成（AI生成プロンプト＋ココナラ発注書テンプレ）：`projects/rakuda-sensei/assets/icon-spec.md`
+- X固定ツイート＋初期投稿5本ドラフト：`projects/rakuda-sensei/sns/x-launch-posts.md`
+- note第1弾記事ドラフト（note-writer skill完全準拠・無料3,800字＋有料2,800字・¥300）：`projects/rakuda-sensei/articles/001-time-saving-routine.md`
+- knowledge/handoff.md に「開設順序の推奨」「銀行口座の方針」を追記
+- 重複していた `projects/rakuda-sensei/reports/sales-channels-comparison.md` を削除（knowledge/sales-channels.md と重複大、必要部分は handoff.md に吸収）
+- 自動投稿について調査：note/BOOTHは完全自動不可（API無し）、Xは予約投稿で半自動可、Kindleは別環境必要
+
+**結果：** 成功（4 deliverable + 2 既存ファイル更新）
+
+**成果物：**
+- `projects/rakuda-sensei/articles/001-time-saving-routine.md`
+- `projects/rakuda-sensei/sns/x-launch-posts.md`
+- `projects/rakuda-sensei/assets/icon-spec.md`
+- `projects/rakuda-sensei/README.md`
+- knowledge/handoff.md 更新
+
+**気づき・メモ：**
+- mdファイルの増殖はナレッジ参照を曖昧にするリスクあり。ユーザーフィードバックを受けて方針：「ログは残す、新規mdは精査」を採用
+- 戦略レポート系（実装判断ログ）はAddnessコメントで十分、新規md不要
+- 実deliverable（記事・SNS文・仕様書）は今後もファイル化必要
+- note第1弾には「要確認」コメント残置（個人エピソードの数値）。本人レビュー必要
+
+---
+
 ### [2026-05-24] ペルソナ確定 — 残業嫌いのらくだ先生
 
 **作業内容：**
