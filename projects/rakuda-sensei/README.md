@@ -21,9 +21,9 @@
 
 | 実験 | チャネル | 第1弾 | ステータス |
 |------|---------|--------|----------|
-| 実験A | BOOTH | 中学国語ワークシート | 未着手 |
-| 実験B | note | 教材作り時短ルーティン記事 | **第1弾ドラフト完成**（[articles/001-time-saving-routine.md](./articles/001-time-saving-routine.md)） |
-| 実験C | Kindle | 教員エッセイ or 学習本 | 未着手 |
+| 実験A | BOOTH | 中2助動詞ワークシート | **完成**（[products/joshi-chu2-worksheet/worksheet.html](./products/joshi-chu2-worksheet/worksheet.html)） |
+| 実験B | note | 教材作り時短ルーティン記事 | **ドラフト完成**（[articles/001-time-saving-routine.md](./articles/001-time-saving-routine.md)） |
+| 実験C | Kindle | 「ぼくが手放した10のこと」エッセイ | **設計＋まえがき＋第1章完成**（[kindle/001-teiji-taikin.md](./kindle/001-teiji-taikin.md)）／残10章は要執筆 |
 
 集客：X（[sns/x-launch-posts.md](./sns/x-launch-posts.md)）
 
@@ -36,10 +36,11 @@ rakuda-sensei/
 ├── README.md            # このファイル（プロジェクト索引）
 ├── assets/              # 画像・アイコン・素材
 ├── sns/                 # SNS投稿ドラフト
-└── articles/            # note記事ドラフト
+├── articles/            # note記事ドラフト
+├── products/            # BOOTH教材（HTML→PDF化して出品）
+└── kindle/              # Kindle原稿
 ```
 
-booth/ や kindle/ は実物が出てきたら追加する。
 戦略・KPIなどは knowledge/ 配下を参照（重複してmd化しない）。
 
 ---
