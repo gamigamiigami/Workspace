@@ -24,6 +24,50 @@
 
 ## ログ
 
+### [2026-05-24] 自動化Phase 2・3実装 — note/BOOTH自動投稿 + PDCA分析パイプライン
+
+**作業内容：**
+- **Phase 1の課金バグ修正**（前セッションの継続）：
+  - `generate_weekly_x.py` が Anthropic API（有料）を使っていた → GitHub Models（無料）に修正
+  - `requirements.txt`: `anthropic` → `openai` に変更
+  - ワークフローの `ANTHROPIC_API_KEY` → `GITHUB_TOKEN` に変更
+- **CLAUDE.md に 💰 お金のルール を追加**（有料化禁止を明示ルール化）
+- **Phase 2: note自動投稿スクリプト実装**：
+  - `post_to_note.py`：Playwrightでnote.comのエディタを操作し記事投稿（完全無料）
+  - `extract_cookies.py`：初回ログイン → セッションクッキーをJSON出力 → GitHub Secretに登録
+  - `.github/workflows/post-to-note.yml`：workflow_dispatchで手動トリガー
+  - `setup/cookie-setup-guide.md`：初回セットアップ手順書（10分）
+- **Phase 2: BOOTH自動出品スクリプト実装**：
+  - `post_to_booth.py`：同様のPlaywright方式
+  - `.github/workflows/post-to-booth.yml`：workflow_dispatchで手動トリガー
+- **Phase 3: 月次PDCA分析実装**：
+  - `monthly_pdca.py`：data/{YYYY-MM}/のCSVをGitHub Modelsで分析 → reports/{YYYY-MM}-pdca.md
+  - `.github/workflows/monthly-pdca.yml`：毎月1日09:00 UTC (JST18:00)に自動実行
+- `requirements.txt` に `playwright>=1.40.0` 追加
+- `projects/rakuda-sensei/data/` フォルダ作成（月次売上CSV置き場）
+- `automation/README.md` を全フェーズ対応版に全面更新
+
+**結果：** 成功（全3フェーズの完全無料パイプライン実装）
+
+**成果物：**
+- `projects/rakuda-sensei/automation/post_to_note.py`
+- `projects/rakuda-sensei/automation/post_to_booth.py`
+- `projects/rakuda-sensei/automation/monthly_pdca.py`
+- `projects/rakuda-sensei/automation/extract_cookies.py`
+- `projects/rakuda-sensei/automation/setup/cookie-setup-guide.md`
+- `.github/workflows/post-to-note.yml`
+- `.github/workflows/post-to-booth.yml`
+- `.github/workflows/monthly-pdca.yml`
+
+**気づき・メモ：**
+- note/BOOTH自動投稿の核心: 「APIがないならブラウザを動かせばいい」= Playwright
+- GitHub Actionsはヘッドレスブラウザが動く無料Linuxサーバー（パブリックリポは無制限）
+- セッションクッキーは30〜90日で切れるため、更新は人間作業（5分）
+- note.comのリッチテキストエディタはセレクタが変わりやすい。エラー時はスクリーンショットをActionsのArtifactsで確認
+- 有料サービス一切不使用：GitHub Actions + GitHub Models + Playwright = ¥0
+
+---
+
 ### [2026-05-24] 自動化Phase 1実装 — AI週次X投稿生成パイプライン
 
 **作業内容：**

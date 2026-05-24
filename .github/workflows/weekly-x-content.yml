@@ -1,6 +1,7 @@
 name: Weekly X Content Generation
 
-# 毎週金曜21:00 UTC = 土曜06:00 JST にAIが翌週のX投稿14本を生成
+# 毎週金曜21:00 UTC = 土曜06:00 JST にGitHub Models(無料)で翌週分のX投稿14本を生成
+# GITHUB_TOKEN を models:read 権限付きで使用 = 追加課金・追加設定なし
 # 手動トリガーも可能(動作確認用)
 
 on:
@@ -10,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  models: read  # GitHub Models 呼び出しに必要
 
 jobs:
   generate:
@@ -28,9 +30,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r projects/rakuda-sensei/automation/requirements.txt
 
-      - name: Generate weekly X posts
+      - name: Generate weekly X posts (via GitHub Models - 無料)
         env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python projects/rakuda-sensei/automation/generate_weekly_x.py
 
       - name: Commit generated content
