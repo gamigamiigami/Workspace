@@ -9,6 +9,17 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "セッション終了時の自動振り返りと保存を行ってください。作業ディレクトリは /home/user/Workspace です。\n\n## 手順\n\n### 1. 変更確認\n`git -C /home/user/Workspace status` と `git -C /home/user/Workspace diff HEAD` を実行し、今セッションで何をしたか把握する。\n\n### 2. knowledge/ への追記（価値があるものだけ・精査して書く）\n\n以下の条件に該当するものがあれば追記する：\n- 再現性のある成功パターン → `knowledge/patterns.md` の先頭に追記\n- 原因と解決策がセットのハマり → `knowledge/failures.md` の先頭に追記\n- 再利用できるUIパーツ → `knowledge/ui-components.md` に追記\n- 今日の作業サマリー → `knowledge/log.md` の先頭に追記（作業した日は必ず書く）\n\n書かない基準：些細な変更・すでに類似の記録がある・一度きりの偶発的な問題\n\n### 3. commit & push\n```\ngit -C /home/user/Workspace add -A\ngit -C /home/user/Workspace commit -m 'chore: セッション終了 - 自動保存'\ngit -C /home/user/Workspace push origin HEAD\n```\n\n変更がない場合も push だけ実行する（push 忘れの救済）。commit や push に失敗してもエラーを無視して終了する。",
+            "timeout": 180
+          }
+        ]
+      }
     ]
   },
   "permissions": {
