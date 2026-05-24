@@ -12,6 +12,18 @@
     ]
   },
   "permissions": {
-    "allow": ["Write"]
+    "allow": [
+      "Write",
+      "Edit",
+      "Bash",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "MultiEdit"
+    ],
+    "defaultMode": "auto"
   }
 }
