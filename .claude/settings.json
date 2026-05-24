@@ -1,0 +1,40 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '### knowledge/ 自動読み込み（セッション開始）' && echo '' && echo '## profile.md' && cat /home/user/Workspace/knowledge/profile.md && echo '' && echo '## mistakes.md' && cat /home/user/Workspace/knowledge/mistakes.md"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "agent",
+            "prompt": "セッション終了処理を行ってください。作業ディレクトリは /home/user/Workspace です。\n\n## 手順\n\n### 1. 変更確認\n`git -C /home/user/Workspace status --short` を実行して今セッションの変更を確認する。\n\n### 2. Task Diary への記録（毎セッション必ず書く）\n`knowledge/task-diary.md` の先頭（`---` の直後）に以下の形式で追記する：\n\n```\n### YYYY-MM-DD\n\n**うまくいったこと**\n- （有効だった手法・アプローチ。なければ「なし」）\n\n**うまくいかなかったこと**\n- （失敗・障壁・回避策が必要だったもの。なければ「なし」）\n\n**発見**\n- （新しくわかった仕様・制限・知見。なければ「なし」）\n\n**次回への申し送り**\n- （中断タスク・今後試したいこと。なければ「なし」）\n\n---\n```\n\n会話の内容から誠実に振り返って書くこと。「なし」が多くても構わない。\n\n### 3. パターン昇華チェック\n`knowledge/task-diary.md` を読み、同じ内容が5件以上記録されているパターンがあれば：\n- 技術的なパターン → `knowledge/patterns.md` または `knowledge/failures.md` に追記\n- 行動ルール・制約 → `CLAUDE.md` の該当箇所に追記\n\n### 4. projects/ の変更がある場合のみ\n`projects/` 配下に変更があれば、追加で以下も行う：\n- 再利用できるUIパーツ → `knowledge/ui-components.md` に追記\n- `knowledge/log.md` に作業サマリーを追記\n\n### 5. 保存\n```\ngit -C /home/user/Workspace add -A\ngit -C /home/user/Workspace commit -m 'chore: 自動保存'\ngit -C /home/user/Workspace push origin HEAD\n```\nエラーが出ても無視して終了する。",
+            "timeout": 180
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Write",
+      "Edit",
+      "Bash",
+      "Read",
+      "Glob",
+      "Grep",
+      "WebFetch",
+      "WebSearch",
+      "NotebookEdit",
+      "MultiEdit"
+    ],
+    "defaultMode": "auto"
+  }
+}
