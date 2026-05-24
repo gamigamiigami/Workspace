@@ -24,6 +24,38 @@
 
 ## ログ
 
+### [2026-05-24] 自動化Phase 1実装 — AI週次X投稿生成パイプライン
+
+**作業内容：**
+- 「自動化できない」前提を再考。3階層アーキテクチャを設計：
+  - Phase 1: AI生成パイプライン (GitHub Actions + Anthropic API)
+  - Phase 2: 投稿実行 (Buffer/X、Playwright on VPS/note BOOTH)
+  - Phase 3: データ収集・PDCA自動化 (スクレイピング + Claude API分析)
+- Phase 1を即実装：
+  - `.github/workflows/weekly-x-content.yml`：cron毎週金21:00UTC実行
+  - `projects/rakuda-sensei/automation/generate_weekly_x.py`：persona.md+sns-playbook.mdを入力にAIで翌週14本のXツイート生成
+  - `projects/rakuda-sensei/automation/requirements.txt`：anthropic SDK依存
+  - `projects/rakuda-sensei/automation/README.md`：3階層アーキ＋Phase 1セットアップ手順＋Phase 2/3設計
+- 月コスト: 約¥60 (Sonnet 4.6使用)
+- 週手間: 25分 (レビュー+Buffer転載)
+
+**結果：** 成功 (実装完成。動作確認は伊神さんがGitHub Secret登録後)
+
+**成果物：**
+- `.github/workflows/weekly-x-content.yml`
+- `projects/rakuda-sensei/automation/generate_weekly_x.py`
+- `projects/rakuda-sensei/automation/requirements.txt`
+- `projects/rakuda-sensei/automation/README.md`
+
+**気づき・メモ：**
+- 完全自動化のボトルネックはnote/BOOTH側にあり(API無し+認証維持コスト)
+- Bufferは無料でX運用を半自動化できる優れ選択肢
+- Phase 2のnote自動投稿は規約グレー。Playwright on VPSなら月¥500、Browser Use SaaSなら$30/月
+- Kindle出版は手動が現実(KDP個人API制限)。ただしePub生成は自動化可
+- 次：伊神さんがAPI keyとGitHub Secretをセット → Phase 1動作確認 → Phase 2着手判断
+
+---
+
 ### [2026-05-24] BOOTH第1弾＆Kindle設計 — 3本の実験コンテンツが揃った
 
 **作業内容：**
