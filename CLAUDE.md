@@ -48,6 +48,7 @@ Workspace/
 | HTML・コード作成 | `coding-rules` → `patterns` → `failures` |
 | UIパーツが必要 | `ui-components` |
 | 副業・販売ツール | `semiretire` |
+| note記事執筆・有料記事制作 | `note-writer` |
 | 外部URL参照 | `defuddle` |
 
 単発の質問・雑談はスキルをスキップしてよい。
@@ -102,6 +103,17 @@ OK: 次回からの正しい対応
 | HTMLファイル | kebab-case | `main.html` / `result-page.html` |
 | CSSクラス | kebab-case | `.answer-button` / `.score-display` |
 | JS変数 | camelCase | `currentScore` / `questionList` |
+
+---
+
+## 💰 お金のルール（絶対厳守）
+
+- **有料サービスへの新規課金は一切禁止。今も今後も。**
+- 実装提案時は「無料か有料か」を必ず明記する
+- 有料の代替がある場合は必ず無料手段を先に検討する
+- 有料化が避けられない機能は「実装しない」「半自動運用で代用」を選ぶ
+- 「¥500/月なら安い」と感じても、オーナーの明示OKなしに有料化しない
+- 現在使用中の無料サービス一覧: `projects/rakuda-sensei/automation/README.md` 参照
 
 ---
 

@@ -1,0 +1,328 @@
+#!/usr/bin/env python3
+"""
+note.com 記事自動投稿スクリプト (Playwright自動ログイン版・完全無料)
+
+GitHub Actions で workflow_dispatch トリガーにより実行。
+NOTE_EMAIL / NOTE_PASSWORD (GitHub Secret) で毎回自動ログインしてから投稿する。
+
+【セットアップ（1回のみ・2分）】
+GitHub > Settings > Secrets and variables > Actions に以下を登録：
+  - NOTE_EMAIL: noteログインメールアドレス
+  - NOTE_PASSWORD: noteログインパスワード
+※クッキー抽出など面倒な作業は不要。Secret登録だけ。
+
+【無料化の仕組み】
+- Playwright: MIT License (追加課金なし)
+- GitHub Actions: 無料枠内 (パブリックリポ無制限)
+- note.com: メール/パスワード認証 (APIキー不要)
+"""
+
+import json
+import os
+import sys
+import re
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+PAYWALL_MARKER = "────────── ペイウォール ──────────"
+
+USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
+
+def extract_meta_from_table(text: str) -> dict:
+    """記事MDの投稿メタデータ表からタイトル・価格・タグを抽出"""
+    meta = {"title": "", "price": 0, "tags": []}
+
+    title_m = re.search(r"\|\s*\*\*タイトル\*\*\s*\|\s*(.+?)\s*\|", text)
+    if title_m:
+        meta["title"] = title_m.group(1).strip()
+
+    price_m = re.search(r"\|\s*\*\*価格\*\*\s*\|\s*¥?(\d+)", text)
+    if price_m:
+        meta["price"] = int(price_m.group(1))
+
+    tags_m = re.search(r"推奨タグ.*?(`#[\w\s]+`)+", text)
+    if tags_m:
+        meta["tags"] = re.findall(r"`#([\w\s]+)`", tags_m.group(0))
+
+    return meta
+
+
+def extract_article_body(text: str) -> tuple[str, str]:
+    if PAYWALL_MARKER in text:
+        parts = text.split(PAYWALL_MARKER, 1)
+        return parts[0].strip(), parts[1].strip()
+    return text.strip(), ""
+
+
+def find_body_section(text: str) -> str:
+    sections = text.split("---")
+    body_candidates = []
+    for section in sections:
+        if re.search(r"^##\s+\S", section, re.MULTILINE):
+            if "投稿メタデータ" not in section and "サムネ" not in section:
+                body_candidates.append(section.strip())
+    return "\n\n---\n\n".join(body_candidates) if body_candidates else text
+
+
+def login_to_note(page, email: str, password: str) -> bool:
+    """note.comにメール/パスワードで自動ログイン"""
+    print("🔐 note.comにログイン中...")
+    page.goto("https://note.com/login", wait_until="networkidle", timeout=30000)
+    page.wait_for_timeout(2000)
+
+    # メールアドレス入力
+    email_selectors = [
+        'input[name="login"]',
+        'input[type="email"]',
+        'input[placeholder*="メール"]',
+        'input[autocomplete="username"]',
+    ]
+    email_filled = False
+    for sel in email_selectors:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(timeout=5000, state="visible")
+            el.fill(email)
+            email_filled = True
+            break
+        except Exception:
+            continue
+
+    if not email_filled:
+        print("ERROR: noteのメール入力欄が見つかりませんでした", file=sys.stderr)
+        return False
+
+    # パスワード入力
+    password_selectors = [
+        'input[name="password"]',
+        'input[type="password"]',
+        'input[autocomplete="current-password"]',
+    ]
+    password_filled = False
+    for sel in password_selectors:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(timeout=5000, state="visible")
+            el.fill(password)
+            password_filled = True
+            break
+        except Exception:
+            continue
+
+    if not password_filled:
+        print("ERROR: noteのパスワード入力欄が見つかりませんでした", file=sys.stderr)
+        return False
+
+    page.wait_for_timeout(800)
+
+    # ログインボタンクリック
+    login_btn_selectors = [
+        'button[type="submit"]:has-text("ログイン")',
+        'button:has-text("ログイン")',
+        'button[type="submit"]',
+    ]
+    for sel in login_btn_selectors:
+        try:
+            page.locator(sel).first.click(timeout=5000)
+            break
+        except Exception:
+            continue
+
+    # ログイン完了待ち
+    page.wait_for_timeout(5000)
+    try:
+        page.wait_for_load_state("networkidle", timeout=15000)
+    except Exception:
+        pass
+
+    # ログイン成否判定
+    current_url = page.url
+    if "/login" in current_url or "signin" in current_url.lower():
+        # エラーメッセージ取得試行
+        try:
+            err = page.locator('.error, .alert, [class*="error"]').first.inner_text(timeout=2000)
+            print(f"ERROR: noteログイン失敗。{err}", file=sys.stderr)
+        except Exception:
+            print("ERROR: noteログイン失敗。メール/パスワードを確認してください", file=sys.stderr)
+        return False
+
+    print("✅ noteログイン成功")
+    return True
+
+
+def post_to_note(article_path: str, dry_run: bool = False) -> int:
+    email = os.environ.get("NOTE_EMAIL")
+    password = os.environ.get("NOTE_PASSWORD")
+    if not email or not password:
+        print("ERROR: NOTE_EMAIL / NOTE_PASSWORD が設定されていません", file=sys.stderr)
+        print("  → GitHub Settings > Secrets and variables > Actions で登録してください", file=sys.stderr)
+        return 1
+
+    md_path = ROOT / article_path
+    if not md_path.exists():
+        print(f"ERROR: {md_path} がありません", file=sys.stderr)
+        return 1
+
+    text = md_path.read_text(encoding="utf-8")
+    meta = extract_meta_from_table(text)
+    body_section = find_body_section(text)
+    free_body, paid_body = extract_article_body(body_section)
+
+    if not meta["title"]:
+        m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
+        meta["title"] = m.group(1).strip() if m else md_path.stem
+
+    print(f"📄 投稿記事: {meta['title']}")
+    print(f"💴 価格: ¥{meta['price']}")
+    print(f"🏷 タグ: {', '.join(meta['tags'])}")
+    print(f"📝 無料部分: {len(free_body)}字 / 有料部分: {len(paid_body)}字")
+
+    if dry_run:
+        print("✅ Dry run完了（実際には投稿していません）")
+        return 0
+
+    from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+        context = browser.new_context(
+            viewport={"width": 1280, "height": 900},
+            user_agent=USER_AGENT,
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+        )
+        page = context.new_page()
+
+        try:
+            # 自動ログイン
+            if not login_to_note(page, email, password):
+                page.screenshot(path="note-login-failed.png")
+                browser.close()
+                return 1
+
+            # 新規記事作成
+            page.goto("https://note.com/notes/new", wait_until="networkidle", timeout=30000)
+            page.wait_for_timeout(3000)
+
+            # タイトル入力
+            title_sel = 'textarea[placeholder*="タイトル"], input[placeholder*="タイトル"], [data-placeholder*="タイトル"], textarea[aria-label*="タイトル"]'
+            try:
+                title_el = page.locator(title_sel).first
+                title_el.wait_for(timeout=10000)
+                title_el.click()
+                title_el.fill(meta["title"])
+                page.wait_for_timeout(500)
+                print("✅ タイトル入力完了")
+            except PWTimeout:
+                print("WARNING: タイトル入力欄が見つかりませんでした", file=sys.stderr)
+
+            # 本文エリアへフォーカス
+            page.keyboard.press("Tab")
+            page.wait_for_timeout(500)
+
+            # 無料部分を入力
+            page.keyboard.insert_text(free_body)
+            page.wait_for_timeout(500)
+
+            # ペイウォール挿入（有料部分がある場合）
+            if paid_body and meta["price"] > 0:
+                page.keyboard.press("Enter")
+                page.keyboard.press("Enter")
+                try:
+                    paywall_btn = page.locator('button[aria-label*="有料"], button:has-text("ここから先は")').first
+                    paywall_btn.click(timeout=5000)
+                    page.wait_for_timeout(500)
+                except Exception:
+                    try:
+                        plus_btn = page.locator('button[aria-label*="ブロック"], button.ProseMirror-menuitem').first
+                        plus_btn.click(timeout=5000)
+                        page.wait_for_timeout(300)
+                        paywall_item = page.locator('button:has-text("有料"), li:has-text("有料")').first
+                        paywall_item.click(timeout=5000)
+                        page.wait_for_timeout(500)
+                    except Exception:
+                        print("WARNING: ペイウォール挿入失敗。手動設定が必要かもしれません", file=sys.stderr)
+
+                page.keyboard.insert_text(paid_body)
+                page.wait_for_timeout(500)
+
+            print("✅ 本文入力完了")
+
+            # 公開設定パネルを開く
+            for sel in ['button:has-text("公開設定")', 'button:has-text("投稿する")', '[data-testid="publish-button"]']:
+                try:
+                    btn = page.locator(sel).first
+                    btn.wait_for(timeout=5000)
+                    btn.click()
+                    page.wait_for_timeout(2000)
+                    break
+                except Exception:
+                    continue
+
+            # 価格設定
+            if meta["price"] > 0:
+                try:
+                    page.locator('label:has-text("有料"), input[value="paid"]').first.click(timeout=5000)
+                    page.wait_for_timeout(500)
+                    page.locator('input[type="number"][name*="price"], input[placeholder*="価格"]').first.fill(str(meta["price"]), timeout=5000)
+                    page.wait_for_timeout(500)
+                    print(f"✅ 価格設定完了: ¥{meta['price']}")
+                except Exception as e:
+                    print(f"WARNING: 価格設定失敗: {e}", file=sys.stderr)
+
+            # タグ設定
+            for tag in meta["tags"][:5]:
+                tag = tag.strip().lstrip("#")
+                if not tag:
+                    continue
+                try:
+                    tag_input = page.locator('input[placeholder*="タグ"], [class*="tag"] input').first
+                    tag_input.fill(tag, timeout=5000)
+                    tag_input.press("Enter")
+                    page.wait_for_timeout(300)
+                except Exception:
+                    pass
+
+            # 最終投稿
+            published = False
+            for sel in ['button:has-text("投稿する")', 'button:has-text("公開する")', '[data-testid="final-publish"]']:
+                try:
+                    page.locator(sel).last.click(timeout=5000)
+                    page.wait_for_timeout(5000)
+                    published = True
+                    break
+                except Exception:
+                    continue
+
+            if published:
+                print(f"✅ 投稿完了！URL: {page.url}")
+            else:
+                print("WARNING: 投稿ボタンが見つかりませんでした", file=sys.stderr)
+                page.screenshot(path="note-post-failed.png")
+                browser.close()
+                return 1
+
+        except Exception as e:
+            print(f"ERROR: 予期しないエラー: {e}", file=sys.stderr)
+            try:
+                page.screenshot(path="note-post-error.png")
+            except Exception:
+                pass
+            browser.close()
+            return 1
+
+        browser.close()
+
+    return 0
+
+
+if __name__ == "__main__":
+    args = sys.argv[1:]
+    if not args:
+        print("Usage: post_to_note.py <article_path> [--dry-run]", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(post_to_note(args[0], "--dry-run" in args))
