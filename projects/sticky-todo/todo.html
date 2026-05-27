@@ -37,11 +37,11 @@
     /* ===== タイトルバー（Windows アプリ風）===== */
     .titlebar {
       background: var(--titlebar);
-      height: 52px;
+      height: 42px;
       display: flex;
       align-items: center;
-      padding: 0 16px;
-      gap: 10px;
+      padding: 0 12px;
+      gap: 8px;
       position: sticky;
       top: 0;
       z-index: 50;
@@ -50,32 +50,32 @@
     }
 
     .titlebar-icon svg {
-      width: 28px;
-      height: 28px;
+      width: 22px;
+      height: 22px;
       flex-shrink: 0;
     }
 
     .titlebar-title {
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 600;
       color: #fff;
       letter-spacing: 0.3px;
     }
 
     .titlebar-meta {
-      font-size: 12px;
+      font-size: 11px;
       color: rgba(255,255,255,0.45);
-      margin-left: 6px;
+      margin-left: 4px;
     }
 
     .titlebar-spacer { flex: 1; }
 
     .titlebar-stats {
       display: flex;
-      gap: 14px;
-      font-size: 12px;
+      gap: 12px;
+      font-size: 11px;
       color: rgba(255,255,255,0.55);
-      margin-right: 8px;
+      margin-right: 6px;
     }
     .titlebar-stats .stat-alert { color: #ff7043; }
     .titlebar-stats .stat-today { color: #ffa726; }
@@ -84,16 +84,16 @@
       background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: 20px;
-      padding: 7px 18px;
-      font-size: 13px;
+      border-radius: 16px;
+      padding: 5px 14px;
+      font-size: 12px;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       transition: var(--transition);
-      min-height: 34px;
+      min-height: 28px;
       white-space: nowrap;
     }
     .btn-new:hover { background: var(--accent-dark); transform: scale(1.03); }
@@ -101,25 +101,25 @@
     /* ===== ツールバー ===== */
     .toolbar {
       background: var(--toolbar);
-      padding: 7px 16px;
+      padding: 5px 12px;
       display: flex;
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       flex-wrap: wrap;
       border-bottom: 1px solid rgba(255,255,255,0.05);
     }
 
     .filter-pill {
-      padding: 4px 13px;
-      border-radius: 16px;
+      padding: 3px 11px;
+      border-radius: 14px;
       border: none;
-      font-size: 12px;
+      font-size: 11px;
       font-family: inherit;
       cursor: pointer;
       background: rgba(255,255,255,0.1);
       color: rgba(255,255,255,0.75);
       transition: var(--transition);
-      height: 28px;
+      height: 24px;
     }
     .filter-pill:hover  { background: rgba(255,255,255,0.18); color: #fff; }
     .filter-pill.active { background: var(--accent); color: #fff; font-weight: 600; }
@@ -127,15 +127,15 @@
     .toolbar-sep { width: 1px; height: 18px; background: rgba(255,255,255,0.15); margin: 0 3px; flex-shrink: 0; }
 
     .sort-sel {
-      padding: 4px 10px;
-      border-radius: 6px;
+      padding: 3px 8px;
+      border-radius: 5px;
       border: 1px solid rgba(255,255,255,0.15);
-      font-size: 12px;
+      font-size: 11px;
       font-family: inherit;
       background: rgba(255,255,255,0.08);
       color: rgba(255,255,255,0.8);
       cursor: pointer;
-      height: 28px;
+      height: 24px;
       outline: none;
     }
     .sort-sel option { background: #333; color: #fff; }
@@ -147,26 +147,26 @@
     }
     .search-icon {
       position: absolute;
-      left: 8px;
-      font-size: 12px;
+      left: 7px;
+      font-size: 11px;
       opacity: 0.5;
       pointer-events: none;
     }
     .search-box {
-      padding: 4px 10px 4px 26px;
-      border-radius: 16px;
+      padding: 3px 8px 3px 22px;
+      border-radius: 14px;
       border: 1px solid rgba(255,255,255,0.15);
-      font-size: 12px;
+      font-size: 11px;
       font-family: inherit;
       background: rgba(255,255,255,0.08);
       color: #fff;
       outline: none;
-      width: 140px;
-      height: 28px;
+      width: 120px;
+      height: 24px;
       transition: var(--transition);
     }
     .search-box::placeholder { color: rgba(255,255,255,0.4); }
-    .search-box:focus { background: rgba(255,255,255,0.14); width: 180px; }
+    .search-box:focus { background: rgba(255,255,255,0.14); width: 160px; }
 
     .done-toggle {
       display: flex;
@@ -174,7 +174,7 @@
       gap: 5px;
       margin-left: auto;
       color: rgba(255,255,255,0.65);
-      font-size: 12px;
+      font-size: 11px;
       cursor: pointer;
       white-space: nowrap;
     }
@@ -182,17 +182,17 @@
 
     /* ===== メインコンテンツ ===== */
     .main {
-      padding: 18px 20px 48px;
+      padding: 10px 14px 32px;
       max-width: 1440px;
       margin: 0 auto;
     }
 
     .task-count-bar {
-      font-size: 12px;
+      font-size: 11px;
       color: #888;
-      margin-bottom: 14px;
+      margin-bottom: 10px;
       display: flex;
-      gap: 16px;
+      gap: 14px;
       flex-wrap: wrap;
     }
     .task-count-bar b { color: #444; }
@@ -202,8 +202,8 @@
     /* ===== タスクグリッド ===== */
     .task-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-      gap: 14px;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
     }
 
     .empty-state {
@@ -259,7 +259,7 @@
 
     /* カテゴリ色帯（上部）*/
     .card-band {
-      height: 5px;
+      height: 4px;
       flex-shrink: 0;
     }
     .cat-授業準備  .card-band { background: #fdd835; }
@@ -269,16 +269,16 @@
     .cat-その他    .card-band { background: #bdbdbd; }
     .cat-custom    .card-band { background: #ffa726; }
 
-    .card-inner { padding: 12px 14px 10px; flex: 1; display: flex; flex-direction: column; }
+    .card-inner { padding: 8px 10px 7px; flex: 1; display: flex; flex-direction: column; }
 
     .card-top {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 5px;
     }
     .cat-label {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
       color: #666;
       letter-spacing: 0.4px;
@@ -287,11 +287,11 @@
     .pri-dot {
       display: flex;
       align-items: center;
-      gap: 4px;
-      font-size: 11px;
+      gap: 3px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 10px;
+      padding: 1px 6px;
+      border-radius: 8px;
     }
     .pri-dot::before { content: ''; width: 7px; height: 7px; border-radius: 50%; }
     .pri-high { background: #ffebee; color: #c62828; }
@@ -302,12 +302,12 @@
     .pri-low::before  { background: #66bb6a; }
 
     .task-title {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 700;
       line-height: 1.4;
       color: #1a1a1a;
       word-break: break-word;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
       flex: 1;
     }
     .task-card.completed .task-title {
@@ -318,25 +318,25 @@
     .submit-row {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      font-size: 12px;
+      gap: 3px;
+      font-size: 11px;
       color: #555;
       background: rgba(0,0,0,0.055);
-      padding: 3px 8px;
-      border-radius: 6px;
-      margin-bottom: 6px;
+      padding: 2px 6px;
+      border-radius: 5px;
+      margin-bottom: 4px;
       word-break: break-word;
       align-self: flex-start;
     }
 
     .task-memo {
-      font-size: 13px;
+      font-size: 12px;
       color: #666;
-      line-height: 1.55;
-      margin-bottom: 8px;
+      line-height: 1.5;
+      margin-bottom: 5px;
       word-break: break-word;
       display: -webkit-box;
-      -webkit-line-clamp: 3;
+      -webkit-line-clamp: 2;
       -webkit-box-orient: vertical;
       overflow: hidden;
     }
@@ -344,14 +344,14 @@
     .link-btn {
       display: inline-flex;
       align-items: center;
-      gap: 4px;
-      font-size: 12px;
+      gap: 3px;
+      font-size: 11px;
       color: #1565c0;
       text-decoration: none;
-      padding: 3px 8px;
-      border-radius: 6px;
+      padding: 2px 6px;
+      border-radius: 5px;
       background: rgba(21,101,192,0.08);
-      margin-bottom: 8px;
+      margin-bottom: 5px;
       transition: var(--transition);
       align-self: flex-start;
     }
@@ -360,16 +360,16 @@
     /* カードフッター */
     .card-footer {
       border-top: 1px solid rgba(0,0,0,0.07);
-      padding: 8px 14px;
+      padding: 5px 10px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-top: auto;
     }
-    .footer-dates { display: flex; flex-direction: column; gap: 2px; }
-    .created-txt { font-size: 11px; color: #bbb; }
+    .footer-dates { display: flex; flex-direction: column; gap: 1px; }
+    .created-txt { font-size: 10px; color: #bbb; }
     .due-txt {
-      font-size: 12px;
+      font-size: 11px;
       color: #888;
       display: flex;
       align-items: center;
@@ -378,15 +378,15 @@
     .due-txt.overdue { color: #c62828; font-weight: 700; }
     .due-txt.today   { color: #e65100; font-weight: 700; }
 
-    .card-btns { display: flex; gap: 2px; }
+    .card-btns { display: flex; gap: 1px; }
     .card-btn {
-      width: 32px;
-      height: 32px;
+      width: 26px;
+      height: 26px;
       border: none;
-      border-radius: 8px;
+      border-radius: 6px;
       background: transparent;
       cursor: pointer;
-      font-size: 15px;
+      font-size: 13px;
       display: flex;
       align-items: center;
       justify-content: center;
