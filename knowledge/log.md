@@ -24,6 +24,29 @@
 
 ## ログ
 
+### [2026-05-27 午後遅] sticky-todo — launch.bat トラブルシューティング継続
+
+**作業内容：**
+- launch.bat の "なにも開かないよ" エラーへの対応
+- README.md を完成版まで整備し、html 直接クリックなど代替手段を明記
+- ユーザーの環境で html ファイルの直接クリック起動が機能することを確認
+- Edge アプリケーション登録などの別案を提示
+
+**変更点：**
+- `projects/sticky-todo/README.md` を新規作成・完成
+- launch.bat 自体は見直し（パス指定の再検証は次セッション）
+
+**結果：** 部分完了（launch.bat は未解決、代替案で対応継続）
+
+**成果物：** `projects/sticky-todo/README.md`
+
+**気づき・メモ：**
+- html 直接クリック での起動は確実に動作
+- launch.bat は Windows 環境差による Edge パス探索の課題あり
+- 次セッションで batch ファイルの構文を再検証すべき
+
+---
+
 ### [2026-05-27 午後] sticky-todo — launch.bat の Edge インストール検出ロジック改善
 
 **作業内容：**
