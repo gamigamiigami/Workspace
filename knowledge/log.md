@@ -24,6 +24,38 @@
 
 ## ログ
 
+### [2026-05-27] sticky-todo — 付箋風Todoアプリ 初版完成
+
+**作業内容：**
+- Edge アプリモード（.bat起動）方式の採用決定・説明
+- `projects/sticky-todo/todo.html`：付箋風Todoアプリ本体を実装
+- `projects/sticky-todo/launch.bat`：Edgeアプリモード起動スクリプト
+- `projects/sticky-todo/README.md`：使い方・ショートカット・自動起動手順
+
+**実装機能：**
+- タスク追加・編集（タイトル・カテゴリ・優先度・締切日・メモ・リンクURL）
+- カテゴリ5種（授業準備/校務/副業/プライベート/その他）＋カスタム追加
+- 優先度3段階（高/中/低）・色分け
+- 期限切れ・今日締切の強調表示
+- フィルタ（カテゴリ別）・ソート（締切/優先度/作成）・テキスト検索
+- 完了トグル・削除確認モーダル
+- localStorage永続保存（try-catch対応）
+- Ctrl+N / Escショートカット
+
+**結果：** 成功
+
+**成果物：**
+- `projects/sticky-todo/todo.html`
+- `projects/sticky-todo/launch.bat`
+- `projects/sticky-todo/README.md`
+
+**気づき・メモ：**
+- Edge アプリモードは `--app=file:///` + パスのバックスラッシュをスラッシュに変換が必要
+- localStorage は try-catch 必須（failures.md 既知パターン通り）
+- カスタムカテゴリは `<option value="__add__">` で追加ダイアログを呼ぶパターンが使いやすい
+
+---
+
 ### [2026-05-24] マルチプラットフォーム対応 + 統合ダッシュボード実装
 
 **作業内容：**
