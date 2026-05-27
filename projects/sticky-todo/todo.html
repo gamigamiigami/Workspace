@@ -37,7 +37,7 @@
     /* ===== タイトルバー（Windows アプリ風）===== */
     .titlebar {
       background: var(--titlebar);
-      height: 42px;
+      height: 36px;
       display: flex;
       align-items: center;
       padding: 0 12px;
@@ -50,13 +50,13 @@
     }
 
     .titlebar-icon svg {
-      width: 22px;
-      height: 22px;
+      width: 18px;
+      height: 18px;
       flex-shrink: 0;
     }
 
     .titlebar-title {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: #fff;
       letter-spacing: 0.3px;
@@ -84,16 +84,16 @@
       background: var(--accent);
       color: #fff;
       border: none;
-      border-radius: 16px;
-      padding: 5px 14px;
-      font-size: 12px;
+      border-radius: 14px;
+      padding: 4px 12px;
+      font-size: 11px;
       font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       transition: var(--transition);
-      min-height: 28px;
+      min-height: 24px;
       white-space: nowrap;
     }
     .btn-new:hover { background: var(--accent-dark); transform: scale(1.03); }
@@ -101,7 +101,7 @@
     /* ===== ツールバー ===== */
     .toolbar {
       background: var(--toolbar);
-      padding: 5px 12px;
+      padding: 4px 10px;
       display: flex;
       align-items: center;
       gap: 5px;
@@ -182,7 +182,7 @@
 
     /* ===== メインコンテンツ ===== */
     .main {
-      padding: 10px 14px 32px;
+      padding: 8px 10px 24px;
       max-width: 1440px;
       margin: 0 auto;
     }
@@ -202,8 +202,8 @@
     /* ===== タスクグリッド ===== */
     .task-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-      gap: 10px;
+      grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+      gap: 8px;
     }
 
     .empty-state {
@@ -269,7 +269,7 @@
     .cat-その他    .card-band { background: #bdbdbd; }
     .cat-custom    .card-band { background: #ffa726; }
 
-    .card-inner { padding: 8px 10px 7px; flex: 1; display: flex; flex-direction: column; }
+    .card-inner { padding: 6px 9px 5px; flex: 1; display: flex; flex-direction: column; }
 
     .card-top {
       display: flex;
@@ -302,12 +302,12 @@
     .pri-low::before  { background: #66bb6a; }
 
     .task-title {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 700;
-      line-height: 1.4;
+      line-height: 1.35;
       color: #1a1a1a;
       word-break: break-word;
-      margin-bottom: 4px;
+      margin-bottom: 3px;
       flex: 1;
     }
     .task-card.completed .task-title {
@@ -360,7 +360,7 @@
     /* カードフッター */
     .card-footer {
       border-top: 1px solid rgba(0,0,0,0.07);
-      padding: 5px 10px;
+      padding: 4px 9px;
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -380,13 +380,13 @@
 
     .card-btns { display: flex; gap: 1px; }
     .card-btn {
-      width: 26px;
-      height: 26px;
+      width: 22px;
+      height: 22px;
       border: none;
-      border-radius: 6px;
+      border-radius: 5px;
       background: transparent;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -1087,8 +1087,30 @@
       });
     }
 
+    // ===== ウィンドウサイズ記憶 =====
+    function initWindowSize() {
+      try {
+        const saved = localStorage.getItem('todo-window-size');
+        if (saved) {
+          const {w, h} = JSON.parse(saved);
+          window.resizeTo(w, h);
+        }
+      } catch(e) {}
+      let t;
+      window.addEventListener('resize', () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          try {
+            localStorage.setItem('todo-window-size', JSON.stringify({
+              w: window.outerWidth, h: window.outerHeight
+            }));
+          } catch(e) {}
+        }, 400);
+      });
+    }
+
     // ===== 初期化 =====
-    function init() { loadData(); setHeaderDate(); bindEvents(); render(); }
+    function init() { loadData(); setHeaderDate(); bindEvents(); render(); initWindowSize(); }
     init();
   </script>
 </body>
