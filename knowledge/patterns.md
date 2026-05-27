@@ -66,6 +66,60 @@ icon/SVG幅            ：28px    → 22px  (-21%)
 
 ---
 
+### [汎用] ウィンドウサイズ保存機能 —localStorage使用
+
+**用途：** Electronアプリ・Edgeアプリモードなど、デスクトップアプリ風のWebアプリで、ユーザーがリサイズしたウィンドウサイズを記憶し、次回起動時に同じサイズで開く機能を実装したい場合
+
+**手法：**
+1. **ウィンドウサイズ取得**：`window.innerWidth`, `window.innerHeight` で現在のサイズを取得
+2. **localStorage に保存**：リサイズイベント（`window.onresize`）で毎回サイズをJSON化して保存
+3. **起動時に復元**：ページロード時（`window.onload` または `DOMContentLoaded`）に localStorage から取得してウィンドウサイズを設定
+4. **デバウンス処理**（オプション）：リサイズイベント発火時に毎回保存すると負荷が高いため、タイマーを使ってデバウンスすることを推奨
+
+**スケール例（sticky-todo プロジェクト）：**
+```javascript
+// ウィンドウサイズを localStorage に保存
+function saveWindowSize() {
+  const size = {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+  localStorage.setItem('windowSize', JSON.stringify(size));
+}
+
+// 起動時にサイズを復元
+window.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('windowSize');
+  if (saved) {
+    const { width, height } = JSON.parse(saved);
+    window.resizeTo(width, height);
+  }
+});
+
+// リサイズ時に保存（デバウンス付き）
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(saveWindowSize, 500);
+});
+```
+
+**ポイント：**
+- localStorage は同一オリジンで複数タブ・ウィンドウで同期される
+- `window.resizeTo()` で復元するが、一部ブラウザ・セキュリティ設定で制限される可能性がある
+- 初期表示時のサイズが大きすぎる場合、localStorage が存在しない初回起動時のデフォルトサイズを設定しておく
+- デバウンスすることで、リサイズイベントの過剰発火を防ぎパフォーマンスを向上
+
+**注意：**
+- localStorage に保存できる最大容量は約5〜10MB（ブラウザ依存）。複数プロジェクトで多くのデータを保存する場合は管理に注意
+- Edgeアプリモードでも localStorage は動作するが、アプリモード側で `--window-size` フラグでウィンドウサイズを指定している場合、復元サイズとの競合に注意
+
+**使用プロジェクト：** sticky-todo（Windows Fluent Design風UI）
+
+**タグ：** #javascript #localStorage #ux #desktop-app #responsiveness
+
+---
+
 ## Windows Batch・自動化
 
 ### [汎用] Windows launch.bat —日本語フォルダ名のURLエンコード対応
