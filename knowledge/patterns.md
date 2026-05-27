@@ -28,6 +28,39 @@
 
 ## Windows Batch・自動化
 
+### [汎用] Windows launch.bat —日本語フォルダ名のURLエンコード対応
+
+**用途：** HTMLファイルをEdgeブラウザでアプリモード起動する際、フォルダ名が日本語（「とどまる」など）の場合、URLエンコードが必須。PowerShellの `[uri]` クラスを使い、ファイルパスから正しいURLエンコード形式への変換を行う
+
+**コード（launch.bat）：**
+```batch
+@echo off
+rem ===== ToDo丸 起動スクリプト =====
+rem 日本語フォルダ名に対応するためPowerShellでURLエンコードして起動
+
+set "HTMLFILE=%~dp0todo.html"
+set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+
+powershell -NoProfile -Command "& { $u = ([uri]$env:HTMLFILE).AbsoluteUri; Start-Process $env:EDGE \"--app=$u --window-size=1280,820\" }"
+```
+
+**ポイント：**
+- PowerShellの `[uri]` クラスでファイルパスを自動URLエンコード（`とどまる` → `%E3%81%A8%E3%81%A9%E3%81%BE%E3%82%8B`）
+- `AbsoluteUri` プロパティで完全なURIスキーム（`file:///...`）を生成
+- 環境変数を `$env:変数名` で参照して、PowerShell側から Batch の変数を利用
+- 二重引用符をエスケープ（`\"...\"`) して PowerShell コマンド内に埋め込む
+
+**注意：**
+- Batch の `file://パス` は日本語文字を自動エンコードしない
+- PowerShell `-NoProfile` オプションで起動時間を短縮
+- Edge が見つからない場合の例外処理は別途実装推奨
+
+**使用プロジェクト：** sticky-todo
+
+**タグ：** #batch #windows #automation #browser #edge #japanese #urlencoding
+
+---
+
 ### [汎用] Windows launch.bat —複数パターンの Edge インストール先に対応
 
 **用途：** HTMLファイルをEdgeブラウザでアプリモード起動するlaunch.batスクリプト。Windows環境ごとにEdgeのインストール先が異なるため、複数パスを段階的に探索する

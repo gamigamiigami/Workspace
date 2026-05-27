@@ -24,6 +24,30 @@
 
 ## ログ
 
+### [2026-05-27 夜遅・深夜] sticky-todo — launch.bat 日本語フォルダ名URLエンコード対応
+
+**作業内容：**
+- ERR_FILE_NOT_FOUNDエラーの原因特定：フォルダ名「とどまる」の日本語文字がURLエンコードされていなかった
+- PowerShellの `[uri]` クラスを活用して自動URLエンコード実装
+- `launch.bat` を修正：Batch から PowerShell を呼び出し、ファイルパスを絶対URIに変換
+
+**変更点：**
+- `projects/sticky-todo/launch.bat` — PowerShell 統合版に刷新
+  - 従来：Batch で直接 `file://パス` を生成（日本語エンコードなし）
+  - 修正後：PowerShell で `[uri]` クラスを使用（自動エンコード）
+
+**結果：** 成功 / 本質的な問題を解決
+
+**成果物：** `projects/sticky-todo/launch.bat` (PowerShell統合版)
+
+**気づき・メモ：**
+- Batch スクリプトは日本語などの非ASCII文字を自動エンコードしない
+- PowerShell `[uri]` クラスで `AbsoluteUri` プロパティを使うと、URLエンコード済みのURIスキーム形式が得られる
+- 「とどまる」は `%E3%81%A8%E3%81%A9%E3%81%BE%E3%82%8B` へ自動変換される
+- Batch と PowerShell の連携時、二重引用符のエスケープに注意
+
+---
+
 ### [2026-05-27 夜遅] sticky-todo — UI最終調整（アプリ名・日付・提出先表示）
 
 **作業内容：**
