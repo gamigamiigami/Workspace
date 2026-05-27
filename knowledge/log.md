@@ -24,6 +24,38 @@
 
 ## ログ
 
+### [2026-05-27 セッション終盤] sticky-todo — UI完全リデザイン（Windows 11 付箋風）
+
+**作業内容：**
+- タイトルバー：黒背景＋SVGアイコン＋Windowsアプリ風フォント実装
+- カード背景：カテゴリ別カラー＋色帯（付箋風）実装
+- 優先度表示：色付きドット●バッジに変更
+- モーダル効果：背景ぼかし（backdrop-filter）＋スライドインアニメーション
+- 空の状態表示：ノートSVGイラスト追加
+- SVGアイコン作成：オレンジ角丸＋白い○＋チェックマーク（ブラウザタブ・タスクバー表示）
+- ツールバー：より締まったWindows風デザインに刷新
+- 全ファイル修正・commit・push完了
+
+**変更点：**
+- `projects/sticky-todo/index.html` — icon link, favicon 追加＋HTML構造微調整
+- `projects/sticky-todo/style.css` — CSS変数・グラデーション・アニメーション・backdrop-filter 等
+- `projects/sticky-todo/script.js` — SVGアイコン・ノートイラスト・スライドイン処理追加
+
+**結果：** 成功 / UI完全リデザイン完了、Windowsアプリ風外観を実現
+
+**成果物：** 
+- `projects/sticky-todo/index.html`
+- `projects/sticky-todo/style.css`
+- `projects/sticky-todo/script.js`
+
+**気づき・メモ：**
+- SVG埋め込みで `text-anchor="middle"` を使うと中央配置が確実
+- CSS変数でカテゴリカラー管理すると、新カテゴリ追加時の修正が最小限で済む
+- `backdrop-filter: blur()` と `animation` の組み合わせで、Windowsアプリ風モーダルが実現可能
+- 色帯＋SVGアイコン＋アニメーションの3要素がWindows付箋風デザインの鍵
+
+---
+
 ### [2026-05-27 夜遅・深夜] sticky-todo — launch.bat 日本語フォルダ名URLエンコード対応
 
 **作業内容：**
