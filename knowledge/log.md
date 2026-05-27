@@ -24,6 +24,56 @@
 
 ## ログ
 
+### [2026-05-27 夜遅] sticky-todo — UI最終調整（アプリ名・日付・提出先表示）
+
+**作業内容：**
+- アプリ名を「ToDo丸」に変更
+- カードに提出先「📤 教頭先生」を表示
+- カード下部に「作成 5/27」として作成日を常時表示
+- launch.bat の Edge パス最終確認・修正（正式パス指定）
+
+**変更点：**
+- `projects/sticky-todo/todo.html` — テキスト・UI更新
+- `projects/sticky-todo/launch.bat` — Edge 起動パス修正
+
+**結果：** 成功 / デプロイ準備完了
+
+**成果物：** 
+- `projects/sticky-todo/todo.html` (UI最終版)
+- `projects/sticky-todo/launch.bat` (Edge パス正式版)
+
+**気づき・メモ：**
+- ユーザーはEdgeをC:\Program Files (x86)\Microsoft\Edge\Application に導入済みであることを確認
+- 「とどまる」フォルダの2ファイルを上書きして launch.bat ダブルクリックで起動指示
+
+---
+
+### [2026-05-27 夜] sticky-todo — launch.bat Edge パス検索の改善
+
+**作業内容：**
+- launch.bat の Edge インストール先検索ロジックを改善
+- %LOCALAPPDATA% 経由でのユーザーローカルフォルダからの Edge 検索を優先
+- 複数のパス（%LOCALAPPDATA%, Program Files (x86), Program Files）を段階的に探索
+- 遅延展開（!VARIABLE!）の活用で変数スコープの問題を解決
+
+**変更点：**
+- `projects/sticky-todo/launch.bat` をさらに改善
+- 第1優先：`%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe`
+- 第2優先：`C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`
+- 第3優先：`C:\Program Files\Microsoft\Edge\Application\msedge.exe`
+- 各ステップで if exist と遅延展開を組み合わせた構文に
+
+**結果：** 成功
+
+**成果物：** `projects/sticky-todo/launch.bat` (再修正版)
+
+**気づき・メモ：**
+- Windows Edge インストール先は個人環境とシステム全体で異なる可能性がある
+- %LOCALAPPDATA% がユーザーごとのローカルインストール先となる場合がほとんど
+- Batch の遅延展開は複数条件分岐時に重要
+
+---
+
 ### [2026-05-27 午後遅] sticky-todo — launch.bat トラブルシューティング継続
 
 **作業内容：**

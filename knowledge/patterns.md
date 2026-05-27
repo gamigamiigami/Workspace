@@ -26,6 +26,68 @@
 
 ---
 
+## Windows Batch・自動化
+
+### [汎用] Windows launch.bat —複数パターンの Edge インストール先に対応
+
+**用途：** HTMLファイルをEdgeブラウザでアプリモード起動するlaunch.batスクリプト。Windows環境ごとにEdgeのインストール先が異なるため、複数パスを段階的に探索する
+
+**コード（launch.bat）：**
+```batch
+@echo off
+chcp 65001 > nul
+cd /d "%~dp0"
+
+REM Edge の複数のインストール先をチェック（優先順：ローカル→Program Files (x86)→Program Files）
+set EDGE_PATH=
+
+REM 1. ユーザーローカルフォルダから Edge を探索（%LOCALAPPDATA%）
+if exist "%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE_PATH=%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"
+  goto :RunEdge
+)
+
+REM 2. Program Files (x86) から探索
+if exist "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE_PATH=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+  goto :RunEdge
+)
+
+REM 3. Program Files から探索
+if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE_PATH=C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+  goto :RunEdge
+)
+
+REM Edge が見つからない場合
+echo "Edge が見つかりません。Edge をインストールしてください。"
+pause
+exit /b 1
+
+:RunEdge
+REM アプリモード起動（--app オプション）
+"!EDGE_PATH!" --app="file:///%~dp0todo.html" --profile-directory=Default
+exit /b 0
+```
+
+**ポイント：**
+- `%LOCALAPPDATA%` はユーザーごとのローカルインストール先として最優先
+- `setlocal enabledelayedexpansion` を使い、ループ内での変数展開が正確に動作するよう制御
+- `if exist` で各パスを段階的にチェック、最初に見つかったものを使用
+- アプリモード起動時は `--app` オプションを指定（ブラウザUI非表示）
+- `--profile-directory=Default` でユーザープロフィールを明示
+
+**注意：**
+- Windows環境によってEdgeインストール先が異なる可能性が高い
+- 遅延展開（`!VARIABLE!`）はループ・条件分岐内で重要
+- `chcp 65001` でUTF-8対応、`cd /d` で絶対パス移動
+
+**使用プロジェクト：** sticky-todo
+
+**タグ：** #batch #windows #automation #browser #edge
+
+---
+
 ## 自動化・スクリプト
 
 ### [汎用] settings.json での自動 commit & push フック

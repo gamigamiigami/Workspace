@@ -185,6 +185,165 @@ function showToast(message, duration = 2000) {
 
 ---
 
+## 付箋風 Todo カード（sticky-todo）
+
+```html
+<!-- カードコンテナ -->
+<div id="card-container" class="card-container"></div>
+
+<!-- 新規追加フォーム -->
+<div class="add-card-form">
+  <input id="new-task" type="text" placeholder="タスクを入力" />
+  <button onclick="addCard()">追加</button>
+</div>
+```
+
+```css
+.card-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  padding: 16px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  min-height: 400px;
+}
+
+.card {
+  background: linear-gradient(135deg, #fff9c4 0%, #ffeb3b 100%);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 12px;
+  word-wrap: break-word;
+}
+
+.card-submission {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+.card-date {
+  font-size: 12px;
+  color: #999;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.card-delete {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: none;
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.add-card-form {
+  display: flex;
+  gap: 8px;
+  padding: 16px;
+}
+
+.add-card-form input {
+  flex: 1;
+  padding: 10px 12px;
+  border: 2px solid #ddd;
+  border-radius: 6px;
+  font-size: 16px;
+}
+
+.add-card-form button {
+  padding: 10px 20px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: bold;
+}
+```
+
+```javascript
+let cards = JSON.parse(localStorage.getItem('todoCards')) || [];
+
+function addCard() {
+  const input = document.getElementById('new-task');
+  const task = input.value.trim();
+  if (!task) return;
+  
+  const card = {
+    id: Date.now(),
+    title: task,
+    submission: '📤 教頭先生',
+    createdDate: new Date().toLocaleDateString('ja-JP', { month: 'short', day: '2-digit' })
+  };
+  
+  cards.push(card);
+  saveCards();
+  renderCards();
+  input.value = '';
+}
+
+function deleteCard(id) {
+  cards = cards.filter(c => c.id !== id);
+  saveCards();
+  renderCards();
+}
+
+function renderCards() {
+  const container = document.getElementById('card-container');
+  container.innerHTML = cards.map(card => `
+    <div class="card">
+      <button class="card-delete" onclick="deleteCard(${card.id})">✕</button>
+      <div class="card-title">${card.title}</div>
+      <div class="card-submission">${card.submission}</div>
+      <div class="card-date">作成 ${card.createdDate}</div>
+    </div>
+  `).join('');
+}
+
+function saveCards() {
+  localStorage.setItem('todoCards', JSON.stringify(cards));
+}
+
+// 初期表示
+renderCards();
+```
+
+**ポイント：**
+- CSS `linear-gradient` で付箋風の視覚効果を実装
+- `grid-template-columns: repeat(auto-fill, minmax(280px, 1fr))` でレスポンシブグリッド
+- `localStorage` でクライアント側にデータ保存（サーバー不要）
+- アイコン（📤）と日付で視認性向上
+- ホバーエフェクトで操作感を改善
+
+**使用プロジェクト：** sticky-todo
+
+**タグ：** #ui #card #todo #localstorage #css-grid
+
+---
+
 ## 関連リンク
 
 - 成功パターン集 → [patterns.md](./patterns.md)
