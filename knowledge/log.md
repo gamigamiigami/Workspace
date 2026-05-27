@@ -24,6 +24,29 @@
 
 ## ログ
 
+### [2026-05-27 午後] sticky-todo — launch.bat の Edge インストール検出ロジック改善
+
+**作業内容：**
+- `projects/sticky-todo/launch.bat` を修正
+- 複数の Edge インストール場所を検索するロジック追加（`C:\Program Files (x86)` → `C:\Program Files`）
+- Edge が見つからない場合のエラーメッセージ＋代替案（直接クリック）を提示
+
+**変更点：**
+- 変数の遅延展開（`!EDGE!`）を使用してパスを柔軟に判定
+- `if exist` で順番にチェック
+- 見つからない場合は `pause` で手動介入を促す
+
+**結果：** 成功
+
+**成果物：** `projects/sticky-todo/launch.bat` (修正版)
+
+**気づき・メモ：**
+- Windows Batch で複数パスをチェックする場合、遅延展開が必須
+- Edge のインストール先は環境による（x86 vs x64）ため、両方チェックが安全
+- ユーザーへの代替案提示は重要（`todo.html` 直接クリック、Edge アプリインストール）
+
+---
+
 ### [2026-05-27] sticky-todo — 付箋風Todoアプリ 初版完成
 
 **作業内容：**
