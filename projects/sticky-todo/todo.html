@@ -11,22 +11,24 @@
 
     body {
       font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-      background: #202020;
+      background: #1e1e1e;
       min-height: 100vh;
       color: #fff;
       font-size: 13px;
       overflow: hidden;
+      display: flex;
+      flex-direction: column;
     }
 
-    /* ===== ヘッダー（Win付箋のタイトルバー風）===== */
+    /* ===== ヘッダー ===== */
     .header {
       height: 36px;
       background: #2b2b2b;
       display: flex;
       align-items: center;
       padding: 0 10px;
-      gap: 6px;
-      border-bottom: 1px solid #3a3a3a;
+      gap: 8px;
+      border-bottom: 1px solid #383838;
       user-select: none;
       flex-shrink: 0;
     }
@@ -40,10 +42,7 @@
       flex: 1;
     }
 
-    .header-date {
-      font-size: 11px;
-      color: #666;
-    }
+    .header-date { font-size: 11px; color: #666; }
 
     .btn-add {
       width: 26px;
@@ -62,9 +61,9 @@
     }
     .btn-add:hover { background: #f5a623; border-color: #f5a623; color: #fff; }
 
-    /* ===== 検索・フィルターバー ===== */
+    /* ===== フィルターバー（検索 + カテゴリのみ）===== */
     .filterbar {
-      height: 30px;
+      height: 32px;
       background: #252525;
       display: flex;
       align-items: center;
@@ -89,8 +88,8 @@
     }
     .search-box {
       width: 100%;
-      height: 20px;
-      padding: 0 6px 0 22px;
+      height: 22px;
+      padding: 0 6px 0 24px;
       background: #333;
       border: 1px solid #444;
       border-radius: 4px;
@@ -100,11 +99,11 @@
       outline: none;
     }
     .search-box::placeholder { color: #666; }
-    .search-box:focus { border-color: #666; background: #383838; }
+    .search-box:focus { border-color: #666; }
 
-    .cat-sel, .sort-sel {
-      height: 20px;
-      padding: 0 4px;
+    .cat-sel {
+      height: 22px;
+      padding: 0 6px;
       background: #333;
       border: 1px solid #444;
       border-radius: 4px;
@@ -114,18 +113,18 @@
       outline: none;
       cursor: pointer;
     }
-    .cat-sel option, .sort-sel option { background: #333; }
+    .cat-sel option { background: #333; }
 
     /* ===== ノートエリア ===== */
     .notes-area {
-      height: calc(100vh - 66px);
+      flex: 1;
       overflow-y: auto;
-      padding: 8px;
+      padding: 10px;
     }
 
     .notes-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
       gap: 8px;
     }
 
@@ -140,52 +139,48 @@
       gap: 8px;
       grid-column: 1 / -1;
     }
-    .empty svg { width: 32px; height: 32px; opacity: 0.4; }
-    .empty p { font-size: 12px; }
+    .empty svg { width: 30px; height: 30px; }
+    .empty p   { font-size: 12px; }
 
-    /* ===== ノートカード（Win付箋スタイル）===== */
+    /* ===== ノートカード（タイトル＋締切日のみ）===== */
     .note-card {
-      border-radius: 3px;
-      padding: 8px 8px 6px;
+      border-radius: 4px;
+      padding: 12px 14px 10px;
       cursor: pointer;
       position: relative;
       transition: box-shadow 0.12s, transform 0.12s;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.4), 0 0 0 1px rgba(0,0,0,0.08);
-      min-height: 80px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+      min-height: 72px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      color: #1a1a1a;
     }
     .note-card:hover {
-      box-shadow: 0 6px 18px rgba(0,0,0,0.5), 0 0 0 1px rgba(0,0,0,0.1);
+      box-shadow: 0 6px 18px rgba(0,0,0,0.5);
       transform: translateY(-1px);
     }
-    .note-card.completed { opacity: 0.45; }
-    .note-card.overdue { outline: 2px solid #ef5350; }
+    .note-card.completed { opacity: 0.4; }
+    .note-card.overdue   { outline: 2px solid #ef5350; }
 
-    /* カテゴリ別の色（Windows付箋パレット）*/
-    .nc-授業準備  { background: #FFF9C4; }
-    .nc-校務      { background: #CCE4FF; }
-    .nc-副業      { background: #E4D5FF; }
+    /* カテゴリ別の背景色 */
+    .nc-授業準備    { background: #FFF9C4; }
+    .nc-校務        { background: #CCE4FF; }
+    .nc-副業        { background: #E4D5FF; }
     .nc-プライベート { background: #C8ECC8; }
-    .nc-その他    { background: #EFEFEF; }
-    .nc-custom    { background: #FFD5D5; }
+    .nc-その他      { background: #EFEFEF; }
+    .nc-custom      { background: #FFD5D5; }
 
-    /* カード内テキストは暗い色 */
-    .note-card { color: #1a1a1a; }
-
-    /* 削除ボタン：ホバー時のみ表示 */
-    .del-btn {
+    /* 完了・削除ボタン（ホバー時のみ表示）*/
+    .ok-btn, .del-btn {
       position: absolute;
       top: 4px;
-      right: 4px;
       width: 18px;
       height: 18px;
       border: none;
       border-radius: 3px;
-      background: rgba(0,0,0,0.15);
-      color: #333;
-      font-size: 11px;
+      background: rgba(0,0,0,0.1);
+      color: #444;
+      font-size: 10px;
       cursor: pointer;
       display: flex;
       align-items: center;
@@ -194,99 +189,33 @@
       transition: opacity 0.12s, background 0.12s;
       line-height: 1;
     }
+    .del-btn { right: 4px; }
+    .ok-btn  { right: 24px; }
+    .note-card:hover .ok-btn,
     .note-card:hover .del-btn { opacity: 1; }
-    .del-btn:hover { background: rgba(239,83,80,0.25) !important; color: #c62828; }
+    .del-btn:hover { background: rgba(239,83,80,0.2) !important; color: #c62828; }
+    .ok-btn:hover  { background: rgba(102,187,106,0.25) !important; color: #2e7d32; }
 
-    /* 完了ボタン */
-    .ok-btn {
-      position: absolute;
-      top: 4px;
-      right: 26px;
-      width: 18px;
-      height: 18px;
-      border: none;
-      border-radius: 3px;
-      background: rgba(0,0,0,0.12);
-      color: #333;
-      font-size: 11px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.12s, background 0.12s;
-    }
-    .note-card:hover .ok-btn { opacity: 1; }
-    .ok-btn:hover { background: rgba(102,187,106,0.3) !important; color: #2e7d32; }
-
-    /* カード内コンテンツ */
+    /* カードテキスト */
     .note-title {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
-      line-height: 1.35;
+      line-height: 1.4;
       word-break: break-word;
-      padding-right: 12px;
+      padding-right: 14px;
+      flex: 1;
     }
     .note-card.completed .note-title { text-decoration: line-through; color: #888; }
-
-    .note-preview {
-      font-size: 11px;
-      color: #444;
-      line-height: 1.45;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-      word-break: break-word;
-    }
-
-    .note-submit {
-      font-size: 10px;
-      color: #555;
-      background: rgba(0,0,0,0.08);
-      display: inline-block;
-      padding: 1px 5px;
-      border-radius: 3px;
-      align-self: flex-start;
-    }
-
-    .note-footer {
-      margin-top: auto;
-      padding-top: 4px;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      border-top: 1px solid rgba(0,0,0,0.08);
-    }
-
-    .note-created {
-      font-size: 10px;
-      color: #888;
-      margin-right: auto;
-    }
-
-    .pri-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-    .pd-high { background: #ef5350; }
-    .pd-mid  { background: #ffa726; }
-    .pd-low  { background: #66bb6a; }
 
     .note-due {
       font-size: 10px;
       color: #666;
+      margin-top: 6px;
     }
     .note-due.overdue { color: #c62828; font-weight: 700; }
     .note-due.today   { color: #e65100; font-weight: 700; }
 
-    /* 完了済みカードのホバーで↩を表示 */
-    .note-card.completed .ok-btn { opacity: 0; }
-    .note-card.completed:hover .ok-btn { opacity: 1; }
-
-    /* ===== モーダルオーバーレイ ===== */
+    /* ===== モーダル ===== */
     .overlay {
       display: none;
       position: fixed;
@@ -299,21 +228,18 @@
     }
     .overlay.open { display: flex; }
 
-    /* ===== 追加・編集モーダル ===== */
     .modal {
       background: #2d2d2d;
       border-radius: 10px;
       width: 100%;
-      max-width: 380px;
-      max-height: 92vh;
-      overflow-y: auto;
+      max-width: 340px;
       box-shadow: 0 20px 60px rgba(0,0,0,0.6);
       color: #e8e8e8;
       animation: pop 0.15s ease;
     }
     @keyframes pop {
-      from { opacity:0; transform: scale(0.95); }
-      to   { opacity:1; transform: scale(1); }
+      from { opacity: 0; transform: scale(0.95); }
+      to   { opacity: 1; transform: scale(1); }
     }
 
     .modal-head {
@@ -323,6 +249,7 @@
       justify-content: space-between;
     }
     .modal-head h2 { font-size: 14px; font-weight: 700; }
+
     .modal-close {
       width: 24px; height: 24px;
       border: none; border-radius: 5px;
@@ -333,16 +260,16 @@
     }
     .modal-close:hover { background: #444; color: #fff; }
 
-    .modal-body { padding: 12px 16px 4px; }
+    .modal-body { padding: 14px 16px 4px; }
 
-    .field { margin-bottom: 10px; }
+    .field { margin-bottom: 12px; }
     .field label {
       display: block; font-size: 11px; font-weight: 600;
-      color: #999; margin-bottom: 3px; letter-spacing: 0.2px;
+      color: #999; margin-bottom: 4px; letter-spacing: 0.2px;
     }
-    .field input, .field textarea, .field select {
+    .field input, .field textarea {
       width: 100%;
-      padding: 7px 10px;
+      padding: 8px 10px;
       background: #383838;
       border: 1px solid #4a4a4a;
       border-radius: 6px;
@@ -351,25 +278,17 @@
       font-family: inherit;
       outline: none;
       transition: border-color 0.12s;
-      min-height: 34px;
     }
-    .field input:focus, .field textarea:focus, .field select:focus {
+    .field input:focus, .field textarea:focus {
       border-color: #f5a623; background: #3e3e3e;
     }
-    .field select option { background: #383838; }
-    .field textarea { resize: vertical; min-height: 60px; }
+    .field textarea { resize: vertical; min-height: 64px; }
     .field-req { color: #ef5350; margin-left: 2px; }
 
-    .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-    /* 色選択（カテゴリ）*/
-    .color-pick {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-    }
+    /* 色選択 */
+    .color-pick { display: flex; gap: 6px; }
     .color-opt {
-      width: 28px; height: 28px;
+      width: 26px; height: 26px;
       border-radius: 4px;
       border: 2px solid transparent;
       cursor: pointer;
@@ -382,29 +301,8 @@
       content: '✓';
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 13px; font-weight: 700; color: rgba(0,0,0,0.5);
+      font-size: 12px; font-weight: 700; color: rgba(0,0,0,0.45);
     }
-
-    /* 優先度ラジオ */
-    .pri-group { display: flex; gap: 6px; }
-    .pri-radio { flex: 1; position: relative; }
-    .pri-radio input { position: absolute; opacity: 0; width: 0; }
-    .pri-radio label {
-      display: flex; align-items: center; justify-content: center; gap: 4px;
-      padding: 6px; border-radius: 6px; border: 1.5px solid #4a4a4a;
-      cursor: pointer; font-size: 12px; font-weight: 600;
-      transition: all 0.12s; color: #aaa; min-height: 34px;
-    }
-    .pri-radio label::before {
-      content: ''; width: 7px; height: 7px; border-radius: 50%;
-    }
-    .pri-radio.r-high label::before { background: #ef5350; }
-    .pri-radio.r-mid  label::before { background: #ffa726; }
-    .pri-radio.r-low  label::before { background: #66bb6a; }
-    .pri-radio input:checked ~ label { color: #e0e0e0; }
-    .pri-radio.r-high input:checked ~ label { border-color: #ef5350; background: rgba(239,83,80,0.12); }
-    .pri-radio.r-mid  input:checked ~ label { border-color: #ffa726; background: rgba(255,167,38,0.12); }
-    .pri-radio.r-low  input:checked ~ label { border-color: #66bb6a; background: rgba(102,187,106,0.12); }
 
     .modal-foot {
       padding: 10px 16px 14px;
@@ -414,14 +312,14 @@
       background: #f5a623; color: #fff; border: none;
       border-radius: 6px; padding: 7px 18px;
       font-size: 13px; font-weight: 700; font-family: inherit;
-      cursor: pointer; transition: background 0.12s; min-height: 32px;
+      cursor: pointer; transition: background 0.12s;
     }
     .btn-save:hover { background: #e09310; }
     .btn-cancel {
       background: #444; color: #ccc; border: none;
       border-radius: 6px; padding: 7px 14px;
       font-size: 13px; font-family: inherit;
-      cursor: pointer; transition: background 0.12s; min-height: 32px;
+      cursor: pointer; transition: background 0.12s;
     }
     .btn-cancel:hover { background: #505050; }
 
@@ -431,29 +329,29 @@
       border-radius: 10px;
       padding: 20px 18px 16px;
       width: 100%;
-      max-width: 300px;
+      max-width: 280px;
       text-align: center;
       box-shadow: 0 20px 60px rgba(0,0,0,0.6);
       color: #e0e0e0;
       animation: pop 0.15s ease;
     }
-    .confirm h3 { font-size: 14px; margin-bottom: 6px; }
+    .confirm h3 { font-size: 14px; margin-bottom: 8px; }
     .confirm p  { font-size: 12px; color: #888; margin-bottom: 18px; line-height: 1.5; }
     .confirm-btns { display: flex; gap: 8px; justify-content: center; }
     .btn-danger {
       background: #ef5350; color: #fff; border: none;
       border-radius: 6px; padding: 7px 16px;
       font-size: 13px; font-family: inherit;
-      cursor: pointer; transition: background 0.12s; min-height: 32px;
+      cursor: pointer; transition: background 0.12s;
     }
     .btn-danger:hover { background: #c62828; }
 
     /* ===== トースト ===== */
     #toast {
-      position: fixed; bottom: 16px; left: 50%;
+      position: fixed; bottom: 14px; left: 50%;
       transform: translateX(-50%) translateY(6px);
       background: #333; color: #e0e0e0;
-      padding: 7px 16px; border-radius: 16px;
+      padding: 6px 14px; border-radius: 14px;
       font-size: 12px; opacity: 0;
       transition: opacity 0.2s, transform 0.2s;
       pointer-events: none; z-index: 999;
@@ -492,11 +390,6 @@
     <select class="cat-sel" id="cat-filter">
       <option value="all">すべて</option>
     </select>
-    <select class="sort-sel" id="sort-select">
-      <option value="due">締切順</option>
-      <option value="priority">優先度</option>
-      <option value="created">作成順</option>
-    </select>
   </div>
 
   <!-- ===== ノートエリア ===== -->
@@ -519,53 +412,18 @@
         </div>
 
         <div class="field">
-          <label>ノートの色（カテゴリ）</label>
+          <label>色</label>
           <div class="color-pick" id="color-pick"></div>
         </div>
 
-        <div class="field-row">
-          <div class="field">
-            <label>締切日</label>
-            <input type="date" id="f-due">
-          </div>
-          <div class="field">
-            <label>提出先</label>
-            <input type="text" id="f-submit-to" placeholder="教頭先生・職員室">
-          </div>
-        </div>
-
         <div class="field">
-          <label>優先度</label>
-          <div class="pri-group">
-            <div class="pri-radio r-high">
-              <input type="radio" name="priority" id="p-high" value="高">
-              <label for="p-high">高</label>
-            </div>
-            <div class="pri-radio r-mid">
-              <input type="radio" name="priority" id="p-mid" value="中" checked>
-              <label for="p-mid">中</label>
-            </div>
-            <div class="pri-radio r-low">
-              <input type="radio" name="priority" id="p-low" value="低">
-              <label for="p-low">低</label>
-            </div>
-          </div>
+          <label>締切日</label>
+          <input type="date" id="f-due">
         </div>
 
         <div class="field">
           <label>メモ</label>
           <textarea id="f-memo" placeholder="備考・詳細..."></textarea>
-        </div>
-
-        <div class="field-row">
-          <div class="field">
-            <label>リンクURL</label>
-            <input type="url" id="f-link" placeholder="https://...">
-          </div>
-          <div class="field">
-            <label>リンクラベル</label>
-            <input type="text" id="f-link-label" placeholder="参照資料">
-          </div>
         </div>
 
       </div>
@@ -589,49 +447,45 @@
   </div>
 
   <script>
-    // ===== ノート色定義（Win付箋パレット）=====
+    // ===== 定数 =====
     const NOTE_COLORS = [
-      { id: '授業準備', bg: '#FFF9C4', label: '黄（授業準備）' },
-      { id: '校務',     bg: '#CCE4FF', label: '青（校務）'     },
-      { id: '副業',     bg: '#E4D5FF', label: '紫（副業）'     },
-      { id: 'プライベート', bg: '#C8ECC8', label: '緑（プライベート）' },
-      { id: 'その他',   bg: '#EFEFEF', label: '灰（その他）'   },
-      { id: 'custom',   bg: '#FFD5D5', label: 'ピンク'         },
+      { id: '授業準備',    bg: '#FFF9C4' },
+      { id: '校務',        bg: '#CCE4FF' },
+      { id: '副業',        bg: '#E4D5FF' },
+      { id: 'プライベート', bg: '#C8ECC8' },
+      { id: 'その他',      bg: '#EFEFEF' },
+      { id: 'custom',      bg: '#FFD5D5' },
     ];
-    const PRI_ORDER   = { '高': 0, '中': 1, '低': 2 };
     const STORAGE_KEY = 'sensei-todo-v1';
 
     // ===== 状態 =====
-    let tasks         = [];
-    let categories    = NOTE_COLORS.map(c => c.id);
-    let activeFilter  = 'all';
-    let sortBy        = 'due';
-    let searchText    = '';
-    let editingId     = null;
-    let deletingId    = null;
+    let tasks        = [];
+    let activeFilter = 'all';
+    let searchText   = '';
+    let editingId    = null;
+    let deletingId   = null;
 
     // ===== 保存・読み込み =====
     function saveData() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, categories })); }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks })); }
       catch(e) {}
     }
     function loadData() {
       try {
         const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-        if (!d) return;
-        if (d.tasks) tasks = d.tasks;
+        if (d && d.tasks) tasks = d.tasks;
       } catch(e) {}
     }
 
-    // ===== 日付 =====
+    // ===== 日付ユーティリティ =====
     function todayStr() {
       const d = new Date();
       return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
     }
-    function pad(n) { return String(n).padStart(2,'0'); }
+    function pad(n) { return String(n).padStart(2, '0'); }
     function fmtDate(s) {
       if (!s) return '';
-      const [,m,d] = s.split('-');
+      const [, m, d] = s.split('-');
       return `${parseInt(m)}/${parseInt(d)}`;
     }
     function dateStatus(s) {
@@ -639,20 +493,9 @@
       const t = todayStr();
       return s < t ? 'overdue' : s === t ? 'today' : '';
     }
-    function fmtCreated(ts) {
-      const d = new Date(ts);
-      return `${d.getMonth()+1}/${d.getDate()}`;
-    }
 
-    // ===== HTML エスケープ =====
-    function esc(s) {
-      return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
-        .replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-    }
-
-    // ===== ノート色を取得 =====
     function getColor(catId) {
-      return NOTE_COLORS.find(c => c.id === catId) || NOTE_COLORS[NOTE_COLORS.length-1];
+      return NOTE_COLORS.find(c => c.id === catId) || NOTE_COLORS[NOTE_COLORS.length - 1];
     }
 
     // ===== フィルタ & ソート =====
@@ -662,41 +505,32 @@
         if (searchText) {
           const q = searchText.toLowerCase();
           if (!t.title.toLowerCase().includes(q) &&
-              !(t.memo||'').toLowerCase().includes(q) &&
-              !(t.submitTo||'').toLowerCase().includes(q)) return false;
+              !(t.memo || '').toLowerCase().includes(q)) return false;
         }
         return true;
       });
-      list.sort((a,b) => {
-        if (sortBy === 'due') {
-          const da = a.dueDate||'9999', db = b.dueDate||'9999';
-          if (da!==db) return da<db?-1:1;
-          return PRI_ORDER[a.priority]-PRI_ORDER[b.priority];
-        }
-        if (sortBy === 'priority') {
-          const d = PRI_ORDER[a.priority]-PRI_ORDER[b.priority];
-          return d!==0 ? d : (a.dueDate||'9999')<(b.dueDate||'9999')?-1:1;
-        }
-        return b.createdAt-a.createdAt;
+      list.sort((a, b) => {
+        const da = a.dueDate || '9999', db = b.dueDate || '9999';
+        return da !== db ? (da < db ? -1 : 1) : b.createdAt - a.createdAt;
       });
-      return [...list.filter(t=>!t.completed), ...list.filter(t=>t.completed)];
+      return [...list.filter(t => !t.completed), ...list.filter(t => t.completed)];
     }
 
-    // ===== カテゴリフィルタを更新 =====
+    // ===== カテゴリフィルタ描画 =====
     function renderCatFilter() {
       const sel = document.getElementById('cat-filter');
       const cur = sel.value;
       sel.innerHTML = '<option value="all">すべて</option>';
       NOTE_COLORS.forEach(c => {
         const o = document.createElement('option');
-        o.value = c.id;
-        o.textContent = c.label.replace(/（.*）/, '').replace('（', '').replace('）','');
+        o.value       = c.id;
+        o.textContent = c.id;
         sel.appendChild(o);
       });
       sel.value = cur || 'all';
     }
 
-    // ===== ノートグリッドを描画 =====
+    // ===== ノートグリッド描画 =====
     function renderNotes() {
       const grid = document.getElementById('notes-grid');
       const vis  = getVisible();
@@ -709,43 +543,48 @@
             <line x1="9" y1="17" x2="23" y2="17" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
             <line x1="9" y1="21" x2="17" y2="21" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <p>${tasks.length===0?'「＋」でノートを追加しよう':'一致するノートがありません'}</p>
+          <p>${tasks.length === 0 ? '「＋」でノートを追加しよう' : '一致するノートがありません'}</p>
         </div>`;
         return;
       }
 
       grid.innerHTML = '';
       vis.forEach(task => {
-        const color  = getColor(task.category);
-        const st     = dateStatus(task.dueDate);
-        const priCls = task.priority==='高'?'pd-high':task.priority==='中'?'pd-mid':'pd-low';
+        const color = getColor(task.category);
+        const st    = dateStatus(task.dueDate);
 
         const card = document.createElement('div');
-        card.className = `note-card nc-${color.id}${color.id==='custom'?' nc-custom':''}`
-          + (task.completed?' completed':'')
-          + (st==='overdue'&&!task.completed?' overdue':'');
+        card.className = `note-card nc-${color.id}`
+          + (task.completed ? ' completed' : '')
+          + (st === 'overdue' && !task.completed ? ' overdue' : '');
         card.style.background = color.bg;
 
-        const dueHtml = task.dueDate ? `<span class="note-due ${st}">${st==='overdue'?'⚠ ':st==='today'?'📅 ':''}${fmtDate(task.dueDate)}</span>` : '';
-        const submitHtml = task.submitTo ? `<span class="note-submit">📤 ${esc(task.submitTo)}</span>` : '';
-        const previewHtml = task.memo ? `<div class="note-preview">${esc(task.memo)}</div>` : '';
+        const okBtn = document.createElement('button');
+        okBtn.className   = 'ok-btn';
+        okBtn.title       = task.completed ? '未完了に戻す' : '完了にする';
+        okBtn.textContent = task.completed ? '↩' : '✓';
+        okBtn.addEventListener('click', e => { e.stopPropagation(); toggleComplete(task.id); });
 
-        card.innerHTML = `
-          <button class="ok-btn" title="${task.completed?'未完了に戻す':'完了にする'}"
-            onclick="event.stopPropagation();toggleComplete('${task.id}')">
-            ${task.completed?'↩':'✓'}
-          </button>
-          <button class="del-btn" title="削除"
-            onclick="event.stopPropagation();confirmDelete('${task.id}','${esc(task.title)}')">
-            ✕
-          </button>
-          <div class="note-title">${esc(task.title)}</div>
-          ${submitHtml}${previewHtml}
-          <div class="note-footer">
-            <span class="note-created">${fmtCreated(task.createdAt)}</span>
-            <span class="pri-dot ${priCls}"></span>
-            ${dueHtml}
-          </div>`;
+        const delBtn = document.createElement('button');
+        delBtn.className   = 'del-btn';
+        delBtn.title       = '削除';
+        delBtn.textContent = '✕';
+        delBtn.addEventListener('click', e => { e.stopPropagation(); confirmDelete(task.id, task.title); });
+
+        const titleEl = document.createElement('div');
+        titleEl.className   = 'note-title';
+        titleEl.textContent = task.title;
+
+        card.appendChild(okBtn);
+        card.appendChild(delBtn);
+        card.appendChild(titleEl);
+
+        if (task.dueDate) {
+          const dueEl = document.createElement('div');
+          dueEl.className   = `note-due ${st}`;
+          dueEl.textContent = (st === 'overdue' ? '⚠ ' : st === 'today' ? '今日 ' : '') + fmtDate(task.dueDate);
+          card.appendChild(dueEl);
+        }
 
         card.addEventListener('click', () => openEdit(task.id));
         grid.appendChild(card);
@@ -754,19 +593,19 @@
 
     function render() { renderCatFilter(); renderNotes(); }
 
-    // ===== 色選択UIを描画 =====
+    // ===== 色選択UI =====
     function renderColorPick(selectedId) {
       const wrap = document.getElementById('color-pick');
       wrap.innerHTML = '';
       NOTE_COLORS.forEach(c => {
         const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'color-opt' + (c.id===selectedId?' sel':'');
+        btn.type             = 'button';
+        btn.className        = 'color-opt' + (c.id === selectedId ? ' sel' : '');
         btn.style.background = c.bg;
-        btn.title = c.label;
-        btn.dataset.cid = c.id;
+        btn.title            = c.id;
+        btn.dataset.cid      = c.id;
         btn.addEventListener('click', () => {
-          wrap.querySelectorAll('.color-opt').forEach(b=>b.classList.remove('sel'));
+          wrap.querySelectorAll('.color-opt').forEach(b => b.classList.remove('sel'));
           btn.classList.add('sel');
         });
         wrap.appendChild(btn);
@@ -778,51 +617,50 @@
       return sel ? sel.dataset.cid : NOTE_COLORS[0].id;
     }
 
-    // ===== モーダル =====
+    // ===== モーダル開閉 =====
     function openAdd() {
       editingId = null;
       document.getElementById('modal-title').textContent = '新規ノート';
-      ['f-title','f-due','f-submit-to','f-memo','f-link','f-link-label'].forEach(id=>{
-        document.getElementById(id).value = '';
-      });
-      document.getElementById('p-mid').checked = true;
+      document.getElementById('f-title').value = '';
+      document.getElementById('f-due').value   = '';
+      document.getElementById('f-memo').value  = '';
       renderColorPick(NOTE_COLORS[0].id);
       document.getElementById('task-modal').classList.add('open');
-      setTimeout(()=>document.getElementById('f-title').focus(), 80);
+      setTimeout(() => document.getElementById('f-title').focus(), 80);
     }
 
     function openEdit(id) {
-      const t = tasks.find(t=>t.id===id); if (!t) return;
+      const t = tasks.find(t => t.id === id);
+      if (!t) return;
       editingId = id;
       document.getElementById('modal-title').textContent = 'ノートを編集';
-      document.getElementById('f-title').value      = t.title;
-      document.getElementById('f-due').value        = t.dueDate||'';
-      document.getElementById('f-submit-to').value  = t.submitTo||'';
-      document.getElementById('f-memo').value       = t.memo||'';
-      document.getElementById('f-link').value       = t.link||'';
-      document.getElementById('f-link-label').value = t.linkLabel||'';
-      document.querySelector(`input[name="priority"][value="${t.priority}"]`).checked = true;
+      document.getElementById('f-title').value = t.title;
+      document.getElementById('f-due').value   = t.dueDate || '';
+      document.getElementById('f-memo').value  = t.memo    || '';
       renderColorPick(t.category);
       document.getElementById('task-modal').classList.add('open');
     }
 
-    function closeModal() { document.getElementById('task-modal').classList.remove('open'); }
+    function closeModal() {
+      document.getElementById('task-modal').classList.remove('open');
+    }
 
+    // ===== 保存 =====
     function saveTask() {
       const title = document.getElementById('f-title').value.trim();
-      if (!title) { showToast('タイトルを入力してください'); document.getElementById('f-title').focus(); return; }
+      if (!title) {
+        showToast('タイトルを入力してください');
+        document.getElementById('f-title').focus();
+        return;
+      }
       const data = {
         title,
-        category:  getSelectedColor(),
-        priority:  document.querySelector('input[name="priority"]:checked').value,
-        dueDate:   document.getElementById('f-due').value,
-        submitTo:  document.getElementById('f-submit-to').value.trim(),
-        memo:      document.getElementById('f-memo').value.trim(),
-        link:      document.getElementById('f-link').value.trim(),
-        linkLabel: document.getElementById('f-link-label').value.trim(),
+        category: getSelectedColor(),
+        dueDate:  document.getElementById('f-due').value,
+        memo:     document.getElementById('f-memo').value.trim(),
       };
       if (editingId) {
-        const i = tasks.findIndex(t=>t.id===editingId);
+        const i = tasks.findIndex(t => t.id === editingId);
         tasks[i] = { ...tasks[i], ...data };
         showToast('更新しました');
       } else {
@@ -834,18 +672,21 @@
 
     // ===== 完了・削除 =====
     function toggleComplete(id) {
-      const t = tasks.find(t=>t.id===id); if (!t) return;
+      const t = tasks.find(t => t.id === id);
+      if (!t) return;
       t.completed = !t.completed;
       saveData(); render();
       showToast(t.completed ? '完了！ 🎉' : '未完了に戻しました');
     }
+
     function confirmDelete(id, title) {
       deletingId = id;
       document.getElementById('confirm-msg').textContent = `「${title}」を削除します。`;
       document.getElementById('confirm-modal').classList.add('open');
     }
+
     function execDelete() {
-      tasks = tasks.filter(t=>t.id!==deletingId);
+      tasks = tasks.filter(t => t.id !== deletingId);
       saveData(); render();
       document.getElementById('confirm-modal').classList.remove('open');
       showToast('削除しました');
@@ -855,9 +696,10 @@
     let toastTimer = null;
     function showToast(msg) {
       const el = document.getElementById('toast');
-      el.textContent = msg; el.classList.add('show');
+      el.textContent = msg;
+      el.classList.add('show');
       if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(()=>el.classList.remove('show'), 2000);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2000);
     }
 
     // ===== ヘッダー日付 =====
@@ -877,38 +719,48 @@
       window.addEventListener('resize', () => {
         clearTimeout(t);
         t = setTimeout(() => {
-          try { localStorage.setItem('todo-window-size', JSON.stringify({w:window.outerWidth,h:window.outerHeight})); }
-          catch(e) {}
+          try {
+            localStorage.setItem('todo-window-size',
+              JSON.stringify({ w: window.outerWidth, h: window.outerHeight }));
+          } catch(e) {}
         }, 400);
       });
     }
 
-    // ===== イベント =====
+    // ===== イベント登録 =====
     function bindEvents() {
       document.getElementById('btn-add').addEventListener('click', openAdd);
       document.getElementById('modal-close').addEventListener('click', closeModal);
       document.getElementById('modal-cancel').addEventListener('click', closeModal);
       document.getElementById('modal-save').addEventListener('click', saveTask);
-      document.getElementById('confirm-cancel').addEventListener('click', ()=>
+      document.getElementById('confirm-cancel').addEventListener('click', () =>
         document.getElementById('confirm-modal').classList.remove('open'));
       document.getElementById('confirm-ok').addEventListener('click', execDelete);
 
-      document.getElementById('cat-filter').addEventListener('change', e=>{ activeFilter=e.target.value; renderNotes(); });
-      document.getElementById('sort-select').addEventListener('change', e=>{ sortBy=e.target.value; renderNotes(); });
-      document.getElementById('search-input').addEventListener('input', e=>{ searchText=e.target.value; renderNotes(); });
+      document.getElementById('cat-filter').addEventListener('change', e => {
+        activeFilter = e.target.value; renderNotes();
+      });
+      document.getElementById('search-input').addEventListener('input', e => {
+        searchText = e.target.value; renderNotes();
+      });
 
-      ['task-modal','confirm-modal'].forEach(id=>{
-        document.getElementById(id).addEventListener('click', e=>{
-          if (e.target===document.getElementById(id))
+      ['task-modal', 'confirm-modal'].forEach(id => {
+        document.getElementById(id).addEventListener('click', e => {
+          if (e.target === document.getElementById(id))
             document.getElementById(id).classList.remove('open');
         });
       });
 
-      document.addEventListener('keydown', e=>{
-        if (e.ctrlKey&&e.key==='n') { e.preventDefault(); openAdd(); }
-        if (e.key==='Escape') { closeModal(); document.getElementById('confirm-modal').classList.remove('open'); }
-        if (e.key==='Enter'&&document.getElementById('task-modal').classList.contains('open'))
-          if (document.activeElement===document.getElementById('f-title')) saveTask();
+      document.addEventListener('keydown', e => {
+        if (e.ctrlKey && e.key === 'n') { e.preventDefault(); openAdd(); }
+        if (e.key === 'Escape') {
+          closeModal();
+          document.getElementById('confirm-modal').classList.remove('open');
+        }
+        if (e.key === 'Enter' &&
+            document.getElementById('task-modal').classList.contains('open') &&
+            document.activeElement === document.getElementById('f-title'))
+          saveTask();
       });
     }
 
