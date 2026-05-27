@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>先生のTodoメモ</title>
+  <title>ToDo丸</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -244,6 +244,20 @@
     }
     .due-overdue { color: #c62828; font-weight: bold; }
     .due-today   { color: #e65100; font-weight: bold; }
+    .footer-left { display: flex; flex-direction: column; gap: 2px; }
+    .created-label { font-size: 11px; color: #bbb; }
+    .submit-to-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      font-size: 12px;
+      color: #555;
+      background: rgba(0,0,0,0.06);
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 6px;
+      word-break: break-word;
+    }
     .card-actions { display: flex; gap: 4px; }
     .btn-icon {
       width: 32px;
@@ -402,7 +416,7 @@
   <!-- ===== Header ===== -->
   <header class="app-header">
     <div>
-      <div class="app-title">📌 先生のTodoメモ</div>
+      <div class="app-title">📌 ToDo丸</div>
       <div class="app-date" id="header-date"></div>
     </div>
     <button class="btn-add" id="btn-add">＋ 新規追加</button>
@@ -466,6 +480,11 @@
             <label for="p-low" class="lbl-low">🟢 低</label>
           </div>
         </div>
+      </div>
+
+      <div class="form-group">
+        <label>提出先・相手</label>
+        <input type="text" id="f-submit-to" placeholder="例：教頭先生・職員室・Google Classroom">
       </div>
 
       <div class="form-group">
@@ -696,6 +715,13 @@
           ? `<a class="task-link-btn" href="${esc(task.link)}" target="_blank" onclick="event.stopPropagation()">
                🔗 ${esc(task.linkLabel || 'リンクを開く')}
              </a>` : '';
+        const submitToHtml = task.submitTo
+          ? `<div class="submit-to-tag">📤 ${esc(task.submitTo)}</div>` : '';
+
+        const createdDate = (() => {
+          const d = new Date(task.createdAt);
+          return `${d.getMonth()+1}/${d.getDate()}`;
+        })();
 
         const card = document.createElement('div');
         card.className = `task-card ${catClass(task.category)}`
@@ -708,10 +734,13 @@
           </div>
           <div class="card-body">
             <div class="task-title">${esc(task.title)}</div>
-            ${memoHtml}${linkHtml}
+            ${submitToHtml}${memoHtml}${linkHtml}
           </div>
           <div class="card-footer">
-            ${dueLabelHtml}
+            <div class="footer-left">
+              <span class="created-label">作成 ${createdDate}</span>
+              ${dueLabelHtml}
+            </div>
             <div class="card-actions">
               <button class="btn-icon" title="${task.completed ? '未完了に戻す' : '完了にする'}"
                 onclick="event.stopPropagation(); toggleComplete('${task.id}')">
@@ -741,6 +770,7 @@
       document.getElementById('f-title').value     = '';
       document.getElementById('f-due').value       = '';
       document.getElementById('f-memo').value      = '';
+      document.getElementById('f-submit-to').value  = '';
       document.getElementById('f-link').value      = '';
       document.getElementById('f-link-label').value = '';
       document.getElementById('p-mid').checked     = true;
@@ -757,6 +787,7 @@
       document.getElementById('f-title').value     = task.title;
       document.getElementById('f-due').value       = task.dueDate || '';
       document.getElementById('f-memo').value      = task.memo || '';
+      document.getElementById('f-submit-to').value  = task.submitTo || '';
       document.getElementById('f-link').value      = task.link || '';
       document.getElementById('f-link-label').value = task.linkLabel || '';
       document.querySelector(`input[name="priority"][value="${task.priority}"]`).checked = true;
@@ -781,6 +812,7 @@
         category:  document.getElementById('f-category').value,
         priority:  document.querySelector('input[name="priority"]:checked').value,
         dueDate:   document.getElementById('f-due').value,
+        submitTo:  document.getElementById('f-submit-to').value.trim(),
         memo:      document.getElementById('f-memo').value.trim(),
         link:      document.getElementById('f-link').value.trim(),
         linkLabel: document.getElementById('f-link-label').value.trim(),
