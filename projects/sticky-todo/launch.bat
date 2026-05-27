@@ -1,11 +1,8 @@
 @echo off
-setlocal EnableDelayedExpansion
-
 rem ===== ToDo丸 起動スクリプト =====
+rem 日本語フォルダ名に対応するためPowerShellでURLエンコードして起動
 
-set "HTMLPATH=%~dp0todo.html"
-set "HTMLPATH=!HTMLPATH:\=/!"
+set "HTMLFILE=%~dp0todo.html"
+set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 
-start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" "--app=file:///!HTMLPATH!" --window-size=1280,820
-
-endlocal
+powershell -NoProfile -Command "& { $u = ([uri]$env:HTMLFILE).AbsoluteUri; Start-Process $env:EDGE \"--app=$u --window-size=1280,820\" }"
