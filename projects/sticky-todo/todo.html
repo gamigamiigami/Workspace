@@ -61,7 +61,7 @@
     }
     .btn-add:hover { background: #f5a623; border-color: #f5a623; color: #fff; }
 
-    /* ===== フィルターバー（検索 + カテゴリのみ）===== */
+    /* ===== フィルターバー ===== */
     .filterbar {
       height: 32px;
       background: #252525;
@@ -142,7 +142,7 @@
     .empty svg { width: 30px; height: 30px; }
     .empty p   { font-size: 12px; }
 
-    /* ===== ノートカード（タイトル＋締切日のみ）===== */
+    /* ===== ノートカード ===== */
     .note-card {
       border-radius: 4px;
       padding: 12px 14px 10px;
@@ -196,7 +196,7 @@
     .del-btn:hover { background: rgba(239,83,80,0.2) !important; color: #c62828; }
     .ok-btn:hover  { background: rgba(102,187,106,0.25) !important; color: #2e7d32; }
 
-    /* カードテキスト */
+    /* カードのタイトル */
     .note-title {
       font-size: 14px;
       font-weight: 700;
@@ -207,13 +207,30 @@
     }
     .note-card.completed .note-title { text-decoration: line-through; color: #888; }
 
-    .note-due {
-      font-size: 10px;
-      color: #666;
+    /* カードのフッター（提出先 + 期限）*/
+    .card-footer {
       margin-top: 6px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
     }
-    .note-due.overdue { color: #c62828; font-weight: 700; }
-    .note-due.today   { color: #e65100; font-weight: 700; }
+
+    .card-submit {
+      font-size: 10px;
+      color: #555;
+      background: rgba(0,0,0,0.1);
+      padding: 1px 6px;
+      border-radius: 3px;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .card-due { font-size: 10px; color: #666; }
+    .card-due.overdue { color: #c62828; font-weight: 700; }
+    .card-due.today   { color: #e65100; font-weight: 700; }
 
     /* ===== モーダル ===== */
     .overlay {
@@ -233,6 +250,8 @@
       border-radius: 10px;
       width: 100%;
       max-width: 340px;
+      max-height: 92vh;
+      overflow-y: auto;
       box-shadow: 0 20px 60px rgba(0,0,0,0.6);
       color: #e8e8e8;
       animation: pop 0.15s ease;
@@ -267,7 +286,7 @@
       display: block; font-size: 11px; font-weight: 600;
       color: #999; margin-bottom: 4px; letter-spacing: 0.2px;
     }
-    .field input, .field textarea {
+    .field input, .field textarea, .field select {
       width: 100%;
       padding: 8px 10px;
       background: #383838;
@@ -278,10 +297,12 @@
       font-family: inherit;
       outline: none;
       transition: border-color 0.12s;
+      min-height: 34px;
     }
-    .field input:focus, .field textarea:focus {
+    .field input:focus, .field textarea:focus, .field select:focus {
       border-color: #f5a623; background: #3e3e3e;
     }
+    .field select option { background: #383838; }
     .field textarea { resize: vertical; min-height: 64px; }
     .field-req { color: #ef5350; margin-left: 2px; }
 
@@ -303,6 +324,78 @@
       display: flex; align-items: center; justify-content: center;
       font-size: 12px; font-weight: 700; color: rgba(0,0,0,0.45);
     }
+
+    /* カテゴリ行（セレクト + 追加ボタン）*/
+    .cat-row { display: flex; gap: 6px; }
+    .cat-row select { flex: 1; }
+    .btn-cat-add {
+      width: 34px; height: 34px;
+      background: #444;
+      border: 1px solid #555;
+      border-radius: 6px;
+      color: #bbb;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.12s;
+    }
+    .btn-cat-add:hover { background: #f5a623; border-color: #f5a623; color: #fff; }
+
+    /* 新カテゴリ入力欄 */
+    .new-cat-wrap {
+      display: none;
+      margin-top: 6px;
+      gap: 6px;
+    }
+    .new-cat-wrap.open { display: flex; }
+    .new-cat-wrap input {
+      flex: 1;
+      height: 34px;
+      padding: 0 10px;
+      background: #383838;
+      border: 1.5px solid #f5a623;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      min-height: unset;
+    }
+    .btn-cat-confirm {
+      height: 34px;
+      padding: 0 12px;
+      background: #f5a623;
+      border: none;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    /* URL行（入力 + 開くボタン）*/
+    .url-row { display: flex; gap: 6px; }
+    .url-row input { flex: 1; }
+    .btn-open-url {
+      width: 34px; height: 34px;
+      background: #444;
+      border: 1px solid #555;
+      border-radius: 6px;
+      color: #bbb;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.12s;
+    }
+    .btn-open-url:hover { background: #555; color: #fff; }
 
     .modal-foot {
       padding: 10px 16px 14px;
@@ -417,8 +510,33 @@
         </div>
 
         <div class="field">
-          <label>締切日</label>
+          <label>カテゴリ</label>
+          <div class="cat-row">
+            <select id="f-category"></select>
+            <button type="button" class="btn-cat-add" id="btn-cat-add" title="カテゴリを追加">＋</button>
+          </div>
+          <div class="new-cat-wrap" id="new-cat-wrap">
+            <input type="text" id="new-cat-input" placeholder="新しいカテゴリ名...">
+            <button type="button" class="btn-cat-confirm" id="btn-cat-confirm">追加</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>提出期限</label>
           <input type="date" id="f-due">
+        </div>
+
+        <div class="field">
+          <label>提出先</label>
+          <input type="text" id="f-submit" placeholder="教頭先生・職員室など">
+        </div>
+
+        <div class="field">
+          <label>紐付けURL</label>
+          <div class="url-row">
+            <input type="url" id="f-url" placeholder="https://...">
+            <button type="button" class="btn-open-url" id="btn-open-url" title="URLを開く">↗</button>
+          </div>
         </div>
 
         <div class="field">
@@ -456,24 +574,48 @@
       { id: 'その他',      bg: '#EFEFEF' },
       { id: 'custom',      bg: '#FFD5D5' },
     ];
-    const STORAGE_KEY = 'sensei-todo-v1';
+    const DEFAULT_CATEGORIES = ['学級', '教科', '部活', 'その他'];
+    const STORAGE_KEY    = 'sensei-todo-v2';
+    const STORAGE_KEY_V1 = 'sensei-todo-v1';
 
     // ===== 状態 =====
-    let tasks        = [];
-    let activeFilter = 'all';
-    let searchText   = '';
-    let editingId    = null;
-    let deletingId   = null;
+    let tasks            = [];
+    let customCategories = [];
+    let activeFilter     = 'all';
+    let searchText       = '';
+    let editingId        = null;
+    let deletingId       = null;
+
+    function allCategories() {
+      return [...DEFAULT_CATEGORIES, ...customCategories];
+    }
 
     // ===== 保存・読み込み =====
     function saveData() {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks })); }
-      catch(e) {}
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, customCategories }));
+      } catch(e) {}
     }
+
     function loadData() {
       try {
         const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-        if (d && d.tasks) tasks = d.tasks;
+        if (d) {
+          if (d.tasks)            tasks            = d.tasks;
+          if (d.customCategories) customCategories = d.customCategories;
+          return;
+        }
+        // v1からの自動マイグレーション
+        const v1 = JSON.parse(localStorage.getItem(STORAGE_KEY_V1) || 'null');
+        if (v1 && v1.tasks) {
+          tasks = v1.tasks.map(t => ({
+            ...t,
+            colorId:  t.category || '授業準備',
+            category: 'その他',
+            submitTo: t.submitTo || '',
+            url:      t.link     || '',
+          }));
+        }
       } catch(e) {}
     }
 
@@ -494,8 +636,8 @@
       return s < t ? 'overdue' : s === t ? 'today' : '';
     }
 
-    function getColor(catId) {
-      return NOTE_COLORS.find(c => c.id === catId) || NOTE_COLORS[NOTE_COLORS.length - 1];
+    function getColor(colorId) {
+      return NOTE_COLORS.find(c => c.id === colorId) || NOTE_COLORS[NOTE_COLORS.length - 1];
     }
 
     // ===== フィルタ & ソート =====
@@ -505,7 +647,8 @@
         if (searchText) {
           const q = searchText.toLowerCase();
           if (!t.title.toLowerCase().includes(q) &&
-              !(t.memo || '').toLowerCase().includes(q)) return false;
+              !(t.memo     || '').toLowerCase().includes(q) &&
+              !(t.submitTo || '').toLowerCase().includes(q)) return false;
         }
         return true;
       });
@@ -521,13 +664,12 @@
       const sel = document.getElementById('cat-filter');
       const cur = sel.value;
       sel.innerHTML = '<option value="all">すべて</option>';
-      NOTE_COLORS.forEach(c => {
+      allCategories().forEach(c => {
         const o = document.createElement('option');
-        o.value       = c.id;
-        o.textContent = c.id;
+        o.value = o.textContent = c;
         sel.appendChild(o);
       });
-      sel.value = cur || 'all';
+      if ([...sel.options].some(o => o.value === cur)) sel.value = cur;
     }
 
     // ===== ノートグリッド描画 =====
@@ -550,11 +692,12 @@
 
       grid.innerHTML = '';
       vis.forEach(task => {
-        const color = getColor(task.category);
-        const st    = dateStatus(task.dueDate);
+        const colorId = task.colorId || task.category || NOTE_COLORS[0].id;
+        const color   = getColor(colorId);
+        const st      = dateStatus(task.dueDate);
 
         const card = document.createElement('div');
-        card.className = `note-card nc-${color.id}`
+        card.className = `note-card nc-${colorId}`
           + (task.completed ? ' completed' : '')
           + (st === 'overdue' && !task.completed ? ' overdue' : '');
         card.style.background = color.bg;
@@ -579,11 +722,26 @@
         card.appendChild(delBtn);
         card.appendChild(titleEl);
 
-        if (task.dueDate) {
-          const dueEl = document.createElement('div');
-          dueEl.className   = `note-due ${st}`;
-          dueEl.textContent = (st === 'overdue' ? '⚠ ' : st === 'today' ? '今日 ' : '') + fmtDate(task.dueDate);
-          card.appendChild(dueEl);
+        // 提出先・提出期限（どちらかあれば表示）
+        if (task.submitTo || task.dueDate) {
+          const footer = document.createElement('div');
+          footer.className = 'card-footer';
+
+          if (task.submitTo) {
+            const sub = document.createElement('span');
+            sub.className   = 'card-submit';
+            sub.textContent = task.submitTo;
+            footer.appendChild(sub);
+          }
+
+          if (task.dueDate) {
+            const due = document.createElement('span');
+            due.className   = `card-due ${st}`;
+            due.textContent = (st === 'overdue' ? '⚠ ' : st === 'today' ? '今日 ' : '') + fmtDate(task.dueDate);
+            footer.appendChild(due);
+          }
+
+          card.appendChild(footer);
         }
 
         card.addEventListener('click', () => openEdit(task.id));
@@ -617,14 +775,45 @@
       return sel ? sel.dataset.cid : NOTE_COLORS[0].id;
     }
 
+    // ===== カテゴリセレクト描画 =====
+    function renderCatSelect(selectedCat) {
+      const sel = document.getElementById('f-category');
+      sel.innerHTML = '';
+      allCategories().forEach(c => {
+        const o = document.createElement('option');
+        o.value = o.textContent = c;
+        if (c === selectedCat) o.selected = true;
+        sel.appendChild(o);
+      });
+    }
+
+    // ===== カテゴリ追加 =====
+    function addCategory() {
+      const input = document.getElementById('new-cat-input');
+      const name  = input.value.trim();
+      if (!name) return;
+      if (allCategories().includes(name)) { showToast('すでに存在します'); return; }
+      customCategories.push(name);
+      saveData();
+      renderCatSelect(name);
+      renderCatFilter();
+      input.value = '';
+      document.getElementById('new-cat-wrap').classList.remove('open');
+      showToast(`「${name}」を追加しました`);
+    }
+
     // ===== モーダル開閉 =====
     function openAdd() {
       editingId = null;
       document.getElementById('modal-title').textContent = '新規ノート';
-      document.getElementById('f-title').value = '';
-      document.getElementById('f-due').value   = '';
-      document.getElementById('f-memo').value  = '';
+      document.getElementById('f-title').value  = '';
+      document.getElementById('f-due').value    = '';
+      document.getElementById('f-submit').value = '';
+      document.getElementById('f-url').value    = '';
+      document.getElementById('f-memo').value   = '';
+      document.getElementById('new-cat-wrap').classList.remove('open');
       renderColorPick(NOTE_COLORS[0].id);
+      renderCatSelect(DEFAULT_CATEGORIES[0]);
       document.getElementById('task-modal').classList.add('open');
       setTimeout(() => document.getElementById('f-title').focus(), 80);
     }
@@ -634,10 +823,14 @@
       if (!t) return;
       editingId = id;
       document.getElementById('modal-title').textContent = 'ノートを編集';
-      document.getElementById('f-title').value = t.title;
-      document.getElementById('f-due').value   = t.dueDate || '';
-      document.getElementById('f-memo').value  = t.memo    || '';
-      renderColorPick(t.category);
+      document.getElementById('f-title').value  = t.title;
+      document.getElementById('f-due').value    = t.dueDate  || '';
+      document.getElementById('f-submit').value = t.submitTo || '';
+      document.getElementById('f-url').value    = t.url      || '';
+      document.getElementById('f-memo').value   = t.memo     || '';
+      document.getElementById('new-cat-wrap').classList.remove('open');
+      renderColorPick(t.colorId || t.category || NOTE_COLORS[0].id);
+      renderCatSelect(t.category || DEFAULT_CATEGORIES[0]);
       document.getElementById('task-modal').classList.add('open');
     }
 
@@ -655,8 +848,11 @@
       }
       const data = {
         title,
-        category: getSelectedColor(),
+        colorId:  getSelectedColor(),
+        category: document.getElementById('f-category').value,
         dueDate:  document.getElementById('f-due').value,
+        submitTo: document.getElementById('f-submit').value.trim(),
+        url:      document.getElementById('f-url').value.trim(),
         memo:     document.getElementById('f-memo').value.trim(),
       };
       if (editingId) {
@@ -736,6 +932,28 @@
       document.getElementById('confirm-cancel').addEventListener('click', () =>
         document.getElementById('confirm-modal').classList.remove('open'));
       document.getElementById('confirm-ok').addEventListener('click', execDelete);
+
+      // カテゴリ追加
+      document.getElementById('btn-cat-add').addEventListener('click', () => {
+        const wrap = document.getElementById('new-cat-wrap');
+        wrap.classList.toggle('open');
+        if (wrap.classList.contains('open'))
+          setTimeout(() => document.getElementById('new-cat-input').focus(), 40);
+      });
+      document.getElementById('btn-cat-confirm').addEventListener('click', addCategory);
+      document.getElementById('new-cat-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') addCategory();
+        if (e.key === 'Escape') {
+          document.getElementById('new-cat-wrap').classList.remove('open');
+        }
+      });
+
+      // URLを開く
+      document.getElementById('btn-open-url').addEventListener('click', () => {
+        const url = document.getElementById('f-url').value.trim();
+        if (url) window.open(url, '_blank');
+        else showToast('URLが入力されていません');
+      });
 
       document.getElementById('cat-filter').addEventListener('change', e => {
         activeFilter = e.target.value; renderNotes();
