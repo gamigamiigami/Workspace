@@ -677,6 +677,7 @@
     let deletingId       = null;
     let currentReminder  = null;
     let faviconBlinkTimer = null;
+    let powershellFired   = {};
 
     function allCategories() {
       return [...DEFAULT_CATEGORIES, ...customCategories];
@@ -986,7 +987,7 @@
         tasks.unshift({ ...data, id: Date.now().toString(), createdAt: Date.now(), completed: false, lastReminded: 0 });
         showToast('追加しました ✅');
       }
-      saveData(); closeModal(); render();
+      saveData(); closeModal(); render(); syncRemindersToNotifier();
     }
 
     // ===== 完了・削除 =====
@@ -994,7 +995,7 @@
       const t = tasks.find(t => t.id === id);
       if (!t) return;
       t.completed = !t.completed;
-      saveData(); render();
+      saveData(); render(); syncRemindersToNotifier();
       showToast(t.completed ? '完了！ 🎉' : '未完了に戻しました');
     }
 
@@ -1006,7 +1007,7 @@
 
     function execDelete() {
       tasks = tasks.filter(t => t.id !== deletingId);
-      saveData(); render();
+      saveData(); render(); syncRemindersToNotifier();
       document.getElementById('confirm-modal').classList.remove('open');
       showToast('削除しました');
     }
@@ -1058,20 +1059,48 @@
       document.title = 'ToDo丸';
     }
 
-    function checkReminders() {
+    function remindKey(task) {
+      const rd  = new Date(new Date(task.dueDateTime).getTime() - parseInt(task.reminder) * 60000);
+      const pad = n => String(n).padStart(2, '0');
+      return task.id + '_' + rd.getFullYear() + '-' + pad(rd.getMonth()+1) + '-' + pad(rd.getDate())
+           + 'T' + pad(rd.getHours()) + ':' + pad(rd.getMinutes());
+    }
+
+    function syncRemindersToNotifier() {
+      const remindable = tasks.filter(t => t.dueDateTime && t.reminder && !t.completed);
+      fetch('http://localhost:48766/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(remindable)
+      }).catch(() => {});
+    }
+
+    async function loadPowerShellFired() {
+      try {
+        const ctrl = new AbortController();
+        setTimeout(() => ctrl.abort(), 800);
+        const resp = await fetch('http://localhost:48766/fired', { signal: ctrl.signal });
+        if (resp.ok) powershellFired = await resp.json();
+      } catch {}
+    }
+
+    async function checkReminders() {
+      await loadPowerShellFired();
       const now = Date.now();
+      let fired = false;
       tasks.forEach(task => {
         if (task.completed || !task.dueDateTime || !task.reminder) return;
-        const due      = new Date(task.dueDateTime).getTime();
+        const due = new Date(task.dueDateTime).getTime();
         if (isNaN(due)) return;
         const remindAt = due - parseInt(task.reminder) * 60000;
-        const last     = task.lastReminded || 0;
-        if (now >= remindAt && last < remindAt) {
+        const last = task.lastReminded || 0;
+        if (now >= remindAt && last < remindAt && !powershellFired[remindKey(task)]) {
           task.lastReminded = now;
-          saveData();
+          fired = true;
           triggerReminder(task);
         }
       });
+      if (fired) { saveData(); syncRemindersToNotifier(); }
     }
 
     function triggerReminder(task) {
@@ -1086,14 +1115,12 @@
         + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
         + (task.submitTo    ? '\n提出先：' + task.submitTo : '');
 
-      // WebSocket経由でPowerShellに通知 → 全ウィンドウ最前面にMessageBox表示
       try {
         const ws = new WebSocket('ws://localhost:48766/');
-        ws.onopen  = () => ws.send(msg);
-        ws.onerror = () => window.alert(msg); // 起動直後など繋がらない場合のフォールバック
-      } catch(e) {
-        window.alert(msg);
-      }
+        const payload = JSON.stringify({ id: task.id, key: remindKey(task), msg });
+        ws.onopen  = () => ws.send(payload);
+        ws.onerror = () => {};
+      } catch(e) {}
 
       // アプリ内モーダル（スヌーズ/確認）
       document.getElementById('reminder-title').textContent = task.title;
@@ -1248,7 +1275,7 @@
         Notification.requestPermission();
       }
 
-      // 30秒ごとにリマインダーをチェック
+      syncRemindersToNotifier();
       checkReminders();
       setInterval(checkReminders, 30000);
     }
