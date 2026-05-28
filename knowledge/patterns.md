@@ -345,6 +345,52 @@ powershell -NoProfile -Command "& { $u = ([uri]$env:HTMLFILE).AbsoluteUri; Start
 
 ---
 
+### [汎用] Windows Batch —シンプルなパス設定パターン（複数行ブロック vs 1行セット）
+
+**用途：** Windows Batch で複数のファイルパスをチェックして、存在する場合のみ変数に設定する場合。特に日本語パスが含まれる環境では、シンプルな1行セットパターンが信頼性が高い
+
+**パターン比較：**
+
+**パターン1 ❌ 複数行ブロック構文（潜在的リスク）**
+```batch
+if exist "%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE=%LOCALAPPDATA%\Microsoft\Edge\Application\msedge.exe"
+) else if exist "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+) else if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE=C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+)
+```
+
+**リスク：**
+- 複数行の `if-else if` ブロック構文は、遅延展開タイミングの問題が生じる可能性がある
+- 日本語フォルダ名（「とどまる」など）を含むパス展開時に、変数展開順序がズレることがある
+
+**パターン2 ✅ シンプルな1行セットパターン（推奨）**
+```batch
+set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (
+  set "EDGE=C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+)
+```
+
+**メリット：**
+- 先に最も一般的なパス（x86）をセット
+- x64版が存在すれば上書きするシンプルロジック
+- 複数行ブロック構文を避けることで、変数展開タイミングを確実に制御
+- 日本語パスが含まれる環境でも安定動作
+
+**ポイント：**
+- Windows Batch での「`if-else if` のネストよりも、シーケンシャルなセット→上書き」が信頼性が高い
+- `set "変数=値"` の形式で、値を引用符で囲むことで、スペース・特殊文字を含むパスに対応
+- 日本語フォルダが含まれる場合、複雑な条件分岐より単純な順序制御が有効
+
+**使用プロジェクト：** sticky-todo
+
+**タグ：** #batch #windows #path-detection #japanese-path #reliability
+
+---
+
 ### [汎用] Windows launch.bat —複数パターンの Edge インストール先に対応
 
 **用途：** HTMLファイルをEdgeブラウザでアプリモード起動するlaunch.batスクリプト。Windows環境ごとにEdgeのインストール先が異なるため、複数パスを段階的に探索する
