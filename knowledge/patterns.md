@@ -1,9 +1,120 @@
 # 成功パターン集
 
-最終更新：2026-05-28
+最終更新：2026-05-30
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
+
+---
+
+## デスクトップ環境・起動スクリプト
+
+### [汎用] Windows PowerShell 非同期タスク通知機構（アプリ最小化対応）
+
+**用途：** ブラウザアプリやデスクトップアプリでバックグラウンドタスクの完了を通知する必要があり、かつアプリが最小化されたり非アクティブになったりしてもユーザーに気づかせたい場合。JavaScriptのページ内タイマーはバックグラウンドタブで停止するため、PowerShellで独立したプロセスを起動して定期的にポーリングを行う。
+
+**アーキテクチャ：**
+```
+1. アプリ起動時・タスク保存時：JavaScript が /tasks POST → サーバーがメモリに登録
+2. 独立チェック：PowerShell notifier.ps1 が 30秒ごとに GET /fired ポーリング
+3. 通知判定：サーバーが pastdue かつ !reminded な task を列挙
+4. 通知表示：PowerShell MessageBox を DefaultDesktopOnly で表示
+5. 状態管理：JavaScript/PowerShell が lastReminded を共有（重複防止）
+```
+
+**実装例：**
+
+1. **server.ps1（タスク管理エンドポイント）**
+```powershell
+# POST /tasks: タスク登録
+# { taskId, deadline, title, ... }
+$script:tasks = @()
+
+if ($path -eq 'tasks') {
+  if ($ctx.Request.HttpMethod -eq 'POST') {
+    $body = [System.IO.StreamReader]::new($ctx.Request.InputStream).ReadToEnd()
+    $task = $body | ConvertFrom-Json
+    $script:tasks += $task
+  }
+}
+
+# GET /fired: 通知対象タスク一覧
+if ($path -eq 'fired') {
+  $now = (Get-Date).ToUniversalTime()
+  $pastdue = $script:tasks | Where-Object {
+    [datetime]::Parse($_.deadline) -lt $now -and -not $_.reminded
+  }
+  $response.ContentType = 'application/json'
+  $json = $pastdue | ConvertTo-Json
+  [byte[]]$bytes = [System.Text.Encoding]::UTF8.GetBytes($json)
+  $response.OutputStream.Write($bytes, 0, $bytes.Length)
+}
+```
+
+2. **notifier.ps1（独立ポーリング・通知スクリプト）**
+```powershell
+# 30秒ごとにGET /fired をポーリング
+while ($true) {
+  try {
+    $response = Invoke-WebRequest -Uri "http://localhost:48765/fired" -Method GET -ErrorAction Stop
+    $tasks = $response.Content | ConvertFrom-Json
+    
+    foreach ($task in $tasks) {
+      # MessageBox: DefaultDesktopOnly = アプリが最小化でも強制表示
+      [System.Windows.Forms.MessageBox]::Show(
+        $task.title,
+        "Reminder",
+        [System.Windows.Forms.MessageBoxButtons]::OK,
+        [System.Windows.Forms.MessageBoxIcon]::Information,
+        [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
+        [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
+      )
+      
+      # 通知済みマーク
+      Invoke-WebRequest -Uri "http://localhost:48765/mark?id=$($task.taskId)" -ErrorAction Stop
+    }
+  } catch { }
+  
+  Start-Sleep -Seconds 30
+}
+```
+
+3. **JavaScript（通知表示・状態連携）**
+```javascript
+// アプリ起動・タスク保存時
+fetch('/tasks', {
+  method: 'POST',
+  body: JSON.stringify({ taskId, deadline, title })
+});
+
+// アプリがアクティブなとき、またはBroadcastChannel経由で通知
+window.addEventListener('focus', async () => {
+  const resp = await fetch('/fired');
+  const tasks = await resp.json();
+  // アプリのモーダル表示（notifier が接続不可時のフォールバック）
+  tasks.forEach(task => showModalReminder(task));
+});
+```
+
+**ポイント：**
+- **PowerShell の DefaultDesktopOnly**：他のアプリが最前面でもMessageBox を強制的に表示。デスクトップ専有フラグなので、ダイアログが確実にユーザーの目に入る
+- **独立プロセス**：JavaScriptのタイマーはバックグラウンドタブで停止されるため、PowerShellの常時ポーリングが必須
+- **状態共有**：lastReminded フィールドでPowerShell と JavaScript が通知状態を共有。重複通知を防止
+- **フォールバック**：PowerShell notifier が接続不可の場合でも、JavaScript のモーダルダイアログが動作（アプリウィンドウが開いている場合）
+- **エラー処理**：Invoke-WebRequest のエラーを黙って無視（`-ErrorAction Stop` → catch で無視）することで、サーバーが落ちてもnotifier プロセスが死なない
+
+**注意：**
+- MessageBox は同期的なため、複数タスクがある場合は1件ずつ表示される
+- PowerShell の実行ポリシー設定が必要：`Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser`
+- notifier.ps1 を常時起動するため、Windows タスクスケジューラまたは startup フォルダに配置を推奨
+
+**発見：**
+- notifier.ps1 が起動できない場合、アプリが最小化されると完全無音になる→アプリのモーダルダイアログが必須（JavaScript フォールバック）
+- アプリウィンドウが開いている限り、モーダルダイアログは常に表示される設計が堅牢
+
+**使用プロジェクト：** sticky-todo（ToDo管理アプリ・リマインダー機能）
+
+**タグ：** #windows #powershell #notifications #background-task #polling #async #reliability
 
 ---
 

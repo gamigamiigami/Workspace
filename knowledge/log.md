@@ -4,6 +4,29 @@
 
 ---
 
+### [2026-05-30 午後] sticky-todo — リマインダー通知UI修正（アラーム vs メッセージボックスのみ）
+
+**作業内容：**
+- リマインダー通知の2つのモード（「アラームあり」「メッセージボックスのみ」）を実装
+- 「メッセージボックスのみ」を選択した場合、PowerShell notifier が起動した場合は Windowsダイアログで「静かに」表示
+- notifier.ps1 が接続不可の場合でも、JavaScript のアプリ内モーダルで通知するようにフォールバック実装
+- 修正の根本原因：triggerReminder() が message 型で早期リターンしていた → モーダル表示を追加
+
+**変更点：**
+- `projects/sticky-todo/todo.html` — triggerReminder() の message 型でもモーダル表示（ただし音・点滅・揺れなし）
+
+**結果：** 成功 / コミット完了 `fix: show in-app modal for message-only reminder type`
+
+**成果物：**
+- `projects/sticky-todo/todo.html` 修正版（リマインダーモーダル改善）
+
+**気づき・メモ：**
+- notifier.ps1 が繋がらないとき、以前は「完全無音」だった → アプリ内モーダルをフォールバックに
+- アプリが開いている限り、モーダルは必ず出るため、通知漏れを防止
+- UI差別化：アラームなし(青枠) vs あり(赤枠・揺れ・音)で視覚的に区別可能
+
+---
+
 ### [2026-05-29 午前] sticky-todo — launch.bat バッチ起動メカニズム最適化 & 日本語除去
 
 **作業内容：**

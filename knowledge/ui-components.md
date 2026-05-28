@@ -1,8 +1,151 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-05-28
+最終更新：2026-05-30
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## リマインダーモーダル（タスク通知）
+
+**用途：** アプリが最小化またはバックグラウンドにある場合、PowerShell MessageBox とは別に、アプリウィンドウがアクティブなときに静かに（または効果音付きで）タスク期限切れを通知する。
+
+```html
+<!-- リマインダーモーダル本体 -->
+<div id="reminderModal" class="reminder-modal" onclick="closeReminder()">
+  <div class="reminder-content" onclick="event.stopPropagation()">
+    <h3 id="reminderTitle">Reminder</h3>
+    <button class="close-btn" onclick="closeReminder()">✕</button>
+  </div>
+</div>
+```
+
+```css
+.reminder-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-in;
+}
+
+.reminder-modal.open {
+  display: flex;
+}
+
+.reminder-modal.open.shake {
+  animation: shake 0.5s ease-in-out;
+}
+
+.reminder-content {
+  background: linear-gradient(135deg, #fff 0%, #f9f9f9 100%);
+  border-radius: 8px;
+  padding: 20px 24px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  width: 280px;
+  position: relative;
+}
+
+.reminder-modal.open.sound .reminder-content {
+  border-left: 4px solid #ff6b6b;  /* アラーム表示 */
+}
+
+.reminder-modal.open.quiet .reminder-content {
+  border-left: 4px solid #4a90e2;  /* 静かなモード表示 */
+}
+
+#reminderTitle {
+  margin: 0;
+  font-size: 14px;
+  color: #222;
+  word-break: break-word;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+}
+
+.close-btn:hover {
+  color: #222;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
+  20%, 40%, 60%, 80% { transform: translateX(4px); }
+}
+```
+
+```javascript
+function showReminder(title, type = 'quiet') {
+  const modal = document.getElementById('reminderModal');
+  const titleEl = document.getElementById('reminderTitle');
+  
+  titleEl.textContent = title;
+  
+  // タイプに応じた効果
+  modal.classList.remove('sound', 'quiet');
+  modal.classList.add(type);
+  modal.classList.add('open');
+  
+  if (type === 'sound') {
+    // 揺れアニメーション
+    modal.classList.add('shake');
+    // 効果音再生（あれば）
+    playNotificationSound();
+  }
+  
+  // 5秒後に自動閉じ
+  setTimeout(closeReminder, 5000);
+}
+
+function closeReminder() {
+  const modal = document.getElementById('reminderModal');
+  modal.classList.remove('open', 'shake', 'sound', 'quiet');
+}
+
+function playNotificationSound() {
+  // 例）ブラウザの標準通知音を再生
+  try {
+    const context = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = context.createOscillator();
+    const gain = context.createGain();
+    osc.connect(gain);
+    gain.connect(context.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, context.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, context.currentTime + 0.2);
+    osc.start(context.currentTime);
+    osc.stop(context.currentTime + 0.2);
+  } catch (e) { /* 再生不可環境 */ }
+}
+```
+
+**特徴：**
+- **条件付き効果：** `type='sound'` でアラーム風（赤い左枠、揺れ、音）、`type='quiet'` で静かに（青い左枠、音なし）
+- **自動閉じ：** 5秒後に自動で消える（重要度は低いため）
+- **PowerShell フォールバック：** このモーダルは「アプリがアクティブなときの補助」。MinimizeされたらPowerShell MessageBox が担当
+- **アニメーション：** fadeIn は標準、shake はアラーム時のみ（UX 差別化）
+
+**使用プロジェクト：** sticky-todo（リマインダー通知UI）
+
+**タグ：** #modal #notification #reminder #animation #ux-polish
 
 ---
 
