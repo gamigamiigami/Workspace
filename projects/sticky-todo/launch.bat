@@ -18,7 +18,7 @@ if not defined EDGE (
 )
 
 rem ===== サーバーを起動（/D で作業フォルダを指定）=====
-start /MIN /D "%~dp0" "" powershell -NoProfile -ExecutionPolicy Bypass -File "server.ps1" -Port %PORT%
+start "ToDo丸Server" /MIN /D "%~dp0" powershell -NoProfile -ExecutionPolicy Bypass -File "server.ps1" -Port %PORT%
 
 rem サーバー起動を待つ
 timeout /t 2 /nobreak > nul
