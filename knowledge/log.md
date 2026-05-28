@@ -4,6 +4,31 @@
 
 ---
 
+### [2026-06-01 午後] sticky-todo — リマインダー通知：アプリ最前面化機能（Win32 API）
+
+**作業内容：**
+- アプリが最小化されている場合、リマインド時に単なるメッセージボックスだけでは見えない問題を解決
+- Win32 API（SetForegroundWindow, ShowWindow）を使用して、対象アプリを復元・最前面に出す機能を実装
+- PowerShell notifier.ps1 に `Invoke-BringToFront` 関数を追加
+  - msedge プロセスを列挙し、ウィンドウタイトルに「ToDo」を含むものを検索
+  - `ShowWindow(SW_RESTORE)` で最小化を復元、`SetForegroundWindow` で最前面化
+  - リマインド通知表示時に両方のモード（通常リマインダー + WebSocket経由）で呼び出す
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — Win32 API P/Invoke インポート + Invoke-BringToFront 関数追加
+
+**結果：** 成功 / アプリ最小化時の通知確認手段が確保
+
+**成果物：**
+- `projects/sticky-todo/notifier.ps1` 改善版（最前面化機能付き）
+
+**気づき・メモ：**
+- MessageBox の DefaultDesktopOnly フラグは全ウィンドウの前に表示されるが、最小化アプリには効果がない
+- Win32 API で復元してから MessageBox を表示することで、どの状態でも確実に通知が見える
+- タイトルマッチングでプロセス特定することで、複数 Edge ウィンドウがある場合でもターゲット指定可能
+
+---
+
 ### [2026-05-30 午後] sticky-todo — リマインダー通知UI修正（アラーム vs メッセージボックスのみ）
 
 **作業内容：**

@@ -98,6 +98,46 @@ window.addEventListener('focus', async () => {
 
 **ポイント：**
 - **PowerShell の DefaultDesktopOnly**：他のアプリが最前面でもMessageBox を強制的に表示。デスクトップ専有フラグなので、ダイアログが確実にユーザーの目に入る
+
+**拡張：アプリ最前面化（Win32 API）**
+
+アプリが最小化されている場合、MessageBox だけでは見えないことがあります。その場合は Win32 API で対象ウィンドウを復元・最前面化してから MessageBox を表示します。
+
+```powershell
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class Win32 {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+    [DllImport("user32.dll", CharSet=CharSet.Auto)]
+    public static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+}
+"@
+
+function Invoke-BringToFront {
+    try {
+        Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | ForEach-Object {
+            $sb = [System.Text.StringBuilder]::new(256)
+            [Win32]::GetWindowText($_.MainWindowHandle, $sb, 256) | Out-Null
+            if ($sb.ToString() -match 'ToDo') {
+                [Win32]::ShowWindow($_.MainWindowHandle, 9) | Out-Null   # SW_RESTORE
+                [Win32]::SetForegroundWindow($_.MainWindowHandle) | Out-Null
+            }
+        }
+    } catch {}
+}
+
+# 通知時に呼び出す
+Invoke-BringToFront
+[System.Windows.Forms.MessageBox]::Show(...)
+```
+
+**利点：**
+- 最小化されたウィンドウも復元される
+- 通知時に確実にアプリがユーザーの目に入る状態になる
+- タイトルマッチングでターゲットプロセスを特定可能
 - **独立プロセス**：JavaScriptのタイマーはバックグラウンドタブで停止されるため、PowerShellの常時ポーリングが必須
 - **状態共有**：lastReminded フィールドでPowerShell と JavaScript が通知状態を共有。重複通知を防止
 - **フォールバック**：PowerShell notifier が接続不可の場合でも、JavaScript のモーダルダイアログが動作（アプリウィンドウが開いている場合）
