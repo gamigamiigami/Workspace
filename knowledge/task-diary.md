@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-05-28 (セッション) - sticky-todo Windows アラーム機能の実装方針確定
+
+**うまくいったこと**
+- Windows Notification API の制限（file:// プロトコルでの非対応）を確認
+- Windows のシステムダイアログ表示（`MessageBoxW` Win32 API 経由）でユーザー注意喚起を実装する方針を確立
+- Electron/Tauri での実装リスクを検討し、HTML + JavaScript でできる範囲を明確化
+- アラーム音声（`AudioContext` で生成可能）、タスクバー点滅（`window.focus()` で自動発生）、アプリ内モーダル表示など、各機能の実現方式を定義
+
+**うまくいかなかったこと**
+- 「Windows のシステムダイアログをブラウザの JavaScript から直接呼び出す」方法は存在しない
+  （解決策：Batch スクリプト内でネイティブダイアログ呼び出し、または Electron/Tauri での実装が必要）
+
+**発見**
+- Edge のアプリモード（`--app=file://`）での JavaScript 実行環境は、localStorage、音声生成、DOM 操作については制限なし
+- Windows のシステムダイアログは JavaScript からは到達不可だが、外部プロセス（Batch/PowerShell）経由なら可能
+- 最終的なアラーム UX：リマインド時刻 → 音声・タスクバー点滅 → システムダイアログ（OK押下）→ アプリ内モーダル（スヌーズ/確認選択）の流れで実装可能
+
+**次回への申し送り**
+- Windows システムダイアログ（`msg.exe` または `powershell -Command [Windows.UI.Popups.MessageDialog]` など）をスクリプトに統合するか検討
+- または Electron/Tauri への移行を検討（より完全なネイティブ統合が可能）
+- launch.bat の既存パス問題（debug.bat 結果待ち）と並行して、アラーム機能の実装進度を進める
+
+---
+
 ### 2026-05-28 (夜間セッション・最終) - sticky-todo launch.bat バックスラッシュ→スラッシュ変換対応
 
 **うまくいったこと**
