@@ -646,6 +646,14 @@
     const STORAGE_KEY_V2 = 'sensei-todo-v2';
     const STORAGE_KEY_V1 = 'sensei-todo-v1';
 
+    const FAVICON_NORMAL = `data:image/svg+xml,<svg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'><rect width='64' height='64' rx='14' fill='%23f5a623'/><circle cx='32' cy='32' r='18' fill='none' stroke='white' stroke-width='4.5'/><path d='M22 32 L29 39 L42 25' stroke='white' stroke-width='4.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+    const FAVICON_ALERT  = `data:image/svg+xml,<svg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'><rect width='64' height='64' rx='14' fill='%23ef5350'/><rect x='28' y='10' width='8' height='30' rx='4' fill='white'/><circle cx='32' cy='52' r='5' fill='white'/></svg>`;
+
+    function setFavicon(href) {
+      const link = document.querySelector("link[rel='icon']");
+      if (link) link.href = href;
+    }
+
     // ===== 状態 =====
     let tasks            = [];
     let customCategories = [];
@@ -1055,20 +1063,17 @@
     function triggerReminder(task) {
       currentReminder = task;
 
-      // 音とタイトル点滅を先に開始（alert中も音は鳴り続ける）
-      startAlarmLoop();
+      startAlarmLoop();   // 音を先に鳴らす（alert中も鳴り続ける）
       startTitleFlash();
+      setFavicon(FAVICON_ALERT); // タスクバーアイコンを赤に変更
 
-      // 他のウィンドウが前面にある場合はシステムダイアログで割り込み通知
-      if (!document.hasFocus()) {
-        try { window.focus(); } catch(e) {}
-        window.alert('⏰ リマインド！\n\n'
-          + task.title
-          + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
-          + (task.submitTo    ? '\n提出先：' + task.submitTo : ''));
-      }
+      // フォーカス状態に関わらず常にシステムダイアログを表示
+      window.alert('⏰ リマインド！\n\n'
+        + task.title
+        + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
+        + (task.submitTo    ? '\n提出先：' + task.submitTo : ''));
 
-      // アプリ内モーダル
+      // アプリ内モーダル（スヌーズ/確認）
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
       if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
@@ -1178,6 +1183,7 @@
       document.getElementById('btn-snooze').addEventListener('click', () => {
         stopAlarm();
         stopTitleFlash();
+        setFavicon(FAVICON_NORMAL);
         document.getElementById('reminder-modal').classList.remove('open');
         if (currentReminder) {
           const task = currentReminder;
@@ -1188,6 +1194,7 @@
       document.getElementById('btn-reminder-ok').addEventListener('click', () => {
         stopAlarm();
         stopTitleFlash();
+        setFavicon(FAVICON_NORMAL);
         document.getElementById('reminder-modal').classList.remove('open');
         currentReminder = null;
       });
