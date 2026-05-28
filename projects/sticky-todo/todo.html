@@ -1133,12 +1133,12 @@
         ws.onerror = () => {};
       } catch(e) {}
 
-      // アラームあり：音・点滅
-      if (isAlarm) {
-        startAlarmLoop();
-        startTitleFlash();
-        startFaviconBlink();
-      }
+      // アラームあり：音のみ限定
+      if (isAlarm) startAlarmLoop();
+
+      // 点滅・揺れ・フォーカスは両タイプ共通
+      startTitleFlash();
+      startFaviconBlink();
 
       // アプリ内モーダル（両タイプで表示）
       document.getElementById('reminder-title').textContent = task.title;
@@ -1152,9 +1152,8 @@
       const box = modal.querySelector('.reminder-box');
       box.style.animation = 'none';
       box.offsetHeight;
-      if (isAlarm) box.style.animation = ''; // message タイプは揺れなし
-
-      if (isAlarm) { try { window.focus(); } catch(e) {} }
+      box.style.animation = '';
+      try { window.focus(); } catch(e) {}
     }
 
     // ===== トースト =====
