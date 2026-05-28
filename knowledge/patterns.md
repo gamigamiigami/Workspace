@@ -111,10 +111,30 @@ window.addEventListener('focus', async () => {
 **発見：**
 - notifier.ps1 が起動できない場合、アプリが最小化されると完全無音になる→アプリのモーダルダイアログが必須（JavaScript フォールバック）
 - アプリウィンドウが開いている限り、モーダルダイアログは常に表示される設計が堅牢
+- 音声通知と視覚フィードバック（タイトル点滅、アイコン赤点滅、揺れアニメ）は独立して制御可能
+- 「メッセージボックスのみ」モードでは、PowerShell notifier に接続できない場合でもアプリのモーダルダイアログでユーザーに通知できる
+
+**拡張仕様：通知方法の柔軟化**
+
+複数の通知方法を実装して、ユーザーが選択できるようにする場合：
+
+| 要素 | アラームあり | メッセージボックスのみ |
+|-----|---------|------------|
+| 音声 | ✓（3音ビープ × 4秒） | ✗ |
+| タイトル点滅 | ✓（「⏰ リマインド！」） | ✓ |
+| アイコン赤点滅 | ✓ | ✓ |
+| 揺れアニメ | ✓ | ✓ |
+| アプリ内モーダル | ✓ | ✓ |
+| PowerShell MessageBox | ✓（警告アイコン ⚠） | ✓（情報アイコン ℹ） |
+
+実装方法：
+- JavaScript レイヤーで `sound` フラグを管理
+- CSS で点滅・揺れアニメは常時実装
+- PowerShell notifier では `DefaultDesktopOnly` で必ず表示
 
 **使用プロジェクト：** sticky-todo（ToDo管理アプリ・リマインダー機能）
 
-**タグ：** #windows #powershell #notifications #background-task #polling #async #reliability
+**タグ：** #windows #powershell #notifications #background-task #polling #async #reliability #ux-customization
 
 ---
 
