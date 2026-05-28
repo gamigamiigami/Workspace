@@ -1,31 +1,35 @@
 @echo off
-echo ===== ToDo丸 デバッグ =====
-echo.
+rem 結果をテキストファイルに書き出してメモ帳で開く
+
+set "LOG=%~dp0debug-log.txt"
+
+echo ===== ToDo debug ===== > "%LOG%"
+echo %date% %time% >> "%LOG%"
+echo. >> "%LOG%"
 
 set "EDGE="
 if exist "C:\Program Files\Microsoft\Edge\Application\msedge.exe" (
   set "EDGE=C:\Program Files\Microsoft\Edge\Application\msedge.exe"
-  echo [OK] Edge: Program Files に見つかりました
+  echo EDGE: found in Program Files >> "%LOG%"
 ) else if exist "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" (
   set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-  echo [OK] Edge: Program Files (x86) に見つかりました
+  echo EDGE: found in Program Files x86 >> "%LOG%"
 ) else (
-  echo [NG] Edge: 見つかりません！
+  echo EDGE: NOT FOUND >> "%LOG%"
 )
 
-echo.
-echo EDGE  = %EDGE%
-echo HTML  = %~dp0todo.html
-echo.
+echo EDGE_PATH=%EDGE% >> "%LOG%"
+echo HTML_PATH=%~dp0todo.html >> "%LOG%"
+echo. >> "%LOG%"
 
 if not defined EDGE (
-  echo Edgeが見つからないので終了します。
-  pause
+  echo RESULT: FAILED - Edge not found >> "%LOG%"
+  notepad "%LOG%"
   exit /b 1
 )
 
-echo Edgeを起動します...
+echo Launching Edge... >> "%LOG%"
 start "" "%EDGE%" --app="%~dp0todo.html" --window-size=380,270
-echo 起動コマンド実行しました。
-echo.
-pause
+echo RESULT: launch command executed >> "%LOG%"
+
+notepad "%LOG%"
