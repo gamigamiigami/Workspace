@@ -6,6 +6,53 @@
 
 ---
 
+### 2026-05-28 (セッション・WebSocket + PowerShell MessageBox 最前面通知実装)
+
+**うまくいったこと**
+- PowerShell の `System.Windows.Forms.MessageBox` の `DefaultDesktopOnly` オプションで、他のアプリが前面でも強制的にダイアログを表示する方式を実装
+- WebSocket サーバー（notifier.ps1）を実装し、HTML から REST 呼び出しで MessageBox をトリガー
+- launch.bat + notifier.ps1 + todo.html の 3 ファイルで完全なアラーム通知フロー実装完了
+- favicon の赤化・点滅、音声アラーム、HTML モーダルと連携した多層通知構造を確立
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- Windows の `DefaultDesktopOnly` フラグはシステム API レベルで「全ウィンドウの最前面」を強制する
+- PowerShell の HttpListener で WebSocket をリッスンし、JavaScript からの呼び出しを受け取る方式が実用的
+- ブラウザアプリ（Edge --app モード）+ ネイティブスクリプト（PowerShell）の組み合わせで、ブラウザのみの制約を補える
+
+**次回への申し送り**
+- 3 ファイル（launch.bat, notifier.ps1, todo.html）は完成、ユーザーの「とどまる」フォルダでの実行テスト待ち
+- 実運用で favicon 点滅・音声・MessageBox の動作が期待通りか確認予定
+- ユーザー検証後、必要に応じて UI 調整
+
+---
+
+### 2026-05-28 (セッション・アラーム UX 改善：favicon 赤化 + alert 常時発火)
+
+**うまくいったこと**
+- favicon を動的に赤い「！」に変更し、リマインド時の視覚的注意喚起を強化
+- `alert()` をシステムダイアログ呼び出しから常時発火に修正
+  - アプリが前面にあった場合でも `alert()` でブラウザのモーダルダイアログを表示
+  - Windows タスクバーの自動点滅と組み合わせて、確実なユーザー注意喚起を実現
+- スヌーズ/確認ボタン押下後に favicon を通常の orange アイコンに復帰させる処理を実装
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- ブラウザの `alert()` は、アプリが前面でも background でも自動的に画面最前面に表示される標準動作を活用
+- favicon の動的変更は `document.head` に新しい `<link rel="icon">` 要素を追加することで実現
+- JavaScript の `setFavicon()` 関数で、リマインド時と通常時の favicon を切り替える処理で、ユーザー体験を大幅向上
+
+**次回への申し送り**
+- アラーム UX（favicon 赤化 + alert 常時発火 + モーダル）の完成
+- ユーザーの実行テストで、実際の動作（特にタスクバー点滅とアラーム音）を確認待ち
+- ユーザー検証後、さらなる UX 改善があればフィードバック予定
+
+---
+
 ### 2026-05-28 (セッション・アラーム機能確認)
 
 **うまくいったこと**

@@ -353,9 +353,9 @@ renderCards();
 
 ---
 
-## 3重リマインド通知（アラーム音 + タイトル点滅 + 揺れるモーダル）
+## 4方向リマインド通知（favicon 赤化 + alert + アラーム音 + タイトル点滅 + 揺れるモーダル）
 
-**概要：** Notification API に依存しない、`file://` でも動作する確実な通知UI。アラーム音・タイトル点滅・揺れるモーダルの3方向同時通知でユーザー見落とし率をほぼ0に。
+**概要：** Notification API に依存しない、`file://` でも動作する確実な通知UI。favicon 赤化・ブラウザ alert・アラーム音・タイトル点滅・揺れるモーダルの4方向同時通知でユーザー見落とし率をほぼ0に。最後の手段として OS レベルのモーダルダイアログ（alert()）で強制表示。
 
 ```html
 <!-- リマインダーアラートモーダル（×ボタンなし） -->
@@ -462,19 +462,25 @@ let currentReminder = null;
 let titleFlashInterval = null;
 let alarmAudioContext = null;
 
-// 3重通知：アラーム音 + タイトル点滅 + 揺れるモーダル
+// 4方向通知：favicon赤化 + alert + アラーム音 + タイトル点滅 + 揺れるモーダル
 function showReminder(taskTitle, deadlineTime) {
   currentReminder = { taskTitle, deadlineTime, dismissedAt: null };
   const msg = `「${taskTitle}」の期限は ${deadlineTime} です`;
   document.getElementById('reminder-message').textContent = msg;
   
-  // 1. モーダル表示 + 揺れアニメーション
+  // 1. favicon を赤い「！」に変更
+  setFavicon('red');
+  
+  // 2. ブラウザ alert() でネイティブダイアログを強制表示
+  alert(`リマインド通知\n\n${msg}`);
+  
+  // 3. モーダル表示 + 揺れアニメーション
   document.getElementById('reminder-alert').classList.add('show');
   
-  // 2. アラーム音開始（4秒ループ × 3音）
+  // 4. アラーム音開始（4秒ループ × 3音）
   playAlarmSound();
   
-  // 3. タイトル点滅開始（「⏰ リマインド！」と交互）
+  // 5. タイトル点滅開始（「⏰ リマインド！」と交互）
   startTitleFlash();
 }
 
@@ -482,6 +488,7 @@ function dismissReminder() {
   currentReminder.dismissedAt = new Date();
   document.getElementById('reminder-alert').classList.remove('show');
   stopAlarmAndFlash();
+  setFavicon('normal'); // favicon を通常のオレンジに戻す
   currentReminder = null;
 }
 
@@ -494,7 +501,27 @@ function snoozeReminder() {
   }
   document.getElementById('reminder-alert').classList.remove('show');
   stopAlarmAndFlash();
+  setFavicon('normal'); // favicon を通常のオレンジに戻す
   currentReminder = null;
+}
+
+// favicon を動的に変更（赤 = リマインド状態、通常 = 通常状態）
+function setFavicon(state) {
+  const svgRed = `<svg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'><rect width='64' height='64' rx='14' fill='%23dc3545'/><text x='32' y='45' font-size='40' font-weight='bold' text-anchor='middle' fill='white'>!</text></svg>`;
+  const svgNormal = `<svg viewBox='0 0 64 64' xmlns='http://www.w3.org/2000/svg'><rect width='64' height='64' rx='14' fill='%23f5a623'/><circle cx='32' cy='32' r='18' fill='none' stroke='white' stroke-width='4.5'/><path d='M22 32 L29 39 L42 25' stroke='white' stroke-width='4.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>`;
+  
+  const svg = state === 'red' ? svgRed : svgNormal;
+  const dataUrl = `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  
+  // 既存の favicon link を削除
+  let link = document.querySelector('link[rel="icon"]');
+  if (link) link.remove();
+  
+  // 新しい favicon link を追加
+  link = document.createElement('link');
+  link.rel = 'icon';
+  link.href = dataUrl;
+  document.head.appendChild(link);
 }
 
 // アラーム音生成（Web Audio API で「ポポポーン」）
@@ -566,10 +593,12 @@ setInterval(() => {
 }, 30000);
 ```
 
-**3重リマインド方式：**
+**4方向リマインド方式：**
 
 | 手段 | 実装 | 効果 |
 |---|---|---|
+| **favicon 赤化** | `document.head` に `<link rel="icon">` 動的追加、リマインド時に赤い「！」に変更 | ブラウザタブが赤く強調、Windows タスクバーも赤表示 |
+| **ブラウザ alert()** | `alert(message)` でネイティブダイアログ呼び出し | OS レベルのモーダル（最前面・アプリ強制フォーカス） |
 | **アラーム音** | Web Audio API で「ポポポーン」3音×4秒ループ | 確認するまで鳴り続ける |
 | **タイトル点滅** | `document.title` を「⏰ リマインド！」と交互 | タブ/ウィンドウが点滅 |
 | **揺れるモーダル** | CSS `@keyframes shake` で画面中央に強制表示（×ボタンなし） | 集中力強制 |

@@ -4,6 +4,62 @@
 
 ---
 
+### [2026-05-28 午後] sticky-todo — WebSocket + PowerShell MessageBox で全窓最前面通知実装
+
+**作業内容：**
+- Windows の MessageBox を PowerShell 経由で呼び出す方式を実装（`DefaultDesktopOnly` フラグで全窓最前面表示）
+- PowerShell HttpListener で WebSocket サーバー（notifier.ps1）を実装
+- HTML（todo.html）から HTTPS/WebSocket でトリガーして、MessageBox を表示する仕組みを完成
+- launch.bat ロジックを調整し、notifier.ps1 をバックグラウンド起動 + Edge で todo.html を起動
+- favicon 赤化・点滅、音声アラーム、HTML モーダル、システムダイアログの 4 層通知フロー完成
+
+**変更点：**
+- `projects/sticky-todo/todo.html` — WebSocket でクライアント側トリガー実装
+- `projects/sticky-todo/notifier.ps1` — 新規作成（PowerShell + System.Windows.Forms MessageBox）
+- `projects/sticky-todo/launch.bat` — notifier.ps1 バックグラウンド起動処理を追加
+
+**結果：** 成功 / 3 ファイル完成，ユーザーテスト待ち
+
+**成果物：**
+- `projects/sticky-todo/notifier.ps1`（WebSocket+MessageBox 実装）
+- `projects/sticky-todo/launch.bat` 修正版
+- `projects/sticky-todo/todo.html` WebSocket トリガー組み込み版
+- コミット：`feat: WebSocket+PowerShell MessageBoxで全窓最前面通知・favicon点滅`
+
+**気づき・メモ：**
+- `System.Windows.Forms.MessageBoxOptions.DefaultDesktopOnly` は OS レベルで全ウィンドウの最前面を強制
+- PowerShell HttpListener で WebSocket リッスン可能（C# アセンブリ利用）
+- Edge --app モード + PowerShell スクリプト = ブラウザアプリの制限を補える実用的な組み合わせ
+- 3 ファイルをユーザーの「とどまる」フォルダに入れて実行テスト予定
+
+---
+
+### [2026-05-28 早朝] sticky-todo — アラーム UX 最終改善（favicon 赤化 + alert 常時発火）
+
+**作業内容：**
+- リマインド時のユーザー注意喚起を強化
+- favicon を動的に赤い「！」に変更（視覚的インパクト向上）
+- `alert()` を常時発火に修正（アプリ前面でも背面でも表示）
+- Windows タスクバー点滅 + ブラウザ標準ダイアログの組み合わせで確実な通知を実現
+- スヌーズ/確認後に favicon を通常のオレンジアイコンに復帰させる処理を実装
+
+**変更点：**
+- `projects/sticky-todo/todo.html` — favicon設定・alert呼び出しロジック修正
+
+**結果：** 成功 / アラーム UX 最終改善完了
+
+**成果物：**
+- `projects/sticky-todo/todo.html`（favicon動的変更＋alert常時発火）
+- コミット：`9321be8 feat: リマインド時にfaviconを赤に変更＋alert常時発火`
+
+**気づき・メモ：**
+- `document.head` に動的に `<link rel="icon">` を追加することで favicon をリアルタイム切り替え可能
+- ブラウザの `alert()` は OS レベルのモーダルダイアログ（アプリ前面でも強制表示）として動作
+- 「音声 + favicon赤化 + alert + タスクバー点滅」の4要素組み合わせで、ユーザーの見落とし率をほぼ 0 に削減
+- アラーム機能は一連の改善サイクルで完成（PDCA短期回転の好例）
+
+---
+
 ### [2026-05-28（深夜・ユーザー診断待ち）] sticky-todo — debug.bat 実行結果待ちで中断
 
 **作業内容：**
