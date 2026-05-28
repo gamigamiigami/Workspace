@@ -1125,7 +1125,7 @@
         + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
         + (task.submitTo    ? '\n提出先：' + task.submitTo : '');
 
-      // PowerShell MessageBox（常に送信）
+      // PowerShell MessageBox（常に試みる）
       try {
         const ws = new WebSocket('ws://localhost:48766/');
         const payload = JSON.stringify({ id: task.id, key: remindKey(task), msg, type: task.reminderType || 'alarm' });
@@ -1133,13 +1133,14 @@
         ws.onerror = () => {};
       } catch(e) {}
 
-      if (!isAlarm) return; // メッセージボックスのみ → ここで終了
+      // アラームあり：音・点滅
+      if (isAlarm) {
+        startAlarmLoop();
+        startTitleFlash();
+        startFaviconBlink();
+      }
 
-      // アラームあり：音・点滅・アプリ内モーダル
-      startAlarmLoop();
-      startTitleFlash();
-      startFaviconBlink();
-
+      // アプリ内モーダル（両タイプで表示）
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
       if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
@@ -1151,8 +1152,9 @@
       const box = modal.querySelector('.reminder-box');
       box.style.animation = 'none';
       box.offsetHeight;
-      box.style.animation = '';
-      try { window.focus(); } catch(e) {}
+      if (isAlarm) box.style.animation = ''; // message タイプは揺れなし
+
+      if (isAlarm) { try { window.focus(); } catch(e) {} }
     }
 
     // ===== トースト =====
