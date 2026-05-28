@@ -1053,18 +1053,22 @@
     }
 
     function triggerReminder(task) {
-      // OS通知（localhost経由なら動作する）
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification('⏰ ToDo丸', {
-            body: task.title + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : ''),
-            requireInteraction: true,
-          });
-        } catch(e) {}
+      currentReminder = task;
+
+      // 音とタイトル点滅を先に開始（alert中も音は鳴り続ける）
+      startAlarmLoop();
+      startTitleFlash();
+
+      // 他のウィンドウが前面にある場合はシステムダイアログで割り込み通知
+      if (!document.hasFocus()) {
+        try { window.focus(); } catch(e) {}
+        window.alert('⏰ リマインド！\n\n'
+          + task.title
+          + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
+          + (task.submitTo    ? '\n提出先：' + task.submitTo : ''));
       }
 
-      // アプリ内モーダル + 音 + タイトル点滅
-      currentReminder = task;
+      // アプリ内モーダル
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
       if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
@@ -1079,8 +1083,6 @@
       box.offsetHeight;
       box.style.animation = '';
 
-      startAlarmLoop();
-      startTitleFlash();
       try { window.focus(); } catch(e) {}
     }
 
