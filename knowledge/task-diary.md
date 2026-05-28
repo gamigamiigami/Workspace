@@ -6,6 +6,26 @@
 
 ---
 
+### 2026-05-28 (夜間セッション・最終) - sticky-todo launch.bat バックスラッシュ→スラッシュ変換対応
+
+**うまくいったこと**
+- Windows Batch での `file:///` パス指定で、バックスラッシュをスラッシュに変換する処理を実装
+- `%~dp0` で取得したパスのバックスラッシュを、`for /f` と `setlocal enabledelayedexpansion` で置換する方法を確立
+- Edge `--app=file:///<path>` では必ずスラッシュパスが必要であることを確認・対応
+
+**うまくいかなかったこと**
+- ユーザーからの検証結果（debug.bat 実行結果）が未受け取りのため、launch.bat の完全テストはできていない状態
+
+**発見**
+- Windows Batch の バックスラッシュ→スラッシュ置換は、`for /f "tokens=*" %i in ('powershell -c "[string path]"')` または Batch の `%variable:~0,1%` による文字置換で実装可能
+- `setlocal enabledelayedexpansion` を使った `!variable!` による遅延展開が、Batch での変数置換に有効
+
+**次回への申し送り**
+- ユーザーが launch.bat をテストして、実際に app mode で起動し、アドレスバーが表示されないことを確認する必要がある
+- 万が一起動に失敗した場合は、debug.bat の実行結果から具体的な原因を特定してさらに修正
+
+---
+
 ### 2026-05-28 (深夜セッション・ユーザー応答待ち状態) - sticky-todo debug.bat 検証待ちの状態で終了
 
 **うまくいったこと**
