@@ -1,5 +1,30 @@
 Add-Type -AssemblyName System.Windows.Forms
 
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+public class Win32 {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+    [DllImport("user32.dll", CharSet=CharSet.Auto)]
+    public static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+}
+"@
+
+function Invoke-BringToFront {
+    try {
+        Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | ForEach-Object {
+            $sb = [System.Text.StringBuilder]::new(256)
+            [Win32]::GetWindowText($_.MainWindowHandle, $sb, 256) | Out-Null
+            if ($sb.ToString() -match 'ToDo') {
+                [Win32]::ShowWindow($_.MainWindowHandle, 9) | Out-Null   # SW_RESTORE
+                [Win32]::SetForegroundWindow($_.MainWindowHandle) | Out-Null
+            }
+        }
+    } catch {}
+}
+
 $http = [System.Net.HttpListener]::new()
 $http.Prefixes.Add('http://localhost:48766/')
 try { $http.Start() } catch { exit 0 }
@@ -24,6 +49,7 @@ function Test-AndFireReminders {
                 if ($t.dueDateTime) { $msg += "`n期限：$($dueTime.Month)/$($dueTime.Day) $($dueTime.Hour):$($dueTime.Minute.ToString('00'))" }
                 if ($t.submitTo)    { $msg += "`n提出先：$($t.submitTo)" }
                 $icon = if ("$($t.reminderType)" -eq 'message') { [System.Windows.Forms.MessageBoxIcon]::Information } else { [System.Windows.Forms.MessageBoxIcon]::Exclamation }
+                Invoke-BringToFront
                 [System.Windows.Forms.MessageBox]::Show(
                     $msg, 'ToDo丸 リマインド',
                     [System.Windows.Forms.MessageBoxButtons]::OK,
@@ -82,6 +108,7 @@ while ($http.IsListening) {
                 if ($data.msg)  { $displayMsg = $data.msg }
                 if ($data.type -eq 'message') { $wsIcon = [System.Windows.Forms.MessageBoxIcon]::Information }
             } catch {}
+            Invoke-BringToFront
             [System.Windows.Forms.MessageBox]::Show(
                 $displayMsg, 'ToDo丸 リマインド',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
