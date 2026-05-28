@@ -153,6 +153,83 @@ window.addEventListener('resize', () => {
 
 ---
 
+### [汎用] ローカルサーバー経由のブラウザ API 対応（file:// の制限回避）
+
+**用途：** HTMLファイルを `file://` プロトコルで直接開く際、Notification API・localStorage・IndexedDB など多くのブラウザ API がセキュリティ上の理由で動作しない場合、Windows 環境でローカルサーバー（PowerShell サーバー）を立てて `http://localhost:PORT` でアクセスさせることで、すべてのAPI が確実に動作する環境を実現する
+
+**手法：**
+1. **PowerShell サーバースクリプト** (`server.ps1`)：指定ポートでローカル HTTP サーバーを起動
+2. **Batch 起動スクリプト** (`launch.bat`)：PowerShell サーバーをバックグラウンド起動、ブラウザで `http://localhost:PORT/ファイル名` を開く
+3. **HTMLファイル** (`todo.html`)：`file://` ではなく `http://` でアクセスされるため、すべての API が動作
+
+**コード例（server.ps1）：**
+```powershell
+$Port = 48765
+$Path = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add("http://localhost:$Port/")
+$listener.Start()
+
+Write-Host "Server running at http://localhost:$Port (press Ctrl+C to stop)"
+
+while ($listener.IsListening) {
+  $context = $listener.GetContext()
+  $request = $context.Request
+  
+  # ローカルファイルのパスを取得
+  $localPath = Join-Path $Path ([System.Uri]::UnescapeDataString($request.Url.LocalPath).TrimStart('/'))
+  
+  if (Test-Path $localPath -PathType Leaf) {
+    $content = [System.IO.File]::ReadAllBytes($localPath)
+    $context.Response.ContentLength64 = $content.Length
+    $context.Response.OutputStream.Write($content, 0, $content.Length)
+  } else {
+    $context.Response.StatusCode = 404
+  }
+  
+  $context.Response.Close()
+}
+```
+
+**コード例（launch.bat）：**
+```batch
+@echo off
+cd /d "%~dp0"
+
+REM PowerShell サーバーをバックグラウンド起動
+powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -Command "& '%~dp0server.ps1'"
+
+REM Edge ブラウザを起動（localhost へアクセス）
+timeout /t 1 /nobreak
+start "" "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --app=http://localhost:48765/todo.html
+
+exit /b 0
+```
+
+**ポイント：**
+- PowerShell の `HttpListener` クラスで組み込みHTTPサーバーを実装（外部ツール不要）
+- `localhost:PORT` でアクセスすることで、Notification API が確実に動作
+- `-WindowStyle Hidden` でサーバープロセスをバックグラウンド実行（ユーザーには見えない）
+- `http://` プロトコル経由のため、localStorage・sessionStorage・IndexedDB・Cookies なども確実に動作
+
+**注意：**
+- PowerShell 実行ポリシーが制限されている環境では `-ExecutionPolicy Bypass` が必要
+- `localhost:PORT` は同一PC内からのみアクセス可能（外部ネットワークからはアクセス不可）
+- サーバープロセスはシステムトレイに表示されず、タスクマネージャーで確認可能
+
+**設計の考慮点：**
+- **Notification API の確実な動作**：初回起動時に許可ダイアログが出現、以後トースト通知が機能
+- **セキュリティ**：`localhost` 限定で、外部からのアクセスは許可しない
+- **オフライン動作**：サーバー起動後はネットワーク不要（ローカルファイル読み込みのみ）
+- **ユーザーUX**：Batch をダブルクリックするだけで、サーバー起動→ブラウザ起動が自動で完了
+
+**使用プロジェクト：** sticky-todo（リマインダー通知機能）
+
+**タグ：** #windows #powershell #http-server #notification-api #browser-api #localhost
+
+---
+
 ## Windows Batch・自動化
 
 ### [汎用] Windows launch.bat —日本語フォルダ名のURLエンコード対応
