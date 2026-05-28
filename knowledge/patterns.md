@@ -1,9 +1,89 @@
 # 成功パターン集
 
-最終更新：2026-05-24
+最終更新：2026-05-28
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
+
+---
+
+## デスクトップ環境・起動スクリプト
+
+### [汎用] Windows Batch + PowerShell ローカルサーバー起動スクリプト
+
+**用途：** Windows 環境で Webアプリを localhost サーバー経由で起動し、ブラウザの Notification API・localStorage・IndexedDB などのセキュリティ制限を回避したい場合。ユーザーが `.bat` ファイルをダブルクリックするだけで即座に起動する環境を実現。
+
+**構成ファイル：**
+
+1. **launch.bat** （起動スクリプト）
+```batch
+@echo off
+set "PORT=48765"
+set "EDGE=C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+
+rem スクリプトのあるフォルダに移動（日本語フォルダ名対応）
+cd /d "%~dp0"
+
+rem サーバーを最小化ウィンドウで起動
+start /MIN "" powershell -NoProfile -ExecutionPolicy Bypass -File "server.ps1" -Port %PORT%
+
+rem サーバー起動を待つ
+timeout /t 2 /nobreak > nul
+
+rem EdgeでAppモードとして起動
+start "" "%EDGE%" --app=http://localhost:%PORT%/todo.html --window-size=380,270
+```
+
+2. **server.ps1** （ローカルサーバー）
+```powershell
+param([string]$Dir = $PSScriptRoot, [int]$Port = 48765)
+
+$listener = New-Object System.Net.HttpListener
+$listener.Prefixes.Add("http://localhost:$Port/")
+
+try {
+    $listener.Start()
+} catch {
+    # すでに起動済みなら何もしない
+    exit 0
+}
+
+while ($listener.IsListening) {
+    try {
+        $ctx  = $listener.GetContext()
+        $path = $ctx.Request.Url.LocalPath.TrimStart('/')
+        if ($path -eq '') { $path = 'todo.html' }
+        $file = Join-Path $Dir $path
+
+        if (Test-Path $file -PathType Leaf) {
+            $bytes = [System.IO.File]::ReadAllBytes($file)
+            $ext   = [System.IO.Path]::GetExtension($file).ToLower()
+            $ctx.Response.ContentType = switch ($ext) {
+                '.html' { 'text/html; charset=utf-8' }
+                '.js'   { 'application/javascript' }
+                '.css'  { 'text/css' }
+                default { 'application/octet-stream' }
+            }
+            $ctx.Response.ContentLength64 = $bytes.Length
+            $ctx.Response.OutputStream.Write($bytes, 0, $bytes.Length)
+        } else {
+            $ctx.Response.StatusCode = 404
+        }
+        $ctx.Response.Close()
+    } catch { break }
+}
+```
+
+**ポイント：**
+- **`cd /d "%~dp0"`**：Batch スクリプト自身のフォルダに移動。`/d` フラグでドライブ変更を許可。日本語フォルダ名でも正常動作。
+- **PowerShell の `$PSScriptRoot`**：PowerShell スクリプトが呼ばれたフォルダを自動的に参照。相対パスで HTML ファイルにアクセス可能。
+- **`start /MIN`**：サーバープロセスを最小化ウィンドウで起動。タスクバーに目立たない形で表示されて UX が向上。
+- **`timeout /t 2`**：サーバー起動遅延時の安定性向上（1秒では短すぎる場合がある）。
+- **`--app=http://...`**：Edge のアプリモード。ウィンドウのアドレスバー・タブを非表示にしてデスクトップアプリ風 UI を実現。
+
+**使用プロジェクト：** sticky-todo（ToDo管理アプリ）
+
+**タグ：** #windows #batch #powershell #localhost #notification-api #desktop-app
 
 ---
 
