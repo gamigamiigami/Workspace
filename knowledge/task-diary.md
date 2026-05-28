@@ -6,6 +6,26 @@
 
 ---
 
+### 2026-05-28 (セッション終了時)
+
+**うまくいったこと**
+- sticky-todo の PowerShell WebSocket + MessageBox `DefaultDesktopOnly` フラグによる「最前面通知」の実装方針が完成
+- launch.bat + notifier.ps1 + todo.html の3ファイル構成で、他アプリが前面でもメッセージボックスを強制的に表示する仕組みを確立
+- Windows システムのセキュリティ制限を尊重しつつ、ユーザー注意喚起を最大化する実装戦略の検証完了
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- Windows の `DefaultDesktopOnly` フラグはシステムAPI レベルで「全ウィンドウの最前面」を強制する機能
+- ブラウザアプリ（Edge --app モード）+ ネイティブスクリプト（PowerShell）の組み合わせで、ブラウザのセキュリティ制限を補完可能
+
+**次回への申し送り**
+- 3ファイル（launch.bat, notifier.ps1, todo.html）は完成、コミット済み・プッシュ済み
+- ユーザーの「とどまる」フォルダでの実行テストで、favicon 点滅・音声・MessageBox の動作確認待ち
+
+---
+
 ### 2026-05-28 (セッション・WebSocket + PowerShell MessageBox 最前面通知実装)
 
 **うまくいったこと**
