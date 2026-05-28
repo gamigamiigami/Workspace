@@ -14,4 +14,7 @@ if not defined EDGE (
   exit /b 1
 )
 
-start "" "%EDGE%" "--app=file:///%~dp0todo.html" --window-size=380,270
+rem バックスラッシュをスラッシュに変換して file:// URL を作る
+set "HTML=%~dp0todo.html"
+set "HTML=%HTML:\=/%"
+start "" "%EDGE%" "--app=file:///%HTML%" --window-size=380,270
