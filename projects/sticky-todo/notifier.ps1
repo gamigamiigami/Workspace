@@ -23,10 +23,11 @@ function Test-AndFireReminders {
                 $msg = "リマインド！`n`n" + $t.title
                 if ($t.dueDateTime) { $msg += "`n期限：$($dueTime.Month)/$($dueTime.Day) $($dueTime.Hour):$($dueTime.Minute.ToString('00'))" }
                 if ($t.submitTo)    { $msg += "`n提出先：$($t.submitTo)" }
+                $icon = if ("$($t.reminderType)" -eq 'message') { [System.Windows.Forms.MessageBoxIcon]::Information } else { [System.Windows.Forms.MessageBoxIcon]::Exclamation }
                 [System.Windows.Forms.MessageBox]::Show(
                     $msg, 'ToDo丸 リマインド',
                     [System.Windows.Forms.MessageBoxButtons]::OK,
-                    [System.Windows.Forms.MessageBoxIcon]::Exclamation,
+                    $icon,
                     [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
                     [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
                 ) | Out-Null
@@ -74,15 +75,17 @@ while ($http.IsListening) {
             $r     = $ws.ReceiveAsync([ArraySegment[byte]]$buf, [Threading.CancellationToken]::None).Result
             $raw   = [Text.Encoding]::UTF8.GetString($buf, 0, $r.Count)
             $displayMsg = $raw
+            $wsIcon = [System.Windows.Forms.MessageBoxIcon]::Exclamation
             try {
                 $data = $raw | ConvertFrom-Json
-                if ($data.key) { $script:firedIds[$data.key] = $true }
-                if ($data.msg) { $displayMsg = $data.msg }
+                if ($data.key)  { $script:firedIds[$data.key] = $true }
+                if ($data.msg)  { $displayMsg = $data.msg }
+                if ($data.type -eq 'message') { $wsIcon = [System.Windows.Forms.MessageBoxIcon]::Information }
             } catch {}
             [System.Windows.Forms.MessageBox]::Show(
                 $displayMsg, 'ToDo丸 リマインド',
                 [System.Windows.Forms.MessageBoxButtons]::OK,
-                [System.Windows.Forms.MessageBoxIcon]::Exclamation,
+                $wsIcon,
                 [System.Windows.Forms.MessageBoxDefaultButton]::Button1,
                 [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly
             ) | Out-Null

@@ -579,6 +579,14 @@
           </select>
         </div>
 
+        <div class="field" id="f-reminder-type-wrap" style="display:none">
+          <label>通知方法</label>
+          <select id="f-reminder-type">
+            <option value="alarm">アラームあり（音・点滅・モーダル）</option>
+            <option value="message">メッセージボックスのみ（静か）</option>
+          </select>
+        </div>
+
         <div class="field">
           <label>提出先</label>
           <input type="text" id="f-submit" placeholder="教頭先生・職員室など">
@@ -929,7 +937,9 @@
       document.getElementById('modal-title').textContent = '新規ノート';
       document.getElementById('f-title').value    = '';
       document.getElementById('f-due').value      = '';
-      document.getElementById('f-reminder').value = '';
+      document.getElementById('f-reminder').value           = '';
+      document.getElementById('f-reminder-type').value      = 'alarm';
+      document.getElementById('f-reminder-type-wrap').style.display = 'none';
       document.getElementById('f-submit').value   = '';
       document.getElementById('f-url').value      = '';
       document.getElementById('f-memo').value     = '';
@@ -947,7 +957,9 @@
       document.getElementById('modal-title').textContent = 'ノートを編集';
       document.getElementById('f-title').value    = t.title;
       document.getElementById('f-due').value      = t.dueDateTime || '';
-      document.getElementById('f-reminder').value = t.reminder    || '';
+      document.getElementById('f-reminder').value           = t.reminder     || '';
+      document.getElementById('f-reminder-type').value      = t.reminderType || 'alarm';
+      document.getElementById('f-reminder-type-wrap').style.display = t.reminder ? '' : 'none';
       document.getElementById('f-submit').value   = t.submitTo    || '';
       document.getElementById('f-url').value      = t.url         || '';
       document.getElementById('f-memo').value     = t.memo        || '';
@@ -973,9 +985,10 @@
         title,
         colorId:     getSelectedColor(),
         category:    document.getElementById('f-category').value,
-        dueDateTime: document.getElementById('f-due').value,
-        reminder:    document.getElementById('f-reminder').value,
-        submitTo:    document.getElementById('f-submit').value.trim(),
+        dueDateTime:  document.getElementById('f-due').value,
+        reminder:     document.getElementById('f-reminder').value,
+        reminderType: document.getElementById('f-reminder-type').value,
+        submitTo:     document.getElementById('f-submit').value.trim(),
         url:         document.getElementById('f-url').value.trim(),
         memo:        document.getElementById('f-memo').value.trim(),
       };
@@ -1105,24 +1118,28 @@
 
     function triggerReminder(task) {
       currentReminder = task;
-
-      startAlarmLoop();
-      startTitleFlash();
-      startFaviconBlink(); // タスクバーアイコンを赤く点滅
+      const isAlarm = task.reminderType !== 'message';
 
       const msg = '⏰ リマインド！\n\n'
         + task.title
         + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
         + (task.submitTo    ? '\n提出先：' + task.submitTo : '');
 
+      // PowerShell MessageBox（常に送信）
       try {
         const ws = new WebSocket('ws://localhost:48766/');
-        const payload = JSON.stringify({ id: task.id, key: remindKey(task), msg });
+        const payload = JSON.stringify({ id: task.id, key: remindKey(task), msg, type: task.reminderType || 'alarm' });
         ws.onopen  = () => ws.send(payload);
         ws.onerror = () => {};
       } catch(e) {}
 
-      // アプリ内モーダル（スヌーズ/確認）
+      if (!isAlarm) return; // メッセージボックスのみ → ここで終了
+
+      // アラームあり：音・点滅・アプリ内モーダル
+      startAlarmLoop();
+      startTitleFlash();
+      startFaviconBlink();
+
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
       if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
@@ -1131,12 +1148,10 @@
 
       const modal = document.getElementById('reminder-modal');
       modal.classList.add('open');
-
       const box = modal.querySelector('.reminder-box');
       box.style.animation = 'none';
       box.offsetHeight;
       box.style.animation = '';
-
       try { window.focus(); } catch(e) {}
     }
 
@@ -1203,6 +1218,11 @@
       document.getElementById('new-cat-input').addEventListener('keydown', e => {
         if (e.key === 'Enter')  addCategory();
         if (e.key === 'Escape') document.getElementById('new-cat-wrap').classList.remove('open');
+      });
+
+      // リマインダー時間が変わったら通知方法欄を表示/非表示
+      document.getElementById('f-reminder').addEventListener('change', e => {
+        document.getElementById('f-reminder-type-wrap').style.display = e.target.value ? '' : 'none';
       });
 
       // URLを開く
