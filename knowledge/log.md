@@ -4,6 +4,31 @@
 
 ---
 
+### [2026-05-29 午前] sticky-todo — launch.bat バッチ起動メカニズム最適化 & 日本語除去
+
+**作業内容：**
+- launch.bat のバッチスクリプト起動方式を改善
+  - **旧方式：** `powershell -Command "Start-Process powershell -ArgumentList ..."`（二重ネスト・過度に複雑）
+  - **新方式：** `start "" powershell -WindowStyle Hidden -File "%NOTIFIER%"`（cmd 組み込みコマンド・即座に非同期実行）
+- バッチファイルから日本語コメント（`rem ===== ToDo丸 起動スクリプト =====` など）を完全除去
+- パス処理を `%NOTIFIER%` 環境変数 + 引用符で統一（スペース含むパスに対応）
+
+**変更点：**
+- `projects/sticky-todo/launch.bat` — 起動メカニズム簡潔化・コメント日本語化除去
+
+**結果：** 成功 / コード可読性向上・エンコーディング問題リスク軽減
+
+**成果物：**
+- `projects/sticky-todo/launch.bat` 改善版
+- コミット予定：`chore: launch.bat 起動メカニズム最適化 & 日本語コメント除去`
+
+**気づき・メモ：**
+- Windows バッチスクリプト内の日本語コメントはエンコーディング問題リスク
+- `start ""` は cmd 組み込みコマンドで、PowerShell ネストより軽量・確実
+- 環境変数化 + 引用符で、複雑なパスも安全に処理可能
+
+---
+
 ### [2026-05-28 午後] sticky-todo — WebSocket + PowerShell MessageBox で全窓最前面通知実装
 
 **作業内容：**
