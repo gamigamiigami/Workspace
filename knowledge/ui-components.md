@@ -353,6 +353,162 @@ renderCards();
 
 ---
 
+## 揺れるアラートモーダル（リマインダー通知用）
+
+```html
+<!-- リマインダーアラートモーダル -->
+<div id="reminder-alert" class="reminder-alert">
+  <div class="reminder-modal">
+    <h2>🔔 タスク期限のお知らせ</h2>
+    <p id="reminder-message" class="reminder-message"></p>
+    <div class="reminder-buttons">
+      <button onclick="snoozeReminder()">5分後にもう一度</button>
+      <button onclick="dismissReminder()">確認した</button>
+    </div>
+  </div>
+</div>
+```
+
+```css
+.reminder-alert {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.reminder-alert.show {
+  display: flex;
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+.reminder-modal {
+  background: #1e1e1e;
+  color: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 90%;
+  width: 400px;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.5);
+  animation: shake 0.5s ease-in-out;
+  text-align: center;
+}
+
+.reminder-message {
+  font-size: 16px;
+  margin: 16px 0 24px;
+  line-height: 1.6;
+}
+
+.reminder-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.reminder-buttons button {
+  padding: 12px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.reminder-buttons button:first-child {
+  background: #ff9800;
+  color: #fff;
+}
+
+.reminder-buttons button:first-child:hover {
+  background: #f57c00;
+}
+
+.reminder-buttons button:last-child {
+  background: #4CAF50;
+  color: #fff;
+}
+
+.reminder-buttons button:last-child:hover {
+  background: #45a049;
+}
+
+/* 揺れアニメーション */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  50% { transform: translateX(8px); }
+  75% { transform: translateX(-8px); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+```
+
+```javascript
+let reminderQueue = [];
+let currentReminder = null;
+
+function showReminder(taskTitle, deadlineTime) {
+  currentReminder = { taskTitle, deadlineTime, dismissedAt: null };
+  const msg = `「${taskTitle}」の期限は ${deadlineTime} です`;
+  document.getElementById('reminder-message').textContent = msg;
+  document.getElementById('reminder-alert').classList.add('show');
+}
+
+function dismissReminder() {
+  currentReminder.dismissedAt = new Date();
+  document.getElementById('reminder-alert').classList.remove('show');
+  currentReminder = null;
+}
+
+function snoozeReminder() {
+  if (currentReminder) {
+    reminderQueue.push({
+      ...currentReminder,
+      nextCheckTime: new Date(Date.now() + 5 * 60000) // 5分後
+    });
+  }
+  document.getElementById('reminder-alert').classList.remove('show');
+  currentReminder = null;
+}
+
+// バックグラウンドでの定期チェック（30秒ごと）
+setInterval(() => {
+  const now = new Date();
+  for (const task of tasks) {
+    if (!task.deadline) continue;
+    const deadline = new Date(task.deadline);
+    const diffMs = deadline - now;
+    
+    // 期限の前後30秒以内
+    if (Math.abs(diffMs) < 30000 && !task.reminderShown) {
+      showReminder(task.title, task.deadline);
+      task.reminderShown = true;
+    }
+  }
+}, 30000);
+```
+
+**特徴：**
+- **揺れアニメーション**：ユーザーが確実に気づく UX
+- **×ボタンなし**：「5分後にもう一度」か「確認した」のみ選択可能
+- **背景グレーアウト**：モーダルに集中させる
+- **30秒ごとのバックグラウンドチェック**：期限前後の通知を確実に捕捉
+- **OS通知との組み合わせ**：ブラウザ通知 + アプリ内アラートの二重通知で見逃し防止
+
+**使用プロジェクト：** sticky-todo (リマインダー機能 2026-05-28)
+
+**タグ：** #alert #reminder #animation #shake #notification #ux-pattern
+
+---
+
 ## 関連リンク
 
 - 成功パターン集 → [patterns.md](./patterns.md)
