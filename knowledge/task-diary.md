@@ -6,6 +6,40 @@
 
 ---
 
+### 2026-06-02 (リマインダー機能：Win32 API 実装の検証失敗 → 根本原因診断段階へ)
+
+**うまくいったこと**
+- Win32 API の `SetForegroundWindow` と `ShowWindow(SW_RESTORE)` を使用したアプリ最前面化機能を PowerShell に実装
+- 実装コード（`Invoke-BringToFront` 関数）を notifier.ps1 に追加し、git commit・push まで完了
+
+**うまくいかなかったこと**
+- **実装した MessageBox が実際には「全ウィンドウの前に出ていない」ことが判明**
+  - `DefaultDesktopOnly` フラグは「サービスデスクトップではなく対話型デスクトップに表示」する機能であり、「全ウィンドウの最前面に出す」ための `MB_TOPMOST (0x40000)` フラグではない
+  - 実装者（AI）がこの違いを理解していなかった
+- **アプリが前面に出ていない**
+  - バックグラウンドで実行する PowerShell からは `SetForegroundWindow` が Windows のセキュリティ制約で無視される可能性がある
+  - ユーザー入力フォーカスのないプロセスから直近のユーザー入力をしたプロセスのウィンドウへの切り替えは基本的に失敗する
+
+**発見**
+- Windows MessageBox の `DefaultDesktopOnly` フラグについて根本的な誤解があった
+- **根本原因が3つ考えられる**：
+  1. notifier.ps1 そのものが起動していない可能性
+  2. MessageBox は起動しているが `DefaultDesktopOnly` では実際には最前面に表示されない
+  3. `SetForegroundWindow` は背景プロセスからの呼び出しでは効かない（Windows セキュリティ制約）
+- ユーザーが指摘する「全然ダメ」という状況は、これらの複合原因の可能性が高い
+
+**次回への申し送り**
+- **【最重要】診断が先**
+  1. `launch.bat` 実行後、タスクマネージャー（Ctrl+Shift+Esc）→ 詳細タブで `powershell.exe` が表示されるか確認
+  2. 表示されない → notifier 起動の問題が根本原因
+  3. 表示される → MessageBox の前面問題と `SetForegroundWindow` の効きが問題
+- **コーディングは診断結果 after**
+  - MessageBox に `MB_TOPMOST` を使用する必要がある可能性
+  - `SetForegroundWindow` を使用できない環境での代替手法（e.g., AllowSetForegroundWindow、AttachThreadInput）を検討
+  - notifier.ps1 の起動メカニズム（launch.bat の batch ファイルエンコーディング、PowerShell execution policy など）の確認
+
+---
+
 ### 2026-06-01 (リマインダー機能：アプリ最前面化 + メッセージボックス統合)
 
 **うまくいったこと**
