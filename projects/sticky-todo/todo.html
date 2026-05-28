@@ -654,6 +654,19 @@
       if (link) link.href = href;
     }
 
+    function startFaviconBlink() {
+      let state = false;
+      faviconBlinkTimer = setInterval(() => {
+        setFavicon(state ? FAVICON_NORMAL : FAVICON_ALERT);
+        state = !state;
+      }, 600);
+    }
+
+    function stopFaviconBlink() {
+      if (faviconBlinkTimer) { clearInterval(faviconBlinkTimer); faviconBlinkTimer = null; }
+      setFavicon(FAVICON_NORMAL);
+    }
+
     // ===== 状態 =====
     let tasks            = [];
     let customCategories = [];
@@ -663,6 +676,7 @@
     let editingId        = null;
     let deletingId       = null;
     let currentReminder  = null;
+    let faviconBlinkTimer = null;
 
     function allCategories() {
       return [...DEFAULT_CATEGORIES, ...customCategories];
@@ -1063,15 +1077,23 @@
     function triggerReminder(task) {
       currentReminder = task;
 
-      startAlarmLoop();   // 音を先に鳴らす（alert中も鳴り続ける）
+      startAlarmLoop();
       startTitleFlash();
-      setFavicon(FAVICON_ALERT); // タスクバーアイコンを赤に変更
+      startFaviconBlink(); // タスクバーアイコンを赤く点滅
 
-      // フォーカス状態に関わらず常にシステムダイアログを表示
-      window.alert('⏰ リマインド！\n\n'
+      const msg = '⏰ リマインド！\n\n'
         + task.title
         + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
-        + (task.submitTo    ? '\n提出先：' + task.submitTo : ''));
+        + (task.submitTo    ? '\n提出先：' + task.submitTo : '');
+
+      // WebSocket経由でPowerShellに通知 → 全ウィンドウ最前面にMessageBox表示
+      try {
+        const ws = new WebSocket('ws://localhost:48766/');
+        ws.onopen  = () => ws.send(msg);
+        ws.onerror = () => window.alert(msg); // 起動直後など繋がらない場合のフォールバック
+      } catch(e) {
+        window.alert(msg);
+      }
 
       // アプリ内モーダル（スヌーズ/確認）
       document.getElementById('reminder-title').textContent = task.title;
@@ -1183,7 +1205,7 @@
       document.getElementById('btn-snooze').addEventListener('click', () => {
         stopAlarm();
         stopTitleFlash();
-        setFavicon(FAVICON_NORMAL);
+        stopFaviconBlink();
         document.getElementById('reminder-modal').classList.remove('open');
         if (currentReminder) {
           const task = currentReminder;
@@ -1194,7 +1216,7 @@
       document.getElementById('btn-reminder-ok').addEventListener('click', () => {
         stopAlarm();
         stopTitleFlash();
-        setFavicon(FAVICON_NORMAL);
+        stopFaviconBlink();
         document.getElementById('reminder-modal').classList.remove('open');
         currentReminder = null;
       });
