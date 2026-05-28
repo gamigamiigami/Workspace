@@ -1212,8 +1212,8 @@
       render();
       initWindowSize();
 
-      // 通知許可を要求（localhost経由の場合に有効）
-      if ('Notification' in window && Notification.permission === 'default') {
+      // OS通知許可（http/https経由の場合のみ）
+      if (location.protocol !== 'file:' && 'Notification' in window && Notification.permission === 'default') {
         Notification.requestPermission();
       }
 
