@@ -1053,6 +1053,17 @@
     }
 
     function triggerReminder(task) {
+      // OS通知（localhost経由なら動作する）
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('⏰ ToDo丸', {
+            body: task.title + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : ''),
+            requireInteraction: true,
+          });
+        } catch(e) {}
+      }
+
+      // アプリ内モーダル + 音 + タイトル点滅
       currentReminder = task;
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
@@ -1200,6 +1211,11 @@
       bindEvents();
       render();
       initWindowSize();
+
+      // 通知許可を要求（localhost経由の場合に有効）
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
 
       // 30秒ごとにリマインダーをチェック
       checkReminders();
