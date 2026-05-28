@@ -115,6 +115,26 @@
     }
     .cat-sel option { background: #333; }
 
+    /* 完了のみ表示トグル */
+    .btn-done-filter {
+      height: 22px;
+      padding: 0 8px;
+      background: #333;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #bbb;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: all 0.12s;
+    }
+    .btn-done-filter.active {
+      background: #2e7d32;
+      border-color: #43a047;
+      color: #fff;
+    }
+
     /* ===== ノートエリア ===== */
     .notes-area {
       flex: 1;
@@ -325,7 +345,7 @@
       font-size: 12px; font-weight: 700; color: rgba(0,0,0,0.45);
     }
 
-    /* カテゴリ行（セレクト + 追加ボタン）*/
+    /* カテゴリ行 */
     .cat-row { display: flex; gap: 6px; }
     .cat-row select { flex: 1; }
     .btn-cat-add {
@@ -336,64 +356,38 @@
       color: #bbb;
       font-size: 18px;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
       transition: all 0.12s;
     }
     .btn-cat-add:hover { background: #f5a623; border-color: #f5a623; color: #fff; }
 
     /* 新カテゴリ入力欄 */
-    .new-cat-wrap {
-      display: none;
-      margin-top: 6px;
-      gap: 6px;
-    }
+    .new-cat-wrap { display: none; margin-top: 6px; gap: 6px; }
     .new-cat-wrap.open { display: flex; }
     .new-cat-wrap input {
-      flex: 1;
-      height: 34px;
-      padding: 0 10px;
-      background: #383838;
-      border: 1.5px solid #f5a623;
-      border-radius: 6px;
-      color: #e0e0e0;
-      font-size: 13px;
-      font-family: inherit;
-      outline: none;
+      flex: 1; height: 34px; padding: 0 10px;
+      background: #383838; border: 1.5px solid #f5a623;
+      border-radius: 6px; color: #e0e0e0;
+      font-size: 13px; font-family: inherit; outline: none;
       min-height: unset;
     }
     .btn-cat-confirm {
-      height: 34px;
-      padding: 0 12px;
-      background: #f5a623;
-      border: none;
-      border-radius: 6px;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 600;
-      font-family: inherit;
-      cursor: pointer;
-      white-space: nowrap;
+      height: 34px; padding: 0 12px;
+      background: #f5a623; border: none; border-radius: 6px;
+      color: #fff; font-size: 12px; font-weight: 600;
+      font-family: inherit; cursor: pointer; white-space: nowrap;
     }
 
-    /* URL行（入力 + 開くボタン）*/
+    /* URL行 */
     .url-row { display: flex; gap: 6px; }
     .url-row input { flex: 1; }
     .btn-open-url {
       width: 34px; height: 34px;
-      background: #444;
-      border: 1px solid #555;
-      border-radius: 6px;
-      color: #bbb;
-      font-size: 15px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: all 0.12s;
+      background: #444; border: 1px solid #555; border-radius: 6px;
+      color: #bbb; font-size: 15px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.12s;
     }
     .btn-open-url:hover { background: #555; color: #fff; }
 
@@ -439,6 +433,51 @@
     }
     .btn-danger:hover { background: #c62828; }
 
+    /* ===== リマインダーモーダル ===== */
+    /* オーバーレイは .overlay 共通を使用、z-index を高くする */
+    #reminder-modal { z-index: 200; background: rgba(0,0,0,0.8); }
+
+    .reminder-box {
+      background: #1a1a2e;
+      border: 2px solid #f5a623;
+      border-radius: 14px;
+      padding: 28px 22px 22px;
+      width: 100%;
+      max-width: 300px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.8), 0 0 40px rgba(245,166,35,0.25);
+      color: #e8e8e8;
+      animation: reminder-shake 0.5s ease;
+    }
+    @keyframes reminder-shake {
+      0%,100% { transform: translateX(0); }
+      15%  { transform: translateX(-8px); }
+      30%  { transform: translateX(8px); }
+      45%  { transform: translateX(-5px); }
+      60%  { transform: translateX(5px); }
+      75%  { transform: translateX(-3px); }
+      90%  { transform: translateX(3px); }
+    }
+    .reminder-icon  { font-size: 38px; margin-bottom: 14px; }
+    .reminder-label { font-size: 11px; color: #f5a623; font-weight: 700; letter-spacing: 1px; margin-bottom: 6px; }
+    .reminder-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; line-height: 1.4; }
+    .reminder-detail { font-size: 12px; color: #aaa; margin-bottom: 22px; line-height: 1.6; white-space: pre-line; }
+    .reminder-btns  { display: flex; gap: 8px; justify-content: center; }
+    .btn-snooze {
+      background: #333; color: #bbb; border: 1px solid #555;
+      border-radius: 6px; padding: 8px 14px;
+      font-size: 12px; font-family: inherit; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .btn-snooze:hover { background: #444; }
+    .btn-reminder-ok {
+      background: #f5a623; color: #fff; border: none;
+      border-radius: 6px; padding: 8px 20px;
+      font-size: 13px; font-weight: 700; font-family: inherit;
+      cursor: pointer; transition: background 0.12s;
+    }
+    .btn-reminder-ok:hover { background: #e09310; }
+
     /* ===== トースト ===== */
     #toast {
       position: fixed; bottom: 14px; left: 50%;
@@ -483,6 +522,7 @@
     <select class="cat-sel" id="cat-filter">
       <option value="all">すべて</option>
     </select>
+    <button class="btn-done-filter" id="btn-done-filter" title="完了済みのみ表示">完了</button>
   </div>
 
   <!-- ===== ノートエリア ===== -->
@@ -522,8 +562,21 @@
         </div>
 
         <div class="field">
-          <label>提出期限</label>
-          <input type="date" id="f-due">
+          <label>提出期限（日時）</label>
+          <input type="datetime-local" id="f-due">
+        </div>
+
+        <div class="field">
+          <label>リマインダー</label>
+          <select id="f-reminder">
+            <option value="">なし</option>
+            <option value="5">5分前</option>
+            <option value="15">15分前</option>
+            <option value="30">30分前</option>
+            <option value="60">1時間前</option>
+            <option value="360">6時間前</option>
+            <option value="1440">1日前</option>
+          </select>
         </div>
 
         <div class="field">
@@ -564,6 +617,20 @@
     </div>
   </div>
 
+  <!-- ===== リマインダーモーダル（×ボタンなし・無視不可）===== -->
+  <div class="overlay" id="reminder-modal">
+    <div class="reminder-box">
+      <div class="reminder-icon">🔔</div>
+      <div class="reminder-label">リマインド</div>
+      <div class="reminder-title" id="reminder-title"></div>
+      <div class="reminder-detail" id="reminder-detail"></div>
+      <div class="reminder-btns">
+        <button class="btn-snooze" id="btn-snooze">5分後にもう一度</button>
+        <button class="btn-reminder-ok" id="btn-reminder-ok">確認した</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ===== 定数 =====
     const NOTE_COLORS = [
@@ -575,7 +642,8 @@
       { id: 'custom',      bg: '#FFD5D5' },
     ];
     const DEFAULT_CATEGORIES = ['学級', '教科', '部活', 'その他'];
-    const STORAGE_KEY    = 'sensei-todo-v2';
+    const STORAGE_KEY    = 'sensei-todo-v3';
+    const STORAGE_KEY_V2 = 'sensei-todo-v2';
     const STORAGE_KEY_V1 = 'sensei-todo-v1';
 
     // ===== 状態 =====
@@ -583,8 +651,10 @@
     let customCategories = [];
     let activeFilter     = 'all';
     let searchText       = '';
+    let showDoneOnly     = false;
     let editingId        = null;
     let deletingId       = null;
+    let currentReminder  = null;
 
     function allCategories() {
       return [...DEFAULT_CATEGORIES, ...customCategories];
@@ -599,41 +669,63 @@
 
     function loadData() {
       try {
+        // v3
         const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         if (d) {
           if (d.tasks)            tasks            = d.tasks;
           if (d.customCategories) customCategories = d.customCategories;
           return;
         }
-        // v1からの自動マイグレーション
+        // v2からマイグレーション
+        const v2 = JSON.parse(localStorage.getItem(STORAGE_KEY_V2) || 'null');
+        if (v2 && v2.tasks) {
+          tasks = v2.tasks.map(t => ({
+            ...t,
+            dueDateTime: t.dueDate ? `${t.dueDate}T00:00` : '',
+            reminder:    '',
+          }));
+          customCategories = v2.customCategories || [];
+          return;
+        }
+        // v1からマイグレーション
         const v1 = JSON.parse(localStorage.getItem(STORAGE_KEY_V1) || 'null');
         if (v1 && v1.tasks) {
           tasks = v1.tasks.map(t => ({
             ...t,
-            colorId:  t.category || '授業準備',
-            category: 'その他',
-            submitTo: t.submitTo || '',
-            url:      t.link     || '',
+            colorId:     t.category || '授業準備',
+            category:    'その他',
+            dueDateTime: t.dueDate ? `${t.dueDate}T00:00` : '',
+            submitTo:    t.submitTo || '',
+            url:         t.link     || '',
+            reminder:    '',
           }));
         }
       } catch(e) {}
     }
 
-    // ===== 日付ユーティリティ =====
-    function todayStr() {
-      const d = new Date();
-      return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-    }
-    function pad(n) { return String(n).padStart(2, '0'); }
-    function fmtDate(s) {
+    // ===== 日付・時刻ユーティリティ =====
+    function fmtDateTime(s) {
       if (!s) return '';
-      const [, m, d] = s.split('-');
-      return `${parseInt(m)}/${parseInt(d)}`;
+      const d = new Date(s);
+      if (isNaN(d)) return '';
+      const days = ['日','月','火','水','木','金','土'];
+      const m   = d.getMonth() + 1;
+      const day = d.getDate();
+      const h   = d.getHours();
+      const min = d.getMinutes();
+      const base = `${m}/${day}（${days[d.getDay()]}）`;
+      return (h === 0 && min === 0) ? base : `${base} ${h}:${String(min).padStart(2,'0')}`;
     }
+
     function dateStatus(s) {
       if (!s) return '';
-      const t = todayStr();
-      return s < t ? 'overdue' : s === t ? 'today' : '';
+      const due = new Date(s);
+      if (isNaN(due)) return '';
+      const now = new Date();
+      if (due < now) return 'overdue';
+      const today    = new Date(now.getFullYear(),  now.getMonth(),  now.getDate());
+      const dueDay   = new Date(due.getFullYear(),  due.getMonth(),  due.getDate());
+      return dueDay.getTime() === today.getTime() ? 'today' : '';
     }
 
     function getColor(colorId) {
@@ -643,6 +735,8 @@
     // ===== フィルタ & ソート =====
     function getVisible() {
       let list = tasks.filter(t => {
+        if (showDoneOnly && !t.completed)  return false;
+        if (!showDoneOnly && t.completed)  return false;  // 通常モードで完了を除外しない → 下に分ける
         if (activeFilter !== 'all' && t.category !== activeFilter) return false;
         if (searchText) {
           const q = searchText.toLowerCase();
@@ -652,10 +746,13 @@
         }
         return true;
       });
+
       list.sort((a, b) => {
-        const da = a.dueDate || '9999', db = b.dueDate || '9999';
+        const da = a.dueDateTime || '9999', db = b.dueDateTime || '9999';
         return da !== db ? (da < db ? -1 : 1) : b.createdAt - a.createdAt;
       });
+
+      if (showDoneOnly) return list;
       return [...list.filter(t => !t.completed), ...list.filter(t => t.completed)];
     }
 
@@ -678,6 +775,9 @@
       const vis  = getVisible();
 
       if (!vis.length) {
+        const msg = showDoneOnly
+          ? '完了したタスクがありません'
+          : tasks.length === 0 ? '「＋」でノートを追加しよう' : '一致するノートがありません';
         grid.innerHTML = `<div class="empty">
           <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
             <rect x="4" y="6" width="24" height="22" rx="3" stroke="#555" stroke-width="2"/>
@@ -685,7 +785,7 @@
             <line x1="9" y1="17" x2="23" y2="17" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
             <line x1="9" y1="21" x2="17" y2="21" stroke="#555" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          <p>${tasks.length === 0 ? '「＋」でノートを追加しよう' : '一致するノートがありません'}</p>
+          <p>${msg}</p>
         </div>`;
         return;
       }
@@ -694,7 +794,7 @@
       vis.forEach(task => {
         const colorId = task.colorId || task.category || NOTE_COLORS[0].id;
         const color   = getColor(colorId);
-        const st      = dateStatus(task.dueDate);
+        const st      = dateStatus(task.dueDateTime);
 
         const card = document.createElement('div');
         card.className = `note-card nc-${colorId}`
@@ -722,8 +822,7 @@
         card.appendChild(delBtn);
         card.appendChild(titleEl);
 
-        // 提出先・提出期限（どちらかあれば表示）
-        if (task.submitTo || task.dueDate) {
+        if (task.submitTo || task.dueDateTime) {
           const footer = document.createElement('div');
           footer.className = 'card-footer';
 
@@ -733,11 +832,10 @@
             sub.textContent = task.submitTo;
             footer.appendChild(sub);
           }
-
-          if (task.dueDate) {
+          if (task.dueDateTime) {
             const due = document.createElement('span');
             due.className   = `card-due ${st}`;
-            due.textContent = (st === 'overdue' ? '⚠ ' : st === 'today' ? '今日 ' : '') + fmtDate(task.dueDate);
+            due.textContent = (st === 'overdue' ? '⚠ ' : st === 'today' ? '今日 ' : '') + fmtDateTime(task.dueDateTime);
             footer.appendChild(due);
           }
 
@@ -806,11 +904,12 @@
     function openAdd() {
       editingId = null;
       document.getElementById('modal-title').textContent = '新規ノート';
-      document.getElementById('f-title').value  = '';
-      document.getElementById('f-due').value    = '';
-      document.getElementById('f-submit').value = '';
-      document.getElementById('f-url').value    = '';
-      document.getElementById('f-memo').value   = '';
+      document.getElementById('f-title').value    = '';
+      document.getElementById('f-due').value      = '';
+      document.getElementById('f-reminder').value = '';
+      document.getElementById('f-submit').value   = '';
+      document.getElementById('f-url').value      = '';
+      document.getElementById('f-memo').value     = '';
       document.getElementById('new-cat-wrap').classList.remove('open');
       renderColorPick(NOTE_COLORS[0].id);
       renderCatSelect(DEFAULT_CATEGORIES[0]);
@@ -823,11 +922,12 @@
       if (!t) return;
       editingId = id;
       document.getElementById('modal-title').textContent = 'ノートを編集';
-      document.getElementById('f-title').value  = t.title;
-      document.getElementById('f-due').value    = t.dueDate  || '';
-      document.getElementById('f-submit').value = t.submitTo || '';
-      document.getElementById('f-url').value    = t.url      || '';
-      document.getElementById('f-memo').value   = t.memo     || '';
+      document.getElementById('f-title').value    = t.title;
+      document.getElementById('f-due').value      = t.dueDateTime || '';
+      document.getElementById('f-reminder').value = t.reminder    || '';
+      document.getElementById('f-submit').value   = t.submitTo    || '';
+      document.getElementById('f-url').value      = t.url         || '';
+      document.getElementById('f-memo').value     = t.memo        || '';
       document.getElementById('new-cat-wrap').classList.remove('open');
       renderColorPick(t.colorId || t.category || NOTE_COLORS[0].id);
       renderCatSelect(t.category || DEFAULT_CATEGORIES[0]);
@@ -848,19 +948,20 @@
       }
       const data = {
         title,
-        colorId:  getSelectedColor(),
-        category: document.getElementById('f-category').value,
-        dueDate:  document.getElementById('f-due').value,
-        submitTo: document.getElementById('f-submit').value.trim(),
-        url:      document.getElementById('f-url').value.trim(),
-        memo:     document.getElementById('f-memo').value.trim(),
+        colorId:     getSelectedColor(),
+        category:    document.getElementById('f-category').value,
+        dueDateTime: document.getElementById('f-due').value,
+        reminder:    document.getElementById('f-reminder').value,
+        submitTo:    document.getElementById('f-submit').value.trim(),
+        url:         document.getElementById('f-url').value.trim(),
+        memo:        document.getElementById('f-memo').value.trim(),
       };
       if (editingId) {
         const i = tasks.findIndex(t => t.id === editingId);
-        tasks[i] = { ...tasks[i], ...data };
+        tasks[i] = { ...tasks[i], ...data, lastReminded: 0 };
         showToast('更新しました');
       } else {
-        tasks.unshift({ ...data, id: Date.now().toString(), createdAt: Date.now(), completed: false });
+        tasks.unshift({ ...data, id: Date.now().toString(), createdAt: Date.now(), completed: false, lastReminded: 0 });
         showToast('追加しました ✅');
       }
       saveData(); closeModal(); render();
@@ -886,6 +987,54 @@
       saveData(); render();
       document.getElementById('confirm-modal').classList.remove('open');
       showToast('削除しました');
+    }
+
+    // ===== リマインダー =====
+    function checkReminders() {
+      const now = Date.now();
+      tasks.forEach(task => {
+        if (task.completed || !task.dueDateTime || !task.reminder) return;
+        const due      = new Date(task.dueDateTime).getTime();
+        if (isNaN(due)) return;
+        const remindAt = due - parseInt(task.reminder) * 60000;
+        const last     = task.lastReminded || 0;
+        if (now >= remindAt && last < remindAt) {
+          task.lastReminded = now;
+          saveData();
+          triggerReminder(task);
+        }
+      });
+    }
+
+    function triggerReminder(task) {
+      // OS通知
+      if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+          new Notification('⏰ ToDo丸リマインド', {
+            body: task.title + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : ''),
+            requireInteraction: true,
+          });
+        } catch(e) {}
+      }
+
+      // アプリ内モーダル
+      currentReminder = task;
+      document.getElementById('reminder-title').textContent = task.title;
+      let detail = '';
+      if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
+      if (task.submitTo)    detail += `\n提出先：${task.submitTo}`;
+      document.getElementById('reminder-detail').textContent = detail;
+
+      const modal = document.getElementById('reminder-modal');
+      modal.classList.add('open');
+
+      // アニメーションをリセット
+      const box = modal.querySelector('.reminder-box');
+      box.style.animation = 'none';
+      box.offsetHeight;
+      box.style.animation = '';
+
+      try { window.focus(); } catch(e) {}
     }
 
     // ===== トースト =====
@@ -933,6 +1082,13 @@
         document.getElementById('confirm-modal').classList.remove('open'));
       document.getElementById('confirm-ok').addEventListener('click', execDelete);
 
+      // 完了のみ表示トグル
+      document.getElementById('btn-done-filter').addEventListener('click', () => {
+        showDoneOnly = !showDoneOnly;
+        document.getElementById('btn-done-filter').classList.toggle('active', showDoneOnly);
+        renderNotes();
+      });
+
       // カテゴリ追加
       document.getElementById('btn-cat-add').addEventListener('click', () => {
         const wrap = document.getElementById('new-cat-wrap');
@@ -942,10 +1098,8 @@
       });
       document.getElementById('btn-cat-confirm').addEventListener('click', addCategory);
       document.getElementById('new-cat-input').addEventListener('keydown', e => {
-        if (e.key === 'Enter') addCategory();
-        if (e.key === 'Escape') {
-          document.getElementById('new-cat-wrap').classList.remove('open');
-        }
+        if (e.key === 'Enter')  addCategory();
+        if (e.key === 'Escape') document.getElementById('new-cat-wrap').classList.remove('open');
       });
 
       // URLを開く
@@ -955,6 +1109,7 @@
         else showToast('URLが入力されていません');
       });
 
+      // フィルター
       document.getElementById('cat-filter').addEventListener('change', e => {
         activeFilter = e.target.value; renderNotes();
       });
@@ -962,6 +1117,7 @@
         searchText = e.target.value; renderNotes();
       });
 
+      // オーバーレイ外クリックで閉じる（リマインダーは除く）
       ['task-modal', 'confirm-modal'].forEach(id => {
         document.getElementById(id).addEventListener('click', e => {
           if (e.target === document.getElementById(id))
@@ -969,6 +1125,21 @@
         });
       });
 
+      // リマインダーボタン
+      document.getElementById('btn-snooze').addEventListener('click', () => {
+        document.getElementById('reminder-modal').classList.remove('open');
+        if (currentReminder) {
+          const task = currentReminder;
+          setTimeout(() => triggerReminder(task), 5 * 60 * 1000);
+        }
+        showToast('5分後にリマインドします');
+      });
+      document.getElementById('btn-reminder-ok').addEventListener('click', () => {
+        document.getElementById('reminder-modal').classList.remove('open');
+        currentReminder = null;
+      });
+
+      // キーボード
       document.addEventListener('keydown', e => {
         if (e.ctrlKey && e.key === 'n') { e.preventDefault(); openAdd(); }
         if (e.key === 'Escape') {
@@ -983,7 +1154,23 @@
     }
 
     // ===== 初期化 =====
-    function init() { loadData(); setDate(); bindEvents(); render(); initWindowSize(); }
+    function init() {
+      loadData();
+      setDate();
+      bindEvents();
+      render();
+      initWindowSize();
+
+      // ブラウザ通知の許可を要求
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+
+      // 30秒ごとにリマインダーをチェック
+      checkReminders();
+      setInterval(checkReminders, 30000);
+    }
+
     init();
   </script>
 </body>
