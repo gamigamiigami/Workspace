@@ -1,8 +1,37 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-05-24
+最終更新：2026-05-28
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## Windows Batch・コマンド実行
+
+### [2026-05-28] sticky-todo — Windows Batch の `start` コマンド：タイトル引数の位置が重要
+
+**状況：** `launch.bat` で `start` コマンドを使ってPowerShell サーバーとEdgeブラウザを起動しようとしていた
+
+**問題：** `start /MIN /D "%~dp0" "タイトル" powershell ...` のように引数を指定するとフォルダが開いてしまい、本来の動作（サーバー起動）が実行されない。タイトル引数が正しく認識されていない
+
+**原因：** Windows Batch の `start` コマンドは**タイトル引数を最初に配置**する必要がある。正しい順序は `start "Title" /フラグ /フラグ コマンド` である。引数順序を間違えると、`start` コマンドの引数パーサーが混乱し、予期しない動作（フォルダ開き）が発生する
+
+**解決策：**
+```batch
+rem ❌ 間違った順序
+start /MIN /D "%~dp0" "タイトル" powershell -File "server.ps1"
+
+rem ✅ 正しい順序
+start "ToDo丸Server" /MIN /D "%~dp0" powershell -NoProfile -ExecutionPolicy Bypass -File "server.ps1"
+```
+タイトル引数（引用符で囲まれたテキスト）を`start`の直後に配置することで、正常に動作する
+
+**再発防止：**
+- `start` コマンドの引数順序：`start "Title" /flag1 /flag2 /D "path" command [args]`
+- タイトル引数が複雑な引用符を含む場合、特にフラグとの相互作用に注意
+- `start` コマンドはWindowsの古いコマンドのため、ドキュメント（`start /?`）の確認が重要
+
+**タグ：** #batch #windows #automation #start-command
 
 ---
 

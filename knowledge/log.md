@@ -4,6 +4,32 @@
 
 ---
 
+### [2026-05-28（夜間・修正）] sticky-todo — launch.bat のタイトル引数修正
+
+**作業内容：**
+- ユーザーフィードバック対応：`launch.bat` 実行時にフォルダが開く問題を調査・修正
+- Windows Batch の `start` コマンド引数順序を修正：タイトル引数を最初に配置
+- 修正前：`start /MIN /D "%~dp0" "タイトル" powershell ...` （引数順序が誤り）
+- 修正後：`start "ToDo丸Server" /MIN /D "%~dp0" powershell ...` （タイトルを最初に）
+- ユーザーへの修正内容を説明・デリバリー完了
+
+**変更点：**
+- `projects/sticky-todo/launch.bat` — `start` コマンドの引数順序を修正
+
+**結果：** 成功 / 即座に修正・コミット・デリバリー完了
+
+**成果物：**
+- `projects/sticky-todo/launch.bat`（修正版）
+- コミット：`8d7d7bc fix: start コマンドのタイトル引数の位置を修正（フォルダが開く問題）`
+
+**気づき・メモ：**
+- Windows Batch の `start` コマンドは引数順序が重要
+- タイトル引数（引用符で囲んだテキスト）は **最初** に配置する必要がある
+- 引数順序誤りでフォルダが開くなどの予期しない動作が発生
+- failures.md に「Windows Batch ハマりポイント」として記録済み
+
+---
+
 ## テンプレート
 
 ```
