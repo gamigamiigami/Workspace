@@ -4,6 +4,38 @@
 
 ---
 
+### [2026-05-28（夜間・再開）] sticky-todo — file:// 直接起動への転換・デバッグスクリプト作成
+
+**作業内容：**
+- PowerShell HTTP サーバー方式（server.ps1）を廃止し、Edge `--app=file:///` による直接起動に変更
+- launch.bat を簡潔化：PORT変数、サーバー起動処理、timeout削除
+- Windows レジストリから Edge パスを自動検索して、異なるインストール位置に対応
+- launch.bat の修正後、ユーザーからの「フォルダが開く」フィードバックに対応
+- ユーザーの環境情報を自動診断する `debug.bat` を作成
+  - Edge のパス検索（Program Files / Program Files (x86））
+  - HTML ファイルの存在確認
+  - Edge 起動試験
+  - 結果をテキストファイルに出力してメモ帳で表示
+
+**変更点：**
+- `projects/sticky-todo/launch.bat` — file:// 直接起動に変更・簡潔化
+- `projects/sticky-todo/debug.bat` — 新規作成（診断スクリプト）
+
+**結果：** 部分完了（debug.bat 実行結果待ち）
+
+**成果物：**
+- `projects/sticky-todo/launch.bat`（サーバー廃止・file:// 直接起動版）
+- `projects/sticky-todo/debug.bat`（診断スクリプト）
+- コミット：`463ee03 debug: 起動トラブル診断用 debug.bat を追加`、`c0d6fbb debug: ログをメモ帳に書き出す方式に変更`
+
+**気づき・メモ：**
+- Windows 単一ファイルアプリの場合、わざわざローカルサーバーを起動する必要はない
+- localStorage、Web Audio API、DOM 操作など主要機能は file:// で完全に動作
+- Notification API は file:// で動作しないが、リマインダーモーダル + 音声 + タイトル点滅で対応可能
+- 複雑なトラブルシューティングはユーザー環境の詳細情報が必須なため、自動診断スクリプトが有効
+
+---
+
 ### [2026-05-28（夜間・修正）] sticky-todo — launch.bat のタイトル引数修正
 
 **作業内容：**
