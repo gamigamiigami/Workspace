@@ -1,4 +1,4 @@
-param([string]$Dir, [int]$Port = 48765)
+param([string]$Dir = $PSScriptRoot, [int]$Port = 48765)
 
 $listener = New-Object System.Net.HttpListener
 $listener.Prefixes.Add("http://localhost:$Port/")
