@@ -990,6 +990,52 @@
     }
 
     // ===== リマインダー =====
+    let titleFlashTimer  = null;
+    let alarmLoopTimer   = null;
+
+    function playAlarm() {
+      try {
+        const ctx  = new (window.AudioContext || window.webkitAudioContext)();
+        const play = (freq, start, dur) => {
+          const osc  = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.value = freq;
+          gain.gain.setValueAtTime(0.35, ctx.currentTime + start);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + dur);
+          osc.start(ctx.currentTime + start);
+          osc.stop(ctx.currentTime + start + dur);
+        };
+        play(880, 0.0, 0.25);
+        play(880, 0.3, 0.25);
+        play(1100, 0.6, 0.4);
+      } catch(e) {}
+    }
+
+    function startAlarmLoop() {
+      playAlarm();
+      alarmLoopTimer = setInterval(playAlarm, 4000);
+    }
+
+    function stopAlarm() {
+      if (alarmLoopTimer) { clearInterval(alarmLoopTimer); alarmLoopTimer = null; }
+    }
+
+    function startTitleFlash() {
+      let on = true;
+      titleFlashTimer = setInterval(() => {
+        document.title = on ? '⏰ リマインド！' : 'ToDo丸';
+        on = !on;
+      }, 600);
+    }
+
+    function stopTitleFlash() {
+      if (titleFlashTimer) { clearInterval(titleFlashTimer); titleFlashTimer = null; }
+      document.title = 'ToDo丸';
+    }
+
     function checkReminders() {
       const now = Date.now();
       tasks.forEach(task => {
@@ -1007,17 +1053,6 @@
     }
 
     function triggerReminder(task) {
-      // OS通知
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          new Notification('⏰ ToDo丸リマインド', {
-            body: task.title + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : ''),
-            requireInteraction: true,
-          });
-        } catch(e) {}
-      }
-
-      // アプリ内モーダル
       currentReminder = task;
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
@@ -1028,12 +1063,13 @@
       const modal = document.getElementById('reminder-modal');
       modal.classList.add('open');
 
-      // アニメーションをリセット
       const box = modal.querySelector('.reminder-box');
       box.style.animation = 'none';
       box.offsetHeight;
       box.style.animation = '';
 
+      startAlarmLoop();
+      startTitleFlash();
       try { window.focus(); } catch(e) {}
     }
 
@@ -1127,6 +1163,8 @@
 
       // リマインダーボタン
       document.getElementById('btn-snooze').addEventListener('click', () => {
+        stopAlarm();
+        stopTitleFlash();
         document.getElementById('reminder-modal').classList.remove('open');
         if (currentReminder) {
           const task = currentReminder;
@@ -1135,6 +1173,8 @@
         showToast('5分後にリマインドします');
       });
       document.getElementById('btn-reminder-ok').addEventListener('click', () => {
+        stopAlarm();
+        stopTitleFlash();
         document.getElementById('reminder-modal').classList.remove('open');
         currentReminder = null;
       });
@@ -1160,11 +1200,6 @@
       bindEvents();
       render();
       initWindowSize();
-
-      // ブラウザ通知の許可を要求
-      if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-      }
 
       // 30秒ごとにリマインダーをチェック
       checkReminders();
