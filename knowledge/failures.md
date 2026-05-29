@@ -8,6 +8,32 @@
 
 ## PowerShell 非同期・スレッド
 
+### [2026-06-12] sticky-todo — PS5.1 で `@(ConvertFrom-Json)` が JSON 配列を二重ラップする
+
+**状況：** `$script:tasks = @($json | ConvertFrom-Json)` で JSON 配列（複数タスク）を受け取った
+
+**問題：** `$script:tasks.Count` が正しいタスク数ではなく 1 になる。`foreach ($t in $script:tasks)` で `$t` がタスク1件ではなく「全タスクの配列」になってしまい、`$t.dueDateTime` が全タスクの dueDateTime をまとめた `Object[]` になる
+
+**原因：** PowerShell 5.1 の `ConvertFrom-Json` は JSON 配列を `Object[]` として返す。`@(Object[])` はその配列をさらに1要素の配列で包むため `@([[task1,task2,task3]])` になる
+
+**解決策：**
+```powershell
+# ❌ PS5.1 では配列が二重になる
+$script:tasks = @($json | ConvertFrom-Json)
+
+# ✅ 配列かどうか確認して直接代入
+$parsed = $json | ConvertFrom-Json
+$script:tasks = if ($parsed -is [System.Array]) { $parsed } else { @($parsed) }
+```
+
+**再発防止：** PowerShell 5.1 で `ConvertFrom-Json` の結果を配列変数に代入するときは必ずこのパターンを使う
+
+**タグ：** #powershell #json #array #ps5.1
+
+---
+
+## PowerShell 非同期・スレッド
+
 ### [2026-06-12] sticky-todo — 日本語Windowsで `DateTime.Parse` が ISO 8601 を解釈できない
 
 **状況：** JavaScriptから送られた `dueDateTime`（例: `"2026-06-12T12:30"`）を PowerShell で `[DateTime]::Parse($str)` でパースしようとした
