@@ -6,6 +6,27 @@
 
 ---
 
+### 2026-05-29 (session a628ca4b - sticky-todo PowerShell JSON配列処理の問題特定・failures.md記録)
+
+**うまくいったこと**
+- PowerShell 5.1 の `ConvertFrom-Json` が JSON 配列を二重にラップする問題を特定・検証
+  - `@($json | ConvertFrom-Json)` が `[[task1,task2,task3]]` 形式になることを確認
+  - 診断手法：`Count` プロパティと `foreach` ループの挙動から配列構造を逆算
+- failures.md に詳細な記録・再発防止パターンを追記
+
+**うまくいかなかったこと**
+- なし（問題の特定・記録が目的達成）
+
+**発見**
+- PowerShell 5.1 での `ConvertFrom-Json` 結果に `@()` を被せるのは危険
+- 正しいパターン：`$parsed = $json | ConvertFrom-Json` 後に条件判定 `if ($parsed -is [System.Array]) { $parsed } else { @($parsed) }` を使う必要がある
+
+**次回への申し送り**
+- sticky-todo の JavaScript→PowerShell JSON 受信パイプラインで、このパターンの適用を検証する
+- コミット `57f43d3 Fix tasks array wrapping in PS5.1` でコード修正済み確認
+
+---
+
 ### 2026-05-29 (session 564ac74d - notifier.ps1 dueDateTime パース確認・テスト実施)
 
 **うまくいったこと**
