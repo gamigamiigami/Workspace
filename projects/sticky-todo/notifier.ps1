@@ -16,7 +16,9 @@ public class Win32 {
 
 $logFile = "$env:TEMP\todo-remind.log"
 function Write-Log($msg) {
-    try { Add-Content $logFile "$(Get-Date 'HH:mm:ss') $msg" } catch {}
+    $line = "$(Get-Date 'HH:mm:ss') $msg"
+    Write-Host $line
+    try { Add-Content $logFile $line } catch { Write-Host "  [log-write-fail] $_" }
 }
 
 function Show-MsgBox($msg, $isMessage) {
