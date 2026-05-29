@@ -6,6 +6,27 @@
 
 ---
 
+### 2026-05-29 (session ea85df86-02 - WebSocket受信パイプラインの修正完了、ユーザーテスト待機)
+
+**うまくいったこと**
+- PowerShell WebSocket リスナーの `AcceptWebSocketAsync('')` → `AcceptWebSocketAsync($null)` への修正を実装
+- notifier.ps1 ファイルの同期を完了し、ユーザーが手動テストを開始できる状態を実現
+- コンソール出力の確認により、WebSocket受信と POST /tasks エンドポイント到達が正常に動作していることを検証
+
+**うまくいかなかったこと**
+- なし（修正がすぐに機能）
+
+**発見**
+- PowerShell の `AcceptWebSocketAsync()` はパラメータなしでは失敗する必要があり、`$null` を明示的に指定することで正常動作
+- WebSocket通信とPOST処理は正常に連携している（ログから確認済み）
+
+**次回への申し送り**
+- ユーザーが Edge で `todo.html` を開いてリマインド発動タスクを作成し、MessageBox の表示を確認するテスト段階
+  - 成功基準：黒い画面に `Showing MessageBox...` が出力される
+  - テスト結果が得られたら、MessageBox 実際表示の自動化検証へ進展
+
+---
+
 ### 2026-05-29 (session ea85df86 続き - MessageBox検証指示、ファイル上書き準備完了)
 
 **うまくいったこと**
