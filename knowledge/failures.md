@@ -1,8 +1,35 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-05-28
+最終更新：2026-05-29
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## PowerShell 構文
+
+### [2026-05-29] sticky-todo — `Get-Date` のフォーマット文字列には `-Format` が必要
+
+**状況：** `Write-Log` 関数内で `Get-Date 'HH:mm:ss'` と書いた
+
+**問題：** PowerShell が `'HH:mm:ss'` を DateTime 値として解釈しようとしてエラー。ログが一切出力されない
+
+**原因：** `Get-Date` に文字列を渡すと `-Date` パラメーター（パースする日時）として扱われる。フォーマット指定には `-Format` フラグが必須
+
+**解決策：**
+```powershell
+# ❌ 間違い
+Get-Date 'HH:mm:ss'
+
+# ✅ 正しい
+Get-Date -Format 'HH:mm:ss'
+# または
+(Get-Date).ToString('HH:mm:ss')
+```
+
+**再発防止：** PowerShell の `Get-Date` はフォーマット指定に必ず `-Format` を明示する
+
+**タグ：** #powershell #datetime #syntax
 
 ---
 
