@@ -86,21 +86,26 @@ $owner.Dispose()
 
 **状況：** `$script:tasks = @($json | ConvertFrom-Json)` で JSON 配列（複数タスク）を受け取った
 
-**問題：** `$script:tasks.Count` が正しいタスク数ではなく 1 になる。`foreach ($t in $script:tasks)` で `$t` がタスク1件ではなく「全タスクの配列」になってしまい、`$t.dueDateTime` が全タスクの dueDateTime をまとめた `Object[]` になる
+**問題：** `$script:tasks.Count` が正しいタスク数ではなく 1 になる。`foreach ($t in $script:tasks)` で `$t` がタスク1件ではなく「全タスクの配列」になってしまい、`$t.dueDateTime` が全タスクの dueDateTime をまとめた `Object[]` になる。さらに、単一要素の場合でも空表示になる可能性がある
 
-**原因：** PowerShell 5.1 の `ConvertFrom-Json` は JSON 配列を `Object[]` として返す。`@(Object[])` はその配列をさらに1要素の配列で包むため `@([[task1,task2,task3]])` になる
+**原因：** PowerShell 5.1 の `ConvertFrom-Json` は JSON 配列を `Object[]` として返す。`@(Object[])` はその配列をさらに1要素の配列で包むため `@([[task1,task2,task3]])` になる。単一要素の場合、条件分岐で配列化してもPowerShellの配列展開により表示時に空になることがある
 
-**解決策：**
+**解決策（推奨）：**
 ```powershell
-# ❌ PS5.1 では配列が二重になる
+# ❌ PS5.1 では配列が二重になる、または単一要素で空表示になる
 $script:tasks = @($json | ConvertFrom-Json)
 
-# ✅ 配列かどうか確認して直接代入
+# ⚠️ 条件分岐版（配列/単一要素で分岐）
 $parsed = $json | ConvertFrom-Json
 $script:tasks = if ($parsed -is [System.Array]) { $parsed } else { @($parsed) }
+
+# ✅ 配列連結版（単一・複数両対応・堅牢）
+$script:tasks = @() + ($json | ConvertFrom-Json)
 ```
 
-**再発防止：** PowerShell 5.1 で `ConvertFrom-Json` の結果を配列変数に代入するときは必ずこのパターンを使う
+**選択理由：** `@() + 結果` パターンは条件分岐が不要で、単一要素でも複数要素でも常に配列が得られる。`Count` プロパティも確実に動作する
+
+**再発防止：** PowerShell 5.1 で `ConvertFrom-Json` の結果を配列変数に代入するときは `@() + (ConvertFrom-Json)` パターンを使う（最も堅牢）
 
 **タグ：** #powershell #json #array #ps5.1
 
