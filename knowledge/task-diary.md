@@ -6,6 +6,33 @@
 
 ---
 
+### 2026-05-29 (session 5b1cc3fb - notifier.ps1 最終版の提供・実機テスト指示)
+
+**うまくいったこと**
+- 前セッション作成の notifier.ps1 をユーザーの「とどまる」フォルダに配置して起動テスト
+- launch.bat が notifier.ps1 を `-WindowStyle Hidden` で起動→通常は見えない仕様だが、黒い画面が瞬間的に出る現象を確認
+- 黒い画面=PowerShell のウィンドウスタイル処理時に一時的に表示される正常な振る舞いであることを診断
+- notifier.ps1 がバックグラウンドで正常起動・HTTP リッスンしていることを確認（ポート 48766 使用中）
+
+**うまくいかなかったこと**
+- MessageBox が表示されるかどうかの最終テストは未実行（ユーザーへの指示のみ）
+
+**発見**
+- PowerShell の `-WindowStyle Hidden` で起動したスクリプトでも、スタイル適用中は UI が一瞬見える
+- notifier.ps1 は HTTP.sys（PID 4）を通じて localhost:48766 でリッスン中であることが netstat で確認可能
+- つまり「黒い画面が見える」=「起動している」という診断指標として有効
+
+**次回への申し送り**
+- **ユーザーテスト待ち中**
+  - 指示内容：todo.html をEdgeで直接開く → タスク作成（期限3〜4分後、リマインド1分前） → Edgeを最小化 → MessageBox が出るか観察
+  - テスト結果と %TEMP%\todo-remind.log の内容を確認して、次のアクション決定
+- 推測シナリオ：
+  - ✅ MessageBox が出る → 実装完了
+  - ❌ MessageBox 出ない・ログに「MessageBox 呼び出し」あり → Win32 MessageBox の配置制御問題
+  - ❌ ログに WebSocket/MessageBox 関連ログなし → JavaScript→PowerShell 通信失敗
+
+---
+
 ### 2026-05-29 (late continuation - notifier.ps1 最終版作成・ユーザーフィードバック待ち)
 
 **うまくいったこと**
