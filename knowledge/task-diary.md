@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-05-29 (session ea85df86-03 - notifier.ps1 リマインダー実行パイプライン確認、MessageBox表示待機)
+
+**うまくいったこと**
+- notifier.ps1 の WebSocket リスナーと POST /tasks エンドポイント受信が正常に動作
+- ユーザーが sticky-todo の todo.html で「3分後」リマインダータスクを作成し、`tasks updated: 1` ログ出力を確認
+- POST 受信後の JSON パース・リマインド登録・タイマーチェック待機の全パイプラインが動作することを検証
+
+**うまくいかなかったこと**
+- なし（パイプラインは想定通りに動作）
+
+**発見**
+- sticky-todo（HTML + JavaScript）からの POST リクエストが、notifier.ps1 の WebSocket リスナーに正常に到達する
+- タイマーチェックの `timer check: 1 tasks` ログが定期的に出力される（10秒間隔）ことから、リマインド時刻監視が正常に機能中
+- notifier.ps1 がタスク受信から MessageBox 発火までの一連のフローに対応していることが確認された
+
+**次回への申し送り**
+- **最優先：リマインド時刻での MessageBox 表示確認**
+  - ユーザーは現在 notifier.ps1 が起動中。リマインド時刻（設定から3分後）になると、`FIRING reminder` → `Showing MessageBox...` ログが出力されるはず
+  - MessageBox が実際に画面に表示されるか確認すること
+  - 成功時：リマインド機能が完全に動作。次は UI/UX改善や永続化機構の検討へ進む
+  - 失敗時（ログ出力されない）：タイマー監視ロジックまたは MessageBox 実行エラーを failure.md に記録
+
+---
+
 ### 2026-05-29 (session ea85df86-02 - WebSocket受信パイプラインの修正完了、ユーザーテスト待機)
 
 **うまくいったこと**
