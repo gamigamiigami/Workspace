@@ -98,6 +98,47 @@ start "ToDo丸Server" /MIN /D "%~dp0" powershell -NoProfile -ExecutionPolicy Byp
 
 ---
 
+### [2026-05-29] sticky-todo — Linux 環境で作成した Batch/PowerShell スクリプトのエンコーディング問題
+
+**状況：** Linux 環境でバッチファイル（launch.bat）と PowerShell スクリプト（notifier.ps1）を作成し、Windows 上で実行しようとしていた
+
+**問題：** バッチファイル内の日本語文字列（"リマインド！"など）が cmd.exe で正しく読み込まれず、コマンド解析に失敗。バッチファイルが実行されるが、PowerShell 起動が失敗したり、予期しない動作が起きたりする
+
+**原因：** 
+- Linux 環境（または WSL）で作成されたテキストファイルはデフォルトで **UTF-8** エンコーディング
+- Windows の cmd.exe は **Shift-JIS（SJIS）** エンコーディングでバッチファイルを読み込む
+- UTF-8 で符号化された日本語文字がカテゴリーが正しく認識されず、バイトシーケンスが破壊される
+- PowerShell スクリプト内の日本語も同様に破壊される可能性がある
+
+**具体例：**
+```
+❌ Linux で作成したバッチファイル（実際には UTF-8）
+@echo off
+title ToDo丸Server
+echo リマインド！
+
+↓ Windows cmd.exe が Shift-JIS として読み込む
+
+cmd: リマインド → 破壊されたバイト列 → 認識できない文字列
+```
+
+**解決策：**
+1. **バッチファイル・PowerShell スクリプトから日本語を完全に除去** → 英語のみのコメント・メッセージに統一
+2. **ファイルのエンコーディングを Shift-JIS に明示的に変換** → `iconv` や `dos2unix` などのツールを使用（非推奨：複雑で互換性問題が増える）
+3. **Windows 環境で再作成** → Notepad などで新規作成し、Shift-JIS で保存（推奨）
+
+実装では「1. 日本語を英語に置き換える」を採用。これによりプラットフォーム依存性が排除される
+
+**再発防止：**
+- Windows の Batch/PowerShell スクリプトにはコメントを含めて **英語のみ** を使用
+- UI表示やユーザーメッセージは、JavaScript（HTML内）で処理し、コマンドラインツール側は英語に統一
+- Linux/WSL 環境で Batch/PowerShell を作成する場合は、完成後に必ず Windows マシンで動作確認
+- Batch ファイル内で日本語を使いたい場合は、外部設定ファイル（JSON など UTF-8 対応）から読み込む方法を検討
+
+**タグ：** #batch #powershell #windows #encoding #internationalization #linux-windows-compat
+
+---
+
 ## セッションスクリプト・自動化
 
 ### [2026-05-24] workspace-setup — Stop フックは「セッション終了時」ではなく「Claudeの返答後」に毎回発動
