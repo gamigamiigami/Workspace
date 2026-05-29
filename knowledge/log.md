@@ -4,6 +4,34 @@
 
 ---
 
+### [2026-05-29 evening] sticky-todo — リマインダー通知：エンコーディング問題の特定と修正
+
+**作業内容：**
+- Linux 環境で UTF-8 で作成したバッチファイル（.bat）を Windows cmd.exe で実行した際、Shift-JIS として読み込まれる問題を特定
+- notifier.ps1 と debug-notifier.bat に含まれる日本語文字列（「リマインド！」「期限」「提出先」など）が文字化けし、コマンド解析が失敗する根本原因を確認
+- 全ての日本語文字列を英語に置き換えた修正版を作成・コミット
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — 日本語文字を英語に変更、メッセージ生成ロジックを Build-Msg 関数に抽出
+  - 「リマインド！」→ 「Remind: 」
+  - 「期限：」→ 「/ Due: 」
+  - 「提出先：」→ 「/ To: 」
+  - MessageBox タイトル「ToDo丸 リマインド」→ 「ToDo Remind」
+- `projects/sticky-todo/debug-notifier.bat` — 日本語コメント・メッセージを英語に変更
+
+**結果：** エンコーディング問題を根本的に解決 / 次セッションでの動作確認待ち
+
+**成果物：**
+- `projects/sticky-todo/notifier.ps1` v2（日本語ゼロ版）
+- `projects/sticky-todo/debug-notifier.bat` v2（日本語ゼロ版）
+
+**気づき・メモ：**
+- Linux（UTF-8）→ Windows（Shift-JIS）のエンコーディングギャップが原因
+- バッチファイルの言語に関わらず、特殊文字の混在を避けることが重要
+- 診断ツール debug-notifier.bat のメッセージも英語化することで、どの環境でも実行可能に
+
+---
+
 ### [2026-05-29 午後] sticky-todo — リマインダー通知：エラー診断ツール作成
 
 **作業内容：**
