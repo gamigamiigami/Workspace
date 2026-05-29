@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-05-29 (session 649b47b7 - notifier.ps1 配布形式確定、ユーザー実行待機)
+
+**うまくいったこと**
+- notifier.ps1 の最終版をGitHub raw URLから直接実行できる形式に確定
+- ユーザーに「とどまる」フォルダへのファイル配置と実行手順を明確化
+- 前セッションの PowerShell デッドロック修正（BeginGetContext/WaitHandle パターン）がセッション間で有効に機能
+
+**うまくいかなかったこと**
+- なし（計画通り進行）
+
+**発見**
+- PowerShell スクリプトの配布時は、GitHub raw URL + ダウンロード指示が最も確実（ローカル手編集より疎結合）
+- notifier.ps1 の長期テストには段階的なユーザーフィードバック（ログ出力確認→MessageBox確認）が有効
+
+**次回への申し送り**
+- **最優先：ユーザーからのテスト実行報告を受ける**
+  - test-notifier.bat 実行後、以下を確認：
+    1. コンソールに `HH:mm:ss notifier started` のログが流れるか
+    2. リマインダー時刻になると MessageBox が表示されるか
+  - テスト成功なら notifier.ps1 を commit・push して実装完了
+  - テスト失敗なら failures.md のトラブルシューティングフローを参照して再診断
+
+---
+
 ### 2026-05-14 (session 1bc16fc5-終了処理 - Stopフック検知確認)
 
 **うまくいったこと**
