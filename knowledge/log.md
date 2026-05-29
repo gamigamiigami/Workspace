@@ -4,6 +4,43 @@
 
 ---
 
+### [2026-05-30 session a628ca4b] sticky-todo — MessageBox から WinForms カスタム通知フォームに置き換え
+
+**作業内容：**
+- MessageBox をカスタム `System.Windows.Forms.Form` に置き換え、スタイル制御対応の通知フォームを実装
+- デザイン設計：赤背景ヘッダー（警告色）+ 白文字 + 黒メッセージ テキスト + 赤OK ボタン
+- フォント：`Yu Gothic UI` を指定して、日本語での大きめ表示に対応
+- `TopMost = $true` + `Activate()` で確実な最前面・フォーカス奪取
+- Panel + Label を階層的に構築して、レイアウト制御を柔軟化
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — `Show-MsgBox` 関数をカスタム Form ベースに全面改修
+  - MessageBox の `DefaultDesktopOnly` オプション → WinForms の `TopMost` に変更
+  - 色・フォント・サイズを動的に指定可能な関数シグネチャに統一
+  - Panel（ヘッダー）+ Label（メッセージ）+ Button（OK）で構成
+- `knowledge/patterns.md` — 新規セクション「PowerShell WinForms カスタム通知フォーム」を追記
+- `knowledge/task-diary.md` — セッション記録を追加
+
+**結果：** 
+- MessageBox の制限を超え、細かいスタイル制御が可能な通知フォームを実装
+- WinForms パターンを patterns.md に記録化し、再利用可能な形に昇華
+
+**成果物：**
+- notifier.ps1 内の`Show-MsgBox` 関数（WinForms Form ベース）
+- patterns.md における「PowerShell WinForms カスタム通知フォーム」パターン
+
+**気づき・メモ：**
+- PowerShell WinForms は同期的（ShowDialog）なため、複数通知時に順序制御が自動化される
+- Panel + Label で複雑なレイアウトを構築可能 → MessageBox よりも高い自由度
+- TopMost + Activate() パターンはMessageBox だけでなく、カスタム Form でも有効
+
+**次のステップ：**
+1. ユーザーの見た目・フォント印象フィードバック待ち（微調整の可能性）
+2. 実装の確認後、デザイン最適化（色・サイズ・フォント調整）を検討
+3. リマインダー UI/UX 完成度の最終チェック
+
+---
+
 ### [2026-05-30 session a628ca4b-stop-2] sticky-todo — WinForms TopMost オーナー実装で MessageBox 最前面化問題を解決
 
 **作業内容：**

@@ -7,6 +7,99 @@
 
 ---
 
+## UI・通知デザイン
+
+### [汎用] PowerShell WinForms カスタム通知フォーム（スタイル制御対応）
+
+**用途：** PowerShell のMessageBox では見た目がデフォルトに限定されるため、色・フォント・レイアウトを細かく制御したい場合。WinForms の `System.Windows.Forms.Form` を直接カスタマイズすることで、MessageBox よりも高度な UX が実現可能。特にリマインダー・アラーム系通知で視認性を重視する場合に有効。
+
+**基本パターン（sticky-todo notifier.ps1）：**
+
+```powershell
+# WinForms Form を カスタム通知として使用
+[System.Windows.Forms.Form] $form = New-Object System.Windows.Forms.Form
+$form.Text = "Reminder !"
+$form.TopMost = $true                           # 常に最前面
+$form.AutoSize = $false
+$form.Size = New-Object System.Drawing.Size(400, 200)
+$form.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+
+# ヘッダーパネル（赤背景）
+$headerPanel = New-Object System.Windows.Forms.Panel
+$headerPanel.BackColor = [System.Drawing.Color]::Red
+$headerPanel.Dock = [System.Windows.Forms.DockStyle]::Top
+$headerPanel.Height = 50
+$headerPanel.BorderStyle = [System.Windows.Forms.BorderStyle]::None
+
+# ヘッダーテキスト（白文字）
+$headerLabel = New-Object System.Windows.Forms.Label
+$headerLabel.Text = "Reminder !"
+$headerLabel.ForeColor = [System.Drawing.Color]::White
+$headerLabel.Font = New-Object System.Drawing.Font("Yu Gothic UI", 14, [System.Drawing.FontStyle]::Bold)
+$headerLabel.Dock = [System.Windows.Forms.DockStyle]::Fill
+$headerLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleCenter
+$headerPanel.Controls.Add($headerLabel)
+
+# メッセージパネル（白背景）
+$msgLabel = New-Object System.Windows.Forms.Label
+$msgLabel.Text = $taskTitle + " / Due: " + $formattedDue
+$msgLabel.ForeColor = [System.Drawing.Color]::Black
+$msgLabel.Font = New-Object System.Drawing.Font("Yu Gothic UI", 12)
+$msgLabel.AutoSize = $false
+$msgLabel.Width = 380
+$msgLabel.Height = 80
+$msgLabel.Location = New-Object System.Drawing.Point(10, 70)
+$form.Controls.Add($msgLabel)
+
+# OK ボタン（赤）
+$okButton = New-Object System.Windows.Forms.Button
+$okButton.Text = "OK"
+$okButton.BackColor = [System.Drawing.Color]::Red
+$okButton.ForeColor = [System.Drawing.Color]::White
+$okButton.Font = New-Object System.Drawing.Font("Yu Gothic UI", 11, [System.Drawing.FontStyle]::Bold)
+$okButton.Width = 80
+$okButton.Location = New-Object System.Drawing.Point(160, 150)
+$okButton.DialogResult = [System.Windows.Forms.DialogResult]::OK
+$form.Controls.Add($okButton)
+
+# 最前面・アクティブ化
+$form.TopMost = $true
+$form.Activate()
+
+# 表示
+$form.ShowDialog()
+```
+
+**利点：**
+- **色制御**：BackColor・ForeColor で自由に配色可能。MessageBox は限定的なアイコンのみ
+- **フォント制御**：`Yu Gothic UI` など日本語対応フォントを指定可能。フォントサイズ・太さも制御可能
+- **レイアウト制御**：Panel・Label を自由に配置。ヘッダー・メッセージ・ボタンの位置・サイズを統一設計可能
+- **TopMost + Activate()** で確実な最前面表示・フォーカス奪取
+
+**設計上の注意：**
+- Dialog 式（`ShowDialog()`）を使用することで、スクリプトをブロック・同期的に実行
+- `DialogResult` でボタンクリック結果を取得可能（MessageBox の返却値と同じインターフェース）
+- `AutoSize = $false` で手動サイズ制御。固定サイズが見た目の統一につながる
+- Dock（`DockStyle.Top`）を使用して、ウィンドウリサイズに対応可能
+
+**カラーパターン例（sticky-todo）：**
+- **Header**：赤背景（警告色） + 白文字
+- **Message**：黒文字（可読性）
+- **Button**：赤背景 + 白文字（アクションを強調）
+
+**拡張案：**
+- マルチボタン対応：`DialogResult.Yes`, `DialogResult.No` を使って複数分岐可能
+- サウンド追加：`[System.Media.SystemSounds]::Beep` で音声フィードバック
+- タイマー自動閉鎖：`System.Timers.Timer` で N秒後に自動的にダイアログを閉じる
+
+**実装上の成功パターン：**
+1. Dialog フォームは同期的 → 次行のコードは Close まで実行されない
+2. TopMost + Activate() の組み合わせで、他のアプリが最前面でも強制表示
+3. Panel + Label で複雑なレイアウトを段階的に構築可能
+4. Font・Color は `New-Object System.Drawing.XXX` で動的生成（ハードコード不要）
+
+---
+
 ## テスト・実装戦略
 
 ### [汎用] 段階的ユーザーテスト＋フィードバック継承フロー
