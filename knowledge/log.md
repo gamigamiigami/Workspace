@@ -4,6 +4,28 @@
 
 ---
 
+### [2026-05-29 late evening] sticky-todo — notifier.ps1 修正と test-notifier.bat 診断ツール完成
+
+**作業内容：**
+- notifier.ps1 の HttpListener エラーハンドリングを強化
+- test-notifier.bat という簡潔な診断スクリプトを作成し、ユーザーが起動エラーを直接確認できるようにした
+- PowerShell スクリプトの "-WindowStyle Hidden" での実行では見えないエラーメッセージを、可視スクリプト経由で確認可能にした
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — HttpListener 例外処理強化
+- `projects/sticky-todo/test-notifier.bat` — 新規作成（ユーザー向けテストツール）
+
+**結果：**診断ツール完成 / ユーザーのテスト実行結果フィードバック待ち
+
+**成果物：**
+- `projects/sticky-todo/test-notifier.bat` — notifier.ps1 起動エラーを黒い画面で直接確認するツール
+
+**気づき・メモ：**
+- 可視スクリプトを用意することで、隠れたエラーメッセージを引き出せる
+- ユーザーへの次ステップは「test-notifier.bat を実行して画面に映る内容を報告」という明確な指示に
+
+---
+
 ### [2026-05-29 evening] sticky-todo — リマインダー通知：エンコーディング問題の特定と修正
 
 **作業内容：**
