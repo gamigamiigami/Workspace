@@ -22,13 +22,18 @@ function Write-Log($msg) {
 }
 
 function Show-MsgBox($msg, $isMessage) {
-    $MB_TOPMOST      = [uint32]0x40000
-    $MB_SETFOREGROUND= [uint32]0x10000
-    $MB_OK           = [uint32]0x0
-    $MB_EXCLAMATION  = [uint32]0x30
-    $MB_INFORMATION  = [uint32]0x40
-    $icon = if ($isMessage) { $MB_INFORMATION } else { $MB_EXCLAMATION }
-    [Win32]::MessageBox([IntPtr]::Zero, $msg, 'ToDo Remind', $MB_OK -bor $icon -bor $MB_TOPMOST -bor $MB_SETFOREGROUND) | Out-Null
+    $icon = if ($isMessage) { [System.Windows.Forms.MessageBoxIcon]::Information } else { [System.Windows.Forms.MessageBoxIcon]::Exclamation }
+    $owner = New-Object System.Windows.Forms.Form
+    $owner.TopMost = $true
+    $owner.Width = 1; $owner.Height = 1
+    $owner.ShowInTaskbar = $false
+    $owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
+    $owner.Show()
+    $owner.Activate()
+    [System.Windows.Forms.MessageBox]::Show($owner, $msg, 'ToDo Remind',
+        [System.Windows.Forms.MessageBoxButtons]::OK, $icon) | Out-Null
+    $owner.Close()
+    $owner.Dispose()
 }
 
 function Invoke-BringToFront {
