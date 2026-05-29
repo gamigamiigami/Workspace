@@ -46,7 +46,7 @@ function Invoke-BringToFront {
 
 $http = [System.Net.HttpListener]::new()
 $http.Prefixes.Add('http://localhost:48766/')
-try { $http.Start(); Write-Log "notifier started" } catch { Write-Log "start failed: $_"; exit 0 }
+try { $http.Start(); Write-Log "notifier started (PS $($PSVersionTable.PSVersion) OS $([System.Environment]::OSVersion.Version))" } catch { Write-Log "start failed: $_"; exit 0 }
 
 $script:tasks    = @()
 $script:firedIds = @{}
@@ -65,8 +65,17 @@ function Test-AndFireReminders {
     foreach ($t in $script:tasks) {
         try {
             if (-not $t.dueDateTime -or -not "$($t.reminder)") { continue }
-            Write-Log "  raw dueDateTime='$($t.dueDateTime)' reminder='$($t.reminder)' lastReminded='$($t.lastReminded)'"
-            $dueTime  = [DateTime]::Parse($t.dueDateTime, [System.Globalization.CultureInfo]::InvariantCulture)
+            Write-Log "  raw dueDateTime='$($t.dueDateTime)' type=$($t.dueDateTime.GetType().Name) reminder='$($t.reminder)'"
+            $ic = [System.Globalization.CultureInfo]::InvariantCulture
+            $dueTime = $null
+            foreach ($fmt in @('yyyy-MM-ddTHH:mm','yyyy-MM-ddTHH:mm:ss','yyyy/MM/dd HH:mm','M/d/yyyy h:mm tt')) {
+                try { $dueTime = [DateTime]::ParseExact("$($t.dueDateTime)", $fmt, $ic); break } catch {}
+            }
+            if (-not $dueTime) {
+                try { $dueTime = [DateTime]::Parse("$($t.dueDateTime)", $ic) } catch {}
+            }
+            if (-not $dueTime) { Write-Log "  CANNOT parse dueDateTime, skipping"; continue }
+            Write-Log "  parsed dueTime=$dueTime"
             $remindAt = $dueTime.AddMinutes(-[int]"$($t.reminder)")
             $lastMs   = if ($t.lastReminded) { [long]"$($t.lastReminded)" } else { 0L }
             $lastDate = if ($lastMs -gt 0) { $epoch.AddMilliseconds($lastMs).ToLocalTime() } else { [DateTime]::MinValue }
@@ -122,7 +131,7 @@ while ($http.IsListening) {
             $buf   = [byte[]]::new(4096)
             $r     = $ws.ReceiveAsync([ArraySegment[byte]]$buf, [Threading.CancellationToken]::None).Result
             $raw   = [Text.Encoding]::UTF8.GetString($buf, 0, $r.Count)
-            Write-Log "WebSocket data: $($raw.Substring(0, [Math]::Min(80, $raw.Length)))"
+            Write-Log "WebSocket data ($($r.Count) bytes): $($raw.Substring(0, [Math]::Min(200, $raw.Length)))"
             $displayMsg = $raw
             $isMsg = $false
             try {
@@ -143,7 +152,7 @@ while ($http.IsListening) {
             $reader.Close()
             try {
                 $script:tasks = @($json | ConvertFrom-Json)
-                Write-Log "tasks updated: $($script:tasks.Count)"
+                Write-Log "tasks updated: $($script:tasks.Count) json=$($json.Substring(0,[Math]::Min(120,$json.Length)))"
             } catch { Write-Log "tasks parse failed: $_" }
             $ctx.Response.StatusCode = 200
             $ctx.Response.Close()
