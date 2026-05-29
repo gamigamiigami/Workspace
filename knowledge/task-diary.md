@@ -6,6 +6,35 @@
 
 ---
 
+### 2026-06-12 (session 5b1cc3fb-続き - notifier.ps1 最終テスト指示、ユーザーフィードバック待機中)
+
+**うまくいったこと**
+- notifier.ps1 の PowerShell スクリプトに `Write-Log` 関数を実装し、タイムスタンプ付きログ出力を確立
+- Get-Date -Format を使った正しい時刻表示実装（前セッションの失敗から回復）
+- ユーザーに「新しいコードを上書き＆test-notifier.bat 実行」という明確な次ステップを指示
+- failures.md に PowerShell 診断ハマりポイントを記録化（エラー診断フロー）
+
+**うまくいかなかったこと**
+- セッション中にユーザーからのテスト結果報告を受けられず（テスト実行待機中の状態）
+- notifier.ps1 が GitHub に commit・push されていない（テスト完了後に実施予定）
+
+**発見**
+- PowerShell の Get-Date フォーマット文字列には `-Format` フラグが必須（2026-05-29 の失敗を繰り返さない）
+- notifier.ps1 の長期デバッグには「ログ可視化→ユーザー報告→仮説判定→修正」の非同期フローが最も効率的
+- failures.md への記録により「診断が先、コーディングは後」という開発プロセスの知識が蓄積
+
+**次回への申し送り**
+- **最優先：ユーザーからのテスト報告を受ける**
+  - 期待動作：黒い画面に `HH:mm:ss notifier started` などのログが流れる → リマインド時刻になると MessageBox 表示
+  - ユーザー指示：test-notifier.bat 実行後、失敗ケースなら %TEMP%\todo-remind.log をメモ帳で確認・報告
+- テスト結果から以下のいずれかを特定：
+  - ✅ ログ出力 + MessageBox 表示 → 完了、commit・push 実施
+  - ❌ ログなし → notifier.ps1 起動失敗、スタック診断が必要
+  - ❌ ログあり + WebSocket 受信ログなし → JavaScript→PowerShell 通信失敗、server.js 側を確認
+  - ❌ ログあり + MessageBox 呼び出し記録なし → Win32 API 呼び出しエラー、例外ログから仮説立案
+
+---
+
 ### 2026-06-11 (session 5b1cc3fb-最終 - notifier.ps1 デバッグ拡張、failures.md 記録完了)
 
 **うまくいったこと**
