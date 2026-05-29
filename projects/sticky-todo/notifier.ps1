@@ -16,7 +16,7 @@ public class Win32 {
 
 $logFile = "$env:TEMP\todo-remind.log"
 function Write-Log($msg) {
-    $line = "$(Get-Date 'HH:mm:ss') $msg"
+    $line = "$(Get-Date -Format 'HH:mm:ss') $msg"
     Write-Host $line
     try { Add-Content $logFile $line } catch { Write-Host "  [log-write-fail] $_" }
 }
