@@ -92,8 +92,8 @@ $lastCheck = [DateTime]::MinValue
 
 while ($http.IsListening) {
     try {
-        $getCtx     = $http.GetContextAsync()
-        $gotRequest = $getCtx.Wait(10000)
+        $ar         = $http.BeginGetContext($null, $null)
+        $gotRequest = $ar.AsyncWaitHandle.WaitOne(10000)
 
         $now = [DateTime]::Now
         if (($now - $lastCheck).TotalSeconds -ge 30) {
@@ -103,7 +103,7 @@ while ($http.IsListening) {
 
         if (-not $gotRequest) { continue }
 
-        $ctx = $getCtx.Result
+        $ctx = $http.EndGetContext($ar)
         $ctx.Response.Headers.Add('Access-Control-Allow-Origin', '*')
         $ctx.Response.Headers.Add('Access-Control-Allow-Methods', 'POST, GET, OPTIONS')
         $ctx.Response.Headers.Add('Access-Control-Allow-Headers', 'Content-Type')
