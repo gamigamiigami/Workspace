@@ -8,6 +8,31 @@
 
 ## PowerShell 非同期・スレッド
 
+### [2026-06-12] sticky-todo — 日本語Windowsで `DateTime.Parse` が ISO 8601 を解釈できない
+
+**状況：** JavaScriptから送られた `dueDateTime`（例: `"2026-06-12T12:30"`）を PowerShell で `[DateTime]::Parse($str)` でパースしようとした
+
+**問題：** 日本語Windows（ロケール ja-JP）では `DateTime.Parse()` がデフォルトで ISO 8601 形式を解釈できずエラーになる
+
+**原因：** `[DateTime]::Parse()` は引数なしだと現在スレッドのカルチャを使う。ja-JP カルチャは `"yyyy/MM/dd HH:mm"` 形式を期待するため、ISO 8601（`"yyyy-MM-ddTHH:mm"`）でエラーになる
+
+**解決策：**
+```powershell
+# ❌ ロケール依存
+[DateTime]::Parse($str)
+
+# ✅ InvariantCulture を明示
+[DateTime]::Parse($str, [System.Globalization.CultureInfo]::InvariantCulture)
+```
+
+**再発防止：** PowerShell で日付文字列をパースするときは必ず `InvariantCulture` を指定する
+
+**タグ：** #powershell #datetime #locale #japanese-windows
+
+---
+
+## PowerShell 非同期・スレッド
+
 ### [2026-05-29] sticky-todo — PowerShell 5.1 で `Task.Wait()` がデッドロックする
 
 **状況：** `HttpListener.GetContextAsync().Wait(10000)` でタイムアウト付きの非同期待機を実装した

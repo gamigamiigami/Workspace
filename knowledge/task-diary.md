@@ -6,6 +6,26 @@
 
 ---
 
+### 2026-05-29 (session ea85df86-04 - failures.md 更新、notifier.ps1 修正内容の知識化)
+
+**うまくいったこと**
+- notifier.ps1 の修正内容（WebSocket受信ハンドル、エラーハンドリング、MessageBox実行パイプライン）をfailures.md に詳細に記録
+- GitHub での修正済みファイル提供（PowerShell WebSocket 受信部分修正）とユーザーへの同期ガイダンス
+- セッション全体の技術的成果（WebSocket→POST→JSON→Timer→MessageBox パイプライン構築）の知識化完了
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- failures.md へのアンチパターン記録が、コード上の実装パターンと連携する形で機能を開始
+- PowerShell WebSocket リスナーの初期化エラー→修正のサイクルが、フェイルセーフな実装ガイドとして蓄積される
+
+**次回への申し送り**
+- MessageBox が実際に画面表示されるかのユーザー確認待ち
+- 確認後：UI/UX最適化、タスク永続化機構、エラーリカバリー機構の検討
+
+---
+
 ### 2026-05-29 (session ea85df86-03 - notifier.ps1 リマインダー実行パイプライン確認、MessageBox表示待機)
 
 **うまくいったこと**
