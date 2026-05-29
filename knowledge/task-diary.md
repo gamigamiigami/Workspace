@@ -6,6 +6,29 @@
 
 ---
 
+### 2026-05-29 (session ea85df86 続き - MessageBox検証指示、ファイル上書き準備完了)
+
+**うまくいったこと**
+- notifier.ps1 のログ出力メカニズムが確立し、デバッグが容易な状態を実現
+- `Write-Host` を `Write-Log` に統合して、コンソールとファイルの両方に出力できる改良を実装
+- ユーザー向けのMessageBoxテスト指示を明確化（test-notifier.bat で `test-message` リマインダー作成 → `Showing MessageBox...` ログ確認）
+
+**うまくいかなかったこと**
+- なし（現在ユーザーからのテスト実行フィードバック待機中）
+
+**発見**
+- PowerShell の WebSocket リスナー + タイマーチェック構造は想定通りに動作
+- `Write-Host` による標準出力がコンソール表示に機能することを確認
+- ログファイル (/tmp/notifier.log) とコンソール出力の二重化により、セッション終了後もテスト履歴を追跡可能
+
+**次回への申し送り**
+- **MessageBoxテスト：** ユーザーが test-notifier.bat を実行し、黒い画面に `Showing MessageBox...` が出たら成功
+  - 出た場合 → リマインド機能が正常。次は自動期限チェック機構（定期的なタイマー）の検証へ
+  - 出ない場合 → `[Windows.Forms.MessageBox]::Show()` の実行環境問題を failure.md に記録
+- notifier.ps1 のファイル配布準備完了（上書き指示で test-notifier.bat と notifier.ps1 同時に更新可能）
+
+---
+
 ### 2026-05-29 (session ea85df86 - notifier.ps1 実機テスト指示確定、sticky-todo 統合テスト進行中)
 
 **うまくいったこと**
