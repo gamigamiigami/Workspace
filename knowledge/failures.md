@@ -55,6 +55,49 @@ start "ToDo丸Server" /MIN /D "%~dp0" powershell -NoProfile -ExecutionPolicy Byp
 
 ---
 
+## PowerShell・Windows ネイティブスクリプト
+
+### [2026-06-02, 2026-06-04] sticky-todo — PowerShell notifier の起動エラー診断：「診断が先、コーディングは後」
+
+**状況：** リマインダー機能で PowerShell 製 notifier.ps1 を起動し、MessageBox で通知を表示しようとした。実装後のユーザーテストで「全然ダメ」というフィードバックを受けた
+
+**問題：** MessageBox が画面に出ていない、または出ていても最前面に表示されていない可能性がある。複数の根本原因が考えられ、どれが真因かが不明確
+
+**原因（仮説3つ）：**
+1. **notifier.ps1 そのものが起動していない可能性** → タスクマネージャーで `powershell.exe` が見えるか確認
+2. **MessageBox は起動しているが `-WindowStyle Hidden` で隠れている** → エラーメッセージが見えない、診断困難
+3. **MessageBox は見えるが `DefaultDesktopOnly` では最前面に表示されない** → `MB_TOPMOST (0x40000)` フラグが必要な可能性
+4. **`SetForegroundWindow` は背景プロセスからは効かない** → Windows セキュリティ制約
+
+**教訓：** 複数の根本原因が考えられる場合は、「コーディング→テスト」ではなく「**診断スクリプト作成→ユーザー環境で実行→エラーメッセージ収集→仮説絞り込み→修正**」というアプローチが必須
+
+**解決プロセス：**
+```
+❌ 間違ったアプローチ（ハマった）
+1. notifier.ps1 に `-WindowStyle Hidden` で起動
+2. ユーザーが「見えない」と報告
+3. コード上で MB_TOPMOST を追加してみる
+4. SetForegroundWindow を追加してみる
+5. 試行錯誤の繰り返し → 時間浪費
+
+✅ 正しいアプローチ（2026-06-02 で実装）
+1. debug-notifier.bat を作成（目に見える形で起動）
+2. ユーザーに実行してもらう
+3. エラーメッセージを見て根本原因を特定
+4. そこから仮説が1つに絞れる
+5. 正確な修正 → 次セッションで検証
+```
+
+**再発防止：**
+- PowerShell の `-WindowStyle Hidden` はエラー診断を妨げる → 診断時は `Visible` で実行
+- 複数の根本原因が考えられるときは、診断スクリプト（エラー出力を目に見える形）をユーザー環境で実行してから仮説検証
+- 「MessageBox が出ない」という症状は複数の理由があるため、最初に「プロセスが起動しているか」を確認すること
+- `DefaultDesktopOnly` vs `MB_TOPMOST` の機能差を正確に理解すること
+
+**タグ：** #powershell #windows #notifier #diagnosis #debugging
+
+---
+
 ## セッションスクリプト・自動化
 
 ### [2026-05-24] workspace-setup — Stop フックは「セッション終了時」ではなく「Claudeの返答後」に毎回発動
