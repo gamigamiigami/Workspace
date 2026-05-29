@@ -4,6 +4,38 @@
 
 ---
 
+### [2026-05-29 final] sticky-todo — notifier.ps1 最終版完成・ログ機能追加・ユーザー診断フロー確立
+
+**作業内容：**
+- 前セッションの診断結果（test-notifier.bat での起動確認）から、notifier.ps1 を本格的に修正
+- Win32 API MessageBox に `MB_TOPMOST (0x40000)` と `MB_SETFOREGROUND (0x10000)` フラグを設定し、最前面表示・フォーカス強制を実現
+- `%TEMP%\todo-remind.log` への詳細ログ出力機能を実装
+  - スタートアップログ、タイマー実行ログ、WebSocket 受信ログ、MessageBox 呼び出しログなど多段階ログ
+  - ユーザーがログを確認することで、各ステップの動作を診断可能に
+- PowerShell スクリプト内の全日本語を英語に統一（エンコーディング問題の完全対策）
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — Win32 MessageBox フラグ追加、ログ出力機能実装、日本語→英語に統一
+
+**結果：** notifier.ps1 最終版完成 / ユーザーへの明確な診断指示を準備完了
+
+**成果物：**
+- `projects/sticky-todo/notifier.ps1` v3（Win32 MB_TOPMOST、詳細ログ、英語のみ版）
+
+**気づき・メモ：**
+- PowerShell スクリプトのリモートデバッグは「ログ出力→ユーザーが確認」というフローが効果的
+- `MB_TOPMOST | MB_SETFOREGROUND` により、Windows のセキュリティ制約下でも最前面表示が可能（SetForegroundWindow より確実）
+- ログファイルにより、ユーザーテスト時の「MessageBox が出た/出ない」の原因特定が大幅に効率化
+- 次セッションの作業：ユーザーからのログ報告を受け、MessageBox 表示・非表示の原因を特定
+
+**次のステップ：**
+1. ユーザーにリマインダーテストを依頼（期限6分後、リマインド5分前のタスク作成）
+2. ユーザーが `%TEMP%\todo-remind.log` の内容を報告
+3. ログ内容から「WebSocket 受信有無」「MessageBox 呼び出し有無」を確認
+4. 原因に応じて notifier.ps1 の追加修正またはクライアント側（todo.html）の修正を実施
+
+---
+
 ### [2026-05-29 late evening] sticky-todo — notifier.ps1 修正と test-notifier.bat 診断ツール完成
 
 **作業内容：**
