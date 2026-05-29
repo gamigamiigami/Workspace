@@ -29,7 +29,9 @@ function Show-MsgBox($msg, $isMessage) {
     $f.TopMost = $true
     $f.StartPosition = 'CenterScreen'
     $f.ClientSize = New-Object System.Drawing.Size(420, 195)
-    $f.FormBorderStyle = 'None'
+    $f.FormBorderStyle = 'FixedDialog'
+    $f.MaximizeBox = $false; $f.MinimizeBox = $false
+    $f.Text = $ttl
     $f.ShowInTaskbar = $true
     $f.BackColor = [System.Drawing.Color]::White
 
