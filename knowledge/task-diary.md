@@ -6,6 +6,36 @@
 
 ---
 
+### 2026-05-29 (session da61f841 - notifier.ps1 最後の2つのエラー修正・ユーザーテスト待機)
+
+**うまくいったこと**
+- PowerShell WebSocketの `AcceptWebSocketAsync('')` → `AcceptWebSocketAsync($null)` 修正（空文字列がエラーになる仕様を確認）
+- 日本語Windowsの `DateTime.Parse` ロケール問題を修正：ISO 8601形式をパースするときは `[System.Globalization.CultureInfo]::InvariantCulture` を明示的に指定
+- failures.md に DateTime.Parse のロケール問題を記録化（再発防止のナレッジ化完了）
+- 直前までのテストで確認された状況：
+  - タイマーチェックが30秒ごとに動作中（`timer check: 0 tasks`）
+  - JavaScript→PowerShell のPOST受信が正常（`tasks updated: 1`）
+  - WebSocket接続が確立（`WebSocket request received`）
+  - → あとはリマインド時刻でのMessageBox表示確認のみ
+
+**うまくいかなかったこと**
+- なし（想定通りのエラー修正で進行）
+
+**発見**
+- PowerShell の WebSocket API は空文字列では `AcceptWebSocketAsync('')` がエラーになる。`$null` を明示的に渡す必要がある
+- 日本語ロケール環境での日付パースは、CultureInfo を明示的に指定しないと、ja-JP デフォルトで ISO 8601 が解釈できずエラーになる
+- failures.md への記録を通じて「同じ問題を繰り返さない」という知識継承フローが確立
+
+**次回への申し送り**
+- **最優先：ユーザーからのテスト実行報告を受ける**
+  - notifier.ps1 の新版（WebSocket$null修正 + DateTime.InvariantCulture修正）をダウンロード・上書き
+  - launch.bat 実行 → 新規タスク作成（期限「今から6分後」、リマインド「5分前」）→ 1分後に MessageBox 表示確認
+  - ログ内容（%TEMP%\todo-remind.log）も確認してレポート
+- テスト成功時→ notifier.ps1 をコミット・プッシュして実装完了
+- テスト失敗時（ログから MessageBox呼び出しなし）→ Win32 MessageBox の表示制御問題を再診断
+
+---
+
 ### 2026-05-29 (session ea85df86-05 - Stopフック処理、実質的な開発作業なし)
 
 **うまくいったこと**
