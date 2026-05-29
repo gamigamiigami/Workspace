@@ -151,8 +151,9 @@ while ($http.IsListening) {
             $json   = $reader.ReadToEnd()
             $reader.Close()
             try {
-                $script:tasks = @($json | ConvertFrom-Json)
-                Write-Log "tasks updated: $($script:tasks.Count) json=$($json.Substring(0,[Math]::Min(120,$json.Length)))"
+                $parsed = $json | ConvertFrom-Json
+                $script:tasks = if ($parsed -is [System.Array]) { $parsed } else { @($parsed) }
+                Write-Log "tasks updated: $($script:tasks.Count) json=$($json.Substring(0,[Math]::Min(200,$json.Length)))"
             } catch { Write-Log "tasks parse failed: $_" }
             $ctx.Response.StatusCode = 200
             $ctx.Response.Close()
