@@ -114,11 +114,9 @@ function Test-AndFireReminders {
             if (-not $dueTime) { Write-Log "  CANNOT parse dueDateTime, skipping"; continue }
             Write-Log "  parsed dueTime=$dueTime"
             $remindAt = $dueTime.AddMinutes(-[int]"$($t.reminder)")
-            $lastMs   = if ($t.lastReminded) { [long]"$($t.lastReminded)" } else { 0L }
-            $lastDate = if ($lastMs -gt 0) { $epoch.AddMilliseconds($lastMs).ToLocalTime() } else { [DateTime]::MinValue }
             $key      = "$($t.id)_$($remindAt.ToString('yyyy-MM-ddTHH:mm'))"
-            Write-Log "  task=$($t.id) remindAt=$remindAt lastDate=$lastDate now=$now fired=$($script:firedIds.ContainsKey($key))"
-            if ($now -ge $remindAt -and $lastDate -lt $remindAt -and -not $script:firedIds.ContainsKey($key)) {
+            Write-Log "  task=$($t.id) remindAt=$remindAt now=$now fired=$($script:firedIds.ContainsKey($key))"
+            if ($now -ge $remindAt -and -not $script:firedIds.ContainsKey($key)) {
                 $script:firedIds[$key] = $true
                 Write-Log "  FIRING reminder for $($t.id)"
                 $msg = Build-Msg $t $dueTime
