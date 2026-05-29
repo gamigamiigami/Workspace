@@ -6,6 +6,27 @@
 
 ---
 
+### 2026-05-29 (final) (リマインダー機能：DefaultDesktopOnly の動作確認)
+
+**うまくいったこと**
+- MessageBox が最前面に表示される (`DefaultDesktopOnly` による最前面表示が正常に機能)
+- ユーザーが手動テストを実施し「メッセージはちゃんと上に出た！」と確認
+- 次の検証ステップ（notifier.ps1 の起動確認）の手順を明確化
+
+**うまくいかなかったこと**
+- powershell.exe がタスクマネージャーに表示されるかの確認が困難（ユーザーが判定不能）
+
+**発見**
+- `DefaultDesktopOnly` フラグは MessageBox の最前面表示に機能している
+- MessageBox 表示→powershell.exe プロセスの生存確認という2段階の検証が必要
+
+**次回への申し送り**
+- `launch.bat` 起動直後に `debug-notifier.bat` を実行してポート 48766 の状態を確認
+- ポート FREE → notifier.ps1 がまだ起動できていない
+- ポート IN USE → notifier.ps1 が正常に動いている という判定フロー
+
+---
+
 ### 2026-05-29 (evening) (リマインダー機能：エンコーディング問題の特定と修正)
 
 **うまくいったこと**
