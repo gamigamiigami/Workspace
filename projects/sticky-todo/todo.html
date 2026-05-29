@@ -511,6 +511,7 @@
     </div>
     <span class="header-title">ToDo丸</span>
     <span class="header-date" id="header-date"></span>
+    <button class="btn-add" id="btn-settings" title="設定">⚙</button>
     <button class="btn-add" id="btn-add" title="新規追加 (Ctrl+N)">＋</button>
   </header>
 
@@ -625,6 +626,27 @@
     </div>
   </div>
 
+  <!-- ===== 設定モーダル ===== -->
+  <div class="overlay" id="settings-modal">
+    <div class="modal">
+      <div class="modal-head">
+        <h2>設定</h2>
+        <button class="modal-close" id="settings-close">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>リマインドメッセージ</label>
+          <textarea id="settings-msg" placeholder="例：提出期限があります！" style="min-height:60px"></textarea>
+        </div>
+        <p style="font-size:11px;color:#666;line-height:1.6;margin-top:-4px">全リマインドに適用されます。<br>通知には「メッセージ / タスク名 / 期限」の順で表示。</p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" id="settings-cancel">キャンセル</button>
+        <button class="btn-save"   id="settings-save">保存</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== リマインダーモーダル（×ボタンなし・無視不可）===== -->
   <div class="overlay" id="reminder-modal">
     <div class="reminder-box">
@@ -686,6 +708,7 @@
     let currentReminder  = null;
     let faviconBlinkTimer = null;
     let powershellFired   = {};
+    let reminderMessage   = '';
 
     function allCategories() {
       return [...DEFAULT_CATEGORIES, ...customCategories];
@@ -694,7 +717,7 @@
     // ===== 保存・読み込み =====
     function saveData() {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, customCategories }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ tasks, customCategories, reminderMessage }));
       } catch(e) {}
     }
 
@@ -703,8 +726,9 @@
         // v3
         const d = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
         if (d) {
-          if (d.tasks)            tasks            = d.tasks;
-          if (d.customCategories) customCategories = d.customCategories;
+          if (d.tasks)                       tasks            = d.tasks;
+          if (d.customCategories)            customCategories = d.customCategories;
+          if (d.reminderMessage !== undefined) reminderMessage = d.reminderMessage;
           return;
         }
         // v2からマイグレーション
@@ -1025,6 +1049,23 @@
       showToast('削除しました');
     }
 
+    // ===== 設定モーダル =====
+    function openSettings() {
+      document.getElementById('settings-msg').value = reminderMessage;
+      document.getElementById('settings-modal').classList.add('open');
+      setTimeout(() => document.getElementById('settings-msg').focus(), 80);
+    }
+    function closeSettings() {
+      document.getElementById('settings-modal').classList.remove('open');
+    }
+    function saveSettings() {
+      reminderMessage = document.getElementById('settings-msg').value.trim();
+      saveData();
+      closeSettings();
+      showToast('設定を保存しました');
+      syncRemindersToNotifier();
+    }
+
     // ===== リマインダー =====
     let titleFlashTimer  = null;
     let alarmLoopTimer   = null;
@@ -1080,7 +1121,9 @@
     }
 
     function syncRemindersToNotifier() {
-      const remindable = tasks.filter(t => t.dueDateTime && t.reminder && !t.completed);
+      const remindable = tasks
+        .filter(t => t.dueDateTime && t.reminder && !t.completed)
+        .map(t => ({ ...t, reminderMessage }));
       fetch('http://localhost:48766/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1120,8 +1163,8 @@
       currentReminder = task;
       const isAlarm = task.reminderType !== 'message';
 
-      const msg = '⏰ リマインド！\n\n'
-        + task.title
+      const customMsg = reminderMessage || '⏰ リマインド！';
+      const msg = customMsg + '\n' + task.title
         + (task.dueDateTime ? '\n期限：' + fmtDateTime(task.dueDateTime) : '')
         + (task.submitTo    ? '\n提出先：' + task.submitTo : '');
 
@@ -1143,6 +1186,7 @@
       // アプリ内モーダル（両タイプで表示）
       document.getElementById('reminder-title').textContent = task.title;
       let detail = '';
+      if (reminderMessage)  detail += reminderMessage + '\n';
       if (task.dueDateTime) detail += `期限：${fmtDateTime(task.dueDateTime)}`;
       if (task.submitTo)    detail += `\n提出先：${task.submitTo}`;
       document.getElementById('reminder-detail').textContent = detail;
@@ -1194,6 +1238,13 @@
     // ===== イベント登録 =====
     function bindEvents() {
       document.getElementById('btn-add').addEventListener('click', openAdd);
+      document.getElementById('btn-settings').addEventListener('click', openSettings);
+      document.getElementById('settings-close').addEventListener('click', closeSettings);
+      document.getElementById('settings-cancel').addEventListener('click', closeSettings);
+      document.getElementById('settings-save').addEventListener('click', saveSettings);
+      document.getElementById('settings-modal').addEventListener('click', e => {
+        if (e.target === document.getElementById('settings-modal')) closeSettings();
+      });
       document.getElementById('modal-close').addEventListener('click', closeModal);
       document.getElementById('modal-cancel').addEventListener('click', closeModal);
       document.getElementById('modal-save').addEventListener('click', saveTask);
@@ -1275,6 +1326,7 @@
         if (e.key === 'Escape') {
           closeModal();
           document.getElementById('confirm-modal').classList.remove('open');
+          closeSettings();
         }
         if (e.key === 'Enter' &&
             document.getElementById('task-modal').classList.contains('open') &&

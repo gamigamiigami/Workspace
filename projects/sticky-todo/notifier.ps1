@@ -42,7 +42,7 @@ function Show-MsgBox($msg, $isMessage) {
     $bar.Controls.Add($barLbl)
 
     $body = New-Object System.Windows.Forms.Label
-    $body.Text = ($msg -replace '^Remind: ','')
+    $body.Text = $msg
     $body.Font = New-Object System.Drawing.Font('Yu Gothic UI', 11)
     $body.ForeColor = [System.Drawing.Color]::FromArgb(40,40,40)
     $body.Size = New-Object System.Drawing.Size(380, 88)
@@ -85,10 +85,12 @@ $script:tasks    = @()
 $script:firedIds = @{}
 
 function Build-Msg($t, $dueTime) {
-    $m = "Remind: " + $t.title
-    if ($t.dueDateTime) { $m += " / Due:" + $dueTime.Month + "/" + $dueTime.Day + " " + $dueTime.Hour + ":" + $dueTime.Minute.ToString('00') }
-    if ($t.submitTo)    { $m += " / To:" + $t.submitTo }
-    return $m
+    $lines = @()
+    if ("$($t.reminderMessage)") { $lines += "$($t.reminderMessage)" }
+    $lines += "$($t.title)"
+    if ($t.dueDateTime) { $lines += $dueTime.ToString('M/d HH:mm') }
+    if ($t.submitTo)    { $lines += "提出先：$($t.submitTo)" }
+    return $lines -join "`n"
 }
 
 function Test-AndFireReminders {
