@@ -6,6 +6,29 @@
 
 ---
 
+### 2026-06-12 (session 1bc16fc5 - notifier.ps1 デッドロック修正、failures.md 記録化)
+
+**うまくいったこと**
+- PowerShell の `HttpListener` デッドロック問題を特定・解決（`Task.Wait()` → `BeginGetContext/WaitHandle`）
+- failures.md に詳細な診断と解決策を記録化
+- 修正版 notifier.ps1 を GitHub に commit・push（5件の fix コミット）
+- 「同じ失敗を記録に残す→次セッションで参照→再発防止」という知識蓄積フロー確立
+
+**うまくいかなかったこと**
+- セッション内でユーザーテストを実行できず（ユーザーへの再テスト指示で終了）
+
+**発見**
+- PowerShell での非同期処理には `.NET Framework` のデッドロック陥阱が潜在（`Task.Result` / `Task.Wait()` は同じスレッド継続待機で全ブロック）
+- `.BeginGetContext()` + `AsyncWaitHandle.WaitOne()` パターンが PowerShell 5.1 でのタイムアウト付き待機の正解
+- failures.md への記録が「デバッグルーチンの外部化」となり、セッション間での知識継承が効率化
+
+**次回への申し送り**
+- ユーザーが修正版 notifier.ps1 をダウンロード＆テスト実行するのを待機中
+- テスト結果（`HH:mm:ss timer check: 0 tasks` が10秒ごとに流れるか確認）を受け取ったら、リマインド機能テストに進める
+- テスト完了したら sticky-todo プロジェクトの実装完了
+
+---
+
 ### 2026-06-12 (session 5b1cc3fb-続き2 - notifier.ps1 コンソール出力デバッグ、ユーザーテスト進行中)
 
 **うまくいったこと**

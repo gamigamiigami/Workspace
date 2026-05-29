@@ -1,8 +1,40 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-05-29
+最終更新：2026-06-12
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## PowerShell 非同期・スレッド
+
+### [2026-05-29] sticky-todo — PowerShell 5.1 で `Task.Wait()` がデッドロックする
+
+**状況：** `HttpListener.GetContextAsync().Wait(10000)` でタイムアウト付きの非同期待機を実装した
+
+**問題：** `Wait()` が永久にブロックし、ループが全く動かない。`Write-Host` も出力されず、タイマーチェックも発火しない
+
+**原因：** PowerShell 5.1（.NET Framework）の SynchronizationContext により、`Task.Wait()` / `Task.Result` が同じスレッドへの継続を待ってデッドロックする。これは .NET の async/await における既知の落とし穴
+
+**解決策：**
+```powershell
+# ❌ デッドロックする
+$task = $http.GetContextAsync()
+$ok   = $task.Wait(10000)
+$ctx  = $task.Result
+
+# ✅ 正しい（BeginGetContext + WaitHandle）
+$ar  = $http.BeginGetContext($null, $null)
+$ok  = $ar.AsyncWaitHandle.WaitOne(10000)
+$ctx = $http.EndGetContext($ar)
+```
+
+**再発防止：**
+- PowerShell 5.1 では `Task.Wait()` / `Task.Result` を HttpListener ループで使わない
+- `BeginXxx/EndXxx`（APM パターン）+ `WaitHandle.WaitOne` を使う
+- .NET の async API を PowerShell から使う場合は常にデッドロックリスクを疑う
+
+**タグ：** #powershell #async #httplistener #deadlock #dotnet
 
 ---
 
