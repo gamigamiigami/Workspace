@@ -148,6 +148,39 @@ Invoke-BringToFront
 - PowerShell の実行ポリシー設定が必要：`Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope CurrentUser`
 - notifier.ps1 を常時起動するため、Windows タスクスケジューラまたは startup フォルダに配置を推奨
 
+**診断テクニック：隠れた起動エラーの可視化**
+
+PowerShell スクリプトが `-WindowStyle Hidden` で起動されている場合、エラーメッセージは見えず、スクリプトが起動直後にクラッシュしていても原因特定が困難です。これを解決するために：
+
+1. **可視実行用テストバッチを別に作成**
+```batch
+@echo off
+REM test-notifier.bat — notifier.ps1 を可視状態で実行
+powershell -NoProfile -ExecutionPolicy Bypass -File "notifier.ps1"
+pause
+```
+
+2. **実行結果の判定**
+   - エラーメッセージが表示される → エラー内容から原因を特定
+   - 何も出ずにすぐ終了 → スクリプト内のエラー処理が原因
+   - ずっと動き続ける → 正常起動（Hidden 版の問題は別）
+
+3. **ログファイル記録との組み合わせ**
+```powershell
+# notifier.ps1 のエラーハンドリング例
+$logFile = "$env:TEMP\notifier.log"
+try {
+    # メイン処理
+    Add-Type -AssemblyName System.Windows.Forms
+    # ...
+} catch {
+    Add-Content $logFile "$(Get-Date): ERROR: $_"
+    Write-Host "Error: $_"  # テスト時に画面に出力
+}
+```
+
+このアプローチにより、開発段階での問題特定と本番段階での無音実行（Hidden）を両立させられます。
+
 **発見：**
 - notifier.ps1 が起動できない場合、アプリが最小化されると完全無音になる→アプリのモーダルダイアログが必須（JavaScript フォールバック）
 - アプリウィンドウが開いている限り、モーダルダイアログは常に表示される設計が堅牢

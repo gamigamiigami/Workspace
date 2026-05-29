@@ -96,6 +96,35 @@ start "ToDo丸Server" /MIN /D "%~dp0" powershell -NoProfile -ExecutionPolicy Byp
 
 **タグ：** #powershell #windows #notifier #diagnosis #debugging
 
+### [2026-06-11] sticky-todo — PowerShell 隠れた起動エラーの可視化：test-notifier.bat による直接診断
+
+**状況：** notifier.ps1 をローンチしているにもかかわらず MessageBox が表示されない。前セッションで debug-notifier.bat を作成してコンポーネントテストを実施していたが、notifier.ps1 本体の起動エラーが見えない状態だった
+
+**問題：** notifier.ps1 は `launch.bat` から `-WindowStyle Hidden` で起動されるため、起動時のエラーがコマンドプロンプトに表示されない。そのため **notifier.ps1 が起動直後にクラッシュしている可能性が高いのに、ユーザーが原因を特定できない** という状況
+
+**原因：** 隠れた状態（Hidden）での起動は、スクリプト作成者側での診断・デバッグに向いていない。エラーメッセージが画面に出ていないため、何が失敗しているかが全く見えない
+
+**解決策：** 可視状態で実行するテスト用バッチファイル `test-notifier.bat` を作成。このバッチは `-WindowStyle Hidden` を使わずに notifier.ps1 を起動し、コマンドプロンプト上にエラーメッセージを出力させる
+
+```batch
+@echo off
+REM test-notifier.bat — notifier.ps1 を可視状態で起動してエラーを直接確認
+powershell -NoProfile -ExecutionPolicy Bypass -File "notifier.ps1"
+pause
+```
+
+この方法により：
+- **エラーメッセージが見える** → モジュールロード失敗、パス解決失敗、権限エラーなどが特定可能
+- **クラッシュなら黒い画面で停止** → スクリプトの実行状況をリアルタイムで確認
+- **正常ならずっと動き続ける** → スクリプトが正常に実行されていることを確認可能
+
+**再発防止：**
+- バックグラウンドプロセスとして実行する必要がない開発段階では、常に可視状態（`-WindowStyle Visible` または Hidden なし）で実行して診断する
+- `launch.bat` の最終版では `-WindowStyle Hidden` を使うが、**テスト段階では診断用の可視バッチを別に作成** して問題切り分けを簡素化
+- 「目に見える形での診断」が問題の早期特定・早期解決につながる
+
+**タグ：** #powershell #windows #debugging #diagnosis #automation
+
 ---
 
 ### [2026-05-29] sticky-todo — Linux 環境で作成した Batch/PowerShell スクリプトのエンコーディング問題
