@@ -6,12 +6,13 @@
 
 ---
 
-### 2026-05-29 (session ea85df86 - notifier.ps1 ユーザーテスト進行中、MessageBox確認待機)
+### 2026-05-29 (session ea85df86 - notifier.ps1 実機テスト指示確定、sticky-todo 統合テスト進行中)
 
 **うまくいったこと**
 - notifier.ps1 の起動成功を確認（`HH:mm:ss notifier started` ログが出力される）
 - PowerShell WebSocket リスナーが正常に起動し、10秒ごとの `timer check: 0 tasks` ログが確認可能な状態を実現
 - ユーザーの環境でスクリプト実行が可能な状態に到達
+- sticky-todo の todo.html とリマインダー機能を統合したエンドツーエンドテスト指示を作成（todo.html をEdgeで開く → タスク作成 → 期限・リマインド設定 → 待機）
 
 **うまくいかなかったこと**
 - なし（現在ユーザーからのフィードバック待機中）
@@ -19,12 +20,18 @@
 **発見**
 - notifier.ps1 の起動流程が確立し、前セッションの PowerShell デッドロック修正が実装環境で有効に機能
 - タイマーチェックのログ出力により、スクリプト内部状態の可視化が確認可能
+- sticky-todo プロジェクトは todo.html (Chromium-based browser対応) + notifier.ps1 (Windows notification) の2層構造での統合テストが次段階
 
 **次回への申し送り**
-- **最優先：ユーザーからの MessageBox 動作確認報告を受ける**
-  - `timer check: 0 tasks` が10秒ごとに流れ始めてから、リマインダー時刻（実テスト時のタスク時刻）になると MessageBox が表示されるか確認
-  - MessageBox が表示される → notifier.ps1 を commit・push して実装完了
-  - MessageBox が表示されない → ユーザーからのエラーログを収集して failures.md に記録し、再診断
+- **最優先：ユーザーからのテスト実行報告を受ける**
+  1. todo.html を Edge で開く
+  2. タスク作成 → 期限を「今から3〜4分後」、リマインドを「1分前」に設定
+  3. Edge最小化して他ウィンドウを前に出す
+  4. 待機
+  5. todo.htmlを開いた直後に黒い画面に `tasks updated: 1` が出たか確認
+  
+  - 出た場合 → notifier.ps1 が正常に JSON 受信・パース・リマインド設定ができている証拠。リマインド時刻に MessageBox が出るか確認へ進める
+  - 出ない場合 → JSON 送信または notifier.ps1 の受信処理に問題。エラーログを収集して failures.md に記録し、再診断
 
 ---
 
