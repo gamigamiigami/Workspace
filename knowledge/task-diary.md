@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-05-29 (session cb407bdd - sticky-todo notifier.ps1 最終版の選別・ユーザー配布)
+
+**うまくいったこと**
+- notifier.ps1 と launch.bat の2ファイルをユーザーに配布
+- 再起動後の「出した記録」の永続化（%TEMP%\todo-fired.json）の仕組みを実装
+- Edgeパスの自動検索順序（`Program Files (x86)` → `Program Files` → PATH）を設定
+- 不要な debug ファイル4つ（debug-notifier.bat など）の削除による フォルダ整理完了
+- プロジェクト構造：`launch.bat` / `notifier.ps1` / `todo.html` の3つのコアファイルに絞込
+- 新版の notifier.ps1、launch.bat を SendUserFile でユーザーに提供
+
+**うまくいかなかったこと**
+- なし（最終版の確定・配布が主目的のセッションのため、実装的課題なし）
+
+**発見**
+- sticky-todo の開発は「基本機能完成 → 信頼性向上 → ファイル整理」という段階進行中
+- 前セッションまでの試行錯誤が notifier.ps1 の改善版に反映されている
+
+**次回への申し送り**
+- ユーザーが配布ファイルを「とどまる」フォルダに上書き・実施して本格運用へ
+- 問題発生時は %TEMP%\todo-remind.log を確認してトラブルシューティング
+- launch.bat での自動起動設定やタスクスケジューラー組み込み検討推奨
+
+---
+
 ### 2026-05-29 (session a628ca4b - PowerShell スクリプトのパフォーマンス確認・リソース使用量検証)
 
 **うまくいったこと**
