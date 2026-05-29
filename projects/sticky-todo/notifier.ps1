@@ -85,6 +85,14 @@ try { $http.Start(); Write-Log "notifier started (PS $($PSVersionTable.PSVersion
 
 $script:tasks    = @()
 $script:firedIds = @{}
+$firedFile = "$env:TEMP\todo-fired.json"
+if (Test-Path $firedFile) {
+    try {
+        $saved = Get-Content $firedFile -Raw | ConvertFrom-Json
+        $saved.PSObject.Properties | ForEach-Object { $script:firedIds[$_.Name] = $true }
+        Write-Log "fired file loaded: $($script:firedIds.Count) entries"
+    } catch { Write-Log "fired file load failed: $_" }
+}
 
 function Build-Msg($t, $dueTime) {
     $lines = @()
@@ -118,6 +126,7 @@ function Test-AndFireReminders {
             Write-Log "  task=$($t.id) remindAt=$remindAt now=$now fired=$($script:firedIds.ContainsKey($key))"
             if ($now -ge $remindAt -and -not $script:firedIds.ContainsKey($key)) {
                 $script:firedIds[$key] = $true
+                Save-FiredIds
                 Write-Log "  FIRING reminder for $($t.id)"
                 $msg = Build-Msg $t $dueTime
                 Invoke-BringToFront
@@ -131,6 +140,10 @@ function Get-FiredJson {
     if ($script:firedIds.Count -eq 0) { return '{}' }
     $pairs = $script:firedIds.Keys | ForEach-Object { '"' + $_ + '":true' }
     return '{' + ($pairs -join ',') + '}'
+}
+
+function Save-FiredIds {
+    try { Set-Content $firedFile (Get-FiredJson) -Encoding UTF8 } catch {}
 }
 
 $lastCheck = [DateTime]::MinValue
@@ -171,7 +184,7 @@ while ($http.IsListening) {
             $isMsg = $false
             try {
                 $data = $raw | ConvertFrom-Json
-                if ($data.key)  { $script:firedIds[$data.key] = $true }
+                if ($data.key)  { $script:firedIds[$data.key] = $true; Save-FiredIds }
                 if ($data.msg)  { $displayMsg = $data.msg }
                 if ($data.type -eq 'message') { $isMsg = $true }
             } catch { Write-Log "WebSocket JSON parse failed" }
