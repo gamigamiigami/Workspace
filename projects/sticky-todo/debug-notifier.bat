@@ -1,25 +1,16 @@
 @echo off
-echo === notifier 診断 ===
+echo === notifier diagnostic ===
 echo.
-
-echo [1] ポート 48766 の使用状況...
+echo [1] Port 48766 check...
 netstat -ano | findstr :48766
-if %ERRORLEVEL% EQU 0 (
-    echo    上記のプロセスがポートを使用中です
-) else (
-    echo    ポートは空いています
-)
+if %ERRORLEVEL% EQU 0 (echo    IN USE) else (echo    FREE)
 echo.
-
-echo [2] 各パーツの動作確認...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "Write-Host '[チェック1] Windows.Forms...'; " ^
-    "try { Add-Type -AssemblyName System.Windows.Forms; Write-Host '  OK' } catch { Write-Host '  NG:' $_ }; " ^
-    "Write-Host '[チェック2] Win32クラス...'; " ^
-    "try { Add-Type 'using System; using System.Runtime.InteropServices; using System.Text; public class Win32Diag { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h); }'; Write-Host '  OK' } catch { Write-Host '  NG:' $_ }; " ^
-    "Write-Host '[チェック3] HTTPリスナー...'; " ^
-    "try { $h=[System.Net.HttpListener]::new(); $h.Prefixes.Add('http://localhost:48766/'); $h.Start(); Write-Host '  OK（起動成功）'; $h.Stop() } catch { Write-Host '  NG:' $_ }"
-
+echo [2] Component test...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try{Add-Type -AssemblyName System.Windows.Forms;Write-Host 'Forms:OK'}catch{Write-Host 'Forms:FAIL' $_};try{$h=[System.Net.HttpListener]::new();$h.Prefixes.Add('http://localhost:48766/');$h.Start();Write-Host 'HTTP:OK';$h.Stop()}catch{Write-Host 'HTTP:FAIL' $_}"
 echo.
-echo === 診断終了 ===
+echo [3] MessageBox test...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.Windows.Forms;[System.Windows.Forms.MessageBox]::Show('test OK','test',[System.Windows.Forms.MessageBoxButtons]::OK,[System.Windows.Forms.MessageBoxIcon]::Information,[System.Windows.Forms.MessageBoxDefaultButton]::Button1,[System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly)"
+echo    MessageBox closed.
+echo.
+echo === done ===
 pause
