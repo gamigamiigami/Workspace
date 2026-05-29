@@ -116,7 +116,7 @@ while ($http.IsListening) {
 
         if ($ctx.Request.IsWebSocketRequest) {
             Write-Log "WebSocket request received"
-            $wsCtx = $ctx.AcceptWebSocketAsync('').Result
+            $wsCtx = $ctx.AcceptWebSocketAsync($null).Result
             $ws    = $wsCtx.WebSocket
             $buf   = [byte[]]::new(4096)
             $r     = $ws.ReceiveAsync([ArraySegment[byte]]$buf, [Threading.CancellationToken]::None).Result
