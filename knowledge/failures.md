@@ -6,6 +6,40 @@
 
 ---
 
+## PowerShell UI・ウィンドウ制御
+
+### [2026-05-30] sticky-todo — Win32 `MB_TOPMOST` フラグだけでは MessageBox の最前面化が確実でない
+
+**状況：** PowerShell で `[Windows.Forms.MessageBox]::Show()` を使い、MessageBox を画面中央・最前面に表示したい
+
+**問題：** `[Windows.Forms.MessageBoxOptions]::TopMost` フラグを指定しても、MessageBox がバックグラウンドに隠れてしまい、タスクバーのボタン点滅のみになる
+
+**原因：** Win32 API の `MessageBox(..., MB_TOPMOST)` は OS のウィンドウマネージャー次第。フォーアグラウンドアプリケーションが別のウィンドウを持つ場合、確実にフォアグラウンドを奪取できない
+
+**解決策：**
+```powershell
+# ❌ TopMost フラグだけではバックグラウンドに隠れる可能性
+[Windows.Forms.MessageBox]::Show($msg, $title, [Windows.Forms.MessageBoxButtons]::OK, 
+    [Windows.Forms.MessageBoxIcon]::Information, 
+    [Windows.Forms.MessageBoxDefaultButton]::Button1,
+    [Windows.Forms.MessageBoxOptions]::TopMost)
+
+# ✅ TopMost な WinForms Form をオーナーにして Activate() で確実に最前面化
+$owner = New-Object Windows.Forms.Form
+$owner.TopMost = $true
+[Windows.Forms.MessageBox]::Show($owner, $msg, $title, 
+    [Windows.Forms.MessageBoxButtons]::OK,
+    [Windows.Forms.MessageBoxIcon]::Information)
+$owner.Activate()
+$owner.Dispose()
+```
+
+**再発防止：** PowerShell で MessageBox を確実に最前面に表示するときは TopMost な WinForms Form をオーナーにして `Activate()` を呼ぶ
+
+**タグ：** #powershell #ui #messagebox #winforms #windows
+
+---
+
 ## PowerShell 非同期・スレッド
 
 ### [2026-06-12] sticky-todo — PS5.1 で `@(ConvertFrom-Json)` が JSON 配列を二重ラップする

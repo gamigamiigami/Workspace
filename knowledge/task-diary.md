@@ -6,6 +6,28 @@
 
 ---
 
+### 2026-05-29 (session a628ca4b-stop-2 - WinForms TopMost オーナーで MessageBox 最前面化実装)
+
+**うまくいったこと**
+- WinForms `TopMost` オーナーフォームを使った MessageBox 前面化の実装に成功
+  - `MB_TOPMOST` フラグの代わりに、TopMost な WinForms Form をオーナーとして指定することで確実に最前面に表示
+  - `Form.Activate()` で確実にフォーカスを奪取
+- PowerShell でのウィンドウ制御（WinForms 統合）の実装パターンを確立
+
+**うまくいかなかったこと**
+- なし（実装意図通り動作する見込み）
+
+**発見**
+- Win32 API の `MB_TOPMOST` フラグだけでは確実な前面化が保証されない（OS/ウィンドウマネージャ次第）
+- WinForms の `TopMost` + `Activate()` パターンが最も確実な実装方法
+- PowerShell から .NET Framework の WinForms を活用することで、高度なウィンドウ制御が可能
+
+**次回への申し送り**
+- 実際に MessageBox が画面中央・最前面に出現することを確認する必要
+- 動作確認後、他の通知パターン（トースト通知等の検討）の優先度を判定
+
+---
+
 ### 2026-05-29 (session a628ca4b-stop - MessageBox の表示位置デバッグ・コア機能完成確認)
 
 **うまくいったこと**

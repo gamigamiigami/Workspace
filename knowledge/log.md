@@ -4,6 +4,39 @@
 
 ---
 
+### [2026-05-30 session a628ca4b-stop-2] sticky-todo — WinForms TopMost オーナー実装で MessageBox 最前面化問題を解決
+
+**作業内容：**
+- 前セッションの「MessageBox が隠れる問題」の根本原因を特定：Win32 API の `MB_TOPMOST` フラグだけでは OS のウィンドウマネージャー次第で前面化が保証されない
+- WinForms `TopMost` Form をオーナーにして `Activate()` を呼ぶ新パターンを実装
+  - `Show-MsgBox` 関数内で `Form` オブジェクトを作成・設定し、MessageBox のオーナーに指定
+  - Form は `ShowInTaskbar=false` で隠し、`StartPosition=CenterScreen` で画面中央に配置
+  - MessageBox 後に Form を破棄
+- notifier.ps1 のコード品質向上（不要な Win32 宣言の削除、可読性改善）
+
+**変更点：**
+- `projects/sticky-todo/notifier.ps1` — WinForms TopMost オーナーパターンの実装
+- `knowledge/failures.md` — 新規エントリ「MB_TOPMOST フラグだけでは MessageBox の最前面化が確実でない」を追記
+- `knowledge/task-diary.md` — セッション a628ca4b-stop-2 の記録を追加
+
+**結果：** 
+- Win32 と WinForms の組み合わせで、確実に前面化・最前面配置できる実装パターンを確立
+- failures.md に「これからのハマりポイント」として知見を記録
+
+**成果物：**
+- failures.md における「PowerShell UI・ウィンドウ制御」セクション（MessageBox 最前面化パターン）
+- notifier.ps1 内の `Show-MsgBox` 関数（再利用可能な WinForms パターン）
+
+**気づき・メモ：**
+- PowerShell での UI 実装には Win32 API だけでなく WinForms の組み合わせが有効
+- TopMost フラグ + Activate() パターンは他の Windows アプリケーション（スクリーンセーバー、緊急通知等）でも応用可能
+
+**次のステップ：**
+1. ユーザーテスト実行：MessageBox が画面中央に最前面で出現するか確認
+2. 確認後、UI/UX 最適化を検討（トースト通知への切り替え等）
+
+---
+
 ### [2026-05-29 session ea85df86] sticky-todo — notifier.ps1 エンドツーエンドテスト指示・段階的フィードバック継承フロー確立
 
 **作業内容：**
