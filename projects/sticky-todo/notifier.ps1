@@ -22,18 +22,46 @@ function Write-Log($msg) {
 }
 
 function Show-MsgBox($msg, $isMessage) {
-    $icon = if ($isMessage) { [System.Windows.Forms.MessageBoxIcon]::Information } else { [System.Windows.Forms.MessageBoxIcon]::Exclamation }
-    $owner = New-Object System.Windows.Forms.Form
-    $owner.TopMost = $true
-    $owner.Width = 1; $owner.Height = 1
-    $owner.ShowInTaskbar = $false
-    $owner.StartPosition = [System.Windows.Forms.FormStartPosition]::CenterScreen
-    $owner.Show()
-    $owner.Activate()
-    [System.Windows.Forms.MessageBox]::Show($owner, $msg, 'ToDo Remind',
-        [System.Windows.Forms.MessageBoxButtons]::OK, $icon) | Out-Null
-    $owner.Close()
-    $owner.Dispose()
+    $clr = if ($isMessage) { [System.Drawing.Color]::FromArgb(41,128,185) } else { [System.Drawing.Color]::FromArgb(220,60,50) }
+    $ttl = if ($isMessage) { 'ToDo  Message' } else { 'Reminder !' }
+
+    $f = New-Object System.Windows.Forms.Form
+    $f.TopMost = $true
+    $f.StartPosition = 'CenterScreen'
+    $f.ClientSize = New-Object System.Drawing.Size(420, 195)
+    $f.FormBorderStyle = 'None'
+    $f.ShowInTaskbar = $true
+    $f.BackColor = [System.Drawing.Color]::White
+
+    $bar = New-Object System.Windows.Forms.Panel
+    $bar.Dock = 'Top'; $bar.Height = 52; $bar.BackColor = $clr
+    $barLbl = New-Object System.Windows.Forms.Label
+    $barLbl.Text = $ttl; $barLbl.Dock = 'Fill'; $barLbl.TextAlign = 'MiddleCenter'
+    $barLbl.ForeColor = [System.Drawing.Color]::White
+    $barLbl.Font = New-Object System.Drawing.Font('Yu Gothic UI', 14, [System.Drawing.FontStyle]::Bold)
+    $bar.Controls.Add($barLbl)
+
+    $body = New-Object System.Windows.Forms.Label
+    $body.Text = ($msg -replace '^Remind: ','')
+    $body.Font = New-Object System.Drawing.Font('Yu Gothic UI', 11)
+    $body.ForeColor = [System.Drawing.Color]::FromArgb(40,40,40)
+    $body.Size = New-Object System.Drawing.Size(380, 88)
+    $body.Location = New-Object System.Drawing.Point(20, 58)
+    $body.TextAlign = 'MiddleLeft'
+
+    $ok = New-Object System.Windows.Forms.Button
+    $ok.Text = 'OK'; $ok.Font = New-Object System.Drawing.Font('Yu Gothic UI', 11)
+    $ok.Size = New-Object System.Drawing.Size(110, 36)
+    $ok.Location = New-Object System.Drawing.Point(155, 150)
+    $ok.BackColor = $clr; $ok.ForeColor = [System.Drawing.Color]::White
+    $ok.FlatStyle = 'Flat'; $ok.FlatAppearance.BorderSize = 0
+    $ok.DialogResult = [System.Windows.Forms.DialogResult]::OK
+    $f.AcceptButton = $ok
+
+    $f.Controls.AddRange(@($bar, $body, $ok))
+    $f.Activate()
+    $f.ShowDialog() | Out-Null
+    $f.Dispose()
 }
 
 function Invoke-BringToFront {
