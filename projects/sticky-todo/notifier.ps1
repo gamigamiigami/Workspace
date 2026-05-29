@@ -65,7 +65,7 @@ function Test-AndFireReminders {
     foreach ($t in $script:tasks) {
         try {
             if (-not $t.dueDateTime -or -not "$($t.reminder)") { continue }
-            $dueTime  = [DateTime]::Parse($t.dueDateTime)
+            $dueTime  = [DateTime]::Parse($t.dueDateTime, [System.Globalization.CultureInfo]::InvariantCulture)
             $remindAt = $dueTime.AddMinutes(-[int]"$($t.reminder)")
             $lastMs   = if ($t.lastReminded) { [long]"$($t.lastReminded)" } else { 0L }
             $lastDate = if ($lastMs -gt 0) { $epoch.AddMilliseconds($lastMs).ToLocalTime() } else { [DateTime]::MinValue }
