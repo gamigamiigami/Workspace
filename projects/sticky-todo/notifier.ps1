@@ -9,8 +9,25 @@ public class Win32 {
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
     [DllImport("user32.dll", CharSet=CharSet.Auto)]
     public static extern int GetWindowText(IntPtr h, StringBuilder sb, int max);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    public static extern int MessageBox(IntPtr hWnd, string text, string caption, uint type);
 }
 "@
+
+$logFile = "$env:TEMP\todo-remind.log"
+function Write-Log($msg) {
+    try { Add-Content $logFile "$(Get-Date 'HH:mm:ss') $msg" } catch {}
+}
+
+function Show-MsgBox($msg, $isMessage) {
+    $MB_TOPMOST      = [uint32]0x40000
+    $MB_SETFOREGROUND= [uint32]0x10000
+    $MB_OK           = [uint32]0x0
+    $MB_EXCLAMATION  = [uint32]0x30
+    $MB_INFORMATION  = [uint32]0x40
+    $icon = if ($isMessage) { $MB_INFORMATION } else { $MB_EXCLAMATION }
+    [Win32]::MessageBox([IntPtr]::Zero, $msg, 'ToDo Remind', $MB_OK -bor $icon -bor $MB_TOPMOST -bor $MB_SETFOREGROUND) | Out-Null
+}
 
 function Invoke-BringToFront {
     try {
@@ -27,7 +44,7 @@ function Invoke-BringToFront {
 
 $http = [System.Net.HttpListener]::new()
 $http.Prefixes.Add('http://localhost:48766/')
-try { $http.Start() } catch { exit 0 }
+try { $http.Start(); Write-Log "notifier started" } catch { Write-Log "start failed: $_"; exit 0 }
 
 $script:tasks    = @()
 $script:firedIds = @{}
@@ -42,6 +59,7 @@ function Build-Msg($t, $dueTime) {
 function Test-AndFireReminders {
     $now   = [DateTime]::Now
     $epoch = [DateTime]::new(1970, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+    Write-Log "timer check: $($script:tasks.Count) tasks"
     foreach ($t in $script:tasks) {
         try {
             if (-not $t.dueDateTime -or -not "$($t.reminder)") { continue }
@@ -50,14 +68,15 @@ function Test-AndFireReminders {
             $lastMs   = if ($t.lastReminded) { [long]"$($t.lastReminded)" } else { 0L }
             $lastDate = if ($lastMs -gt 0) { $epoch.AddMilliseconds($lastMs).ToLocalTime() } else { [DateTime]::MinValue }
             $key      = "$($t.id)_$($remindAt.ToString('yyyy-MM-ddTHH:mm'))"
+            Write-Log "  task=$($t.id) remindAt=$remindAt lastDate=$lastDate now=$now fired=$($script:firedIds.ContainsKey($key))"
             if ($now -ge $remindAt -and $lastDate -lt $remindAt -and -not $script:firedIds.ContainsKey($key)) {
                 $script:firedIds[$key] = $true
-                $msg  = Build-Msg $t $dueTime
-                $icon = if ("$($t.reminderType)" -eq 'message') { [System.Windows.Forms.MessageBoxIcon]::Information } else { [System.Windows.Forms.MessageBoxIcon]::Exclamation }
+                Write-Log "  FIRING reminder for $($t.id)"
+                $msg = Build-Msg $t $dueTime
                 Invoke-BringToFront
-                [System.Windows.Forms.MessageBox]::Show($msg, 'ToDo Remind', [System.Windows.Forms.MessageBoxButtons]::OK, $icon, [System.Windows.Forms.MessageBoxDefaultButton]::Button1, [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly) | Out-Null
+                Show-MsgBox $msg ("$($t.reminderType)" -eq 'message')
             }
-        } catch {}
+        } catch { Write-Log "  error: $_" }
     }
 }
 
@@ -94,28 +113,35 @@ while ($http.IsListening) {
         }
 
         if ($ctx.Request.IsWebSocketRequest) {
+            Write-Log "WebSocket request received"
             $wsCtx = $ctx.AcceptWebSocketAsync('').Result
             $ws    = $wsCtx.WebSocket
             $buf   = [byte[]]::new(4096)
             $r     = $ws.ReceiveAsync([ArraySegment[byte]]$buf, [Threading.CancellationToken]::None).Result
             $raw   = [Text.Encoding]::UTF8.GetString($buf, 0, $r.Count)
+            Write-Log "WebSocket data: $($raw.Substring(0, [Math]::Min(80, $raw.Length)))"
             $displayMsg = $raw
-            $wsIcon     = [System.Windows.Forms.MessageBoxIcon]::Exclamation
+            $isMsg = $false
             try {
                 $data = $raw | ConvertFrom-Json
                 if ($data.key)  { $script:firedIds[$data.key] = $true }
                 if ($data.msg)  { $displayMsg = $data.msg }
-                if ($data.type -eq 'message') { $wsIcon = [System.Windows.Forms.MessageBoxIcon]::Information }
-            } catch {}
+                if ($data.type -eq 'message') { $isMsg = $true }
+            } catch { Write-Log "WebSocket JSON parse failed" }
             Invoke-BringToFront
-            [System.Windows.Forms.MessageBox]::Show($displayMsg, 'ToDo Remind', [System.Windows.Forms.MessageBoxButtons]::OK, $wsIcon, [System.Windows.Forms.MessageBoxDefaultButton]::Button1, [System.Windows.Forms.MessageBoxOptions]::DefaultDesktopOnly) | Out-Null
+            Write-Log "Showing MessageBox..."
+            Show-MsgBox $displayMsg $isMsg
+            Write-Log "MessageBox closed"
             $ws.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, '', [Threading.CancellationToken]::None).Wait()
 
         } elseif ($ctx.Request.HttpMethod -eq 'POST' -and $ctx.Request.Url.AbsolutePath -eq '/tasks') {
             $reader = [System.IO.StreamReader]::new($ctx.Request.InputStream, [Text.Encoding]::UTF8)
             $json   = $reader.ReadToEnd()
             $reader.Close()
-            try { $script:tasks = @($json | ConvertFrom-Json); Test-AndFireReminders } catch {}
+            try {
+                $script:tasks = @($json | ConvertFrom-Json)
+                Write-Log "tasks updated: $($script:tasks.Count)"
+            } catch { Write-Log "tasks parse failed: $_" }
             $ctx.Response.StatusCode = 200
             $ctx.Response.Close()
 
@@ -127,8 +153,9 @@ while ($http.IsListening) {
             $ctx.Response.Close()
 
         } else {
+            Write-Log "unknown request: $($ctx.Request.HttpMethod) $($ctx.Request.Url.AbsolutePath)"
             $ctx.Response.StatusCode = 200
             $ctx.Response.Close()
         }
-    } catch {}
+    } catch { Write-Log "loop error: $_" }
 }
