@@ -6,6 +6,34 @@
 
 ---
 
+### 2026-05-29 (session 5b1cc3fb - notifier.ps1 最終版作成・ユーザーテスト指示)
+
+**うまくいったこと**
+- notifier.ps1 を完全に改修（Win32 `MessageBox()` + `MB_TOPMOST | MB_SETFOREGROUND` フラグ、詳細ログ、WebSocket ハンドリング改善）
+- ユーザーに「新しいコードをダウンロード＆テストして」という明確な次ステップを提示
+- これまでのセッションでの仮説（MB_TOPMOST フラグが必要）を実装にまで到達
+- 診断ログで「notifier 起動判定」「WebSocket 受信判定」「MessageBox 呼び出し判定」が可能な体制構築完了
+
+**うまくいかなかったこと**
+- notifier.ps1 を GitHub に push していない（ユーザーが raw URL からダウンロードする指示のみ）
+- セッション内でユーザーからのテスト結果報告を受けていない（セッション終了）
+
+**発見**
+- PowerShell Windows Forms の `MessageBox()` Win32 P/Invoke は CharSet.Unicode 必須（日本語対応）
+- Win32 `MB_TOPMOST (0x40000) | MB_SETFOREGROUND (0x10000)` の組み合わせで「全ウィンドウ最前面」を実現
+- `GetContextAsync().Wait(timeout)` でタイムアウト付きループが単一スレッドモデルでも稼働（HTTP.sys が別スレッドで処理）
+- ログファイルを `Add-Content` で書き込む際の try-catch は「プロセス権限不足」時のみ有効（通常はファイルオープン成功）
+
+**次回への申し送り**
+- **最優先：ユーザーからのテスト報告を受ける**
+  - ユーザー指示：新しい notifier.ps1 をダウンロード＆上書き → test-notifier.bat 実行
+  - 期待値：黒い画面に `HH:mm:ss notifier started` などのログが流れる → リマインド発火 → MessageBox 確認
+  - ログ内容をメモ帳で開いて報告してもらう予定
+- ユーザーのテスト完了後、ログに基づいて「WebSocket が本当に来ているのか」「MessageBox が呼ばれているのか」を確認
+- 必要に応じて notifier.ps1 を再修正してから GitHub に commit・push
+
+---
+
 ### 2026-05-29 (session 5b1cc3fb-続き - MessageBox ログ出力確認指示・デバッグ体制確立)
 
 **うまくいったこと**
