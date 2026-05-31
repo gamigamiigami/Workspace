@@ -306,27 +306,122 @@ def post_to_booth(
                     browser.close()
                     return 1
 
-            # 新規商品作成ページへ - URL候補
+            # 新規商品作成ページへ
+            # 戦略1: 既知URL候補を試す
             new_item_urls = [
                 "https://manage.booth.pm/items/new",
+                "https://manage.booth.pm/items/create",
                 "https://manage.booth.pm/products/new",
                 "https://manage.booth.pm/items/add",
             ]
+
+            def is_valid_create_page(p) -> bool:
+                """404でもログインでもない、かつinput要素があれば有効"""
+                try:
+                    title = p.title()
+                    if "404" in title or "見つかりません" in title:
+                        return False
+                    url_lower = p.url.lower()
+                    if "login" in url_lower or "accounts.pixiv" in url_lower or "sign_in" in url_lower:
+                        return False
+                    # input要素が存在すれば有効
+                    if p.locator("input, textarea").count() > 0:
+                        return True
+                    return False
+                except Exception:
+                    return False
+
             page_loaded = False
             for url in new_item_urls:
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=20000)
                     page.wait_for_timeout(3000)
-                    # ログインにリダイレクトされてないか
-                    if "login" in page.url.lower() or "accounts.pixiv" in page.url:
-                        print(f"⚠️ {url} → ログインへリダイレクト", file=sys.stderr)
-                        continue
-                    print(f"📍 商品作成ページ到達: {page.url}")
-                    page_loaded = True
-                    break
+                    if is_valid_create_page(page):
+                        print(f"📍 商品作成ページ到達 (戦略1): {page.url}")
+                        page_loaded = True
+                        break
+                    else:
+                        print(f"⏭ {url} → 404 or ログイン or input無し (title={page.title()})")
                 except Exception as e:
                     print(f"⏭ {url} 失敗: {e}", file=sys.stderr)
                     continue
+
+            # 戦略2: 管理画面トップから「新規出品」ボタンを探してクリック
+            if not page_loaded:
+                print("\n🔍 戦略2: 管理画面トップから新規出品ボタンを探す")
+                try:
+                    page.goto("https://manage.booth.pm/", wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(3000)
+                    new_btn_selectors = [
+                        'a:has-text("新規出品")',
+                        'a:has-text("新規追加")',
+                        'button:has-text("新規出品")',
+                        'a:has-text("商品を追加")',
+                        'a:has-text("出品する")',
+                        'a[href*="items/new"]',
+                        'a[href*="items/create"]',
+                        'a[href*="items/add"]',
+                        'a[href*="products/new"]',
+                        '[aria-label*="新規"]',
+                        '[aria-label*="追加"]',
+                    ]
+                    for sel in new_btn_selectors:
+                        try:
+                            el = page.locator(sel).first
+                            el.wait_for(timeout=3000, state="visible")
+                            print(f"   → ボタン発見: {sel}")
+                            el.click(timeout=5000)
+                            page.wait_for_timeout(4000)
+                            if is_valid_create_page(page):
+                                print(f"📍 商品作成ページ到達 (戦略2): {page.url}")
+                                page_loaded = True
+                                break
+                        except Exception:
+                            continue
+                except Exception as e:
+                    print(f"戦略2失敗: {e}", file=sys.stderr)
+
+            # 戦略3: items 一覧ページから「新規」ボタンを探す
+            if not page_loaded:
+                print("\n🔍 戦略3: items 一覧から新規出品ボタンを探す")
+                items_list_urls = [
+                    "https://manage.booth.pm/items",
+                    "https://manage.booth.pm/products",
+                ]
+                for list_url in items_list_urls:
+                    try:
+                        page.goto(list_url, wait_until="domcontentloaded", timeout=20000)
+                        page.wait_for_timeout(3000)
+                        title = page.title()
+                        if "404" in title or "見つかりません" in title:
+                            continue
+                        print(f"   📋 一覧到達: {page.url} ({title})")
+                        # 一覧ページ上の「新規出品」「+」ボタン
+                        for sel in [
+                            'a:has-text("新規出品")',
+                            'a:has-text("商品を追加")',
+                            'a:has-text("出品する")',
+                            'button:has-text("新規")',
+                            'a[href*="new"]',
+                            'a[href*="create"]',
+                            '[class*="new"][role="button"]',
+                            'a.btn-primary',
+                        ]:
+                            try:
+                                el = page.locator(sel).first
+                                el.wait_for(timeout=2000, state="visible")
+                                el.click(timeout=3000)
+                                page.wait_for_timeout(4000)
+                                if is_valid_create_page(page):
+                                    print(f"📍 商品作成ページ到達 (戦略3): {page.url}")
+                                    page_loaded = True
+                                    break
+                            except Exception:
+                                continue
+                        if page_loaded:
+                            break
+                    except Exception:
+                        continue
 
             try:
                 page.screenshot(path="booth-01-newitem-page.png")
@@ -334,7 +429,30 @@ def post_to_booth(
                 pass
 
             if not page_loaded:
-                print("ERROR: 商品作成ページに到達できません", file=sys.stderr)
+                # === 強化診断モード（戦略3全部失敗時） ===
+                print("\n" + "=" * 60, file=sys.stderr)
+                print("ERROR: 商品作成ページに到達できません（戦略1-3全部失敗）", file=sys.stderr)
+                print("=" * 60, file=sys.stderr)
+                try:
+                    page.screenshot(path="booth-00-nopage.png", full_page=True)
+                    print(f"URL: {page.url}")
+                    print(f"Title: {page.title()}")
+                    body_text = page.locator("body").inner_text()[:1500]
+                    print(f"\n=== ページ可視テキスト先頭1500字 ===")
+                    print(body_text)
+                    # クリック可能要素列挙
+                    btn_info = page.locator("a, button").evaluate_all(
+                        "els => els.slice(0, 30).map(e => ({tag: e.tagName, text: (e.innerText||'').slice(0,40), href: e.href || null}))"
+                    )
+                    print(f"\n=== クリック可能要素（最大30件） ===")
+                    for b in btn_info:
+                        if b.get('text') or b.get('href'):
+                            print(f"  <{b['tag']}> text={b.get('text','')!r} href={b.get('href','')}")
+                    html = page.content()
+                    Path("booth-page-dump.html").write_text(html, encoding="utf-8")
+                    print(f"\n📄 HTMLダンプ保存: booth-page-dump.html")
+                except Exception as e:
+                    print(f"診断情報取得失敗: {e}")
                 browser.close()
                 return 1
 
