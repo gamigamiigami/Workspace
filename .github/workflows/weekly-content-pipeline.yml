@@ -27,6 +27,10 @@ permissions:
   models: read
   actions: write  # 連鎖ワークフロー起動のため
 
+env:
+  # 2026-06-16以降はデフォルトNode 24になるため先取りでopt-in (警告抑制)
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   # 全生成を1ジョブで完結（並列pushの競合を回避）
   generate-all:
