@@ -338,6 +338,17 @@ def post_to_booth(
                 browser.close()
                 return 1
 
+            # 動的UI待ち（React/Vue マウント完了を念のため待つ）
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            page.wait_for_timeout(3000)
+
+            # iframe があるならその中も探索対象に
+            frames = [page] + [f for f in page.frames if f.url and f.url != page.url]
+            print(f"📑 探索フレーム数: {len(frames)}")
+
             # 商品名入力 - セレクタ大幅拡充
             name_selectors = [
                 'input[name="item[name]"]',
@@ -352,26 +363,45 @@ def post_to_booth(
                 'textarea[name*="name"]',
                 '[data-testid*="name"] input',
                 'form input[type="text"]:first-of-type',
+                'input.item-name',
+                'input[class*="title"]',
+                'input[class*="name"]',
             ]
             name_filled = False
-            for sel in name_selectors:
-                try:
-                    el = page.locator(sel).first
-                    el.wait_for(timeout=3000, state="visible")
-                    el.fill(meta["title"])
-                    page.wait_for_timeout(300)
-                    print(f"✅ 商品名入力完了 (selector: {sel})")
-                    name_filled = True
+            for frame in frames:
+                if name_filled:
                     break
-                except Exception:
-                    continue
+                for sel in name_selectors:
+                    try:
+                        el = frame.locator(sel).first
+                        el.wait_for(timeout=2000, state="visible")
+                        el.fill(meta["title"])
+                        try:
+                            page.wait_for_timeout(300)
+                        except Exception:
+                            pass
+                        frame_label = "main" if frame is page else repr(frame)
+                        print(f"✅ 商品名入力完了 (frame={frame_label}, selector: {sel})")
+                        name_filled = True
+                        break
+                    except Exception:
+                        continue
 
             if not name_filled:
                 print("ERROR: 商品名入力欄が全候補マッチしませんでした", file=sys.stderr)
+                # デバッグ: HTMLダンプとスクショ
                 try:
-                    page.screenshot(path="booth-02-name-not-found.png")
-                except Exception:
-                    pass
+                    page.screenshot(path="booth-02-name-not-found.png", full_page=True)
+                    html_dump = page.content()[:20000]
+                    Path("booth-page-dump.html").write_text(html_dump, encoding="utf-8")
+                    print("📄 デバッグ用 booth-page-dump.html を出力（Artifactで確認）")
+                    # form要素のセレクタを列挙
+                    inputs_info = page.locator('input[type="text"], input:not([type]), textarea').evaluate_all(
+                        "els => els.slice(0, 20).map(e => ({tag: e.tagName, name: e.name, id: e.id, placeholder: e.placeholder, ariaLabel: e.getAttribute('aria-label')}))"
+                    )
+                    print(f"📝 ページ上のtext input要素（最大20件）: {inputs_info}")
+                except Exception as e:
+                    print(f"デバッグ情報取得失敗: {e}")
                 browser.close()
                 return 1
 
