@@ -189,6 +189,48 @@ def shot(page, name: str):
         print(f"WARNING: スクショ失敗 {name}: {e}", file=sys.stderr)
 
 
+def normalize_cookies(raw_json: str) -> list:
+    """
+    Cookie-Editor 出力のJSONをPlaywright SetCookieParam形式に正規化する。
+
+    必要な変換:
+      - expirationDate -> expires (float)
+      - sameSite "lax"/"strict"/"none"/"no_restriction" -> "Lax"/"Strict"/"None"
+      - hostOnly / session / storeId 等の余計なフィールドを除去
+    """
+    import json as _json
+    raw = _json.loads(raw_json)
+    normalized = []
+    for c in raw:
+        new_c = {"name": c["name"], "value": c["value"]}
+        if c.get("domain"):
+            new_c["domain"] = c["domain"]
+        new_c["path"] = c.get("path", "/")
+        # sessionクッキー以外は expires をfloatで設定
+        if "expirationDate" in c and not c.get("session"):
+            try:
+                new_c["expires"] = float(c["expirationDate"])
+            except (TypeError, ValueError):
+                pass
+        elif "expires" in c and not c.get("session"):
+            try:
+                new_c["expires"] = float(c["expires"])
+            except (TypeError, ValueError):
+                pass
+        if "sameSite" in c:
+            ss = str(c["sameSite"]).lower()
+            mapping = {"lax": "Lax", "strict": "Strict",
+                       "none": "None", "no_restriction": "None", "unspecified": "None"}
+            if ss in mapping:
+                new_c["sameSite"] = mapping[ss]
+        if "httpOnly" in c:
+            new_c["httpOnly"] = bool(c["httpOnly"])
+        if "secure" in c:
+            new_c["secure"] = bool(c["secure"])
+        normalized.append(new_c)
+    return normalized
+
+
 def post_to_note(article_path: str, dry_run: bool = False) -> int:
     email = os.environ.get("NOTE_EMAIL")
     password = os.environ.get("NOTE_PASSWORD")
@@ -236,13 +278,14 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
         cookie_auth = False
         if cookie_json:
             try:
-                import json as _json
-                cookies = _json.loads(cookie_json)
+                cookies = normalize_cookies(cookie_json)
                 context.add_cookies(cookies)
                 cookie_auth = True
-                print(f"🍪 クッキー認証 ({len(cookies)}個のクッキー)")
+                print(f"🍪 クッキー認証 ({len(cookies)}個・正規化済み)")
             except Exception as e:
-                print(f"WARNING: クッキー解析失敗: {e}", file=sys.stderr)
+                print(f"WARNING: クッキー解析/正規化失敗: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
 
         page = context.new_page()
 
