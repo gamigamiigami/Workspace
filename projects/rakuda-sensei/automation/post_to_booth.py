@@ -388,20 +388,95 @@ def post_to_booth(
                         continue
 
             if not name_filled:
+                print("\n" + "=" * 60, file=sys.stderr)
                 print("ERROR: 商品名入力欄が全候補マッチしませんでした", file=sys.stderr)
-                # デバッグ: HTMLダンプとスクショ
+                print("=" * 60, file=sys.stderr)
+
+                # --- 強化診断モード ---
                 try:
                     page.screenshot(path="booth-02-name-not-found.png", full_page=True)
-                    html_dump = page.content()[:20000]
-                    Path("booth-page-dump.html").write_text(html_dump, encoding="utf-8")
-                    print("📄 デバッグ用 booth-page-dump.html を出力（Artifactで確認）")
-                    # form要素のセレクタを列挙
-                    inputs_info = page.locator('input[type="text"], input:not([type]), textarea').evaluate_all(
-                        "els => els.slice(0, 20).map(e => ({tag: e.tagName, name: e.name, id: e.id, placeholder: e.placeholder, ariaLabel: e.getAttribute('aria-label')}))"
-                    )
-                    print(f"📝 ページ上のtext input要素（最大20件）: {inputs_info}")
+                    print("📸 スクショ保存: booth-02-name-not-found.png")
                 except Exception as e:
-                    print(f"デバッグ情報取得失敗: {e}")
+                    print(f"スクショ失敗: {e}", file=sys.stderr)
+
+                # 1. ページ基本情報
+                try:
+                    print(f"\n=== ページ基本 ===")
+                    print(f"URL: {page.url}")
+                    print(f"Title: {page.title()}")
+                except Exception:
+                    pass
+
+                # 2. 主要見出し（H1, H2, H3）
+                try:
+                    print(f"\n=== 見出し（最大5件ずつ） ===")
+                    for tag in ["h1", "h2", "h3"]:
+                        texts = page.locator(tag).all_text_contents()
+                        for t in texts[:5]:
+                            t = t.strip().replace("\n", " ")
+                            if t:
+                                print(f"<{tag}>: {t[:120]}")
+                except Exception as e:
+                    print(f"見出し取得失敗: {e}", file=sys.stderr)
+
+                # 3. 「ショップ設定」「カテゴリ」など特殊画面の検出
+                try:
+                    body_text = page.locator("body").inner_text()[:2000]
+                    print(f"\n=== ページ可視テキスト先頭2000字 ===")
+                    print(body_text)
+                    print()
+                    # 既知パターンの検出
+                    setup_keywords = [
+                        ("ショップ設定", "ショップ初期設定未完了の可能性"),
+                        ("ショップを開設", "ショップ未開設"),
+                        ("カテゴリ", "カテゴリ選択が先かも"),
+                        ("プロフィール", "プロフィール設定が先かも"),
+                        ("支払", "支払情報未登録"),
+                        ("銀行", "口座情報未登録"),
+                        ("本人確認", "本人確認未完了"),
+                        ("利用規約", "利用規約同意必要"),
+                    ]
+                    print(f"=== 既知の阻害要因検出 ===")
+                    for kw, hint in setup_keywords:
+                        if kw in body_text:
+                            print(f"⚠️ 「{kw}」検出 → {hint}")
+                except Exception as e:
+                    print(f"可視テキスト取得失敗: {e}", file=sys.stderr)
+
+                # 4. ボタン・リンク列挙
+                try:
+                    print(f"\n=== クリック可能要素（最大20件） ===")
+                    btn_info = page.locator("button, a[href]").evaluate_all(
+                        "els => els.slice(0, 20).map(e => ({tag: e.tagName, text: (e.innerText||'').slice(0,40), href: e.href || null}))"
+                    )
+                    for b in btn_info:
+                        print(f"  <{b['tag']}> text={b.get('text','')!r} href={b.get('href','')}")
+                except Exception as e:
+                    print(f"クリック要素取得失敗: {e}", file=sys.stderr)
+
+                # 5. 全input要素（text以外も含む）
+                try:
+                    print(f"\n=== input要素全部（最大20件） ===")
+                    all_inputs = page.locator("input, textarea, select").evaluate_all(
+                        "els => els.slice(0, 20).map(e => ({tag: e.tagName, type: e.type, name: e.name, id: e.id, placeholder: e.placeholder, ariaLabel: e.getAttribute('aria-label')}))"
+                    )
+                    if all_inputs:
+                        for i in all_inputs:
+                            print(f"  <{i.get('tag','')}> type={i.get('type','')} name={i.get('name','')!r} id={i.get('id','')!r} placeholder={i.get('placeholder','')!r}")
+                    else:
+                        print("  （input/textarea/select が1つも見つからない＝フォーム自体がない画面）")
+                except Exception as e:
+                    print(f"input列挙失敗: {e}", file=sys.stderr)
+
+                # 6. HTMLダンプ
+                try:
+                    html_dump = page.content()
+                    Path("booth-page-dump.html").write_text(html_dump, encoding="utf-8")
+                    print(f"\n📄 HTMLダンプ保存: booth-page-dump.html ({len(html_dump)} 文字・Artifactで確認)")
+                except Exception as e:
+                    print(f"HTMLダンプ失敗: {e}", file=sys.stderr)
+
+                print("=" * 60, file=sys.stderr)
                 browser.close()
                 return 1
 
