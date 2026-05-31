@@ -1,9 +1,106 @@
 # 成功パターン集
 
-最終更新：2026-05-24
+最終更新：2026-05-31
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
+
+---
+
+## Playwright / Web 自動化
+
+### [汎用] Playwright セレクタの複数パターンフォールバック戦略
+
+**用途：** Webブラウザ自動化（BOOTH・note等への自動投稿）で、単一セレクタだと環境差異・フレームワーク更新・複数ページ仕様に対応できない場合、複数候補セレクタを段階的に試行する
+
+**問題背景：**
+- 単一セレクタ（例：`input[name="item[name]"]`）のみだと「ページ仕様変更」「複数ページ形式」「レンダリング差異」で失敗
+- GitHub Actions環境とローカル環境で異なるDOM構造になることもある
+- note・BOOTH は複数年のプロダクト更新で段組み・要素命名が異なる
+
+**解決策：複数セレクタの並列トライ（フォールバック）**
+```python
+# 例：商品名入力
+name_selectors = [
+    'input[name="item[name]"]',           # 標準的な属性ベース
+    'input[name*="name"][type="text"]',   # 属性部分一致
+    'input[name*="title"]',               # タイトル名称
+    'input[placeholder*="商品名"]',       # プレースホルダ
+    'input[id*="name"]',                  # ID属性
+    'textarea[name*="name"]',             # テキストエリア
+    '[data-testid*="name"] input',        # data-testid
+    'form input[type="text"]:first-of-type',  # CSS疑似セレクタ
+]
+
+name_filled = False
+for sel in name_selectors:
+    try:
+        el = page.locator(sel).first
+        el.wait_for(timeout=3000, state="visible")
+        el.fill(value)
+        print(f"✅ 入力完了 (selector: {sel})")
+        name_filled = True
+        break
+    except Exception:
+        continue
+
+if not name_filled:
+    print("ERROR: 全セレクタ不一致", file=sys.stderr)
+    return False
+```
+
+**URL候補のトライも同様に対応：**
+```python
+new_item_urls = [
+    "https://manage.booth.pm/items/new",
+    "https://manage.booth.pm/products/new",
+    "https://manage.booth.pm/items/add",
+]
+
+page_loaded = False
+for url in new_item_urls:
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=20000)
+        if "login" in page.url.lower():  # ログインへのリダイレクト検知
+            continue
+        page_loaded = True
+        break
+    except Exception:
+        continue
+```
+
+**セレクタ戦略の階層（堅牢性の順）：**
+1. **属性完全一致** (`input[name="item[name]"]`) — 仕様変更に弱い
+2. **属性部分一致** (`input[name*="name"]`) — やや堅牢
+3. **プレースホルダ** (`input[placeholder*="商品名"]`) — UI テキストベースで堅牢
+4. **ID属性** (`input[id*="name"]`) — フレームワーク由来、中程度堅牢
+5. **data-testid** (`[data-testid*="name"]`) — テスト駆動開発のサイトなら最強
+6. **疑似セレクタ** (`form input:first-of-type`) — 最後の手段
+
+**失敗ログの診断スクリーンショット：**
+```python
+try:
+    page.screenshot(path="booth-01-newitem-page.png")  # 到達時点
+except Exception:
+    pass
+
+if not name_filled:
+    try:
+        page.screenshot(path="booth-02-name-not-found.png")  # 失敗時点
+    except Exception:
+        pass
+```
+
+**ポイント：**
+- 複数候補は「すべて試す」のではなく「成功したら break」（効率性）
+- タイムアウト値を短めに（3秒程度）して、不一致時の判定を素早く
+- ログに「どのセレクタで成功したか」を記録すれば、次の修正が早い
+- スクリーンショットの命名を細分化（01・02・03）することで、どの段階で失敗したか可視化
+- GitHub Actions Artifacts でスクショを保存すれば、エージェントも人間も原因特定が容易
+
+**使用プロジェクト：** rakuda-sensei（post_to_booth.py, post_to_note.py）
+
+**タグ：** #playwright #web-automation #resilience #selector #fallback
 
 ---
 
