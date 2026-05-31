@@ -1,0 +1,111 @@
+name: Daily Instagram Post
+
+# 毎日 10:00 UTC (19:00 JST) に1本Instagram投稿
+# X週次ファイルから今日の朝スロットを抽出 → PIL画像生成 → Meta Graph APIで投稿
+# 全部¥0
+
+on:
+  schedule:
+    - cron: "0 10 * * *"  # 19:00 JST
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Dry run（画像生成のみ・投稿しない）"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  generate-and-post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
+
+      - name: Install Japanese fonts (Noto Sans CJK)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fonts-noto-cjk
+
+      - name: Install Python dependencies
+        run: pip install -r projects/rakuda-sensei/automation/requirements.txt
+
+      - name: Generate Instagram image + post MD
+        id: gen
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_REPOSITORY_OWNER: ${{ github.repository_owner }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+        run: python projects/rakuda-sensei/automation/generate_instagram_post.py
+
+      - name: Commit generated image + MD
+        if: steps.gen.outputs.ig_post_path != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projects/rakuda-sensei/dashboard/assets/posts/ projects/rakuda-sensei/sns/instagram/
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(auto): Instagram画像 + 投稿MD生成"
+            git push
+          fi
+
+      - name: Wait for raw.githubusercontent.com cache sync
+        if: steps.gen.outputs.ig_post_path != '' && inputs.dry_run != true
+        run: sleep 30
+
+      - name: Post to Instagram
+        if: steps.gen.outputs.ig_post_path != '' && inputs.dry_run != true
+        env:
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: |
+          python projects/rakuda-sensei/automation/post_to_instagram.py \
+            "${{ steps.gen.outputs.ig_post_path }}"
+
+      - name: Commit IG post status update
+        if: success() && inputs.dry_run != true
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projects/rakuda-sensei/sns/instagram/
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(auto): Instagram投稿ステータス更新"
+            git push
+          fi
+
+      - name: Upload error screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: instagram-error
+          path: "*.png"
+          if-no-files-found: ignore
+
+      - name: Create issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🚨 Instagram投稿失敗 ($(date +%Y-%m-%d))" \
+            --body "Instagram自動投稿が失敗しました。
+
+          ## 考えられる原因
+          - META_ACCESS_TOKEN / IG_USER_ID が未設定
+          - Metaトークン期限切れ
+          - 画像URLがまだ反映されていない（Pages/raw.githubusercontent.com キャッシュ）
+          - Instagram Graph APIレート制限
+
+          **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label "bug,automation,platform-instagram"
