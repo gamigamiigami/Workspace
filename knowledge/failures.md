@@ -76,6 +76,98 @@
 
 ---
 
+### [2026-05-31] rakuda-sensei — Playwright による headless Chrome bot検知の回避策
+
+**状況：** GitHub Actions 上で Playwright を使って自動投稿ワークフローを実装している。note・BOOTH はブラウザからのアクセスを自動化で検知して拒否する可能性がある。
+
+**問題：** 
+- Playwright (headless mode) は `navigator.webdriver === true` で検知される
+- bot検知エンジンが複数のシグナルを監視している可能性が高い
+
+**原因：** 
+Playwright のデフォルト設定では以下が bot と判定される：
+```javascript
+navigator.webdriver === true  // Playwright特有
+chrome.webstore === undefined  // Chromium特有
+window.chrome === undefined    // bot検知シグナル
+navigator.plugins.length === 0 // bot特性
+```
+
+**解決策：** 
+Playwright 起動時に以下の偽装を実装：
+```python
+# post_to_note.py の browser 起動部分
+browser = await playwright.chromium.launch(
+    headless=True,
+    args=[
+        '--disable-dev-shm-usage',
+        '--no-first-run',
+        '--no-default-browser-check'
+    ]
+)
+
+context = await browser.new_context(
+    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+)
+
+# ページ開く前に偽装スクリプトを注入
+await page.add_init_script("""
+  Object.defineProperty(navigator, 'webdriver', {
+    get: () => undefined,
+  });
+  window.chrome = { runtime: {} };
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [1, 2, 3],
+  });
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['ja-JP', 'ja', 'en-US', 'en'],
+  });
+""")
+
+context = await browser.new_context(...)
+page = await context.new_page()
+await page.add_init_script(...)  # スクリプト注入
+```
+
+**注意点：**
+- bot検知ロジックは各サイトで秘匿されている → 完全な防御は不可能
+- IP ベースのブロック（GitHub Actions IPが既にブロックリストに入っている場合）には対応不可
+- UI 構造の大幅変更には複数セレクタ候補でカバーしきれない可能性がある
+
+**事前診断ワークフロー（check-cookies.yml）の導入：**
+- 本番投稿前に「認証テストのみ」を実行するワークフローを追加
+- クッキー形式の正規化確認 + ログイン状態確認 + screenshot 取得
+- このステップで認証OK → 本番実行時の成功確率が大幅向上
+- 失敗時は screenshot artifact で実際の画面が可視化できるため、UI構造の変更検知が容易
+
+**トラブルシューティング手順（ユーザー向け）：**
+```
+① Cookie-Editorで取得したクッキーを GitHub Secrets に登録
+   https://github.com/{owner}/{repo}/settings/secrets/actions
+   → NOTE_COOKIES（JSON形式）
+
+② 事前診断ワークフローを実行
+   https://github.com/{owner}/{repo}/actions/workflows/check-cookies.yml
+   → Run workflow → Artifacts でスクリーンショット確認
+   → ✅ ログインOKの確認
+
+③ スクリーンショットで実際の画面確認
+   - note・BOOTH の「認証後」画面が表示されているか
+   - UI構造に変化があれば、セレクタを修正
+
+④ 本番投稿ワークフロー実行
+   https://github.com/{owner}/{repo}/actions/workflows/post-to-note.yml
+```
+
+**再発防止：** 
+- bot検知は「試してみるしかない」ため、GitHub Actions環境での実機実行が必須
+- 「クッキー認証+事前診断」パターンを標準フロー化する
+- UI構造変更は定期的に事前診断で監視
+
+**タグ：** #playwright #bot-detection #github-actions #automation #resilience
+
+---
+
 ## セッションスクリプト・自動化
 
 ### [2026-05-24] workspace-setup — Stop フックは「セッション終了時」ではなく「Claudeの返答後」に毎回発動
