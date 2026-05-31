@@ -7,6 +7,69 @@
 
 ---
 
+## Playwright / Web 自動化
+
+### [汎用] SPA 対応：networkidle 回避と部分的遅延確認パターン
+
+**用途：** Playwright で SPA（Single Page Application）環境下での自動化。`networkidle` ウェイト条件は通信が止まらないため無限タイムアウトになり、代替として `domcontentloaded` + 手動遅延確認の組み合わせが有効
+
+**問題背景：**
+- X（Twitter）・Discord・Slack など、リアルタイム通信を常時行うSPAアプリケーションでは `networkidle` が機能しない
+- Playwright のデフォルト `wait_until="networkidle"` では以下が発生：
+  ```
+  ERROR: Page.goto: Timeout 30000ms exceeded.
+  navigating to "https://x.com/compose/post", waiting until "networkidle"
+  ```
+- 単なる `domcontentloaded` だけではページが不安定な状態で要素選択を行うリスクが高まる
+
+**解決策：2段階ウェイト戦略**
+```python
+# ステップ1: DOM 準備完了まで待機
+page.goto(url, wait_until="domcontentloaded", timeout=20000)
+
+# ステップ2: 特定の主要要素が stable になるまで待機
+try:
+    page.locator("input[placeholder*='何が起きてますか']").wait_for(
+        timeout=5000, state="visible"
+    )
+    # DOM が安定していることの簡易確認
+    page.wait_for_timeout(1000)  # 1秒の余裕持ち
+except Exception:
+    print("Compose 入力欄が見つかりません")
+    raise
+```
+
+**URL の複数候補も並行対応：**
+```python
+compose_urls = [
+    "https://x.com/compose/post",
+    "https://x.com/home?compose_target=post",
+    "https://x.com/i/compose/post",
+]
+
+for url in compose_urls:
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        # ここでDOM安定性を確認
+        page.locator("textarea").first.wait_for(timeout=3000, state="visible")
+        print(f"✅ Compose 到達: {url}")
+        break
+    except Exception:
+        continue
+```
+
+**ポイント：**
+- `wait_until="networkidle"` は SPA では使用しない（代わりに `domcontentloaded` を基本）
+- `domcontentloaded` 後に「主要な入力要素が visible」状態を確認（セレクタ複数候補）
+- 手動で 1秒程度の遅延を挟んでから要素操作（レンダリング完成待ち）
+- 複数 URL 候補 × セレクタ複数候補の組み合わせでロバスト性を大幅向上
+
+**使用プロジェクト：** addness-side-income（post-to-x.yml）
+
+**タグ：** #playwright #spa #networkidle #web-automation #x-twitter
+
+---
+
 ## コンテンツ販売・記事生成
 
 ### [汎用] 有料記事の「3点セット」強制構成による市場適合性向上

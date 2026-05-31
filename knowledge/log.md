@@ -4,6 +4,54 @@
 
 ---
 
+### [2026-05-31] addness-side-income — X自動投稿ワークフロー：実機テスト障壁解消と PR merge 完了
+
+**作業内容：**
+- **セッション15-16 の実機テスト結果から 2 つの致命的問題を特定・修正**
+  1. **networkidle 無限タイムアウト**：X は SPA で常時通信状態のため `wait_until="networkidle"` は機能しない
+     - 修正：`domcontentloaded` + 手動遅延確認パターンに変更
+     - 複数 URL 候補（compose, home + fallback）を並行対応
+  
+  2. **GitHub Issue 作成権限不足**：GraphQL mutation `createIssue` に `issues: write` 権限が必須
+     - 修正：`post-to-x.yml` の `permissions` セクションに `issues: write` を追加
+
+- **セレクタロバスト性強化**
+  - テキスト入力欄：4 種セレクタ（`input[placeholder*='何が起きてますか']`, `textarea`, data-testid, 疑似セレクタ）
+  - 投稿ボタン：6 種セレクタ（実装時点で ID/class/aria-label など複数対応）
+  - 各段階でスクショを artifacts に保存（デバッグ効率化）
+
+- **PR #35 作成・マージ完了**
+  - `post_to_x.py`：networkidle 回避 + セレクタ複数化
+  - `post-to-x.yml`：permissions 追加 + URL候補フォールバック
+  - `main` ブランチへの統合完了
+
+**成果物：**
+- **Merged PR #35**：実装完全化
+  - 105 insertions, 18 deletions
+  - commit SHA: 366946a
+
+**状態サマリー（X 自動投稿）：**
+| 段階 | 状態 |
+|---|---|
+| ✅ クッキー認証 | 動作確認済み（セッション15・16） |
+| ✅ X ホーム到達 | 動作確認済み |
+| ✅ compose 画面遷移 | networkidle 回避で修正完了 |
+| ✅ 入力欄発見 | セレクタ 4 種対応完了 |
+| ✅ 投稿ボタン | セレクタ 6 種対応完了 |
+| ✅ Issue 起票 | 権限追加で修正完了 |
+
+**後続作業（ユーザー）：**
+1. GitHub Actions → `post-to-x.yml` → Run workflow（force: true）で再実行
+2. X タイムラインで「授業準備に時間がかかると感じること...」投稿確認
+3. 成功 → 定時投稿スケジュール本運用化開始
+
+**知見・パターン化：**
+- SPA（X, Discord, Slack）自動化での networkidle 回避パターンを `knowledge/patterns.md` に昇華
+- GitHub Actions 権限管理（`issues: write`）の落とし穴を `knowledge/failures.md` に記録
+- Playwright セレクタ複数化戦略の有効性を再実証
+
+---
+
 ### [2026-06-04] addness-side-income — X自動投稿 GitHub Actions化完成・ユーザー設定待機
 
 **作業内容：**
