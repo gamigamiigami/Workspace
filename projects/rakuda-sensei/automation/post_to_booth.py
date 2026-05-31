@@ -306,20 +306,72 @@ def post_to_booth(
                     browser.close()
                     return 1
 
-            # 新規商品作成ページへ
-            page.goto("https://manage.booth.pm/items/new", wait_until="networkidle", timeout=30000)
-            page.wait_for_timeout(3000)
+            # 新規商品作成ページへ - URL候補
+            new_item_urls = [
+                "https://manage.booth.pm/items/new",
+                "https://manage.booth.pm/products/new",
+                "https://manage.booth.pm/items/add",
+            ]
+            page_loaded = False
+            for url in new_item_urls:
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(3000)
+                    # ログインにリダイレクトされてないか
+                    if "login" in page.url.lower() or "accounts.pixiv" in page.url:
+                        print(f"⚠️ {url} → ログインへリダイレクト", file=sys.stderr)
+                        continue
+                    print(f"📍 商品作成ページ到達: {page.url}")
+                    page_loaded = True
+                    break
+                except Exception as e:
+                    print(f"⏭ {url} 失敗: {e}", file=sys.stderr)
+                    continue
 
-            # 商品名入力
             try:
-                name_input = page.locator('input[name="item[name]"], input[placeholder*="商品名"], input[id*="name"]').first
-                name_input.wait_for(timeout=10000)
-                name_input.fill(meta["title"])
-                page.wait_for_timeout(300)
-                print("✅ 商品名入力完了")
-            except PWTimeout:
-                print("ERROR: 商品名入力欄が見つかりませんでした", file=sys.stderr)
-                page.screenshot(path="booth-post-failed.png")
+                page.screenshot(path="booth-01-newitem-page.png")
+            except Exception:
+                pass
+
+            if not page_loaded:
+                print("ERROR: 商品作成ページに到達できません", file=sys.stderr)
+                browser.close()
+                return 1
+
+            # 商品名入力 - セレクタ大幅拡充
+            name_selectors = [
+                'input[name="item[name]"]',
+                'input[name*="name"][type="text"]',
+                'input[name*="title"]',
+                'input[placeholder*="商品名"]',
+                'input[placeholder*="商品タイトル"]',
+                'input[placeholder*="タイトル"]',
+                'input[id*="name"]',
+                'input[id*="title"]',
+                'input[aria-label*="商品名"]',
+                'textarea[name*="name"]',
+                '[data-testid*="name"] input',
+                'form input[type="text"]:first-of-type',
+            ]
+            name_filled = False
+            for sel in name_selectors:
+                try:
+                    el = page.locator(sel).first
+                    el.wait_for(timeout=3000, state="visible")
+                    el.fill(meta["title"])
+                    page.wait_for_timeout(300)
+                    print(f"✅ 商品名入力完了 (selector: {sel})")
+                    name_filled = True
+                    break
+                except Exception:
+                    continue
+
+            if not name_filled:
+                print("ERROR: 商品名入力欄が全候補マッチしませんでした", file=sys.stderr)
+                try:
+                    page.screenshot(path="booth-02-name-not-found.png")
+                except Exception:
+                    pass
                 browser.close()
                 return 1
 

@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[3]
 PERSONA_PATH = ROOT / "knowledge" / "persona.md"
 PLAYBOOK_PATH = ROOT / "knowledge" / "sns-playbook.md"
 PRODUCT_PLAYBOOK = ROOT / "knowledge" / "product-playbook.md"
+VOICE_PATH = ROOT / "knowledge" / "voice-and-style.md"  # 最優先参照
 NOTE_SKILL = ROOT / ".claude" / "skills" / "note-writer" / "SKILL.md"
 ARTICLES_DIR = ROOT / "projects" / "rakuda-sensei" / "articles"
 REPORTS_DIR = ROOT / "projects" / "rakuda-sensei" / "reports"
@@ -152,19 +153,27 @@ def slugify(title: str) -> str:
 
 def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
                   product_pb: str, note_skill: str, insights: str,
-                  used_topics_list: list[str]) -> str:
+                  used_topics_list: list[str], voice: str = "") -> str:
     pillar_info = PILLARS[pillar]
     price_min, price_max = pillar_info["price_range"]
 
     return f"""あなたは「残業嫌いのらくだ先生🐪」（公立中学校教員・公務員・20代）のnote記事を執筆します。
 
+**🚨 最重要厳守事項: AI生成と気付かれない記事を書く 🚨**
+
+==== 最優先参照: 伊神さんの実際の口調・人物情報 ====
+{voice}
+
+このファイルの内容を**ペルソナ厳守より優先**して反映する。
+口調・NG表現・推奨表現・人物情報のリアリティをすべてここから取る。
+
 ==== 今回のテーマ ====
 柱: {pillar} ({pillar_info['name']})
-タイトル候補: 「{topic}」
+タイトル候補: 「{topic}」（このまま使わず、伊神さんの口調に合わせて再構成）
 価格帯: ¥{price_min}〜¥{price_max}
 推奨タグ: {pillar_info['tags']}
 
-==== ペルソナ（厳守）====
+==== ペルソナ（基本情報）====
 {persona}
 
 ==== SNSプレイブック（柱と一貫性）====

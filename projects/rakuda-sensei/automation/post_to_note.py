@@ -103,13 +103,52 @@ def extract_article_body(text: str) -> tuple[str, str]:
 
 
 def find_body_section(text: str) -> str:
-    sections = text.split("---")
-    body_candidates = []
-    for section in sections:
-        if re.search(r"^##\s+\S", section, re.MULTILINE):
-            if "投稿メタデータ" not in section and "サムネ" not in section:
+    """
+    記事本文だけを抽出する。除去対象:
+    - HTMLコメント（<!-- AUTO-GENERATED -->等）
+    - 投稿メタデータ表
+    - サムネ画像指示書
+    - 投稿後アクションメモ
+    - 最初の # 見出し（noteエディタには別途タイトル欄がある）
+    """
+    # 1. HTMLコメントを除去
+    cleaned = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
+
+    # 2. 「## 記事本文」セクションがあればそこから抽出
+    m = re.search(r"##\s+記事本文\s*\n+(.+?)(?:\n##\s+投稿後|\Z)", cleaned, re.DOTALL)
+    if m:
+        body = m.group(1).strip()
+    else:
+        # フォールバック: --- 区切りから本文セクションだけ取得
+        sections = cleaned.split("---")
+        body_candidates = []
+        for section in sections:
+            # 内部メモらしいキーワードを含むセクションはスキップ
+            skip_keywords = [
+                "投稿メタデータ", "サムネ", "投稿後アクション",
+                "対応Addnessゴール", "note-writer skill",
+                "作成日：", "作成日:",
+            ]
+            if any(kw in section for kw in skip_keywords):
+                continue
+            if re.search(r"^##\s+\S", section, re.MULTILINE) or len(section.strip()) > 300:
                 body_candidates.append(section.strip())
-    return "\n\n---\n\n".join(body_candidates) if body_candidates else text
+        body = "\n\n".join(body_candidates) if body_candidates else cleaned
+
+    # 3. 最初の # 見出し（記事タイトル）を除去（noteには別タイトル欄）
+    body = re.sub(r"^#\s+.+?\n", "", body, count=1)
+
+    # 4. 「### サムネ画像指示書」など発信者メモのサブセクション除去
+    body = re.sub(
+        r"###\s+(サムネ.*?|投稿後.*?|レビュー.*?|内部メモ.*?)\n.+?(?=\n##\s|\n###\s|\Z)",
+        "",
+        body,
+        flags=re.DOTALL,
+    )
+
+    # 5. 連続空行を整理
+    body = re.sub(r"\n{3,}", "\n\n", body).strip()
+    return body
 
 
 def login_to_note(page, email: str, password: str) -> bool:
