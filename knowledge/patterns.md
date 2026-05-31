@@ -181,6 +181,135 @@ if not name_filled:
 
 ---
 
+### [汎用] Playwright セレクタ不一致時の自動診断：ページ状態情報の構造化抽出
+
+**用途：** Playwright でセレクタが見つからず自動化が失敗した場合、原因特定のために「ページ全体の状態」を構造化してダンプ出力する。「なぜセレクタが効かないのか」を GitHub Actions ログから即座に判断できるようにする
+
+**問題背景：**
+- セレクタが不一致でも「選択されませんでした」というログだけでは、原因が「ページが読み込まれていない」なのか「DOM構造が想定と異なる」なのか「ログイン画面にリダイレクト」なのか不明
+- BOOTH・note等の管理画面は複数バージョンのUI共存、リダイレクト遷移、動的レンダリングが複雑で、単なるスクリーンショットでは対応不足
+- 「どの画面にいるのか」「何が入力可能なのか」「何がブロッキング要因か」が不明確だと、次の対応が決まらない
+
+**解決策：構造化情報の自動抽出ダンプ**
+```python
+async def dump_page_state_on_failure(page, output_prefix="booth-dump"):
+    """セレクタ不一致時に、ページ全体の状態を自動出力"""
+    
+    try:
+        # 1. ページタイトルと URL
+        title = await page.title()
+        url = page.url
+        print(f"\n📍 ページ状態ダンプ: {title}")
+        print(f"   URL: {url}")
+        
+        # 2. 見出し（h1/h2/h3）を全て抽出
+        headings = await page.locator("h1, h2, h3").all_text_contents()
+        if headings:
+            print(f"\n📋 見出し:")
+            for heading in headings:
+                print(f"   - {heading[:100]}")
+        
+        # 3. 可視テキスト先頭2000字
+        body_text = await page.locator("body").text_content()
+        if body_text:
+            visible_text = body_text[:2000]
+            print(f"\n📄 可視テキスト（先頭2000字）:")
+            print(visible_text)
+            print("...")
+        
+        # 4. 阻害要因のキーワード検出
+        blocking_keywords = ["ショップ設定", "カテゴリ", "本人確認", "振込先", "利用規約", "ログイン", "accounts.pixiv"]
+        detected_keywords = [kw for kw in blocking_keywords if kw in body_text]
+        if detected_keywords:
+            print(f"\n⚠️  阻害要因キーワード検出:")
+            for kw in detected_keywords:
+                print(f"   - {kw}")
+        
+        # 5. 全 input 要素の属性
+        inputs = await page.locator("input, textarea").all()
+        if inputs:
+            print(f"\n⌨️  入力要素 ({len(inputs)}個):")
+            for i, inp in enumerate(inputs[:20]):  # 最初の20個に制限
+                input_type = await inp.get_attribute("type") or "text"
+                input_name = await inp.get_attribute("name") or "(no name)"
+                input_placeholder = await inp.get_attribute("placeholder") or ""
+                print(f"   {i+1}. type={input_type} name={input_name} placeholder='{input_placeholder}'")
+        
+        # 6. クリック可能要素（a, button, [role="button"]）
+        clickables = await page.locator("a, button, [role='button']").all()
+        if clickables:
+            print(f"\n🔘 クリック可能要素 ({len(clickables)}個、最初10個):")
+            for i, el in enumerate(clickables[:10]):
+                text = (await el.text_content()).strip()[:50]
+                href = await el.get_attribute("href") or ""
+                print(f"   {i+1}. {text} {f'({href})' if href else ''}")
+        
+        # 7. スクリーンショット保存
+        await page.screenshot(path=f"{output_prefix}-state.png")
+        print(f"\n📸 スクリーンショット保存: {output_prefix}-state.png")
+        
+    except Exception as e:
+        print(f"⚠️  ダンプ中にエラー: {e}")
+```
+
+**GitHub Actions ログでの活用例：**
+```
+📍 ページ状態ダンプ: BOOTH 商品編集
+   URL: https://manage.booth.pm/items/123/edit
+
+📋 見出し:
+   - 商品情報
+   - 在庫・価格設定
+
+📄 可視テキスト（先頭2000字）:
+   商品名 商品説明 商品タイプ...
+
+⚠️  阻害要因キーワード検出:
+   - ショップ設定
+   - 本人確認
+
+⌨️  入力要素 (15個):
+   1. type=text name=item[name] placeholder='商品名を入力'
+   2. type=hidden name=_token placeholder=''
+   3. type=text name=item[description] placeholder=''
+   ...
+
+🔘 クリック可能要素 (8個、最初10個):
+   1. 保存する (/items/123/edit)
+   2. プレビュー
+   3. 削除する
+   ...
+
+📸 スクリーンショット保存: booth-dump-state.png
+```
+
+**ポイント：**
+- ページ遷移時にこのダンプを自動実行することで、「到達した画面」が即座に見える
+- 見出し + キーワード検出により「何の画面か」が数秒で判断可能
+- input 要素一覧から「利用可能なセレクタ候補」が直ちに得られる
+- クリック可能要素から「次に遷移するべき画面」の候補が見える
+- スクリーンショット + 構造化情報の組み合わせで、GitHub Actions ログから完全に原因特定可能
+
+**実装箇所：**
+- rakuda-sensei の `post_to_booth.py` セレクタ不一致時の exception handler
+- `post_to_note.py` の note 管理画面ナビゲーション失敗時
+
+**プロジェクト実装例（post_to_booth.py）：**
+```python
+try:
+    # セレクタ試行フロー...
+    if not name_filled:
+        await dump_page_state_on_failure(page, "booth-01-name-input")
+        return False
+except Exception as e:
+    await dump_page_state_on_failure(page, f"booth-error-{str(e)[:20]}")
+    raise
+```
+
+**タグ：** #playwright #web-automation #diagnosis #debugging #structured-output
+
+---
+
 ## GitHub Actions
 
 ### [汎用] GitHub Actions の条件式制限と回避策
