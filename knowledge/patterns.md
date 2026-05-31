@@ -28,6 +28,68 @@
 
 ## 自動化・スクリプト
 
+### [汎用] 複数ワークフロー統合による無料クラウドコンピュート実現
+
+**用途：** GitHub Actions の月2,000分無料枠を活用し、複数の自動生成・投稿ワークフローをスケジュール競合なく統合運用する
+
+**パターン：** 
+1. 複数の自動化ワークフロー（X投稿、note投稿、BOOTH教材生成など）を個別のワークフローファイルとして実装
+2. 親ワークフロー（`workflow_dispatch` + `schedule` トリガー）で統合管理し、スケジュール重複を回避
+3. GitHub Models（gpt-4o-mini）で全コンテンツ生成（無料、トークン上限あり）
+4. Meta Graph API + Playwright でプラットフォーム投稿を自動化（API課金なし）
+5. Issue 自動起票 + メール通知で24時間監視・障害検知を実現
+
+**実装例（workflow_dispatch + schedule の併用）：**
+```yaml
+name: Weekly Content Pipeline
+
+on:
+  workflow_dispatch:  # 手動テスト用
+    inputs:
+      debug_mode:
+        description: 'Enable debug output'
+        required: false
+        default: 'false'
+  schedule:
+    - cron: '0 21 * * 0'  # 毎週日曜 21:00 UTC
+
+jobs:
+  generate-and-post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Generate content
+        run: |
+          # GitHub Models + Claude で生成
+          echo "Generating content..."
+      - name: Post to X
+        run: python3 automation/post_x.py
+      - name: Post to note
+        run: python3 automation/post_note.py
+```
+
+**セキュリティ考慮（PyNaCl による Secret 暗号化）：**
+- 自動延長トークンを AES-256 で暗号化して Secret に保存
+- 毎月1日の定期実行時に復号化・延長・再暗号化を自動実行
+- ワークフロー失敗時は Issue 自動起票で人間に通知
+
+**ポイント：**
+- 月2,000分（約33時間）で、毎週100本超のコンテンツを永久に回し続けられる
+- 初期セットアップ（アカウント作成・Secret登録）は人間必須だが、以降は完全自動
+- `workflow_dispatch` で本番前にいつでも手動テスト可能
+- Issue 自動起票により、エージェントが人間に24時間報告可能
+
+**注意：**
+- GitHub Models のトークン上限に注意（月間制限あり）
+- ワークフロー実行時刻は UTC ベース（日本時間への変換が必須）
+- Secret の暗号化キーは環境変数として管理（リポジトリに平文保存しない）
+
+**使用プロジェクト：** rakuda-sensei（副業自動化システム）
+
+**タグ：** #github-actions #automation #free #api #cron #security
+
+---
+
 ### [汎用] settings.json での自動 commit & push フック
 
 **用途：** セッション終了時に自動で git 操作を実行し、push 忘れを防ぐ
