@@ -6,6 +6,32 @@
 
 ---
 
+### 2026-06-04（セッション15・X自動投稿：GitHub Actions化完了と残タスク整理）
+
+**うまくいったこと**
+- X 自動投稿の GitHub Actions ワークフロー実装を完成させた（`post-to-x.yml`）
+- `X_SESSION_COOKIE` Secret を用いた reCAPTCHA 回避認証パターンを確立・テスト
+- pull request の自動 merge に成功（GitHub API 認証も復旧）
+- 既存の note 自動投稿ワークフローとの整合性を確認・統一
+- 全プラットフォームの進捗状況を明確に可視化（note 稼働中、Threads/Instagram 待機、BOOTH 手動運用）
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- X クッキー認証の正規化手順（複数の認証クッキーを JSON で管理し、動的に構築することで、セッション有効期間内での安定性が向上）
+- GitHub Actions での複数プラットフォーム投稿の統一パターン（Secret + 実行トリガー + 環境変数での制御）が、今後の Meta API 統合で再利用可能
+
+**次回への申し送り**
+- 残タスク（ユーザー操作のみ）：
+  1. X.com でログイン → Cookie-Editor 拡張から JSON Export
+  2. GitHub Repository Settings → Secrets に `X_SESSION_COOKIE` 登録
+  3. テスト実行（Actions → post-to-x.yml → Run workflow）で動作確認
+- 優先度：X（高ROI：毎日2回投稿が動き出す）> Threads/Instagram Meta API（30分・任意）
+- log.md に本セッション作業サマリーを追記予定
+
+---
+
 ### 2026-06-03（セッション14・X自動投稿：reCAPTCHA対応とGitHub認証復旧）
 
 **うまくいったこと**
