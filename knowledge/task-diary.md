@@ -6,6 +6,27 @@
 
 ---
 
+### 2026-05-31（GitHub Actions ワークフロー Node.js 24 opt-in 対応）
+
+**うまくいったこと**
+- GitHub Actions の Node.js 20 deprecation 警告に対応
+- `FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"` を全ワークフロー（11個）の env: に追加
+- 全ワークフロー YAML構文の一括検証完了（yaml.safe_load で11個全て valid 確認）
+- PR #8 を作成・マージ完了、修正が本番環境に反映済み
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- GitHub Actions の Node.js フェーズアウト対応は環境変数 1行で対応可能
+- 警告メッセージは実機動作に影響しないが、早期対応でワークフロー実行ログの可読性が向上
+
+**次回への申し送り**
+- weekly-content-pipeline.yml を再度実行して、修正後のワークフロー完全動作を検証予定
+- include_booth: true オプションで BOOTH生成が安全に完了するか確認が必須
+
+---
+
 ### 2026-05-31（weekly-content-pipelineの並列実行競合エラー修正）
 
 **うまくいったこと**
