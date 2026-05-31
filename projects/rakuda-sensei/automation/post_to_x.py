@@ -209,27 +209,113 @@ def post_tweet(page, tweet_text: str) -> bool:
     """ツイートを投稿"""
     print(f"📝 投稿中: {tweet_text[:30]}...")
 
-    page.goto("https://x.com/compose/post", wait_until="networkidle", timeout=30000)
-    page.wait_for_timeout(3000)
+    # X は SPA で networkidle が永遠に来ないので domcontentloaded を使う
+    # 複数のcompose URL候補を試す
+    compose_urls = [
+        "https://x.com/compose/post",
+        "https://x.com/compose/tweet",  # 旧URL
+        "https://twitter.com/compose/tweet",  # twitter.comドメイン
+    ]
+    compose_loaded = False
+    for url in compose_urls:
+        try:
+            page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(4000)  # SPA レンダリング待ち
+            compose_loaded = True
+            print(f"   📍 compose 到達: {page.url}")
+            break
+        except Exception as e:
+            print(f"   ⏭ {url} 失敗: {e}", file=sys.stderr)
+            continue
 
-    # ツイート入力欄
-    try:
-        tweet_area = page.locator('[data-testid="tweetTextarea_0"], [contenteditable="true"][role="textbox"]').first
-        tweet_area.wait_for(timeout=10000, state="visible")
-        tweet_area.click()
-        page.keyboard.insert_text(tweet_text)
-        page.wait_for_timeout(1000)
-    except Exception as e:
-        print(f"ERROR: ツイート入力欄が見つかりません: {e}", file=sys.stderr)
+    if not compose_loaded:
+        # フォールバック: home から compose ボタンをクリック
+        try:
+            page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(3000)
+            for sel in [
+                '[data-testid="SideNav_NewTweet_Button"]',
+                'a[href="/compose/post"]',
+                'a[href="/compose/tweet"]',
+                'button:has-text("ポスト")',
+            ]:
+                try:
+                    page.locator(sel).first.click(timeout=3000)
+                    page.wait_for_timeout(3000)
+                    compose_loaded = True
+                    print(f"   📍 home → compose ボタンで到達")
+                    break
+                except Exception:
+                    continue
+        except Exception as e:
+            print(f"ERROR: home 経由も失敗: {e}", file=sys.stderr)
+            return False
+
+    if not compose_loaded:
+        print("ERROR: compose 画面に到達できず", file=sys.stderr)
+        try:
+            page.screenshot(path="x-compose-failed.png")
+        except Exception:
+            pass
         return False
 
-    # 投稿ボタン
-    try:
-        post_btn = page.locator('[data-testid="tweetButton"], button:has-text("ポストする"), button:has-text("ポスト")').first
-        post_btn.click(timeout=5000)
-        page.wait_for_timeout(5000)
-    except Exception as e:
-        print(f"ERROR: 投稿ボタンが見つかりません: {e}", file=sys.stderr)
+    # ツイート入力欄 - セレクタ拡充
+    text_selectors = [
+        '[data-testid="tweetTextarea_0"]',
+        '[contenteditable="true"][role="textbox"]',
+        '[contenteditable="true"][data-text="true"]',
+        'div[role="textbox"][contenteditable="true"]',
+    ]
+    text_filled = False
+    for sel in text_selectors:
+        try:
+            tweet_area = page.locator(sel).first
+            tweet_area.wait_for(timeout=5000, state="visible")
+            tweet_area.click()
+            page.keyboard.insert_text(tweet_text)
+            page.wait_for_timeout(1500)
+            print(f"   ✅ テキスト入力完了 (selector: {sel})")
+            text_filled = True
+            break
+        except Exception:
+            continue
+
+    if not text_filled:
+        print("ERROR: ツイート入力欄が見つかりません", file=sys.stderr)
+        try:
+            page.screenshot(path="x-text-not-found.png")
+        except Exception:
+            pass
+        return False
+
+    # 投稿ボタン - セレクタ拡充
+    post_btn_selectors = [
+        '[data-testid="tweetButton"]',
+        '[data-testid="tweetButtonInline"]',
+        'button[data-testid*="tweet"]',
+        'button:has-text("ポストする")',
+        'button:has-text("ポスト")',
+        'button[type="submit"]',
+    ]
+    posted = False
+    for sel in post_btn_selectors:
+        try:
+            post_btn = page.locator(sel).first
+            post_btn.wait_for(timeout=3000, state="visible")
+            post_btn.click(timeout=5000)
+            page.wait_for_timeout(5000)
+            posted = True
+            print(f"   ✅ 投稿ボタンクリック (selector: {sel})")
+            break
+        except Exception:
+            continue
+
+    if not posted:
+        print("ERROR: 投稿ボタンが見つかりません", file=sys.stderr)
+        try:
+            page.screenshot(path="x-post-button-failed.png")
+        except Exception:
+            pass
         return False
 
     print("✅ ツイート投稿完了")
