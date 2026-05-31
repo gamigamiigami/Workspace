@@ -1,4 +1,8 @@
-name: List Product on BOOTH
+name: List Product on BOOTH (実験的・手動運用推奨)
+
+# ⚠️ BOOTH UI 変更が頻繁で安定動作しないため、手動運用を推奨。
+# 詳細: knowledge/booth-manual-guide.md
+# このワークフローは workflow_dispatch のみ（試行用に残置）。
 
 # BOOTH商品を自動出品する（自動ログイン版）
 # 使い方: GitHub Actions > "List Product on BOOTH" > Run workflow

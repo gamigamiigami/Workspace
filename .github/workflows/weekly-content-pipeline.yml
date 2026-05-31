@@ -3,8 +3,10 @@ name: Weekly Content Pipeline (生成→投稿の完全自動)
 # 毎週日曜 21:00 UTC (JST月曜6:00) に下記を全自動実行:
 #  1. X週次14本AI生成 (3本柱ローテ)
 #  2. note記事1本AI生成 (3本柱ローテ) → 翌日に自動投稿
-#  3. 週次でBOOTH教材1本AI生成 → 翌日に自動出品
+#  3. BOOTH教材1本AI生成 → ★手動出品★ (BOOTH UIが頻繁に変わり自動化が壊れやすいため)
 # すべてGitHub Models (無料) + Playwright/Graph API (無料)
+#
+# BOOTH手動出品手順: knowledge/booth-manual-guide.md
 
 on:
   schedule:
@@ -133,19 +135,30 @@ jobs:
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/post-to-note.yml/dispatches" \
             -d '{"ref":"${{ github.ref_name }}","inputs":{"article_path":"${{ needs.generate-all.outputs.article_path }}","dry_run":false}}'
 
-  # BOOTH自動出品起動
-  trigger-booth-post:
+  # BOOTH手動出品リマインダー（自動出品はBOOTHのUI仕様変更頻度の高さのため停止）
+  notify-booth-manual:
     runs-on: ubuntu-latest
     needs: generate-all
     if: needs.generate-all.outputs.product_path != ''
+    permissions:
+      issues: write
     steps:
-      - name: Trigger post-to-booth workflow
+      - name: Create issue with manual upload instructions
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          curl -L -X POST \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/post-to-booth.yml/dispatches" \
-            -d '{"ref":"${{ github.ref_name }}","inputs":{"product_path":"${{ needs.generate-all.outputs.product_path }}","dry_run":false}}'
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🛒 BOOTH手動出品 ($(date +%Y-%m-%d)) - 2-3分の作業" \
+            --body "新しいBOOTH商品が生成されました。手動で出品してください（2-3分）。
+
+          ## 商品ファイル
+          \`${{ needs.generate-all.outputs.product_path }}\`
+
+          ## 出品手順（要約）
+          1. ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/${{ needs.generate-all.outputs.product_path }} を開く
+          2. ファイル冒頭の \`<!-- BOOTH_TITLE ... -->\` コメントから商品名・価格・説明・タグをコピー
+          3. ${{ github.server_url }}/${{ github.repository }}/blob/${{ github.ref_name }}/knowledge/booth-manual-guide.md の手順に従う
+
+          完了したらこのIssueを閉じてください。" \
+            --label "bug"
