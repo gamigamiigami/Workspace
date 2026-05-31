@@ -306,15 +306,6 @@ def post_to_booth(
                     browser.close()
                     return 1
 
-            # 新規商品作成ページへ
-            # 戦略1: 既知URL候補を試す
-            new_item_urls = [
-                "https://manage.booth.pm/items/new",
-                "https://manage.booth.pm/items/create",
-                "https://manage.booth.pm/products/new",
-                "https://manage.booth.pm/items/add",
-            ]
-
             def is_valid_create_page(p) -> bool:
                 """404でもログインでもない、かつinput要素があれば有効"""
                 try:
@@ -324,7 +315,6 @@ def post_to_booth(
                     url_lower = p.url.lower()
                     if "login" in url_lower or "accounts.pixiv" in url_lower or "sign_in" in url_lower:
                         return False
-                    # input要素が存在すれば有効
                     if p.locator("input, textarea").count() > 0:
                         return True
                     return False
@@ -332,96 +322,112 @@ def post_to_booth(
                     return False
 
             page_loaded = False
-            for url in new_item_urls:
-                try:
-                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    page.wait_for_timeout(3000)
-                    if is_valid_create_page(page):
-                        print(f"📍 商品作成ページ到達 (戦略1): {page.url}")
-                        page_loaded = True
-                        break
-                    else:
-                        print(f"⏭ {url} → 404 or ログイン or input無し (title={page.title()})")
-                except Exception as e:
-                    print(f"⏭ {url} 失敗: {e}", file=sys.stderr)
-                    continue
 
-            # 戦略2: 管理画面トップから「新規出品」ボタンを探してクリック
-            if not page_loaded:
-                print("\n🔍 戦略2: 管理画面トップから新規出品ボタンを探す")
-                try:
-                    page.goto("https://manage.booth.pm/", wait_until="domcontentloaded", timeout=20000)
-                    page.wait_for_timeout(3000)
-                    new_btn_selectors = [
-                        'a:has-text("新規出品")',
-                        'a:has-text("新規追加")',
-                        'button:has-text("新規出品")',
-                        'a:has-text("商品を追加")',
-                        'a:has-text("出品する")',
-                        'a[href*="items/new"]',
-                        'a[href*="items/create"]',
-                        'a[href*="items/add"]',
-                        'a[href*="products/new"]',
-                        '[aria-label*="新規"]',
-                        '[aria-label*="追加"]',
-                    ]
-                    for sel in new_btn_selectors:
-                        try:
-                            el = page.locator(sel).first
-                            el.wait_for(timeout=3000, state="visible")
-                            print(f"   → ボタン発見: {sel}")
-                            el.click(timeout=5000)
-                            page.wait_for_timeout(4000)
-                            if is_valid_create_page(page):
-                                print(f"📍 商品作成ページ到達 (戦略2): {page.url}")
-                                page_loaded = True
-                                break
-                        except Exception:
-                            continue
-                except Exception as e:
-                    print(f"戦略2失敗: {e}", file=sys.stderr)
+            # 戦略1: 確実に到達できる /items に行き、そこから動線を発見する
+            print("\n🔍 戦略1: 確実に動く /items ページから動線を発見")
+            try:
+                page.goto("https://manage.booth.pm/items", wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(4000)
+                print(f"   📍 到達: {page.url} | title={page.title()}")
 
-            # 戦略3: items 一覧ページから「新規」ボタンを探す
-            if not page_loaded:
-                print("\n🔍 戦略3: items 一覧から新規出品ボタンを探す")
-                items_list_urls = [
-                    "https://manage.booth.pm/items",
-                    "https://manage.booth.pm/products",
-                ]
-                for list_url in items_list_urls:
+                # 全アンカーを取得してダンプ
+                all_anchors = page.locator("a").evaluate_all(
+                    """els => els.slice(0, 80).map(e => ({
+                        text: (e.innerText || '').trim().slice(0, 60),
+                        href: e.href || '',
+                        aria: e.getAttribute('aria-label') || ''
+                    }))"""
+                )
+                print(f"   📋 ページ上のリンク数: {len(all_anchors)}")
+                # 候補抽出: href / text / aria に "new"/"create"/"add"/"新規"/"追加"/"出品"/"作成" を含む
+                keywords = ["new", "create", "add", "register", "新規", "追加", "出品", "作成"]
+                candidates = []
+                shop_subdomain = None
+                for link in all_anchors:
+                    href = link["href"]
+                    text = link["text"]
+                    aria = link["aria"]
+                    haystack = (href + " " + text + " " + aria).lower()
+                    # ショップサブドメイン抽出（{name}.booth.pm 形式のリンク）
+                    sub_m = re.search(r"https://([a-z0-9_-]+)\.booth\.pm", href)
+                    if sub_m and sub_m.group(1) not in ("manage", "accounts"):
+                        shop_subdomain = sub_m.group(1)
+                    # 新規系キーワードで候補に追加
+                    if any(kw in haystack for kw in keywords):
+                        if href and "javascript:" not in href:
+                            candidates.append(link)
+
+                print(f"   🔑 ショップサブドメイン推定: {shop_subdomain or '不明'}")
+                print(f"   🎯 新規系候補リンク: {len(candidates)} 件")
+                for i, c in enumerate(candidates[:15]):
+                    print(f"     [{i}] text={c['text']!r} href={c['href']} aria={c['aria']!r}")
+
+                # サブドメインベースの候補URLを動的生成
+                dynamic_urls = []
+                if shop_subdomain:
+                    dynamic_urls.extend([
+                        f"https://{shop_subdomain}.booth.pm/items/new",
+                        f"https://{shop_subdomain}.booth.pm/admin/items/new",
+                    ])
+                # 候補リンクのhrefも試行URL候補に追加
+                for c in candidates:
+                    h = c["href"]
+                    if h and h not in dynamic_urls and "manage.booth.pm" in h:
+                        dynamic_urls.append(h)
+                # 既知URLも追加（最後の砦）
+                dynamic_urls.extend([
+                    "https://manage.booth.pm/items/new",
+                    "https://manage.booth.pm/owner/items/new",
+                ])
+
+                # URLを順に試行
+                for url in dynamic_urls:
                     try:
-                        page.goto(list_url, wait_until="domcontentloaded", timeout=20000)
+                        print(f"   🔗 試行: {url}")
+                        page.goto(url, wait_until="domcontentloaded", timeout=15000)
                         page.wait_for_timeout(3000)
                         title = page.title()
                         if "404" in title or "見つかりません" in title:
+                            print(f"      ⏭ 404")
                             continue
-                        print(f"   📋 一覧到達: {page.url} ({title})")
-                        # 一覧ページ上の「新規出品」「+」ボタン
-                        for sel in [
-                            'a:has-text("新規出品")',
-                            'a:has-text("商品を追加")',
-                            'a:has-text("出品する")',
-                            'button:has-text("新規")',
-                            'a[href*="new"]',
-                            'a[href*="create"]',
-                            '[class*="new"][role="button"]',
-                            'a.btn-primary',
-                        ]:
-                            try:
-                                el = page.locator(sel).first
-                                el.wait_for(timeout=2000, state="visible")
-                                el.click(timeout=3000)
-                                page.wait_for_timeout(4000)
-                                if is_valid_create_page(page):
-                                    print(f"📍 商品作成ページ到達 (戦略3): {page.url}")
-                                    page_loaded = True
-                                    break
-                            except Exception:
-                                continue
-                        if page_loaded:
-                            break
-                    except Exception:
+                        if not is_valid_create_page(page):
+                            print(f"      ⏭ 無効ページ (title={title})")
+                            continue
+                        print(f"   📍 商品作成ページ到達 (戦略1): {page.url}")
+                        page_loaded = True
+                        break
+                    except Exception as e:
+                        print(f"      ⏭ 失敗: {e}")
                         continue
+
+                # URL試行で見つからなければ、候補リンクを実際にクリック
+                if not page_loaded and candidates:
+                    print("\n   🔍 候補リンクをクリック試行")
+                    page.goto("https://manage.booth.pm/items", wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(3000)
+                    for c in candidates[:10]:
+                        try:
+                            text = c["text"]
+                            href = c["href"]
+                            if not text and not href:
+                                continue
+                            # text優先でクリック
+                            sel = f'a:has-text("{text}")' if text else f'a[href="{href}"]'
+                            print(f"      → クリック試行: {sel[:80]}")
+                            page.locator(sel).first.click(timeout=3000)
+                            page.wait_for_timeout(4000)
+                            if is_valid_create_page(page):
+                                print(f"   📍 商品作成ページ到達 (戦略1クリック): {page.url}")
+                                page_loaded = True
+                                break
+                            # 戻る
+                            page.goto("https://manage.booth.pm/items", timeout=15000)
+                            page.wait_for_timeout(2000)
+                        except Exception as e:
+                            print(f"         失敗: {e}")
+                            continue
+            except Exception as e:
+                print(f"戦略1で例外: {e}", file=sys.stderr)
 
             try:
                 page.screenshot(path="booth-01-newitem-page.png")
