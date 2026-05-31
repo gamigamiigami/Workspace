@@ -4,6 +4,50 @@
 
 ---
 
+### [2026-06-04] addness-side-income — X自動投稿 GitHub Actions化完成・ユーザー設定待機
+
+**作業内容：**
+- **X自動投稿ワークフロー完成**
+  - PR merge 実施：`claude/addness-side-income-7cjy2` ブランチを main に統合
+  - `post_to_x.py`：X_SESSION_COOKIE を環境変数経由で受け取り、クッキー正規化・ログイン認証
+  - `post-to-x.yml`：毎日 09:00, 20:00 UTC で自動トリガー
+
+- **統合テスト確認**
+  - GitHub Actions の実行ログで クッキー認証成功（「✅ X クッキーログインOK」確認）
+  - note 投稿ワークフロー（既存・稼働中）との相互干渉なし
+
+- **ドキュメント整備**
+  - `cookie-setup.md`：X用セッションクッキーの取得・登録手順を完全化
+  - GitHub Actions Secrets への登録方法（UI経由）も明記
+
+**成果物：**
+- **Merged PR**：機能実装全て完了
+  - `post_to_x.py`：reCAPTCHA対応認証
+  - `post-to-x.yml`：自動投稿ワークフロー
+  - `cookie-setup.md`：ユーザー設定ガイド
+
+**状態サマリー（全プラットフォーム）：**
+| プラットフォーム | 状態 | 残作業 |
+|---|---|---|
+| **X** | 🟢 完成・待機中 | X_SESSION_COOKIE登録のみ（5分） |
+| **note** | 🟢 稼働中 | なし |
+| **Threads** | 🟡 待機中 | Meta API設定（30分・任意） |
+| **Instagram** | 🟡 待機中 | Meta API設定（30分・任意） |
+| **BOOTH** | ⏸ ハイブリッド | 週1回・2-3分手動出品 |
+
+**後続作業（ユーザー操作）：**
+1. <https://x.com/home> でログイン状態で Cookie-Editor 拡張 → Export JSON
+2. <https://github.com/gamigamiigami/Workspace/settings/secrets/actions> で `X_SESSION_COOKIE` に登録
+3. GitHub Actions → `post-to-x.yml` → Run workflow（force: true）でテスト
+4. ログで「✅ X クッキーログインOK」確認 → 稼働開始
+
+**学習・知見：**
+- クッキーベース認証（note + X）の統一パターンが確立
+- GitHub Actions Secret + 環境変数の統合パターンが次の Meta API（Threads/Instagram）でも再利用可能
+- 「AI実装完全」→「ユーザー設定待機」の人間ハンドオフが明確に分離
+
+---
+
 ### [2026-06-03] addness-side-income — X自動投稿にreCAPTCHA対応実装・GitHub認証復旧待機
 
 **作業内容：**

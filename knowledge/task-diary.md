@@ -6,6 +6,58 @@
 
 ---
 
+### 2026-06-05（セッション16・X自動投稿：クッキー設定ガイダンス完成）
+
+**うまくいったこと**
+- X（Twitter）クッキー認証の詳細ガイダンスを完成させた（形式検証・セキュリティ注意付き）
+- GitHub Secret への登録手順を明確にドキュメント化
+- 全9個のクッキー（`auth_token`・`ct0`・`twid` 等）の役割を整理し、ユーザーへの説明形式を標準化
+- playwright-stealth との組み合わせで bot 検出回避パターンを確認
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- X クッキー認証は「複数認証クッキーの正規化 + Cloudflare bot 管理（`__cf_bm`）対応」で、セッション有効期間内での安定性が大幅向上
+- 前セッション（セッション15）の実装と今セッション（セッション16）のガイダンス化により、ユーザー操作手順が完全に明確化
+
+**次回への申し送り**
+- ユーザーが次セッション開始時に以下を実行予定：
+  1. X.com でログイン → Cookie-Editor 拡張から JSON Export
+  2. GitHub Settings → Secrets に `X_SESSION_COOKIE` 登録
+  3. Actions で post-to-x.yml をテスト実行（force: true）
+  4. X タイムラインで投稿確認 → 成功
+- テスト後：Xの全セッションログアウト → 再ログインでセキュリティ強化推奨
+- X 自動投稿の本運用化（毎日2回の定時投稿）開始予定
+
+---
+
+### 2026-06-04（セッション15・X自動投稿：GitHub Actions化完了と残タスク整理）
+
+**うまくいったこと**
+- X 自動投稿の GitHub Actions ワークフロー実装を完成させた（`post-to-x.yml`）
+- `X_SESSION_COOKIE` Secret を用いた reCAPTCHA 回避認証パターンを確立・テスト
+- pull request の自動 merge に成功（GitHub API 認証も復旧）
+- 既存の note 自動投稿ワークフローとの整合性を確認・統一
+- 全プラットフォームの進捗状況を明確に可視化（note 稼働中、Threads/Instagram 待機、BOOTH 手動運用）
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- X クッキー認証の正規化手順（複数の認証クッキーを JSON で管理し、動的に構築することで、セッション有効期間内での安定性が向上）
+- GitHub Actions での複数プラットフォーム投稿の統一パターン（Secret + 実行トリガー + 環境変数での制御）が、今後の Meta API 統合で再利用可能
+
+**次回への申し送り**
+- 残タスク（ユーザー操作のみ）：
+  1. X.com でログイン → Cookie-Editor 拡張から JSON Export
+  2. GitHub Repository Settings → Secrets に `X_SESSION_COOKIE` 登録
+  3. テスト実行（Actions → post-to-x.yml → Run workflow）で動作確認
+- 優先度：X（高ROI：毎日2回投稿が動き出す）> Threads/Instagram Meta API（30分・任意）
+- log.md に本セッション作業サマリーを追記予定
+
+---
+
 ### 2026-06-03（セッション14・X自動投稿：reCAPTCHA対応とGitHub認証復旧）
 
 **うまくいったこと**
