@@ -1,0 +1,61 @@
+name: Weekly Health Check
+
+# 毎週月曜 00:00 UTC に全プラットフォームの疎通確認
+# 失敗時は自動でGitHub Issueを起票
+
+on:
+  schedule:
+    - cron: "0 0 * * 1"  # 毎週月曜
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      failure_count: ${{ steps.check.outputs.failure_count }}
+      failure_summary: ${{ steps.check.outputs.failure_summary }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
+      - run: pip install -r projects/rakuda-sensei/automation/requirements.txt
+
+      - name: Run health check
+        id: check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
+          THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          META_ACCESS_TOKEN: ${{ secrets.META_ACCESS_TOKEN }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+        run: python projects/rakuda-sensei/automation/health_check.py
+        continue-on-error: true
+
+      - name: Create issue on failure
+        if: steps.check.outputs.failure_count != '0' && steps.check.outputs.failure_count != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🩺 ヘルスチェック異常 ($(date +%Y-%m-%d))" \
+            --body "週次ヘルスチェックで異常を検出しました。
+
+          ## 失敗項目
+          ${{ steps.check.outputs.failure_summary }}
+
+          ## 対応の目安
+          - **GitHub Models失敗**: GITHUB_TOKEN権限確認、または無料枠超過の可能性
+          - **Threads/Instagram API失敗**: トークン期限切れ → \`refresh_meta_tokens.py\` 手動実行 or 再発行
+          - **note/BOOTH到達性失敗**: 一時的なサービス障害の可能性、翌日再実行で復旧することが多い
+          - **X到達性失敗**: X側のメンテナンス or アクセス制限
+
+          **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label "bug,health-check"

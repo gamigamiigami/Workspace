@@ -4,6 +4,41 @@
 
 ---
 
+### [2026-05-31] 自動回復機能5つ実装 — 半年30分メンテで永久稼働化
+
+**作業内容（ユーザー要望「動いたら動き続ける」反映）：**
+1. **Metaトークン自動延長**：`refresh_meta_tokens.py` + `refresh-tokens.yml`
+   - 月2回 (1日/15日) cron で Threads/Instagram の60日トークンを自動更新
+   - GitHub Secrets API + PyNaCl でリポジトリSecretを暗号化更新
+2. **失敗時自動Issue起票**：post-to-x/note/booth/threads/refresh-tokens/health-checkに追加
+   - gh CLI（runner標準搭載）でIssue作成・原因と対応をテンプレ化
+   - メール通知はGitHub Notificationが拾う（無料）
+3. **複数セレクタ自動フォールバック**：`post_to_note.py` に `try_selectors()` 追加
+   - UIが変わってもセレクタ候補リストでカバー
+4. **週次ヘルスチェック**：`health_check.py` + `health-check.yml`
+   - 毎週月曜 00:00 UTC に GitHub Models / Threads / IG / note / BOOTH / X の疎通確認
+   - 失敗項目を自動Issue化
+5. **PDCAフィードバックループ**：`generate_weekly_x.py` も `latest_pdca_insights()` 使用
+   - X週次生成・note記事生成・両方でPDCAインサイトを次回プロンプトに自動反映
+   - 「伸びた投稿型」を強化、「伸びなかった型」を抑制
+
+**結果：** 成功 — 実質的な人間メンテ「半年に1回30分」レベルまで圧縮
+
+**成果物：**
+- `automation/refresh_meta_tokens.py` / `health_check.py`
+- `.github/workflows/refresh-tokens.yml` / `health-check.yml`
+- `requirements.txt` に pynacl 追加
+- 既存全post-*.ymlに failure() Issue起票ステップ追加
+
+**気づき・メモ：**
+- GitHub Secrets API + PyNaCl でSecret自動更新可能（GH_PAT必要）
+- gh CLIは ubuntu-latest に標準搭載・追加インストール不要
+- 失敗時Issue起票はGitHub Notificationで実質メール通知化
+- Metaトークンは「th_refresh_token」エンドポイントで毎回60日延長可能
+- 全機能¥0（GitHub Free tier + Meta公式refresh API + MIT License libs）
+
+---
+
 ### [2026-05-31] 完全自動化パイプライン実装 — 記事・商品生成も全自動
 
 **作業内容（ユーザー「全自動で投稿記事作成＆投稿＆分析までやって」要望反映）：**

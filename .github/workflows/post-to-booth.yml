@@ -87,3 +87,22 @@ jobs:
           name: booth-post-screenshot
           path: "*.png"
           if-no-files-found: ignore
+
+      - name: Create issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🚨 BOOTH出品失敗 ($(date +%Y-%m-%d))" \
+            --body "BOOTH商品の自動出品が失敗しました。
+
+          - **商品**: \`${{ inputs.product_path }}\`
+          - **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ## 対応
+          1. Artifactのスクリーンショットを確認
+          2. BOOTH/pixiv UI変更ならセレクタ更新
+          3. pixiv認証エラーならパスワード確認" \
+            --label "bug,automation,platform-booth"

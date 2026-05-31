@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parents[3]  # /home/user/Workspace
 PERSONA_PATH = ROOT / "knowledge" / "persona.md"
 PLAYBOOK_PATH = ROOT / "knowledge" / "sns-playbook.md"
 OUTPUT_DIR = ROOT / "projects" / "rakuda-sensei" / "sns" / "weekly"
+REPORTS_DIR = ROOT / "projects" / "rakuda-sensei" / "reports"
 
 # GitHub Models 設定 (無料・GITHUB_TOKEN で認証)
 GH_MODELS_ENDPOINT = "https://models.github.ai/inference"
@@ -42,7 +43,26 @@ def next_monday(today: datetime.date) -> datetime.date:
     return today + datetime.timedelta(days=delta)
 
 
-def build_prompt(persona: str, playbook: str, week_start: datetime.date) -> str:
+def latest_pdca_insights() -> str:
+    """直近のPDCAレポートから生成プロンプトに渡すインサイトを抽出"""
+    import re
+    if not REPORTS_DIR.exists():
+        return "（PDCAレポートなし。初回生成）"
+    files = sorted(REPORTS_DIR.glob("*-pdca.md"), reverse=True)
+    if not files:
+        return "（PDCAレポートなし。初回生成）"
+    text = files[0].read_text(encoding="utf-8")
+    action = re.search(r"##\s*Action.*?\n(.+?)(?=\n##|\Z)", text, re.DOTALL)
+    good = re.search(r"###\s*良かった点.*?\n(.+?)(?=\n###|\n##|\Z)", text, re.DOTALL)
+    parts = []
+    if good:
+        parts.append(f"**前月の良かった点:**\n{good.group(1).strip()[:400]}")
+    if action:
+        parts.append(f"**今月のアクション方針:**\n{action.group(1).strip()[:400]}")
+    return "\n\n".join(parts) if parts else "（前回データから読み取れず）"
+
+
+def build_prompt(persona: str, playbook: str, week_start: datetime.date, insights: str = "") -> str:
     week_end = week_start + datetime.timedelta(days=6)
     return f"""あなたは「残業嫌いのらくだ先生🐪」(中学校国語教員)のX(Twitter)発信を担当しています。
 
@@ -54,6 +74,9 @@ def build_prompt(persona: str, playbook: str, week_start: datetime.date) -> str:
 
 ==== SNSプレイブック ====
 {playbook}
+
+==== 前月のPDCAインサイト（必ず反映） ====
+{insights}
 
 ==== 制約 ====
 - 各ツイート 140〜160字 (140字オーバー厳禁)
@@ -128,13 +151,15 @@ def main() -> int:
     print(f"📅 生成対象週: {week_start} 〜 {week_start + datetime.timedelta(days=6)}")
     print(f"🤖 モデル: {MODEL} (GitHub Models・無料)")
 
+    insights = latest_pdca_insights()
+
     client = OpenAI(base_url=GH_MODELS_ENDPOINT, api_key=token)
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         temperature=0.8,
         messages=[
-            {"role": "user", "content": build_prompt(persona, playbook, week_start)},
+            {"role": "user", "content": build_prompt(persona, playbook, week_start, insights)},
         ],
     )
 
