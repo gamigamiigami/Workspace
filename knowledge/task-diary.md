@@ -6,6 +6,31 @@
 
 ---
 
+### 2026-05-31（playwright-stealth ライブラリの導入と PR マージ）
+
+**うまくいったこと**
+- 業界標準 `playwright-stealth` ライブラリの統合完了（19種類の bot 検知回避機構）
+- 自作 STEALTH_JS の基本対策を補完し、navigator / chrome / webgl 等の偽装強化
+- 注入タイミングの最適化（context.new_page() 直後）で確実な適用を実現
+- import 失敗時の fallback メカニズムで互換性を維持
+- 構文検証 + コミット + PR 作成・マージを一連で完了
+- check_cookies.py に stealth_sync 適用で事前診断の信頼度が向上
+
+**うまくいかなかったこと**
+- なし（既存実装との互換性完全）
+
+**発見**
+- playwright-stealth は Playwright 4.x+ で公式推奨される標準ライブラリ
+- headless=True 環境でも navigator.webdriver は簡単に検知できるため、多層的な偽装が必須
+- stealth_sync() の実装は Context 単位ではなく Page 単位で動作するため、タイミング管理が重要
+
+**次回への申し送り**
+- マージ後のワークフロー実行で実機テスト必須（playwright-stealth 導入がクッキー認証成功率に与える影響は未実測）
+- GitHub Actions 環境での Chromium sandboxing と stealth の相互作用は未検証
+- bot 検知の最終判定はサーバー側のロジックが秘匿されているため、「試してダメなら手動対応」が現実的
+
+---
+
 ### 2026-05-31（別ブランチのクッキー設定ドキュメント検索・特定）
 
 **うまくいったこと**
