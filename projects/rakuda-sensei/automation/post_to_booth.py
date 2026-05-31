@@ -83,19 +83,27 @@ def parse_product_meta(html_path: Path) -> dict:
     text = html_path.read_text(encoding="utf-8")
     meta = {"title": "", "price": 0, "description": "", "tags": []}
 
-    title_m = re.search(r"<!--\s*BOOTH_TITLE:\s*(.+?)\s*-->", text)
+    # 行単位でメタ情報を抽出（HTMLコメント全体が複数行のため）
+    title_m = re.search(r"BOOTH_TITLE:\s*(.+?)\s*$", text, re.MULTILINE)
     if title_m:
         meta["title"] = title_m.group(1).strip()
 
-    price_m = re.search(r"<!--\s*BOOTH_PRICE:\s*(\d+)\s*-->", text)
-    if price_m:
-        meta["price"] = int(price_m.group(1))
+    # フォールバック: <title> タグ
+    if not meta["title"]:
+        t_m = re.search(r"<title>\s*(.+?)\s*</title>", text, re.IGNORECASE)
+        if t_m:
+            meta["title"] = t_m.group(1).strip()
 
-    desc_m = re.search(r"<!--\s*BOOTH_DESC:\s*(.+?)\s*-->", text, re.DOTALL)
+    price_m = re.search(r"BOOTH_PRICE:\s*([\d,]+)", text)
+    if price_m:
+        meta["price"] = int(price_m.group(1).replace(",", ""))
+
+    # DESC は BOOTH_TAGS or --> までの複数行
+    desc_m = re.search(r"BOOTH_DESC:\s*\n((?:(?!BOOTH_TAGS:|-->).*\n?)+)", text)
     if desc_m:
         meta["description"] = desc_m.group(1).strip()
 
-    tags_m = re.search(r"<!--\s*BOOTH_TAGS:\s*(.+?)\s*-->", text)
+    tags_m = re.search(r"BOOTH_TAGS:\s*(.+?)\s*$", text, re.MULTILINE)
     if tags_m:
         meta["tags"] = [t.strip() for t in tags_m.group(1).split(",")]
 
