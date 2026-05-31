@@ -31,6 +31,25 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+# Playwrightのheadless fingerprintを隠す init script
+# navigator.webdriver === undefined にする等
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', {
+  get: () => [{name: 'Chrome PDF Plugin'}, {name: 'Chrome PDF Viewer'}, {name: 'Native Client'}]
+});
+// chrome.runtime をモック（headlessには存在しない）
+window.chrome = { runtime: {} };
+// WebGLベンダーを実機らしく
+const getParameter = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(parameter) {
+  if (parameter === 37445) return 'Intel Inc.';
+  if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+  return getParameter.apply(this, [parameter]);
+};
+"""
+
 
 def try_selectors(page, selectors: list[str], action: str = "fill", value: str = "",
                   timeout_each: int = 5000, action_name: str = "操作") -> bool:
@@ -265,13 +284,27 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+                "--disable-features=IsolateOrigins,site-per-process",
+            ],
+        )
         context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
+            viewport={"width": 1366, "height": 768},  # 一般的解像度に
             user_agent=USER_AGENT,
             locale="ja-JP",
             timezone_id="Asia/Tokyo",
+            extra_http_headers={
+                "Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            },
         )
+        # bot fingerprint隠蔽
+        context.add_init_script(STEALTH_JS)
 
         # クッキー認証を優先（reCAPTCHA回避・推奨）
         cookie_json = os.environ.get("NOTE_SESSION_COOKIE")
@@ -466,10 +499,37 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
                     continue
 
             if published:
-                print(f"✅ 投稿完了！URL: {page.url}")
+                shot(page, "10-after-publish-click")
+                # 公開URLパターン (note.com/{user}/n/{hash}) に遷移していれば成功
+                if "/n/" in page.url and "/notes/" not in page.url:
+                    print(f"✅ 公開完了！URL: {page.url}")
+                else:
+                    # 念のため公開記事一覧をチェック
+                    print(f"⚠️ 投稿クリックしたがURLが想定外: {page.url}")
+                    print("   → 下書きで止まっている可能性。マイページで確認してください")
+                    try:
+                        page.goto("https://note.com/notes/manage/published", wait_until="domcontentloaded", timeout=15000)
+                        page.wait_for_timeout(2000)
+                        shot(page, "11-verify-published-list")
+                        # タイトルが一覧に出てれば公開成功
+                        if page.locator(f"text={meta['title'][:20]}").first.is_visible(timeout=3000):
+                            print(f"✅ 公開記事一覧で発見、公開成功")
+                        else:
+                            print(f"❌ 公開記事一覧に見当たらない → 下書きの可能性")
+                            page.goto("https://note.com/notes/manage/draft", wait_until="domcontentloaded", timeout=15000)
+                            page.wait_for_timeout(2000)
+                            shot(page, "12-verify-draft-list")
+                            if page.locator(f"text={meta['title'][:20]}").first.is_visible(timeout=3000):
+                                print(f"⚠️ 下書きには存在、公開ボタンを別途実行する必要")
+                            else:
+                                print(f"❌ 下書きにも見当たらない、保存自体が失敗")
+                                browser.close()
+                                return 1
+                    except Exception as e:
+                        print(f"検証中エラー: {e}")
             else:
                 print("WARNING: 投稿ボタンが見つかりませんでした", file=sys.stderr)
-                page.screenshot(path="note-post-failed.png")
+                shot(page, "10-no-publish-button")
                 browser.close()
                 return 1
 
