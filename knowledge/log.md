@@ -4,6 +4,99 @@
 
 ---
 
+### [2026-06-03] addness-side-income — X自動投稿にreCAPTCHA対応実装・GitHub認証復旧待機
+
+**作業内容：**
+- **X自動投稿スクリプト（`post_to_x.py`）に `X_SESSION_COOKIE` 対応を実装**
+  - reCAPTCHA 回避のため、ブラウザセッションクッキー（Cookie-Editor 拡張で取得）を使用
+  - note 自動投稿と同じ認証パターンで統一
+  
+- **GitHub Actions ワークフロー更新（`post-to-x.yml`）**
+  - `X_SESSION_COOKIE` を Secret 経由で環境変数に渡す仕様に変更
+  - pull request 作成・push 完了
+
+- **ドキュメント整備（`cookie-setup.md`）**
+  - X用クッキー取得手順を追加（Cookie-Editor ブラウザ拡張で JSON Export）
+  - GitHub Secrets での登録手順も記載
+
+- **GitHub 認証の期間満了対応**
+  - セッション中盤で MCP 認証が無効化
+  - 自動 merge は一時中断、ユーザー手動確認 / merge 待機中
+
+**成果物：**
+- Pull Request：`claude/addness-side-income-7cjy2`（code push 済み、merge 待機中）
+  - `post_to_x.py`：X_SESSION_COOKIE 対応
+  - `post-to-x.yml`：Secret 統合
+  - `cookie-setup.md`：X クッキー設定ガイド追加
+
+**後続作業（ユーザー手動）：**
+1. PR merge（手動 or 認証復旧後自動）
+2. X クッキー取得：<https://x.com/home> で Cookie-Editor → Export JSON
+3. `X_SESSION_COOKIE` を <https://github.com/gamigamiigami/Workspace/settings/secrets/actions> に登録
+4. 次セッションで X 自動投稿テスト
+
+**知識資産：**
+- reCAPTCHA 対応パターン（ブラウザセッションクッキー）が note/X で統一
+- Threads/Instagram Meta API対応も同じ Secret パターンで可能（30分程度）
+
+---
+
+### [2026-06-02] rakuda-sensei — BOOTH完全自動化からハイブリッドモデルへの撤退・スコープ縮小
+
+**作業内容：**
+- **セッション9-13（5セッション・30時間以上）の BOOTH 完全自動化プロジェクト判定**
+  - セッション12：8ステップのスクショ + 出品後検証ロジック実装 → サイレント失敗検出
+  - セッション13：3回のワークフロー実行で同じ障壁（PDF・出品ボタン問題）が再現 → 撤退判定
+
+- **ROI 計算による撤退判定実施**
+  ```
+  完全自動化 ROI：月3-5件 × 3分 = 月15分 << 月5時間保守コスト
+  ROI逆転時点：150ヶ月（12年以上）で初めて回収
+  
+  ハイブリッドモデル ROI：月0.7時間（AI生成 + Issue自動起票 + 人間2-3分）
+  → 月4.3時間削減，即座に黒字化
+  ```
+
+- **新しい運用フロー設計完成**
+  ```
+  [毎週日曜 21:00 UTC]
+    ↓
+    AIが商品HTML生成 ← ここまで自動
+    ↓
+    GitHub Issue 自動起票 ← 「BOOTH手動出品 2-3分」リマインダー
+    ↓
+  [あなた・週1回 2-3分]
+    ↓
+    Issueのリンク → BOOTH商品フォーム貼り付け → PDF添付 → 出品
+    ↓
+    Issue クローズ
+  ```
+
+- **CLAUDE.md への行動原則追記**：「3回同じ障壁で失敗したら撤退判定フェーズへ」の基準を明記
+
+- **failures.md への昇華**：
+  - 「BOOTH完全自動化：自動化コストが手動運用を上回ったケース」として記録
+  - 自動化 ROI判定基準（仕様透明性 + テスト環境の有無 + 月次利用量）を明記
+
+- **task-diary.md への記録**：セッション13の振り返り（うまくいったこと・うまくいかなかったこと・発見・次回申し送り）
+
+**成果物：**
+- 新フロー：GitHub Actions + Issue テンプレートでの自動リマインダー仕組み（次セッション実装予定）
+- 知識資産：failures.md に「自動化撤退判定基準」，CLAUDE.md に「行動原則」として蓄積
+- 月10分運用での長期サステナビリティ確保
+
+**判定の妥当性（振り返り）：**
+| 項目 | 判定 |
+|---|---|
+| 技術実現可能性 | ⚠️ 仕様不明確（BOOTH公開ドキュメント不十分） + テスト環境なし |
+| ROI | 🔴 完全自動化 12年償却 vs ハイブリッド即時黒字 |
+| 適性判定 | 🟡 本番環境のみの自動化テストはサステイナビリティ低 |
+| **総合** | **撤退・スコープ縮小が正判定** |
+
+**タグ：** #automation #roi #business-judgment #deployment
+
+---
+
 ### [2026-05-31] rakuda-sensei playwright-stealth ライブラリ導入 — 19種類の bot検知回避メカニズム統合
 
 **作業内容：**

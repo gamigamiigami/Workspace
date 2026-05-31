@@ -54,6 +54,7 @@ jobs:
 
       - name: Post tweet to X
         env:
+          X_SESSION_COOKIE: ${{ secrets.X_SESSION_COOKIE }}
           X_USERNAME: ${{ secrets.X_USERNAME }}
           X_PASSWORD: ${{ secrets.X_PASSWORD }}
         run: |
