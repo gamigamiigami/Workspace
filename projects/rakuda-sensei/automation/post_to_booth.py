@@ -30,6 +30,40 @@ USER_AGENT = (
 )
 
 
+def normalize_cookies(raw_json: str) -> list:
+    """Cookie-Editor JSONをPlaywright SetCookieParam形式に正規化"""
+    import json as _json
+    raw = _json.loads(raw_json)
+    normalized = []
+    for c in raw:
+        new_c = {"name": c["name"], "value": c["value"]}
+        if c.get("domain"):
+            new_c["domain"] = c["domain"]
+        new_c["path"] = c.get("path", "/")
+        if "expirationDate" in c and not c.get("session"):
+            try:
+                new_c["expires"] = float(c["expirationDate"])
+            except (TypeError, ValueError):
+                pass
+        elif "expires" in c and not c.get("session"):
+            try:
+                new_c["expires"] = float(c["expires"])
+            except (TypeError, ValueError):
+                pass
+        if "sameSite" in c:
+            ss = str(c["sameSite"]).lower()
+            mapping = {"lax": "Lax", "strict": "Strict",
+                       "none": "None", "no_restriction": "None", "unspecified": "None"}
+            if ss in mapping:
+                new_c["sameSite"] = mapping[ss]
+        if "httpOnly" in c:
+            new_c["httpOnly"] = bool(c["httpOnly"])
+        if "secure" in c:
+            new_c["secure"] = bool(c["secure"])
+        normalized.append(new_c)
+    return normalized
+
+
 def parse_product_meta(html_path: Path) -> dict:
     text = html_path.read_text(encoding="utf-8")
     meta = {"title": "", "price": 0, "description": "", "tags": []}
@@ -201,13 +235,14 @@ def post_to_booth(
         cookie_auth = False
         if cookie_json:
             try:
-                import json as _json
-                cookies = _json.loads(cookie_json)
+                cookies = normalize_cookies(cookie_json)
                 context.add_cookies(cookies)
                 cookie_auth = True
-                print(f"🍪 クッキー認証 ({len(cookies)}個のクッキー)")
+                print(f"🍪 クッキー認証 ({len(cookies)}個・正規化済み)")
             except Exception as e:
-                print(f"WARNING: クッキー解析失敗: {e}", file=sys.stderr)
+                print(f"WARNING: クッキー解析/正規化失敗: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
 
         page = context.new_page()
 
