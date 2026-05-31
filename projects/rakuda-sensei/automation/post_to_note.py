@@ -65,9 +65,9 @@ def extract_meta_from_table(text: str) -> dict:
     if title_m:
         meta["title"] = title_m.group(1).strip()
 
-    price_m = re.search(r"\|\s*\*\*価格\*\*\s*\|\s*¥?(\d+)", text)
+    price_m = re.search(r"\|\s*\*\*価格\*\*\s*\|\s*¥?([\d,]+)", text)
     if price_m:
-        meta["price"] = int(price_m.group(1))
+        meta["price"] = int(price_m.group(1).replace(",", ""))
 
     tags_m = re.search(r"推奨タグ.*?(`#[\w\s]+`)+", text)
     if tags_m:
@@ -179,6 +179,16 @@ def login_to_note(page, email: str, password: str) -> bool:
     return True
 
 
+def shot(page, name: str):
+    """各ステップでスクリーンショットを撮影（デバッグ用）"""
+    try:
+        path = f"note-step-{name}.png"
+        page.screenshot(path=path, full_page=False)
+        print(f"📸 スクショ: {path}")
+    except Exception as e:
+        print(f"WARNING: スクショ失敗 {name}: {e}", file=sys.stderr)
+
+
 def post_to_note(article_path: str, dry_run: bool = False) -> int:
     email = os.environ.get("NOTE_EMAIL")
     password = os.environ.get("NOTE_PASSWORD")
@@ -220,30 +230,119 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
             locale="ja-JP",
             timezone_id="Asia/Tokyo",
         )
+
+        # クッキー認証を優先（reCAPTCHA回避・推奨）
+        cookie_json = os.environ.get("NOTE_SESSION_COOKIE")
+        cookie_auth = False
+        if cookie_json:
+            try:
+                import json as _json
+                cookies = _json.loads(cookie_json)
+                context.add_cookies(cookies)
+                cookie_auth = True
+                print(f"🍪 クッキー認証 ({len(cookies)}個のクッキー)")
+            except Exception as e:
+                print(f"WARNING: クッキー解析失敗: {e}", file=sys.stderr)
+
         page = context.new_page()
 
         try:
-            # 自動ログイン
-            if not login_to_note(page, email, password):
-                page.screenshot(path="note-login-failed.png")
+            if cookie_auth:
+                # クッキーセット済みなのでログインスキップ、直接トップへ
+                page.goto("https://note.com/", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
+                if "/login" in page.url or "/signin" in page.url.lower():
+                    print("ERROR: クッキーが無効/期限切れ。再取得してください", file=sys.stderr)
+                    shot(page, "01-cookie-invalid")
+                    browser.close()
+                    return 1
+                print(f"✅ クッキーログインOK ({page.url})")
+                shot(page, "01-cookie-ok")
+            else:
+                # フォールバック: メール/パスワードログイン (reCAPTCHA リスクあり)
+                if not login_to_note(page, email, password):
+                    shot(page, "01-login-failed")
+                    browser.close()
+                    return 1
+                shot(page, "01-login-ok")
+
+            # 新規記事作成 - 複数のURL候補を試す
+            compose_urls = [
+                "https://editor.note.com/new",       # 2024-2026 新URL
+                "https://note.com/editor/new",
+                "https://note.com/notes/new",        # 旧URL
+                "https://note.com/sitesettings",
+            ]
+            compose_loaded = False
+            for url in compose_urls:
+                try:
+                    print(f"🔗 試行: {url}")
+                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(3000)
+                    # editorっぽいURLに辿り着いたか
+                    if "editor" in page.url or "/notes/" in page.url or "edit" in page.url:
+                        print(f"✅ エディタ到達: {page.url}")
+                        compose_loaded = True
+                        break
+                    else:
+                        print(f"⏭ {url} → リダイレクトor非エディタ ({page.url})")
+                except Exception as e:
+                    print(f"⏭ {url} 失敗: {e}")
+                    continue
+
+            if not compose_loaded:
+                # 最後の手段: マイページから「投稿」ボタンを探す
+                try:
+                    page.goto("https://note.com/", wait_until="domcontentloaded", timeout=20000)
+                    page.wait_for_timeout(2000)
+                    for sel in ['a:has-text("投稿")', 'button:has-text("投稿")', 'a[href*="new"]', 'a[href*="editor"]']:
+                        try:
+                            page.locator(sel).first.click(timeout=3000)
+                            page.wait_for_timeout(3000)
+                            print(f"✅ 投稿ボタン経由でエディタへ: {page.url}")
+                            compose_loaded = True
+                            break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+            shot(page, "02-editor-loaded")
+
+            if not compose_loaded:
+                print("ERROR: noteエディタへの遷移失敗", file=sys.stderr)
                 browser.close()
                 return 1
 
-            # 新規記事作成
-            page.goto("https://note.com/notes/new", wait_until="networkidle", timeout=30000)
-            page.wait_for_timeout(3000)
+            # タイトル入力 - セレクタ拡充
+            title_selectors = [
+                'textarea[placeholder*="タイトル"]',
+                'input[placeholder*="タイトル"]',
+                '[data-placeholder*="タイトル"]',
+                'textarea[aria-label*="タイトル"]',
+                'textarea[aria-label*="title"]',
+                'h1[contenteditable="true"]',
+                '[role="textbox"][aria-label*="タイトル"]',
+                'textarea.title',
+                '#noteTitleInput',
+            ]
+            title_filled = False
+            for sel in title_selectors:
+                try:
+                    title_el = page.locator(sel).first
+                    title_el.wait_for(timeout=5000, state="visible")
+                    title_el.click()
+                    title_el.fill(meta["title"])
+                    page.wait_for_timeout(500)
+                    print(f"✅ タイトル入力完了 (selector: {sel})")
+                    title_filled = True
+                    break
+                except Exception:
+                    continue
 
-            # タイトル入力
-            title_sel = 'textarea[placeholder*="タイトル"], input[placeholder*="タイトル"], [data-placeholder*="タイトル"], textarea[aria-label*="タイトル"]'
-            try:
-                title_el = page.locator(title_sel).first
-                title_el.wait_for(timeout=10000)
-                title_el.click()
-                title_el.fill(meta["title"])
-                page.wait_for_timeout(500)
-                print("✅ タイトル入力完了")
-            except PWTimeout:
-                print("WARNING: タイトル入力欄が見つかりませんでした", file=sys.stderr)
+            if not title_filled:
+                print("WARNING: タイトル入力欄が全候補マッチしませんでした", file=sys.stderr)
+                shot(page, "03-title-not-found")
 
             # 本文エリアへフォーカス
             page.keyboard.press("Tab")

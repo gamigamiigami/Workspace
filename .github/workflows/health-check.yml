@@ -62,4 +62,4 @@ jobs:
           - **X到達性失敗**: X側のメンテナンス or アクセス制限
 
           **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "bug,health-check"
+            --label "bug"

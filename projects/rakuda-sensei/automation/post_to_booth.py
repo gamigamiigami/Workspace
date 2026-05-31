@@ -195,13 +195,37 @@ def post_to_booth(
             locale="ja-JP",
             timezone_id="Asia/Tokyo",
         )
+
+        # クッキー認証を優先（reCAPTCHA回避）
+        cookie_json = os.environ.get("BOOTH_SESSION_COOKIE")
+        cookie_auth = False
+        if cookie_json:
+            try:
+                import json as _json
+                cookies = _json.loads(cookie_json)
+                context.add_cookies(cookies)
+                cookie_auth = True
+                print(f"🍪 クッキー認証 ({len(cookies)}個のクッキー)")
+            except Exception as e:
+                print(f"WARNING: クッキー解析失敗: {e}", file=sys.stderr)
+
         page = context.new_page()
 
         try:
-            if not login_to_booth(page, email, password):
-                page.screenshot(path="booth-login-failed.png")
-                browser.close()
-                return 1
+            if cookie_auth:
+                page.goto("https://manage.booth.pm/", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(2000)
+                if "login" in page.url.lower() or "accounts.pixiv.net" in page.url:
+                    print("ERROR: クッキーが無効/期限切れ。再取得してください", file=sys.stderr)
+                    page.screenshot(path="booth-cookie-invalid.png")
+                    browser.close()
+                    return 1
+                print(f"✅ BOOTHクッキーログインOK ({page.url})")
+            else:
+                if not login_to_booth(page, email, password):
+                    page.screenshot(path="booth-login-failed.png")
+                    browser.close()
+                    return 1
 
             # 新規商品作成ページへ
             page.goto("https://manage.booth.pm/items/new", wait_until="networkidle", timeout=30000)

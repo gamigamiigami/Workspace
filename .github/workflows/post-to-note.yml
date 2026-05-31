@@ -46,6 +46,7 @@ jobs:
 
       - name: Post to note.com
         env:
+          NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
         run: |
@@ -82,4 +83,4 @@ jobs:
           1. ArtifactのスクリーンショットでUI状態を確認
           2. note.com のエディタ仕様変更ならセレクタ更新
           3. 認証エラーならパスワード/2FA設定を確認" \
-            --label "bug,automation,platform-note"
+            --label "bug"

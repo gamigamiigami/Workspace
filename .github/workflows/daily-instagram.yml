@@ -122,4 +122,4 @@ jobs:
           - Instagram Graph APIレート制限
 
           **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "bug,automation,platform-instagram"
+            --label "bug"

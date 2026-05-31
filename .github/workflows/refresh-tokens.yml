@@ -50,4 +50,4 @@ jobs:
           2. 新しいトークンを \`META_ACCESS_TOKEN\` / \`THREADS_ACCESS_TOKEN\` に再登録
 
           **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "bug,automation"
+            --label "bug"

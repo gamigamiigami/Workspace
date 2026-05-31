@@ -61,6 +61,7 @@ jobs:
 
       - name: List product on BOOTH
         env:
+          BOOTH_SESSION_COOKIE: ${{ secrets.BOOTH_SESSION_COOKIE }}
           PIXIV_EMAIL: ${{ secrets.PIXIV_EMAIL }}
           PIXIV_PASSWORD: ${{ secrets.PIXIV_PASSWORD }}
         run: |
@@ -109,4 +110,4 @@ jobs:
           1. Artifactのスクリーンショットを確認
           2. BOOTH/pixiv UI変更ならセレクタ更新
           3. pixiv認証エラーならパスワード確認" \
-            --label "bug,automation,platform-booth"
+            --label "bug"
