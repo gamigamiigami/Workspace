@@ -56,7 +56,12 @@ jobs:
           git add projects/rakuda-sensei/dashboard/assets/posts/ projects/rakuda-sensei/sns/instagram/
           if ! git diff --staged --quiet; then
             git commit -m "chore(auto): Instagram画像 + 投稿MD生成"
-            git push
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin "${{ github.ref_name }}" || true
+              if git push; then exit 0; fi
+              sleep $((i * 2))
+            done
+            exit 1
           fi
 
       - name: Wait for raw.githubusercontent.com cache sync
@@ -80,7 +85,12 @@ jobs:
           git add projects/rakuda-sensei/sns/instagram/
           if ! git diff --staged --quiet; then
             git commit -m "chore(auto): Instagram投稿ステータス更新"
-            git push
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin "${{ github.ref_name }}" || true
+              if git push; then exit 0; fi
+              sleep $((i * 2))
+            done
+            exit 1
           fi
 
       - name: Upload error screenshot
