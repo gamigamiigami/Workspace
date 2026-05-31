@@ -6,6 +6,28 @@
 
 ---
 
+### 2026-05-31（weekly-content-pipelineの並列実行競合エラー修正）
+
+**うまくいったこと**
+- 3つの生成ジョブ（X / note / BOOTH）の並列実行による git push 競合を診断・修正
+- 並列pushレースを解決：複数ジョブの順次実行化 + pull-rebase再試行ロジック (指数バックオフ付き)
+- 修正内容を weekly-content-pipeline.yml に適用し、同様の修正を post-to-x, post-to-threads, daily-instagram にも展開
+- PR マージ完了、ワークフロー「Run workflow」で再度実行可能な状態に復帰
+
+**うまくいかなかったこと**
+- 初版設計で並列実行可能性を考慮し切れず、本番環境で初めて競合を検出
+
+**発見**
+- GitHub Actions での複数ジョブの git push：並列実行時に「リモートに新しいcommit」競合が発生しやすい
+- push競合対策：pull-rebase再試行（最大5回、待機時間2秒→4秒→6秒の指数バックオフ）で高確度に解決可能
+- 自動化パイプラインは「全ジョブ完了後に一括push」か「順次実行→最後に一括push」設計が安全
+
+**次回への申し送り**
+- weekly-content-pipeline.yml を再度実行しても競合なく完走する状態に到達
+- 同様の修正パターンが他ワークフロー（post-to-threads, daily-instagram など）にも適用済み
+
+---
+
 ### 2026-06-XX（GitHub Actions YAML修正・PR #6 マージ）
 
 **うまくいったこと**

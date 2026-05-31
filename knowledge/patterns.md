@@ -56,6 +56,63 @@ if: ${{ github.event_name == 'schedule' }}
 
 ---
 
+### [汎用] GitHub Actions での並列ジョブの git push 競合解消
+
+**用途：** 複数ジョブが並列実行され、それぞれが git push する際に「リモートに新しいcommitがある」エラーが発生する場合、順次実行化と再試行ロジックで解決
+
+**問題：** 
+```
+Error: failed to push some refs to 'https://github.com/.../repo.git'
+hint: Updates were rejected because the remote contains work that you do
+hint: not have locally. This is usually caused by another process pushing
+```
+→ 並列実行の複数ジョブが同時に push しようとして競合発生
+
+**解決策1：ジョブの順次実行化（推奨）**
+```yaml
+jobs:
+  generate-all:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate X content
+        run: python3 generate_x.py
+      
+      - name: Generate note content
+        run: python3 generate_note.py
+      
+      - name: Generate BOOTH content
+        run: python3 generate_booth.py
+      
+      - name: Push all at once
+        run: |
+          git add -A
+          git commit -m "chore: auto-generate content"
+          git push origin HEAD
+```
+
+**解決策2：並列ジョブの場合は pull-rebase 再試行（5回、指数バックオフ）**
+```yaml
+- name: Push with retry
+  run: |
+    for i in {1..5}; do
+      git push origin HEAD && break
+      echo "Push failed. Retrying in $(($i * 2)) seconds..."
+      sleep $(($i * 2))
+      git pull --rebase origin main
+    done
+```
+
+**ポイント：**
+- 複数ジョブの git操作は「最終的に同期が取れれば良い」という柔軟性が重要
+- 順次実行は遅いが確実；並列実行は速いが再試行ロジックが必須
+- 指数バックオフ（2秒→4秒→6秒）で、リモートの変更を拾う時間を稼ぐ
+
+**使用プロジェクト：** rakuda-sensei（weekly-content-pipeline.yml, post-to-x.yml, post-to-threads.yml, daily-instagram.yml）
+
+**タグ：** #github-actions #git #parallelism #concurrency
+
+---
+
 ## テンプレート
 
 ```
