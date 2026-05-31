@@ -6,6 +6,27 @@
 
 ---
 
+### 2026-05-31（別ブランチのクッキー設定ドキュメント検索・特定）
+
+**うまくいったこと**
+- 別ブランチ（`claude/workspace-knowledge-base-setup-ccVKP`）上のファイル探索でパス特定完了
+- Git ls-files コマンド活用で、複数ファイル（.github/workflows/check-cookies.yml、projects/rakuda-sensei/automation/check_cookies.py、cookie-setup.md）の存在確認
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- ドキュメント ファイル位置：`projects/rakuda-sensei/automation/setup/cookie-setup.md`
+- クッキー関連の自動化スクリプト・ワークフローが整備されている
+
+**次回への申し送り**
+- ユーザーが次のアクション実施予定：
+  1. cookie-setup.md で手順を読む（クッキー取得方法）
+  2. `NOTE_SESSION_COOKIE` / `BOOTH_SESSION_COOKIE` を Secrets に登録
+  3. Check Cookies ワークフロー（check-cookies.yml）を手動実行して認証確認
+
+---
+
 ### 2026-05-31（Playwrightの bot fingerprint対策と事前診断ワークフロー実装）
 
 **うまくいったこと**
