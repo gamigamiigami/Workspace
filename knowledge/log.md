@@ -4,6 +4,43 @@
 
 ---
 
+### [2026-06-03] addness-side-income — X自動投稿にreCAPTCHA対応実装・GitHub認証復旧待機
+
+**作業内容：**
+- **X自動投稿スクリプト（`post_to_x.py`）に `X_SESSION_COOKIE` 対応を実装**
+  - reCAPTCHA 回避のため、ブラウザセッションクッキー（Cookie-Editor 拡張で取得）を使用
+  - note 自動投稿と同じ認証パターンで統一
+  
+- **GitHub Actions ワークフロー更新（`post-to-x.yml`）**
+  - `X_SESSION_COOKIE` を Secret 経由で環境変数に渡す仕様に変更
+  - pull request 作成・push 完了
+
+- **ドキュメント整備（`cookie-setup.md`）**
+  - X用クッキー取得手順を追加（Cookie-Editor ブラウザ拡張で JSON Export）
+  - GitHub Secrets での登録手順も記載
+
+- **GitHub 認証の期間満了対応**
+  - セッション中盤で MCP 認証が無効化
+  - 自動 merge は一時中断、ユーザー手動確認 / merge 待機中
+
+**成果物：**
+- Pull Request：`claude/addness-side-income-7cjy2`（code push 済み、merge 待機中）
+  - `post_to_x.py`：X_SESSION_COOKIE 対応
+  - `post-to-x.yml`：Secret 統合
+  - `cookie-setup.md`：X クッキー設定ガイド追加
+
+**後続作業（ユーザー手動）：**
+1. PR merge（手動 or 認証復旧後自動）
+2. X クッキー取得：<https://x.com/home> で Cookie-Editor → Export JSON
+3. `X_SESSION_COOKIE` を <https://github.com/gamigamiigami/Workspace/settings/secrets/actions> に登録
+4. 次セッションで X 自動投稿テスト
+
+**知識資産：**
+- reCAPTCHA 対応パターン（ブラウザセッションクッキー）が note/X で統一
+- Threads/Instagram Meta API対応も同じ Secret パターンで可能（30分程度）
+
+---
+
 ### [2026-06-02] rakuda-sensei — BOOTH完全自動化からハイブリッドモデルへの撤退・スコープ縮小
 
 **作業内容：**

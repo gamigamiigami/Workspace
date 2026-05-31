@@ -6,6 +6,35 @@
 
 ---
 
+### 2026-06-03（セッション14・X自動投稿：reCAPTCHA対応とGitHub認証復旧）
+
+**うまくいったこと**
+- X自動投稿スクリプト（`post_to_x.py`）に `X_SESSION_COOKIE` 対応を実装し、reCAPTCHA回避が可能に
+- note 自動投稿と同じく、GitHub Actions Secret を用いたクッキーベース認証パターンを確立
+- クッキー設定ドキュメント（`cookie-setup.md`）に X用クッキー取得手順を追加完了
+- pull request 作成まで完了し、コード push は成功
+
+**うまくいかなかったこと**
+- GitHub の MCP 認証が期間満了により無効化（セッション中盤で発生）
+- 認証復旧までの間、自動 PR merge が一時的に不可能（ユーザーの手動確認が必要な状態に）
+
+**発見**
+- reCAPTCHA 対応の工程：クッキー自動化（X）+ GitHub Secret 登録（自動） + 手動 Secret 値設定（ユーザー操作）
+- X クッキー取得は Cookie-Editor ブラウザ拡張の JSON Export で簡潔に実装可能
+- note と X の投稿自動化パイプラインが同じ認証パターンで統一されたことで、今後の Threads/Instagram Meta API対応が既知パターンに落ちやすくなった
+
+**次回への申し送り**
+- merge 待機中：<https://github.com/gamigamiigami/Workspace/compare/claude/workspace-knowledge-base-setup-ccVKP...claude/addness-side-income-7cjy2>
+  - 選択肢A：ユーザーが認証URL経由で GitHub 再認可 → AI が自動 merge
+  - 選択肢B：ユーザーが GitHub UI から手動 merge（高速）
+- merge 後の ユーザー手動作業：
+  1. <https://x.com/home> でログイン状態で Cookie-Editor → Export JSON
+  2. <https://github.com/gamigamiigami/Workspace/settings/secrets/actions> で `X_SESSION_COOKIE` に登録
+  3. 次セッションで X 自動投稿テスト実行
+- Threads/Instagram Meta API 対応は 30分程度で可能（後回しでOK）
+
+---
+
 ### 2026-06-02（セッション13・BOOTH撤退判断：手動出品への戦略転換）
 
 **うまくいったこと**
