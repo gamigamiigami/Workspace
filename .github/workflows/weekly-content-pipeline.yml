@@ -3,7 +3,7 @@ name: Weekly Content Pipeline (生成→投稿の完全自動)
 # 毎週日曜 21:00 UTC (JST月曜6:00) に下記を全自動実行:
 #  1. X週次14本AI生成 (3本柱ローテ)
 #  2. note記事1本AI生成 (3本柱ローテ) → 翌日に自動投稿
-#  3. 第1週・第3週はBOOTH教材1本AI生成 → 翌日に自動出品
+#  3. 週次でBOOTH教材1本AI生成 → 翌日に自動出品
 # すべてGitHub Models (無料) + Playwright/Graph API (無料)
 
 on:
@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       include_booth:
-        description: "BOOTH商品も生成する (通常は隔週)"
+        description: "BOOTH商品も生成する"
         required: false
         type: boolean
         default: false
@@ -28,17 +28,32 @@ permissions:
   actions: write  # 連鎖ワークフロー起動のため
 
 jobs:
-  generate-x-weekly:
+  # 全生成を1ジョブで完結（並列pushの競合を回避）
+  generate-all:
     runs-on: ubuntu-latest
+    outputs:
+      article_path: ${{ steps.gen-note.outputs.article_path }}
+      pillar: ${{ steps.gen-note.outputs.pillar }}
+      product_path: ${{ steps.gen-booth.outputs.product_path }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: "pip"
           cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
+
       - run: pip install -r projects/rakuda-sensei/automation/requirements.txt
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # === 1. X週次14本生成 ===
       - name: Generate weekly X posts (3本柱対応)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -46,35 +61,14 @@ jobs:
 
       - name: Commit X weekly
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add projects/rakuda-sensei/sns/weekly/
           if ! git diff --staged --quiet; then
             git commit -m "chore(auto): X週次14本生成 (3本柱)"
-            git push
           fi
 
-  generate-note-article:
-    runs-on: ubuntu-latest
-    needs: generate-x-weekly
-    outputs:
-      article_path: ${{ steps.gen.outputs.article_path }}
-      pillar: ${{ steps.gen.outputs.pillar }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref }}
-          fetch-depth: 0
-      - run: git pull --ff-only origin ${{ github.ref_name }} || true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
-      - run: pip install -r projects/rakuda-sensei/automation/requirements.txt
-
+      # === 2. note記事1本生成 ===
       - name: Generate note article (柱ローテ)
-        id: gen
+        id: gen-note
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PILLAR: ${{ inputs.pillar_override }}
@@ -82,53 +76,47 @@ jobs:
 
       - name: Commit note article
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add projects/rakuda-sensei/articles/
           if ! git diff --staged --quiet; then
-            git commit -m "chore(auto): note記事生成 (柱${{ steps.gen.outputs.pillar }})"
-            git push
+            git commit -m "chore(auto): note記事生成 (柱${{ steps.gen-note.outputs.pillar }})"
           fi
 
-  generate-booth-product:
-    runs-on: ubuntu-latest
-    needs: generate-x-weekly
-    if: ${{ inputs.include_booth == true || github.event_name == 'schedule' }}
-    outputs:
-      product_path: ${{ steps.gen.outputs.product_path }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - run: git pull --ff-only origin ${{ github.ref_name }} || true
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: "pip"
-          cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
-      - run: pip install -r projects/rakuda-sensei/automation/requirements.txt
-
+      # === 3. BOOTH教材1本生成（条件付き）===
       - name: Generate BOOTH product (単元ローテ)
-        id: gen
+        id: gen-booth
+        if: ${{ inputs.include_booth == true || github.event_name == 'schedule' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python projects/rakuda-sensei/automation/generate_booth_product.py
 
       - name: Commit BOOTH product
+        if: ${{ inputs.include_booth == true || github.event_name == 'schedule' }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add projects/rakuda-sensei/products/
           if ! git diff --staged --quiet; then
             git commit -m "chore(auto): BOOTH教材生成"
-            git push
           fi
 
-  # 生成完了後、note自動投稿ワークフローを起動
+      # === 一括push（pull-rebase付き再試行）===
+      - name: Push all commits with retry
+        run: |
+          for i in 1 2 3 4 5; do
+            git pull --rebase origin "${{ github.ref_name }}" || true
+            if git push; then
+              echo "✅ Push成功 (試行 $i)"
+              exit 0
+            fi
+            echo "⏳ Push失敗、$((i * 3))秒待機して再試行..."
+            sleep $((i * 3))
+          done
+          echo "❌ Push最大試行回数到達"
+          exit 1
+
+  # note自動投稿起動
   trigger-note-post:
     runs-on: ubuntu-latest
-    needs: generate-note-article
-    if: needs.generate-note-article.outputs.article_path != ''
+    needs: generate-all
+    if: needs.generate-all.outputs.article_path != ''
     steps:
       - name: Trigger post-to-note workflow
         env:
@@ -139,13 +127,13 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/post-to-note.yml/dispatches" \
-            -d '{"ref":"${{ github.ref_name }}","inputs":{"article_path":"${{ needs.generate-note-article.outputs.article_path }}","dry_run":false}}'
+            -d '{"ref":"${{ github.ref_name }}","inputs":{"article_path":"${{ needs.generate-all.outputs.article_path }}","dry_run":false}}'
 
   # BOOTH自動出品起動
   trigger-booth-post:
     runs-on: ubuntu-latest
-    needs: generate-booth-product
-    if: needs.generate-booth-product.outputs.product_path != ''
+    needs: generate-all
+    if: needs.generate-all.outputs.product_path != ''
     steps:
       - name: Trigger post-to-booth workflow
         env:
@@ -156,4 +144,4 @@ jobs:
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/post-to-booth.yml/dispatches" \
-            -d '{"ref":"${{ github.ref_name }}","inputs":{"product_path":"${{ needs.generate-booth-product.outputs.product_path }}","dry_run":false}}'
+            -d '{"ref":"${{ github.ref_name }}","inputs":{"product_path":"${{ needs.generate-all.outputs.product_path }}","dry_run":false}}'

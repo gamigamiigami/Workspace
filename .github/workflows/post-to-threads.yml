@@ -67,5 +67,10 @@ jobs:
           git add projects/rakuda-sensei/sns/.threads-posted.log
           if ! git diff --staged --quiet; then
             git commit -m "chore(automation): Threads投稿ログ更新"
-            git push
+            for i in 1 2 3 4 5; do
+              git pull --rebase origin "${{ github.ref_name }}" || true
+              if git push; then exit 0; fi
+              sleep $((i * 2))
+            done
+            exit 1
           fi

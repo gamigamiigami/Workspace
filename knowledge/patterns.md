@@ -7,6 +7,55 @@
 
 ---
 
+## GitHub Actions
+
+### [汎用] GitHub Actions の条件式制限と回避策
+
+**用途：** GitHub Actions ワークフロー内で複雑な条件（モジュロ演算など）を使う場合、native な条件式では対応不可なため、ロジックを簡潔化するか外部スクリプト呼び出しに委譲する
+
+**制限一覧：**
+- ❌ モジュロ演算（`%`）：非対応
+- ❌ 複雑な数値演算：非対応
+- ✅ 単純な比較（`==`, `!=`, `>`, `<`）：対応
+- ✅ 論理演算（`&&`, `||`, `!`）：対応
+
+**回避策1：ロジックを簡潔化（推奨）**
+```yaml
+# 旧：隔週で生成（モジュロが必要で失敗）
+if: ${{ github.event.schedule && (github.run_number % 2 == 0) }}
+
+# 新：スケジュール実行時は常に生成
+if: ${{ github.event_name == 'schedule' }}
+```
+
+**回避策2：Python スクリプトに委譲（複雑な場合）**
+```yaml
+- name: Determine action
+  id: action_decider
+  run: |
+    week_num=$(($(date +%V) % 2))
+    if [ $week_num -eq 0 ]; then
+      echo "generate_booth=true" >> $GITHUB_OUTPUT
+    else
+      echo "generate_booth=false" >> $GITHUB_OUTPUT
+    fi
+
+- name: Run BOOTH generation
+  if: steps.action_decider.outputs.generate_booth == 'true'
+  run: python3 generate_booth.py
+```
+
+**ポイント：**
+- GitHub Actions の条件式は intentionally シンプル設計（デバッグ性重視）
+- 複雑なビジネスロジックは Python/Bash スクリプト層で実装すべき
+- ワークフローは「どのスクリプトをいつ呼ぶか」に徹する設計が保守性を上げる
+
+**使用プロジェクト：** rakuda-sensei（weekly-content-pipeline.yml）
+
+**タグ：** #github-actions #yaml #debugging #conditional-logic
+
+---
+
 ## テンプレート
 
 ```
