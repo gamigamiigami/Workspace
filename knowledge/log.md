@@ -4,6 +4,63 @@
 
 ---
 
+### [2026-05-31] rakuda-sensei Playwright bot対策 — headless Chrome検知回避 + 事前診断ワークフロー実装
+
+**作業内容：**
+- **Failure Mode シミュレーション**：6パターンの失敗可能性を評価・対策マッピング完了
+  1. Playwright bot fingerprint検知（高確率）→ navigator.webdriver他4つの偽装実装
+  2. note editor セレクタ不一致（中確率）→ 複数候補フォールバック + スクショ保存
+  3. クッキー形式不一致（中確率）→ 事前診断スクリプト追加
+  4. 下書き止まり（中確率）→ 投稿後URL確認 + 一覧訪問検証
+  5. CSRF トークン期限切れ（低確率）→ リトライで救える想定
+  6. IP ブロック（低確率）→ 対策不可（手動運用フォールバック）
+- **headless Chrome偽装実装**：Playwright ページ生成時に `add_init_script()` で４つのシグナルを偽装
+  - `navigator.webdriver` を `undefined` に
+  - `window.chrome.runtime` を定義
+  - `navigator.plugins` を非空に
+  - `navigator.languages` を日本語＋英語に設定
+- **事前診断ワークフロー（check-cookies.yml）設計・実装**：本番投稿前に認証テストのみ実行
+  - クッキー形式の正規化確認
+  - ログイン状態確認
+  - screenshot artifact で実際の画面可視化
+  - ユーザーが実際のUI確認できるように
+- **複数セレクタ候補の統合**：note editor セレクタを3〜5個候補で用意してフォールバック
+- **投稿後検証の強化**：URL確認 + 一覧訪問で投稿成功確定
+
+**新しい運用フロー提示：**
+```
+ステップ1：クッキー取得（初回のみ）
+  → Cookie-Editor で取得 → Secrets登録
+
+ステップ2：🆕 事前診断（毎回推奨）
+  → check-cookies.yml 実行 → screenshot確認
+  → ✅ ログインOK なら本番実行確率↑↑
+
+ステップ3：本番投稿
+  → post-to-note.yml等実行 → screenshot で画面確認
+```
+
+**正直なリスク残存：**
+- note特有のbot検知ロジック（秘匿）はheadless Chrome対策で全防御不可能
+- IPベースのブロックはクッキー有効でも発生し得る
+- UI構造の大幅変更には複数セレクタでもカバーしきれない可能性
+
+**修正ファイル：**
+- `projects/rakuda-sensei/automation/post_to_note.py`（bot偽装スクリプト + 複数セレクタ + 投稿後検証追加）
+- `projects/rakuda-sensei/automation/post_to_booth.py`（同上）
+- `.github/workflows/check-cookies.yml`（新規ファイル）
+
+**成果物：**
+- Failure Mode シミュレーション表（task-diary.mdで記録）
+- 事前診断ワークフローの完全実装
+- ユーザー向けの運用フロー設計書
+
+**次ステップ：**
+- ユーザーが事前診断ワークフロー実行 → screenshot で UI確認
+- 本番投稿ワークフロー実行 → 実機動作検証
+
+---
+
 ### [2026-05-31] rakuda-sensei クッキー認証 — Playwright SetCookieParam への正規化実装完了
 
 **作業内容：**
