@@ -660,32 +660,98 @@ def post_to_booth(
                 browser.close()
                 return 1
 
-            # 説明文
-            if meta["description"]:
-                try:
-                    desc_area = page.locator('textarea[name="item[description]"], textarea[placeholder*="説明"]').first
-                    desc_area.fill(meta["description"], timeout=5000)
-                    page.wait_for_timeout(300)
-                    print("✅ 説明文入力完了")
-                except Exception as e:
-                    print(f"WARNING: 説明文入力失敗: {e}", file=sys.stderr)
-
-            # 価格
+            # === 各入力ステップごとにスクショ + 詳細ログ ===
             try:
-                price_input = page.locator('input[name="item[price]"], input[type="number"]').first
-                price_input.fill(str(meta["price"]), timeout=5000)
-                page.wait_for_timeout(300)
-                print(f"✅ 価格入力完了: ¥{meta['price']}")
-            except Exception as e:
-                print(f"WARNING: 価格入力失敗: {e}", file=sys.stderr)
-
-            # カテゴリ
-            try:
-                cat_sel = page.locator('select[name*="category"]').first
-                cat_sel.select_option(label="ダウンロードコンテンツ", timeout=5000)
-                page.wait_for_timeout(300)
+                page.screenshot(path="booth-03-after-name.png", full_page=True)
             except Exception:
                 pass
+
+            # 説明文 - セレクタ拡充
+            desc_selectors = [
+                'textarea[name="item[description]"]',
+                'textarea[name*="description"]',
+                'textarea[placeholder*="説明"]',
+                'textarea[placeholder*="商品の説明"]',
+                'textarea[aria-label*="説明"]',
+                '[contenteditable="true"][role="textbox"]',
+            ]
+            desc_filled = False
+            if meta["description"]:
+                for sel in desc_selectors:
+                    try:
+                        el = page.locator(sel).first
+                        el.wait_for(timeout=3000, state="visible")
+                        el.fill(meta["description"], timeout=5000)
+                        page.wait_for_timeout(300)
+                        print(f"✅ 説明文入力完了 (selector: {sel})")
+                        desc_filled = True
+                        break
+                    except Exception:
+                        continue
+                if not desc_filled:
+                    print("WARNING: 説明文入力欄が見つかりませんでした", file=sys.stderr)
+            try:
+                page.screenshot(path="booth-04-after-desc.png", full_page=True)
+            except Exception:
+                pass
+
+            # 価格 - セレクタ拡充
+            price_selectors = [
+                'input[name="item[price]"]',
+                'input[name*="price"]',
+                'input[type="number"][name*="price"]',
+                'input[placeholder*="価格"]',
+                'input[placeholder*="¥"]',
+                'input[type="number"]',
+            ]
+            price_filled = False
+            for sel in price_selectors:
+                try:
+                    el = page.locator(sel).first
+                    el.wait_for(timeout=3000, state="visible")
+                    el.fill(str(meta["price"]), timeout=5000)
+                    page.wait_for_timeout(300)
+                    print(f"✅ 価格入力完了: ¥{meta['price']} (selector: {sel})")
+                    price_filled = True
+                    break
+                except Exception:
+                    continue
+            if not price_filled:
+                print(f"❌ 価格入力欄が見つからない", file=sys.stderr)
+            try:
+                page.screenshot(path="booth-05-after-price.png", full_page=True)
+            except Exception:
+                pass
+
+            # カテゴリ - 複数候補で試行
+            category_selectors = [
+                ('select[name*="category"]', "ダウンロードコンテンツ"),
+                ('select[name*="category"]', "教材・本"),
+                ('select[name*="category"]', "ドキュメント"),
+            ]
+            category_set = False
+            for sel, label in category_selectors:
+                try:
+                    page.locator(sel).first.select_option(label=label, timeout=3000)
+                    page.wait_for_timeout(300)
+                    print(f"✅ カテゴリ設定: {label}")
+                    category_set = True
+                    break
+                except Exception:
+                    continue
+            if not category_set:
+                # ラジオボタン式の可能性
+                for sel in ['label:has-text("ダウンロードコンテンツ")', '[role="radio"]:has-text("ダウンロード")']:
+                    try:
+                        page.locator(sel).first.click(timeout=3000)
+                        page.wait_for_timeout(300)
+                        print(f"✅ カテゴリラジオ選択: {sel}")
+                        category_set = True
+                        break
+                    except Exception:
+                        continue
+            if not category_set:
+                print("WARNING: カテゴリ設定スキップ（select も radio も無し）", file=sys.stderr)
 
             # ファイルアップロード
             if pdf_file and pdf_file.exists():
@@ -695,30 +761,114 @@ def post_to_booth(
                     print(f"✅ ファイルアップロード完了: {pdf_file.name}")
                 except Exception as e:
                     print(f"WARNING: ファイルアップロード失敗: {e}", file=sys.stderr)
+            else:
+                print(f"⚠️ PDFファイルが指定されていない (BOOTHはダウンロードコンテンツに必須の場合あり)")
+            try:
+                page.screenshot(path="booth-06-after-file.png", full_page=True)
+            except Exception:
+                pass
 
             # 在庫: 無制限
             try:
                 page.locator('input[value="unlimited"], label:has-text("無制限")').first.click(timeout=5000)
                 page.wait_for_timeout(300)
+                print("✅ 在庫無制限を選択")
             except Exception:
                 pass
 
-            # 出品
+            try:
+                page.screenshot(path="booth-07-final-form.png", full_page=True)
+            except Exception:
+                pass
+
+            # === 各ステップでスクショ保存（デバッグ可視化） ===
+            try:
+                page.screenshot(path="booth-08-before-submit.png", full_page=True)
+                print("📸 booth-08-before-submit.png 保存")
+            except Exception:
+                pass
+
+            # 出品ボタン押下
+            print("\n🚀 出品ボタンを探してクリック")
+            submit_selectors = [
+                'button[type="submit"]:has-text("出品")',
+                'button[type="submit"]:has-text("登録")',
+                'button[type="submit"]:has-text("保存")',
+                'button[type="submit"]:has-text("公開")',
+                'button:has-text("登録する")',
+                'button:has-text("出品する")',
+                'button:has-text("公開する")',
+                'input[type="submit"]',
+                'button[type="submit"]',
+            ]
             submitted = False
-            for sel in ['button[type="submit"]:has-text("出品")', 'button[type="submit"]:has-text("保存")', 'input[type="submit"]']:
+            for sel in submit_selectors:
                 try:
-                    page.locator(sel).first.click(timeout=5000)
-                    page.wait_for_timeout(5000)
+                    btn = page.locator(sel).first
+                    btn.wait_for(timeout=3000, state="visible")
+                    print(f"   → 出品ボタン発見: {sel}")
+                    btn.click(timeout=5000)
+                    page.wait_for_timeout(7000)
                     submitted = True
+                    print(f"   ✅ クリック完了 → URL: {page.url}")
                     break
                 except Exception:
                     continue
 
-            if submitted and "items" in page.url:
-                print(f"✅ BOOTH出品完了！URL: {page.url}")
-            else:
-                print("WARNING: 出品確認ができませんでした", file=sys.stderr)
-                page.screenshot(path="booth-post-result.png")
+            try:
+                page.screenshot(path="booth-09-after-submit.png", full_page=True)
+                print("📸 booth-09-after-submit.png 保存")
+            except Exception:
+                pass
+
+            if not submitted:
+                print("❌ 出品ボタンが見つかりませんでした", file=sys.stderr)
+                # ボタン候補をダンプ
+                try:
+                    btn_dump = page.locator("button, input[type='submit']").evaluate_all(
+                        "els => els.slice(0, 20).map(e => ({tag: e.tagName, type: e.type || '', text: (e.innerText||'').trim().slice(0,50), name: e.name}))"
+                    )
+                    print("\n=== ページ上の全ボタン ===")
+                    for b in btn_dump:
+                        print(f"  <{b['tag']} type={b.get('type','')!r}> text={b.get('text','')!r} name={b.get('name','')!r}")
+                except Exception:
+                    pass
+                browser.close()
+                return 1
+
+            # === 出品確認: /items 一覧で実際に商品が見えるか ===
+            print("\n🔎 出品確認: /items 一覧に商品が現れているか")
+            try:
+                page.goto("https://manage.booth.pm/items", wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(4000)
+                page.screenshot(path="booth-10-verify-items-list.png", full_page=True)
+                print(f"   📸 booth-10-verify-items-list.png 保存")
+
+                # 商品タイトルの前方一致でチェック
+                title_snippet = meta["title"][:15] if meta["title"] else ""
+                if title_snippet:
+                    body_text = page.locator("body").inner_text()
+                    if title_snippet in body_text:
+                        print(f"   ✅ 商品確認OK: 「{title_snippet}」が /items に存在")
+                        browser.close()
+                        return 0
+                    else:
+                        print(f"   ❌ 商品が /items に見当たらない")
+                        print(f"      → サイレント失敗。フォーム送信できてない可能性")
+                        # 一覧ページの構造をダンプ
+                        items_text = body_text[:1500]
+                        print(f"\n=== /items ページ可視テキスト先頭1500字 ===")
+                        print(items_text)
+                        browser.close()
+                        return 1
+                else:
+                    print(f"   ⚠️ タイトル不明で確認スキップ")
+                    browser.close()
+                    return 1
+            except Exception as e:
+                print(f"   ⚠️ 確認中エラー: {e}", file=sys.stderr)
+                browser.close()
+                return 1
 
         except Exception as e:
             print(f"ERROR: 予期しないエラー: {e}", file=sys.stderr)
