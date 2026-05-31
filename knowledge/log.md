@@ -4,6 +4,49 @@
 
 ---
 
+### [2026-05-31] rakuda-sensei クッキー認証 — Playwright SetCookieParam への正規化実装完了
+
+**作業内容：**
+- **Cookie-Editor互換性検証**：Playwright インストール & 実際の型定義を確認（`SetCookieParam`）
+- **バグ発見**：前回実装の4つの非互換性を検出
+  - `expirationDate` → `expires` フィールド名変更（型：float）
+  - `sameSite: "lax"` → `sameSite: "Lax"` （大文字化）
+  - `sameSite: "no_restriction"` → `sameSite: "None"` 
+  - 不要フィールド（hostOnly, session, storeId）を除去
+- **`normalize_cookies()` 関数実装**：両モジュール（post_to_note.py / post_to_booth.py）に統合
+- **検証**：Playwright 型定義とのマッピング全検証、単体テスト合格
+
+**修正内容：**
+```python
+# 例：Cookie-Editor出力 → Playwright対応
+{
+  "expirationDate": 1764000000,  # ❌ Playwrightは "expires" と float型 を期待
+  "sameSite": "lax",             # ❌ "Lax" に大文字化必須
+  "hostOnly": true,              # ❌ 余計なフィールド（除去）
+}
+→
+{
+  "expires": 1764000000.0,       # ✅ フロート型
+  "sameSite": "Lax",             # ✅ 大文字
+}
+```
+
+**成果物：**
+- `projects/rakuda-sensei/automation/post_to_note.py`（normalize_cookies追加）
+- `projects/rakuda-sensei/automation/post_to_booth.py`（normalize_cookies追加）
+
+**環境制約：**
+- Chromium ダウンロード不可（GitHub Actions ローカル環境でのネットワーク制限）
+- 実運用検証はユーザーが GitHub Actions 上で実行 → ログ確認必須
+
+**期待される成功ログ：**
+```
+🍪 クッキー認証 (N個・正規化済み)
+✅ クッキーログインOK
+```
+
+---
+
 ### [2026-06-XX] Instagram自動化 実装開始 — 画像生成スクリプト追加
 
 **作業内容：**

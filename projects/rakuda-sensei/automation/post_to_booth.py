@@ -29,6 +29,21 @@ USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
+STEALTH_JS = """
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
+Object.defineProperty(navigator, 'plugins', {
+  get: () => [{name: 'Chrome PDF Plugin'}, {name: 'Chrome PDF Viewer'}, {name: 'Native Client'}]
+});
+window.chrome = { runtime: {} };
+const getParameter = WebGLRenderingContext.prototype.getParameter;
+WebGLRenderingContext.prototype.getParameter = function(parameter) {
+  if (parameter === 37445) return 'Intel Inc.';
+  if (parameter === 37446) return 'Intel Iris OpenGL Engine';
+  return getParameter.apply(this, [parameter]);
+};
+"""
+
 
 def normalize_cookies(raw_json: str) -> list:
     """Cookie-Editor JSONをPlaywright SetCookieParam形式に正規化"""
@@ -222,13 +237,24 @@ def post_to_booth(
     from playwright.sync_api import sync_playwright, TimeoutError as PWTimeout
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+            ],
+        )
         context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
+            viewport={"width": 1366, "height": 768},
             user_agent=USER_AGENT,
             locale="ja-JP",
             timezone_id="Asia/Tokyo",
+            extra_http_headers={
+                "Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8",
+            },
         )
+        context.add_init_script(STEALTH_JS)
 
         # クッキー認証を優先（reCAPTCHA回避）
         cookie_json = os.environ.get("BOOTH_SESSION_COOKIE")

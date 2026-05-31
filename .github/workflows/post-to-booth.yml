@@ -85,13 +85,14 @@ jobs:
 
           eval python projects/rakuda-sensei/automation/post_to_booth.py $ARGS
 
-      - name: Upload error screenshot (on failure)
-        if: failure()
+      - name: Upload screenshots (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: booth-post-screenshot
+          name: booth-post-screenshots
           path: "*.png"
           if-no-files-found: ignore
+          retention-days: 7
 
       - name: Create issue on failure
         if: failure()
