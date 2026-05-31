@@ -6,6 +6,34 @@
 
 ---
 
+### 2026-05-31（Playwrightクッキー認証の実装検証と修正）
+
+**うまくいったこと**
+- Playwrightをインストールして実際に型定義を確認
+- Cookie-Editorの出力形式とPlaywright `SetCookieParam` の非互換性を特定（sameSite、expirationDate）
+- `normalize_cookies()` 関数を実装・テスト完了、単体テストで正常動作確認
+- normalize_cookies()の出力が全フィールド準拠であることを検証
+- 両モジュール（post_to_note.py、post_to_booth.py）での統合テスト完了
+
+**うまくいかなかったこと**
+- Chromiumのダウンロードがネットワーク制限で不可（環境制約）
+- 前回実装したコードが重大な型エラーを含んでいた（ユーザーが貼ったクッキーは認証スキップされていた可能性）
+
+**発見**
+- Cookie-Editorの形式とPlaywright要件の非互換性：
+  - Cookie-Editor: `"sameSite": "lax"` → Playwright: `"Lax"` (大文字必須)
+  - Cookie-Editor: `"expirationDate": 1764000000` → Playwright: `"expires"` フィールド（異なるキー）
+- 前回のコードではこの変換がなく、ユーザーがクッキー認証を試しても失敗していた可能性
+- Playwright公式の `SetCookieParam` 型定義を直接inspectして検証することの有効性
+
+**次回への申し送り**
+- ブラウザ自体は環境制約でローカル実機テスト不可
+- GitHub Actions上での実運用動作確認が必須（ユーザーがワークフロー再ラン → ログ確認）
+- ログに `🍪 クッキー認証 (N個・正規化済み)` と `✅ クッキーログインOK` が出れば成功
+- 今度のコードは Playwright公式型定義とCookie-Editorのマッピング検証済みで信頼度が高い
+
+---
+
 ### 2026-05-31（GitHub Actions クッキー認証への移行設計）
 
 **うまくいったこと**
