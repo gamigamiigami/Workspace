@@ -60,3 +60,22 @@ jobs:
           name: note-post-screenshot
           path: "*.png"
           if-no-files-found: ignore
+
+      - name: Create issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🚨 note記事投稿失敗 ($(date +%Y-%m-%d))" \
+            --body "note記事の自動投稿が失敗しました。
+
+          - **記事**: \`${{ inputs.article_path }}\`
+          - **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+          ## 対応
+          1. ArtifactのスクリーンショットでUI状態を確認
+          2. note.com のエディタ仕様変更ならセレクタ更新
+          3. 認証エラーならパスワード/2FA設定を確認" \
+            --label "bug,automation,platform-note"

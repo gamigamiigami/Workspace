@@ -82,3 +82,27 @@ jobs:
           name: x-post-screenshot
           path: "*.png"
           if-no-files-found: ignore
+
+      - name: Create issue on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue create \
+            --repo "${{ github.repository }}" \
+            --title "🚨 X投稿失敗 ($(date +%Y-%m-%d_%H:%M))" \
+            --body "X(Twitter)への自動投稿が失敗しました。
+
+          ## 考えられる原因
+          - X側でアカウントが一時ロックされた（手動ログインで解除必要）
+          - 認証コード要求（メール確認が必要）
+          - X UIの変更（セレクタ要更新）
+          - X_USERNAME / X_PASSWORD が正しくない
+
+          ## 対応
+          1. 実行ログのArtifactにあるスクリーンショットを確認
+          2. 必要なら手動でXにログインしてロック解除
+          3. それでも継続失敗するならX native scheduler に切替
+
+          **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --label "bug,automation,platform-x"

@@ -32,6 +32,31 @@ USER_AGENT = (
 )
 
 
+def try_selectors(page, selectors: list[str], action: str = "fill", value: str = "",
+                  timeout_each: int = 5000, action_name: str = "操作") -> bool:
+    """
+    複数セレクタを順に試して最初に見つかったものを操作する。
+    UIが変わってもセレクタリストのどれかにヒットすれば壊れない。
+    """
+    from playwright.sync_api import TimeoutError as PWTimeout
+    for sel in selectors:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(timeout=timeout_each, state="visible")
+            if action == "fill":
+                el.fill(value)
+            elif action == "click":
+                el.click(timeout=timeout_each)
+            elif action == "press_enter_in":
+                el.fill(value)
+                el.press("Enter")
+            return True
+        except (PWTimeout, Exception):
+            continue
+    print(f"WARNING: {action_name} のセレクタが全部マッチしませんでした", file=sys.stderr)
+    return False
+
+
 def extract_meta_from_table(text: str) -> dict:
     """記事MDの投稿メタデータ表からタイトル・価格・タグを抽出"""
     meta = {"title": "", "price": 0, "tags": []}
