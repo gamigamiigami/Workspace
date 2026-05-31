@@ -88,6 +88,13 @@ def check_one(site_name: str, secret_env: str, normalizer, urls_to_check: list, 
 
         page = context.new_page()
 
+        try:
+            from playwright_stealth import stealth_sync
+            stealth_sync(page)
+            print(f"     🥷 playwright-stealth 適用")
+        except Exception:
+            pass
+
         all_ok = True
         for url in urls_to_check:
             try:

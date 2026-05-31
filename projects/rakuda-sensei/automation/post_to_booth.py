@@ -272,6 +272,16 @@ def post_to_booth(
 
         page = context.new_page()
 
+        # playwright-stealth (最初のgoto前に適用)
+        try:
+            from playwright_stealth import stealth_sync
+            stealth_sync(page)
+            print("🥷 playwright-stealth 適用")
+        except ImportError:
+            print("⚠️ playwright-stealth未インストール")
+        except Exception as e:
+            print(f"⚠️ stealth適用エラー（続行）: {e}")
+
         try:
             if cookie_auth:
                 page.goto("https://manage.booth.pm/", wait_until="domcontentloaded", timeout=30000)

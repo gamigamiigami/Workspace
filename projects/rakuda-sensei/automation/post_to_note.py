@@ -303,7 +303,7 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
                 "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
             },
         )
-        # bot fingerprint隠蔽
+        # bot fingerprint隠蔽（自作JS）
         context.add_init_script(STEALTH_JS)
 
         # クッキー認証を優先（reCAPTCHA回避・推奨）
@@ -321,6 +321,16 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
                 traceback.print_exc(file=sys.stderr)
 
         page = context.new_page()
+
+        # playwright-stealth で19種類以上のbot検知回避を適用 (最初のgoto前)
+        try:
+            from playwright_stealth import stealth_sync
+            stealth_sync(page)
+            print("🥷 playwright-stealth 適用 (19種類のbot検知回避)")
+        except ImportError:
+            print("⚠️ playwright-stealth未インストール、自作STEALTH_JSのみ使用")
+        except Exception as e:
+            print(f"⚠️ stealth適用エラー（続行）: {e}")
 
         try:
             if cookie_auth:
