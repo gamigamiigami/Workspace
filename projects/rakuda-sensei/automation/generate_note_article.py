@@ -27,6 +27,7 @@ PERSONA_PATH = ROOT / "knowledge" / "persona.md"
 PLAYBOOK_PATH = ROOT / "knowledge" / "sns-playbook.md"
 PRODUCT_PLAYBOOK = ROOT / "knowledge" / "product-playbook.md"
 VOICE_PATH = ROOT / "knowledge" / "voice-and-style.md"  # 最優先参照
+SALES_PATH = ROOT / "knowledge" / "sales-playbook.md"  # 売れる記事戦略
 NOTE_SKILL = ROOT / ".claude" / "skills" / "note-writer" / "SKILL.md"
 ARTICLES_DIR = ROOT / "projects" / "rakuda-sensei" / "articles"
 REPORTS_DIR = ROOT / "projects" / "rakuda-sensei" / "reports"
@@ -58,16 +59,21 @@ PILLARS = {
         "name": "公務員×資産形成・節約",
         "tags": "#公務員 #資産形成 #つみたてNISA",
         "topics": [
-            "5年で2000万貯めた公務員の家計簿全公開",
-            "教員のためのつみたてNISA配分テンプレ",
-            "iDeCo vs つみたてNISA 公務員の正解",
+            # === フェーズ1: 集中強化4本（sales-playbook.md 戦略決定） ===
+            "公務員が5年で2000万貯めた｜オルカン80%・実家暮らしの全戦略",
+            "日本株デイトレで-50万｜失敗から学んだ低リスク投資配分",
+            "20代公務員の家計簿全公開｜支出10万で月30万貯金する仕組み",
+            "教員×つみたてNISA｜共働き予定夫婦のFIREロードマップ",
+            # === フェーズ2: ローテ用ストック ===
+            "iDeCo使わない公務員の選択｜つみたてNISAだけで十分な理由",
             "公務員共済貯金を最大限活用する方法",
             "節約Tips30: 月3万浮かせた具体策",
             "教員の手取りを最適化する控除術",
             "20代公務員のFIREロードマップ",
             "ふるさと納税で得する公務員設計",
+            "バリスタファイアを目指す夫婦のお金会議テンプレ",
         ],
-        "price_range": (500, 1500),
+        "price_range": (500, 980),
     },
     "C": {
         "name": "教育ゲーム制作・バイブコーディング",
@@ -88,18 +94,24 @@ PILLARS = {
 
 
 def next_pillar() -> str:
-    """直近3回のローテーション履歴から次に書くべき柱を決定"""
+    """
+    柱B（公務員×資産形成）集中強化戦略（2026-05-31 sales-playbook.md準拠）:
+      - 最初の4本: 全てB（ブランド確立）
+      - 5本目以降: B → A → B → C → B → A → B → C ... (B 50% / A 25% / C 25%)
+    """
     if not ROTATION_LOG.exists():
-        return "A"
+        return "B"
     lines = [l.strip() for l in ROTATION_LOG.read_text(encoding="utf-8").splitlines() if l.strip()]
-    last_three = [l.split("\t")[-1] for l in lines[-3:]] if lines else []
-    # A→B→C→A→B→C... のローテ
-    order = ["A", "B", "C"]
-    if not last_three:
-        return "A"
-    last = last_three[-1]
-    idx = order.index(last) if last in order else -1
-    return order[(idx + 1) % 3]
+    history = [l.split("\t")[-1] for l in lines]
+    n = len(history)
+
+    # フェーズ1: 最初の4本は全てB
+    if n < 4:
+        return "B"
+
+    # フェーズ2: B重視ローテ (B→A→B→C 4本サイクル)
+    phase2_cycle = ["B", "A", "B", "C"]
+    return phase2_cycle[(n - 4) % 4]
 
 
 def used_topics() -> list[str]:
@@ -153,23 +165,31 @@ def slugify(title: str) -> str:
 
 def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
                   product_pb: str, note_skill: str, insights: str,
-                  used_topics_list: list[str], voice: str = "") -> str:
+                  used_topics_list: list[str], voice: str = "",
+                  sales: str = "") -> str:
     pillar_info = PILLARS[pillar]
     price_min, price_max = pillar_info["price_range"]
 
     return f"""あなたは「残業嫌いのらくだ先生🐪」（公立中学校教員・公務員・20代）のnote記事を執筆します。
 
-**🚨 最重要厳守事項: AI生成と気付かれない記事を書く 🚨**
+**🚨 最重要厳守事項 🚨**
+1. AI生成と気付かれない記事を書く
+2. 有料部分は必ず「コピペできる成果物 + 手順チェックリスト + 数値表」の3点セット
+   （抽象的なノウハウだけは絶対NG・売れない）
 
-==== 最優先参照: 伊神さんの実際の口調・人物情報 ====
+==== 最優先参照1: 伊神さんの実際の口調・人物情報 ====
 {voice}
 
-このファイルの内容を**ペルソナ厳守より優先**して反映する。
-口調・NG表現・推奨表現・人物情報のリアリティをすべてここから取る。
+==== 最優先参照2: 売れる有料記事の戦略 ====
+{sales}
+
+上記2ファイルは**ペルソナ厳守より優先**して反映する。
+口調・NG表現・人物情報は voice-and-style から、
+記事構成・タイトル・有料部分の作り方は sales-playbook から取る。
 
 ==== 今回のテーマ ====
 柱: {pillar} ({pillar_info['name']})
-タイトル候補: 「{topic}」（このまま使わず、伊神さんの口調に合わせて再構成）
+タイトル候補: 「{topic}」（このまま使わず、sales-playbook の鉄則で再構成・数字と対比を入れる）
 価格帯: ¥{price_min}〜¥{price_max}
 推奨タグ: {pillar_info['tags']}
 
@@ -274,6 +294,8 @@ def main() -> int:
     playbook = PLAYBOOK_PATH.read_text(encoding="utf-8") if PLAYBOOK_PATH.exists() else ""
     product_pb = PRODUCT_PLAYBOOK.read_text(encoding="utf-8") if PRODUCT_PLAYBOOK.exists() else ""
     note_skill = NOTE_SKILL.read_text(encoding="utf-8") if NOTE_SKILL.exists() else ""
+    voice = VOICE_PATH.read_text(encoding="utf-8") if VOICE_PATH.exists() else ""
+    sales = SALES_PATH.read_text(encoding="utf-8") if SALES_PATH.exists() else ""
     insights = latest_pdca_insights()
 
     client = OpenAI(base_url=GH_MODELS_ENDPOINT, api_key=token)
@@ -283,7 +305,8 @@ def main() -> int:
         temperature=0.85,
         messages=[
             {"role": "user", "content": build_prompt(pillar, topic, persona, playbook,
-                                                     product_pb, note_skill, insights, used)},
+                                                     product_pb, note_skill, insights, used,
+                                                     voice=voice, sales=sales)},
         ],
     )
 
