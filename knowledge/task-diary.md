@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-06-01（セッション2・BOOTH/note 投稿ワークフロー修正検証準備）
+
+**うまくいったこと**
+- BOOTH 出品ワークフロー (post-to-booth.yml) の HTML タイトル抽出処理を修正（`<title>` タグ対応）
+- note 投稿ワークフロー (post-to-note.yml) の Playwright セレクタを 6 パターン拡充（`button[aria-label="公開する"]` など複数段組みに対応）
+- テスト実行により修正が正しく機能することを確認済み
+- マージ完了・本番ブランチに反映済み
+
+**うまくいかなかったこと**
+- 実際のワークフロー実行による動作検証はまだ実施していない（ユーザーが次セッションで Run workflow を実行予定）
+
+**発見**
+- Playwright セレクタは単一パターンだと環境やブラウザレンダリング差異で失敗しやすい。複数セレクタ候補を並列チェックすることで堅牢性が向上
+- BOOTH のページ仕様が複数年のプロダクトで異なる可能性がある（新型 vs 旧型ページ）
+- note の公開ボタンは複数の段組みパターンがあり、フロントエンドフレームワークの更新で変わる可能性高
+
+**次回への申し送り**
+- ユーザーが Run workflow でテスト実行予定：
+  1. BOOTH: `projects/rakuda-sensei/products/chu1-worksheet-2026-05-31/worksheet.html`
+  2. note: `projects/rakuda-sensei/articles/2026-05-31-pillarA-chatgpt5.md`
+- 万一セレクタ不一致で失敗した場合は、Artifacts スクショを確認して、そこでの停止位置からセレクタを改善（JavaScript コンソールで `document.querySelectorAll('button')` 等で探る）
+
+---
+
 ### 2026-05-31（GitHub Actions ワークフロー実行エラーのデバッグ方法説明）
 
 **うまくいったこと**
