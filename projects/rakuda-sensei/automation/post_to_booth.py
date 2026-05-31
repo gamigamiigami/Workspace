@@ -323,7 +323,63 @@ def post_to_booth(
 
             page_loaded = False
 
-            # 戦略1: 確実に到達できる /items に行き、そこから動線を発見する
+            # === 正解URL（ユーザーから確認済み・2026-05-31）===
+            # 商品作成は2段階フロー: /items/select_type → タイプ選択 → 実フォーム
+            print("\n🎯 既知の正解フロー: /items/select_type 経由")
+            try:
+                page.goto("https://manage.booth.pm/items/select_type",
+                          wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(4000)
+                print(f"   📍 タイプ選択ページ到達: {page.url} | title={page.title()}")
+
+                if "404" in page.title() or "見つかりません" in page.title():
+                    print("   ⚠️ /items/select_type も404になっていた → 戦略1へフォールバック", file=sys.stderr)
+                else:
+                    # ダウンロードコンテンツ（教材PDF/HTML向き）のリンク・ボタンを探す
+                    download_selectors = [
+                        'a:has-text("ダウンロードコンテンツ")',
+                        'button:has-text("ダウンロードコンテンツ")',
+                        'a:has-text("ダウンロード")',
+                        '[data-type*="download"]',
+                        'a[href*="downloadable"]',
+                        'a[href*="digital"]',
+                        'label:has-text("ダウンロード")',
+                    ]
+                    type_selected = False
+                    for sel in download_selectors:
+                        try:
+                            el = page.locator(sel).first
+                            el.wait_for(timeout=3000, state="visible")
+                            print(f"   → 「ダウンロードコンテンツ」要素発見: {sel}")
+                            el.click(timeout=5000)
+                            page.wait_for_timeout(4000)
+                            # 遷移後ページが商品作成フォームになっていればOK
+                            if is_valid_create_page(page):
+                                print(f"   📍 商品作成フォーム到達: {page.url}")
+                                page_loaded = True
+                                type_selected = True
+                                break
+                        except Exception:
+                            continue
+
+                    if not type_selected:
+                        # ダウンロード以外も含めて最初のタイプを選んでみる（フォールバック）
+                        print("   ⏭ ダウンロードコンテンツ選択失敗、ページ上の全タイプ候補をダンプ")
+                        type_links = page.locator("a, button").evaluate_all(
+                            """els => els.slice(0, 30).map(e => ({
+                                tag: e.tagName,
+                                text: (e.innerText || '').trim().slice(0, 50),
+                                href: e.href || '',
+                                aria: e.getAttribute('aria-label') || ''
+                            }))"""
+                        )
+                        for t in type_links:
+                            if t["text"] or t["href"]:
+                                print(f"     <{t['tag']}> text={t['text']!r} href={t['href']}")
+            except Exception as e:
+                print(f"   ⚠️ select_type フロー失敗: {e}", file=sys.stderr)
+
+            # 戦略1（旧）: 上記が失敗した場合のフォールバック - /items から動線発見
             print("\n🔍 戦略1: 確実に動く /items ページから動線を発見")
             try:
                 page.goto("https://manage.booth.pm/items", wait_until="domcontentloaded", timeout=20000)
