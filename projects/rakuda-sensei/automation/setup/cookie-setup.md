@@ -34,6 +34,18 @@ Chrome / Edge: <https://chromewebstore.google.com/detail/cookie-editor/hlkennded
 
 ---
 
+## 🔧 ステップ2.5: X (Twitter) のクッキー取得 ★追加
+
+1. **x.com にログイン**（普段のメール/パスワードで・reCAPTCHA出たら解決）
+2. ログインした状態で Cookie-Editor アイコン🍪をクリック
+3. 右下 **Export** → **「Export as JSON」**
+4. <https://github.com/gamigamiigami/Workspace/settings/secrets/actions> で
+   - Name: `X_SESSION_COOKIE`
+   - Secret: 貼り付け
+
+→ これで reCAPTCHA を完全回避してX自動投稿できる
+→ クッキー方式が成功した場合、X_USERNAME/X_PASSWORD は使われない（fallbackとして残置）
+
 ## 🔧 ステップ3: BOOTH のクッキー取得
 
 1. **BOOTH (manage.booth.pm) にログイン**

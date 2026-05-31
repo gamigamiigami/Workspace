@@ -264,27 +264,111 @@ def main(force: bool = False, dry_run: bool = False) -> int:
 
     username = os.environ.get("X_USERNAME")
     password = os.environ.get("X_PASSWORD")
-    if not username or not password:
-        print("ERROR: X_USERNAME / X_PASSWORD が設定されていません", file=sys.stderr)
+    cookie_json = os.environ.get("X_SESSION_COOKIE")
+
+    if not cookie_json and (not username or not password):
+        print("ERROR: X_SESSION_COOKIE もしくは X_USERNAME/X_PASSWORD が必要です", file=sys.stderr)
+        print("  → 推奨: Cookie-Editor で取得した X_SESSION_COOKIE を Secret 登録", file=sys.stderr)
+        print("  → 詳細: projects/rakuda-sensei/automation/setup/cookie-setup.md", file=sys.stderr)
         return 1
 
     from playwright.sync_api import sync_playwright
 
+    # 自作ステルス JS (note/booth と同じ)
+    STEALTH_JS = """
+    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
+    window.chrome = { runtime: {} };
+    """
+
+    def normalize_cookies(raw_json: str) -> list:
+        """Cookie-Editor JSON → Playwright SetCookieParam 形式"""
+        import json as _json
+        raw = _json.loads(raw_json)
+        normalized = []
+        for c in raw:
+            new_c = {"name": c["name"], "value": c["value"]}
+            if c.get("domain"):
+                new_c["domain"] = c["domain"]
+            new_c["path"] = c.get("path", "/")
+            if "expirationDate" in c and not c.get("session"):
+                try:
+                    new_c["expires"] = float(c["expirationDate"])
+                except (TypeError, ValueError):
+                    pass
+            if "sameSite" in c:
+                ss = str(c["sameSite"]).lower()
+                m = {"lax": "Lax", "strict": "Strict",
+                     "none": "None", "no_restriction": "None", "unspecified": "None"}
+                if ss in m:
+                    new_c["sameSite"] = m[ss]
+            if "httpOnly" in c:
+                new_c["httpOnly"] = bool(c["httpOnly"])
+            if "secure" in c:
+                new_c["secure"] = bool(c["secure"])
+            normalized.append(new_c)
+        return normalized
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-blink-features=AutomationControlled"])
+        browser = p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",
+                "--disable-blink-features=AutomationControlled",
+                "--disable-dev-shm-usage",
+            ],
+        )
         context = browser.new_context(
-            viewport={"width": 1280, "height": 900},
+            viewport={"width": 1366, "height": 768},
             user_agent=USER_AGENT,
             locale="ja-JP",
             timezone_id="Asia/Tokyo",
+            extra_http_headers={"Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8"},
         )
+        context.add_init_script(STEALTH_JS)
+
+        # クッキー認証を優先（reCAPTCHA回避・推奨）
+        cookie_auth = False
+        if cookie_json:
+            try:
+                cookies = normalize_cookies(cookie_json)
+                context.add_cookies(cookies)
+                cookie_auth = True
+                print(f"🍪 X クッキー認証 ({len(cookies)}個・正規化済み)")
+            except Exception as e:
+                print(f"WARNING: クッキー解析失敗: {e}", file=sys.stderr)
+                import traceback
+                traceback.print_exc(file=sys.stderr)
+
         page = context.new_page()
 
+        # playwright-stealth (最初の goto 前)
         try:
-            if not login_to_x(page, username, password):
-                page.screenshot(path="x-login-failed.png")
-                browser.close()
-                return 1
+            from playwright_stealth import stealth_sync
+            stealth_sync(page)
+            print("🥷 playwright-stealth 適用")
+        except ImportError:
+            print("⚠️ playwright-stealth なし（自作STEALTH_JSのみ）")
+        except Exception:
+            pass
+
+        try:
+            if cookie_auth:
+                # クッキーで認証済みなのでホームへ
+                page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_timeout(3000)
+                if "/login" in page.url or "/flow" in page.url:
+                    print("ERROR: X クッキーが無効/期限切れ。再取得してください", file=sys.stderr)
+                    page.screenshot(path="x-cookie-invalid.png")
+                    browser.close()
+                    return 1
+                print(f"✅ X クッキーログインOK ({page.url})")
+            else:
+                # フォールバック: メール/パスワード (reCAPTCHA リスクあり)
+                if not login_to_x(page, username, password):
+                    page.screenshot(path="x-login-failed.png")
+                    browser.close()
+                    return 1
 
             if not post_tweet(page, tweet_text):
                 page.screenshot(path="x-post-failed.png")
