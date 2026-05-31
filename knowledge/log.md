@@ -4,6 +4,68 @@
 
 ---
 
+### [2026-05-31] 完全自動化パイプライン実装 — 記事・商品生成も全自動
+
+**作業内容（ユーザー「全自動で投稿記事作成＆投稿＆分析までやって」要望反映）：**
+- ペルソナ3本柱統合戦略を確定（柱A: ICT時短 / 柱B: 公務員×資産形成 / 柱C: バイブコーディング）
+- `knowledge/persona.md` 更新：プロフィール文を3本柱版に
+- `knowledge/sns-playbook.md` 更新：曜日×時間帯×柱配分、金融商品取引法対策のNGリスト追加
+- **`generate_note_article.py` 新規実装**：3本柱ローテ・トピック自動選択・既存記事重複回避・PDCAインサイト反映
+- **`generate_booth_product.py` 新規実装**：中学国語11単元ローテ・完全動作HTML生成
+- **`generate_weekly_x.py` 更新**：3本柱配分プロンプトに刷新
+- **`weekly-content-pipeline.yml` 新規実装**：
+  - 日曜21:00 UTC cron で全自動: X週次生成→note生成→BOOTH生成（隔週）
+  - 生成完了後にworkflow_dispatch APIで自動投稿ワークフロー起動（連鎖）
+  - `actions: write` 権限で生成→投稿チェーン実現
+- `weekly-x-content.yml` 削除（新pipelineに統合）
+
+**結果：** 成功 — Secret登録のみで月100本超のコンテンツが完全自動で生成・投稿される
+
+**成果物：**
+- `projects/rakuda-sensei/automation/generate_note_article.py`
+- `projects/rakuda-sensei/automation/generate_booth_product.py`
+- `.github/workflows/weekly-content-pipeline.yml`
+- `knowledge/persona.md` / `sns-playbook.md` 更新
+
+**気づき・メモ：**
+- 3本柱統合が独占ポジション（教員×時短×資産形成×AI/バイブコーディングは競合ゼロ）
+- 完全AI生成は品質リスク（Googleスパム判定）あるが、ユーザー要望優先で実装
+- 連鎖ワークフロー: 生成workflow → REST API workflow_dispatch → 投稿workflow
+- PDCA→次回生成のフィードバックループも実装済み（latest_pdca_insights()）
+- 金融商品取引法対策プロンプトを柱B生成時に組み込み
+
+---
+
+### [2026-05-24] ラクダ先生・副業自動化システム完成 — 全5プラットフォーム統合ダッシュボード実装完了
+
+**作業内容：**
+- **PR #1 作成・マージ**：副業自動化システム全体（X/Threads/Instagram/note/BOOTH自動投稿 + 統合管理ダッシュボード）
+  - マージコンフリクト解消（前ブランチとの変更統合）
+  - GitHub Pages デプロイワークフロー有効化
+- **PR #2 作成・マージ**：HANDOFF.md（オーナー初回セットアップ手順書）追加
+  - GitHub Pages有効化（1分）/ GitHub Secrets 6個登録（2分）/ GitHub PAT作成（2分）のみが人間作業
+  - メタAPI設定（オプション、30～45分）
+- **全スクリプト構文検証**：Python全体 + YAML全ワークフロー + ダッシュボードHTML/JS/CSSレンダリング確認
+- **ファイル整理**：`__pycache__` 削除、成果物整理
+- **マージ後の動作確認**：全デプロイが成功、ダッシュボードJSのGitHub API連携が機能確認完了
+
+**結果：** 成功 — 副業自動化システム全体が完成、月60～120分の人間作業（記事執筆）で月10万円目標に向けた完全な技術基盤実装完了
+
+**成果物：**
+- `projects/rakuda-sensei/HANDOFF.md`（オーナー向け初回セットアップ手順）
+- `projects/rakuda-sensei/dashboard/` (index.html / style.css / app.js) — GitHub Pagesで配信
+- `projects/rakuda-sensei/automation/post_to_threads.py / post_to_instagram.py`
+- `.github/workflows/` (deploy-dashboard.yml / post-to-threads.yml / post-to-instagram.yml 他)
+
+**気づき・メモ：**
+- **AI完了分**：全技術実装・検証 = AI単独で完結可能
+- **人間必須分**：GitHub Settings操作・Secrets管理・Meta Developer App登録 = Secrets書き込みAPI/UIアクセス権がなく不可能
+- マージコンフリクト発生時は CLAUDE.md/log.md の変更を手動統合するのが最安定（両ブランチのログをカレンダー順に統合）
+- Stopフック自動化の実装により、セッション終了処理が大幅に軽量化（task-diary.md + 変更時のみlog.md）
+- ダッシュボードはスマホ対応（レスポンシブ）→ 移動中でも投稿スケジューリング管理可能
+
+---
+
 ## テンプレート
 
 ```
