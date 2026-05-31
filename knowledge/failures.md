@@ -26,6 +26,56 @@
 
 ---
 
+## GitHub Actions & 自動投稿
+
+### [2026-05-31] rakuda-sensei — GitHub Actions 自動投稿での Secrets 未登録 / パスワード違いエラー
+
+**状況：** GitHub Actions で BOOTH / note への自動投稿ワークフローを実装し、実行した
+
+**問題：** 
+- BOOTH投稿が管理画面に「何も表示されない」状態
+- note投稿が管理画面に「何も表示されない」状態
+
+**原因：** 
+1. BOOTH：ショップのサブドメイン（`rakuda-sensei`）が設定されていない
+2. note：GitHub Secrets で `NOTE_EMAIL` / `NOTE_PASSWORD` が登録されていない、または パスワード相違
+
+**解決策：** 
+1. BOOTH の場合：`https://manage.booth.pm/settings` → ショップURL欄に サブドメイン名 を入力して保存 → ワークフロー再実行
+2. note の場合：`https://github.com/{owner}/{repo}/settings/secrets/actions` で Secrets登録状況を確認 → `NOTE_EMAIL` / `NOTE_PASSWORD` が存在するか確認 → 存在しない場合は登録 → ワークフロー再実行
+3. 詳細なエラーメッセージは GitHub Actions ログの「最後10行」を見る
+
+**トラブルシューティング手順：**
+```
+① Secrets確認ページを開く
+   https://github.com/{owner}/{repo}/settings/secrets/actions
+
+② 「Repository secrets」セクションで以下が表示されているか確認：
+   - NOTE_EMAIL
+   - NOTE_PASSWORD
+   （存在しない場合は New repository secret ボタンで追加）
+
+③ ワークフロー実行ログを確認
+   https://github.com/{owner}/{repo}/actions/workflows/post-to-note.yml
+   → 最新の run をクリック
+   → post ジョブをクリック
+   → "Post to note.com" ステップを展開
+   → ログの最後10行を確認
+   
+④ ログに表示される内容で原因確定：
+   - "NOTE_EMAIL が設定されていません" → Secrets 未登録
+   - "noteログイン失敗" → パスワード相違
+   - "✅ noteログイン成功" → 問題なし（投稿は発生している）
+```
+
+**再発防止：** 
+- 新しい自動投稿ワークフロー追加時は、Secrets登録 → ワークフロー実行 → ログで「成功」確認 を初回セットアップフロー化する
+- ログの「最後10行」を見ることが最速の原因特定方法
+
+**タグ：** #github-actions #automation #secrets #troubleshooting
+
+---
+
 ## セッションスクリプト・自動化
 
 ### [2026-05-24] workspace-setup — Stop フックは「セッション終了時」ではなく「Claudeの返答後」に毎回発動

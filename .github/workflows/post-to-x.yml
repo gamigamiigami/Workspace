@@ -116,4 +116,4 @@ jobs:
           3. それでも継続失敗するならX native scheduler に切替
 
           **実行ログ**: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --label "bug,automation,platform-x"
+            --label "bug"
