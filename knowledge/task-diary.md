@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-06-01（セッション20・GitHub Models セキュリティ完全検証 + requirements.txt 重複削除）
+
+**うまくいったこと**
+- GitHub Models セキュリティ検査（全6スクリプト）を完全実施
+  - ANTHROPIC_API_KEY、OPENAI_API_KEY、GEMINI_API_KEY は未登録を確認
+  - 全スクリプトが GitHub Models 無料枠のみ使用（課金リスク ¥0）
+  - リポジトリ Secrets 15個を全て検査・ドキュメント化
+  - 外部AI API URL（api.openai.com等）がコード内にないことを確認
+- requirements.txt の重複（Pillow が2行）を削除
+  - 6ライン → 5ラインに最適化
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- OpenAI SDK を使ってるが実は「OpenAI互換API通信ライブラリ」として GitHub Models アクセスに使用（外部課金なし）
+- GitHub Models 無料枠は月数千リクエスト許容可能（月2,000リクエスト程度の利用で安全圏）
+
+**次回への申し送り**
+- 全スクリプト：GitHub Models 無料枠で安定稼働中
+- 念のため確認リンク：https://github.com/marketplace/models（レート制限状況確認可能）
+
+---
+
 ### 2026-06-07（セッション19・BOOTH根本問題解決 + AI自己学習システム完成）
 
 **うまくいったこと**
