@@ -6,6 +6,34 @@
 
 ---
 
+### 2026-06-01（セッション21・PR #36 マージ完了＆セキュリティ監査完全実施）
+
+**うまくいったこと**
+- PR #36 の整理・マージ（重複削除コミット・GitHub Models セキュリティ検査の成果を本流に反映）
+- requirements.txt の重複削除（Pillow の二重記載を除去）
+- Secrets 全15個のセキュリティ監査を完全実施
+  - 危険なAPIキー（ANTHROPIC/CLAUDE/OPENAI/GEMINI_API_KEY）: 全て未登録を確認
+  - 全スクリプト（generate_note_article.py 等 6個）が GitHub Models 無料枠のみ使用（課金リスク ¥0）
+  - secret scanning で危険な認証情報を検出せず（クリーン）
+- 売上・価格を含む経営判断ドキュメント群のセキュリティ確認（公開リスクなし）
+- ブランド画像6枚生成スクリプト完成（PIL で自動生成可能、生成PNG確認済み）
+- note 自己紹介文 4パターンを整備
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- GitHub Models を経由することで OpenAI SDK は実質的に無料・課金なし（SDK は単なる互換ライブラリとして機能）
+- Meta Graph API、Playwright、PyNaCl、Pillow などすべて OSS 無料枠で運用可能
+- 「無料中心モデル」を実装すると、システム全体の月額課金は ¥0（Claude Pro は個人契約済みで別）
+
+**次回への申し送り**
+- リポジトリは完全にクリーン状態（変更なし、PR マージ済み）
+- 全スクリプト・経営判断資料ともセキュリティ OK（監査記録は knowledge/log.md に保存）
+- note 記事執筆・ブランド画像生成・Threads/Instagram 連携の準備完了
+
+---
+
 ### 2026-06-01（セッション20・GitHub Models セキュリティ完全検証 + requirements.txt 重複削除）
 
 **うまくいったこと**

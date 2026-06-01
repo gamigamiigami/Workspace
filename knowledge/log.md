@@ -4,6 +4,49 @@
 
 ---
 
+### [2026-06-01] addness-side-income — PR #36 マージ完了 + GitHub Models セキュリティ監査最終化
+
+**作業内容：**
+- **GitHub Models セキュリティ監査（全6スクリプト）の完全実施**
+  - ANTHROPIC_API_KEY、OPENAI_API_KEY、GEMINI_API_KEY は未登録を確認
+  - GitHub Models 無料枠のみ使用（課金リスク ¥0）
+  - requirements.txt の重複削除（Pillow が二重記載 → 5ラインに最適化）
+  - secrets.json の全15個を検査・ドキュメント化済み
+  
+- **PR #36 統合・マージ完了**
+  - requirements.txt 重複削除コミット・GitHub Actions セキュリティ検査の本流統合
+  - リポジトリ完全クリーン状態（変更なし）
+  
+- **ブランド画像生成スクリプト完成**
+  - `automation/generate_brand_assets.py` に Pillow による自動生成実装
+  - 生成PNG 6枚の確認済み
+  
+- **セキュリティ監査記録を knowledge/log.md に保存**
+  - 外部AI API課金：¥0（確定）
+  - 全スクリプト GitHub Models 無料枠稼働確認
+
+**成果物：**
+- PR #36 マージ完了
+- セキュリティ監査結果記録（knowledge/log.md）
+- 生成ブランド画像 6枚
+
+**状態サマリー：**
+| 内容 | 状態 |
+|---|---|
+| 外部AI API課金 | 🟢 ¥0（危険キー全未登録） |
+| GitHub Models 無料枠 | ✅ 6スクリプト全部稼働 |
+| requirements.txt | ✅ 重複削除・最適化 |
+| PR #36 | ✅ マージ済み |
+| リポジトリ状態 | ✅ クリーン（変更なし） |
+
+**気づき・メモ：**
+- GitHub Models は実質的に無制限（月2,000リクエスト程度は安全圏）
+- OpenAI SDK は「OpenAI互換 API ライブラリ」として GitHub Models に接続（外部課金なし）
+- Meta API、Playwright、PyNaCl、Pillow は全て OSS 無料
+- システム全体の月額課金：完全に ¥0（Claude Pro は個人契約済み・別費用）
+
+---
+
 ### [2026-06-07] addness-side-income — BOOTH自動出品：3段戦略で根本問題解決 + AI自己学習完成
 
 **作業内容：**
