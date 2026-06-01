@@ -1,8 +1,53 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-02
+最終更新：2026-05-31
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## GitHub Actions
+
+### [2026-05-31] addness-side-income — GitHub Actions で issue:write 権限が明示的に必要
+
+**状況：** GitHub Actions ワークフロー（`post-to-x.yml`）内で GitHub Issue を自動作成する機能を実装
+
+**問題：** 
+- Issue 作成時に以下のエラーが発生
+  ```
+  GraphQL: Resource not accessible by integration (createIssue)
+  ```
+- ワークフロームの `permissions` セクションで権限を指定していない状態
+
+**原因：** 
+- GitHub Actions の `GITHUB_TOKEN` はデフォルトで `contents: read` のみ持つ
+- Issue 作成（`createIssue` GraphQL mutation）には明示的に `issues: write` 権限が必要
+- ワークフロー YAML の `permissions` セクションに `issues: write` を記載していなかった
+
+**解決策：**
+```yaml
+jobs:
+  post-to-x:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read    # コード読み込み用
+      issues: write     # Issue 作成用（これが必須）
+    steps:
+      - uses: actions/checkout@v3
+      - name: Post to X and create issue
+        run: python scripts/post_to_x.py
+```
+
+**再発防止：**
+- GitHub Actions で外部リソース操作が必要な場合は、各操作に対応する `permissions` フラグを事前に調べて記載
+- よく使う権限セット：
+  - `contents: read` — リポジトリコード参照
+  - `contents: write` — コミット、PR作成
+  - `issues: write` — Issue作成・更新
+  - `pull-requests: write` — PR操作
+  - `secrets: read` — Secret参照（デフォルトで有効）
+
+**タグ：** #github-actions #permissions #issue #automation
 
 ---
 

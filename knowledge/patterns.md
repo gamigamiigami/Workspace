@@ -7,6 +7,69 @@
 
 ---
 
+## Playwright / Web 自動化
+
+### [汎用] SPA 対応：networkidle 回避と部分的遅延確認パターン
+
+**用途：** Playwright で SPA（Single Page Application）環境下での自動化。`networkidle` ウェイト条件は通信が止まらないため無限タイムアウトになり、代替として `domcontentloaded` + 手動遅延確認の組み合わせが有効
+
+**問題背景：**
+- X（Twitter）・Discord・Slack など、リアルタイム通信を常時行うSPAアプリケーションでは `networkidle` が機能しない
+- Playwright のデフォルト `wait_until="networkidle"` では以下が発生：
+  ```
+  ERROR: Page.goto: Timeout 30000ms exceeded.
+  navigating to "https://x.com/compose/post", waiting until "networkidle"
+  ```
+- 単なる `domcontentloaded` だけではページが不安定な状態で要素選択を行うリスクが高まる
+
+**解決策：2段階ウェイト戦略**
+```python
+# ステップ1: DOM 準備完了まで待機
+page.goto(url, wait_until="domcontentloaded", timeout=20000)
+
+# ステップ2: 特定の主要要素が stable になるまで待機
+try:
+    page.locator("input[placeholder*='何が起きてますか']").wait_for(
+        timeout=5000, state="visible"
+    )
+    # DOM が安定していることの簡易確認
+    page.wait_for_timeout(1000)  # 1秒の余裕持ち
+except Exception:
+    print("Compose 入力欄が見つかりません")
+    raise
+```
+
+**URL の複数候補も並行対応：**
+```python
+compose_urls = [
+    "https://x.com/compose/post",
+    "https://x.com/home?compose_target=post",
+    "https://x.com/i/compose/post",
+]
+
+for url in compose_urls:
+    try:
+        page.goto(url, wait_until="domcontentloaded", timeout=15000)
+        # ここでDOM安定性を確認
+        page.locator("textarea").first.wait_for(timeout=3000, state="visible")
+        print(f"✅ Compose 到達: {url}")
+        break
+    except Exception:
+        continue
+```
+
+**ポイント：**
+- `wait_until="networkidle"` は SPA では使用しない（代わりに `domcontentloaded` を基本）
+- `domcontentloaded` 後に「主要な入力要素が visible」状態を確認（セレクタ複数候補）
+- 手動で 1秒程度の遅延を挟んでから要素操作（レンダリング完成待ち）
+- 複数 URL 候補 × セレクタ複数候補の組み合わせでロバスト性を大幅向上
+
+**使用プロジェクト：** addness-side-income（post-to-x.yml）
+
+**タグ：** #playwright #spa #networkidle #web-automation #x-twitter
+
+---
+
 ## コンテンツ販売・記事生成
 
 ### [汎用] 有料記事の「3点セット」強制構成による市場適合性向上
@@ -310,7 +373,265 @@ except Exception as e:
 
 ---
 
+## Web 自動化 / ブラウザ認証
+
+### [汎用] Playwright stealth + クッキー認証による Bot 検出回避
+
+**用途：** Web サイト（特に X/Twitter などの Bot 検出厳格なサイト）への自動ログインで、Playwright 単体では bot として検出・ブロックされる場合、`playwright-stealth` プラグイン + 複数クッキーの正規化で人間のアクセスを偽装
+
+**問題背景：**
+- Playwright は自動化ツールとしてブラウザに認識される（User-Agent、各種JS実行パターン）
+- X.com は reCAPTCHA + Cloudflare bot 管理で厳格に bot 検出・ブロック
+- 単なる User-Agent 変更や JavaScript 無効化では対応不足
+- セッションクッキーの形式が正規化されていないと、セッション無効判定される
+
+**解決策1：playwright-stealth の導入**
+```python
+from playwright.async_api import async_playwright
+from playwright_stealth import stealth_async
+
+async with async_playwright() as p:
+    browser = await p.chromium.launch(headless=True)
+    context = await browser.new_context()
+    page = await context.new_page()
+    
+    # Stealth プラグインを適用（bot 検出回避）
+    await stealth_async(page)
+    
+    # 以降の操作は人間のブラウザに見える
+    await page.goto("https://x.com")
+```
+
+**解決策2：複数クッキーの正規化と登録**
+
+X.com の重要クッキー（セッション16で確認）：
+```python
+import json
+import os
+
+# ユーザーが Cookie-Editor で Export した JSON をパース
+cookies_json = os.getenv("X_SESSION_COOKIE")  # GitHub Secret から読み込み
+cookies_list = json.loads(cookies_json)
+
+# 必須クッキー（9個）の存在確認と正規化
+required_cookies = {
+    "auth_token",      # セッション ID
+    "ct0",             # CSRF トークン
+    "twid",            # ユーザー ID
+    "personalization_id",
+    "guest_id",
+    "kdt",
+    "external_user_id",
+    "mbox",
+    "__cf_bm",         # Cloudflare bot 管理
+}
+
+for cookie in cookies_list:
+    if cookie["name"] in required_cookies:
+        # 形式検証：domain, path, secure, httpOnly を確認
+        if not all(k in cookie for k in ["name", "value", "domain"]):
+            raise ValueError(f"Invalid cookie format: {cookie['name']}")
+
+# コンテキストに適用
+context = await browser.new_context()
+await context.add_cookies(cookies_list)
+```
+
+**重要なクッキーの役割：**
+| クッキー | 役割 | 有効期限 |
+|---------|------|---------|
+| `auth_token` | セッション認証（最重要） | 数ヶ月 |
+| `ct0` | CSRF トークン | セッション中 |
+| `twid` | ユーザー ID 特定 | 数ヶ月 |
+| `__cf_bm` | Cloudflare bot 検出回避 | 30分 |
+| `personalization_id` | ユーザー追跡 | 数年 |
+
+**セキュリティ考慮：**
+```python
+# ❌ 平文で Secret に保存してはいけない
+COOKIE_JSON = "auth_token=abc123&ct0=def456..."  # 危険
+
+# ✅ JSON 形式で Secret に保存（GitHub Secret として自動暗号化）
+X_SESSION_COOKIE = """[
+  {"name": "auth_token", "value": "abc123...", "domain": ".x.com", "path": "/", "secure": true, "httpOnly": true},
+  {"name": "ct0", "value": "def456...", "domain": ".x.com", "path": "/", "secure": true},
+  ...
+]"""
+
+# ワークフロー内で復号化して使用
+cookies_list = json.loads(os.getenv("X_SESSION_COOKIE"))
+```
+
+**実装ポイント：**
+- Stealth プラグインは `page.goto()` の前に必ず適用（ページ読み込み前にJS検出回避を有効化）
+- クッキーは `context.new_page()` ではなく `context = new_context(cookies=...)` の段階で登録
+- `__cf_bm` は Cloudflare が要求に応じて自動更新するため、定期的な re-export が必要（月1回程度推奨）
+- セッション有効期限の監視：Issue 自動起票で「クッキーが古い可能性」をユーザーに通知
+
+**検証方法（ローカル）：**
+```python
+# Cookie-Editor (Chrome拡張) で Export → JSON で保存
+# → GitHub Secret `X_SESSION_COOKIE` に貼り付け
+# → ワークフロー実行 → X タイムラインで投稿確認
+
+# 失敗時のログ確認：
+# - Page タイトルが「X / Twitter」か「log in」か
+# - Artifacts に保存されたスクショで「投稿ボタン」が見えるか
+```
+
+**実装例（post-to-x.yml）：**
+```yaml
+- name: X に自動投稿（Playwright + Stealth）
+  run: |
+    python3 -c "
+    import asyncio, json, os
+    from playwright.async_api import async_playwright
+    from playwright_stealth import stealth_async
+    
+    async def post():
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context()
+            page = await context.new_page()
+            await stealth_async(page)  # Bot 検出回避
+            
+            # クッキー登録
+            cookies = json.loads(os.getenv('X_SESSION_COOKIE'))
+            await context.add_cookies(cookies)
+            
+            # 投稿処理...
+            await page.goto('https://x.com/compose/post', wait_until='domcontentloaded')
+            # ...
+    
+    asyncio.run(post())
+    "
+  env:
+    X_SESSION_COOKIE: \${{ secrets.X_SESSION_COOKIE }}
+```
+
+**ポイント：**
+- セッション16・17・18にわたって実機で継続稼働が実証（3セッション以上の成功 = パターン化確定）
+- 初回セットアップ（Cookie-Editor export）は人間作業だが、以降は完全自動
+- クッキー有効期間内での安定投稿を実現（本番稼働のベース）
+- `__cf_bm` など動的クッキーも含めた複数クッキー構成がロバスト性の鍵
+
+**注意：**
+- クッキー有効期限切れ時はユーザーが再 export して Secret を更新する必要あり
+- X がセッション管理を変更すると対応が必要（3ヶ月ごとの確認推奨）
+
+**使用プロジェクト：** addness-side-income（post-to-x.yml, セッション16・17・18で本番稼働開始）
+
+**タグ：** #playwright #web-automation #stealth #cookie #authentication #bot-detection #x-twitter
+
+---
+
 ## GitHub Actions
+
+### [汎用] GitHub Actions ワークフロー権限管理の必須セクション（permissions）
+
+**用途：** GitHub Actions ワークフロー内で GitHub API 操作（Issue 作成、PR merge、Secret アクセスなど）を行う場合、`permissions` セクションで明示的に権限を指定しないと「Permission denied」エラーで失敗
+
+**問題背景：**
+- GitHub Actions のデフォルト権限は最小限（読み取りのみ）
+- Issue 作成・PR merge・コメント投稿などの書き込み操作は明示的な権限指定が必須
+- ワークフロー実行時に権限不足でエラーが発生してから気づくケースが多い
+- セッション17で X 自動投稿ワークフローが「Issue 作成権限不足」で失敗
+
+**解決策：ワークフロース最上部に `permissions` セクションを追加**
+
+```yaml
+name: Post to X
+
+on:
+  schedule:
+    - cron: '0 7 * * *'  # 毎日 7:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read          # リポジトリコンテンツ読み取り
+  issues: write           # Issue 作成・更新
+  pull-requests: write    # PR 操作
+  id-token: write         # OIDC（Optional、Cloud services の認証用）
+
+jobs:
+  post-to-x:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Post to X
+        run: python3 scripts/post_to_x.py
+        env:
+          X_SESSION_COOKIE: ${{ secrets.X_SESSION_COOKIE }}
+      
+      - name: Create issue on failure
+        if: failure()
+        uses: actions/github-script@v6
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: '🚨 X 自動投稿に失敗',
+              body: `ワークフロー: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+            })
+```
+
+**権限フィールド一覧：**
+
+| 権限 | 用途 | デフォルト |
+|------|------|----------|
+| `contents: read` | リポジトリコンテンツ読み取り | ✅ 有効 |
+| `contents: write` | git commit・push | ❌ 無効 |
+| `issues: write` | Issue 作成・コメント・ラベル | ❌ 無効 |
+| `pull-requests: write` | PR 操作・コメント・review | ❌ 無効 |
+| `packages: write` | Docker イメージ push | ❌ 無効 |
+| `id-token: write` | OIDC Token 発行（AWS・GCP認証用） | ❌ 無効 |
+
+**実装ポイント：**
+1. 必要な権限のみを指定（セキュリティ最小権限の原則）
+2. ワークフロー実行前にログから「Permission denied」を探す癖をつける
+3. 複数ジョブがある場合は、`jobs.<job-name>.permissions` で ジョブ単位のオーバーライドも可能
+
+**ジョブ単位でのオーバーライド例：**
+```yaml
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read  # check ジョブは読み取り専用
+    steps:
+      - run: echo "Checking..."
+  
+  post:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # post ジョブだけ書き込み可能
+      issues: write
+    steps:
+      - run: python3 post.py
+```
+
+**デバッグ方法：**
+```bash
+# ローカルで権限エラーが出たら、ワークフロー YAML に以下を追加
+- name: Debug permissions
+  run: |
+    echo "Current token scopes:"
+    curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+         https://api.github.com/user
+```
+
+**ポイント：**
+- セッション17で「GitHub Issue 作成権限不足」→「`permissions: issues: write` 追加」で解決した具体例
+- デフォルトで権限がないため「実装 → テスト → エラー発見 → 権限追加」のサイクルが発生しやすい
+- 実装フェーズで「何の API を呼ぶか」を事前に洗い出し、必要な権限を先制的に指定する習慣が重要
+
+**使用プロジェクト：** addness-side-income（post-to-x.yml, post-to-note.yml, improve-articles.yml など複数ワークフロー）
+
+**タグ：** #github-actions #permissions #security #api #debugging
+
+---
 
 ### [汎用] GitHub Actions の条件式制限と回避策
 
