@@ -24,6 +24,8 @@ from pathlib import Path
 
 from openai import OpenAI
 
+sys.path.insert(0, str(Path(__file__).parent))
+
 ROOT = Path(__file__).resolve().parents[3]
 PERSONA_PATH = ROOT / "knowledge" / "persona.md"
 PLAYBOOK_PATH = ROOT / "knowledge" / "sns-playbook.md"
@@ -200,6 +202,15 @@ def improve_article(path: Path, client: OpenAI, knowledge: dict) -> tuple[bool, 
     except Exception as e:
         return False, f"API失敗: {e}"
 
+    # 品質研磨
+    quality_note = ""
+    try:
+        from quality_check_article import polish
+        new_body, q = polish(new_body)
+        quality_note = f" / 品質スコア {q.score}"
+    except Exception:
+        pass
+
     ok, reason = is_meaningful_improvement(old_text, new_body)
     if not ok:
         return False, reason
@@ -208,11 +219,11 @@ def improve_article(path: Path, client: OpenAI, knowledge: dict) -> tuple[bool, 
     v2_path = path.with_name(path.stem + "-v2.md")
     header = (
         f"<!-- IMPROVED-FROM: {path.name} at {datetime.datetime.now().isoformat(timespec='seconds')} -->\n"
-        f"<!-- 旧版を voice-and-style + sales-playbook の最新情報で再生成 -->\n"
-        f"<!-- 改善判定: {reason} -->\n\n"
+        f"<!-- 旧版を voice-and-style + sales-playbook の最新情報で再生成 + quality_check_article で研磨 -->\n"
+        f"<!-- 改善判定: {reason}{quality_note} -->\n\n"
     )
     v2_path.write_text(header + new_body, encoding="utf-8")
-    return True, f"保存: {v2_path.name}（{reason}）"
+    return True, f"保存: {v2_path.name}（{reason}{quality_note}）"
 
 
 def main() -> int:
