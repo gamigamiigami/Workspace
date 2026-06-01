@@ -103,6 +103,24 @@ jobs:
             git commit -m "chore(auto): BOOTH教材生成"
           fi
 
+      # === 4. note記事のクロスポスト用 X/Threads/IG 文章を生成 ===
+      - name: Generate cross-post promos (X / Threads / IG)
+        id: gen-crosspost
+        if: ${{ steps.gen-note.outputs.article_path != '' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python projects/rakuda-sensei/automation/generate_cross_post.py \
+            "${{ steps.gen-note.outputs.article_path }}"
+
+      - name: Commit cross-post promos
+        if: ${{ steps.gen-note.outputs.article_path != '' }}
+        run: |
+          git add projects/rakuda-sensei/sns/cross-posts/
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(auto): クロスポスト文生成 (X/Threads/IG)"
+          fi
+
       # === 一括push（pull-rebase付き再試行）===
       - name: Push all commits with retry
         run: |
