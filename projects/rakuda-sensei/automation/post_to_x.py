@@ -44,13 +44,20 @@ WEEKDAY_JP = ["月", "火", "水", "木", "金", "土", "日"]
 
 def current_slot() -> tuple[datetime.date, str]:
     """
-    現在のJST時刻から (対象日付, スロット) を返す
-    7:00以前 = 朝スロット、12:00以前は当日朝、それ以降の早い時刻も朝枠で次回扱い
-    21:00以降 = 夜スロット
-    判定はざっくり: JST時刻 < 14時 → "朝"、>= 14時 → "夜"
+    現在のJST時刻から (対象日付, スロット) を返す。
+    2026-06-01 戦略変更: 朝/昼/夜 の3スロット体制 (1日3投稿)
+    - 0-10時 → "朝" (7:00 cron でここに来る)
+    - 10-17時 → "昼" (12:30 cron でここに来る)
+    - 17-24時 → "夜" (21:00 cron でここに来る)
     """
     now = datetime.datetime.now(JST)
-    slot = "朝" if now.hour < 14 else "夜"
+    h = now.hour
+    if h < 10:
+        slot = "朝"
+    elif h < 17:
+        slot = "昼"
+    else:
+        slot = "夜"
     return now.date(), slot
 
 
@@ -68,7 +75,7 @@ def find_weekly_file(target_date: datetime.date) -> Path | None:
 def extract_tweet(weekly_md: str, target_date: datetime.date, slot: str) -> str | None:
     """
     weeklyファイル内から指定日・スロットの本文を抽出。
-    ## 5/26(月) のような見出し配下の ### 朝 または ### 夜 セクションの「本文:」を返す。
+    ## 5/26(月) のような見出し配下の ### 朝/### 昼/### 夜 セクションの「本文:」を返す。
     """
     month = target_date.month
     day = target_date.day

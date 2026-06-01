@@ -7,8 +7,10 @@ name: Post to Threads
 
 on:
   schedule:
-    - cron: "0 22 * * *"
-    - cron: "0 12 * * *"
+    # 1日3投稿 (2026-06-01 戦略変更)
+    - cron: "0 22 * * *"   # 朝7:00 JST
+    - cron: "30 3 * * *"   # 昼12:30 JST
+    - cron: "0 12 * * *"   # 夜21:00 JST
   workflow_dispatch:
     inputs:
       text:

@@ -36,7 +36,13 @@ API_BASE = "https://graph.threads.net/v1.0"
 
 def current_slot() -> tuple[datetime.date, str]:
     now = datetime.datetime.now(JST)
-    slot = "朝" if now.hour < 14 else "夜"
+    h = now.hour
+    if h < 10:
+        slot = "朝"
+    elif h < 17:
+        slot = "昼"
+    else:
+        slot = "夜"
     return now.date(), slot
 
 
