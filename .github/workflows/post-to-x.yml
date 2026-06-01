@@ -8,8 +8,11 @@ name: Post Tweet to X
 
 on:
   schedule:
+    # 1日3投稿戦略 (2026-06-01)
     # 22:00 UTC = 07:00 JST 翌日 (朝スロット)
     - cron: "0 22 * * *"
+    # 03:30 UTC = 12:30 JST 当日 (昼スロット・休み時間狙い)
+    - cron: "30 3 * * *"
     # 12:00 UTC = 21:00 JST 当日 (夜スロット)
     - cron: "0 12 * * *"
   workflow_dispatch:
