@@ -4,6 +4,41 @@
 
 ---
 
+### [2026-06-02] rakuda-sensei — note第2弾記事「サイドFIRE計画シート」SNS告知バンドル完成
+
+**作業内容：**
+
+- **記事価格確定**
+  - Plan B採用：定価 ¥1,500 + SNSプロモ拡散割引 ¥500（セッション33の調査結果を実装）
+  - 運用手順：noteの管理画面で「SNSプロモーション機能 → 割引価格500を入力」設定
+
+- **サムネ画像生成完了**
+  - 仕様：1280×670 PNG
+  - 設計方式：絵文字回避のためカラーチップ方式採用（図解の可読性重視）
+  - 配置：`projects/rakuda-sensei/assets/thumbnails/002-side-fire-sheet.png`
+
+- **SNS告知バンドル作成**（`sns/cross-posts/2026-06-02-side-fire-sheet/`）
+  - **x-variants.md**：X向け A/B/C 3パターン + 5回連投スケジュール + **自動RT用テンプレ文**
+  - **threads.md**：500字長文版（スタンドアロン）
+  - **instagram.md**：カルーセル構成 + キャプション + ハッシュタグ戦略
+  - **promo-meta.json**：構造化メタデータ（投稿スクリプトが拾える形式）
+
+**運用メモ：**
+- 読者は **Xアカウント連携が必須**（SNSプロモ機能の制限）
+  - 拡散文でこの準備要件を軽く触れると親切
+
+**成果物：**
+- `projects/rakuda-sensei/assets/thumbnails/002-side-fire-sheet.png`（1280×670 PNG）
+- `projects/rakuda-sensei/sns/cross-posts/2026-06-02-side-fire-sheet/`（4ファイル）
+- `projects/rakuda-sensei/automation/build_thumbnail_fire.py`（サムネ生成スクリプト）
+
+**次ステップ：**
+- 記事URLが確定したら placeholder（`xxxx`）を一括置換スクリプト化
+- Day 7 後のリライト案を予め用意
+- 別の柱（A. ICT/AI時短 / C. 教育ゲーム）の次の記事企画着手
+
+---
+
 ### [2026-06-02] rakuda-sensei — note第2弾記事「サイドFIRE計画シート」ドラフト完成
 
 **作業内容：**
