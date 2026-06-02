@@ -263,6 +263,47 @@ def dump_html(page, name: str):
         print(f"WARNING: HTML dump失敗 {name}: {e}", file=sys.stderr)
 
 
+def enumerate_form_elements(page, label: str = ""):
+    """publish パネル上の input/button をすべて列挙してログに出力する（ログ経由で selector を割り出す用）"""
+    print(f"\n=== 🔍 要素列挙: {label} ===")
+    try:
+        inputs = page.query_selector_all("input, textarea, select, [contenteditable='true']")
+        print(f"📥 input/textarea/contenteditable: {len(inputs)}個")
+        for i, inp in enumerate(inputs[:40]):
+            try:
+                tag = inp.evaluate("el => el.tagName")
+                attrs = {
+                    "type": inp.get_attribute("type"),
+                    "name": inp.get_attribute("name"),
+                    "placeholder": inp.get_attribute("placeholder"),
+                    "aria-label": inp.get_attribute("aria-label"),
+                    "id": inp.get_attribute("id"),
+                    "value": (inp.get_attribute("value") or "")[:30],
+                }
+                cls = (inp.get_attribute("class") or "")[:60]
+                visible = inp.is_visible()
+                attrs_str = " ".join(f"{k}={v}" for k, v in attrs.items() if v)
+                print(f"  [{i}] {tag} visible={visible} {attrs_str} class='{cls}'")
+            except Exception:
+                pass
+        buttons = page.query_selector_all("button, [role='button'], [role='radio'], a[role='button']")
+        print(f"\n🔘 button: {len(buttons)}個")
+        for i, btn in enumerate(buttons[:40]):
+            try:
+                text = (btn.inner_text() or "").strip()[:50].replace("\n", " ")
+                aria = btn.get_attribute("aria-label") or ""
+                role = btn.get_attribute("role") or ""
+                disabled = btn.get_attribute("disabled") or ""
+                visible = btn.is_visible()
+                cls = (btn.get_attribute("class") or "")[:50]
+                print(f"  [{i}] '{text}' role={role} aria='{aria}' disabled={disabled} visible={visible} class='{cls}'")
+            except Exception:
+                pass
+        print(f"=== 列挙終わり ===\n")
+    except Exception as e:
+        print(f"WARNING: 列挙失敗: {e}", file=sys.stderr)
+
+
 def delete_drafts_matching_title(page, title_prefix: str, max_delete: int = 10) -> int:
     """note の下書き一覧から、タイトル前方一致するドラフトを削除する。
     複数試行のたびに増えた重複ドラフトをクリーンアップ。"""
@@ -661,6 +702,9 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 pass
             page.wait_for_timeout(2000)
 
+            # 公開パネルの全要素を列挙（ログから selector を逆引きするため）
+            enumerate_form_elements(page, "公開パネル直後 (/publish/)")
+
             # アイキャッチ画像（サムネ）アップロード
             # 記事ファイル名から推定 (articles/002-foo.md → assets/thumbnails/002-foo.png)
             thumbnail_path = (
@@ -716,9 +760,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     except Exception:
                         continue
                 # 有料を選んだ後に価格入力欄が現れるので少し待つ
-                page.wait_for_timeout(1500)
+                page.wait_for_timeout(2000)
                 shot(page, "07b-after-paid-radio")
                 dump_html(page, "07b-after-paid-radio")
+                enumerate_form_elements(page, "有料ラジオ押下後")
                 price_selectors = [
                     'input[type="number"][name*="price"]',
                     'input[placeholder*="価格"]',
