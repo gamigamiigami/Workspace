@@ -640,6 +640,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # 公開URLパターン (note.com/{user}/n/{hash}) に遷移していれば成功
                 if "/n/" in page.url and "/notes/" not in page.url:
                     print(f"✅ 公開完了！URL: {page.url}")
+                    # 後続のクロスポスト連携用にURLを永続化
+                    url_file = ROOT / "projects" / "rakuda-sensei" / "articles" / ".last-published-url.txt"
+                    url_file.write_text(page.url + "\n", encoding="utf-8")
+                    print(f"💾 .last-published-url.txt に保存")
                 else:
                     # 念のため公開記事一覧をチェック
                     print(f"⚠️ 投稿クリックしたがURLが想定外: {page.url}")
