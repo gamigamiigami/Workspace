@@ -4,6 +4,53 @@
 
 ---
 
+### [2026-06-03] rakuda-sensei — 完全自動公開パイプライン最終実装
+
+**作業内容：**
+
+- **サイドFIRE記事（¥1,500）が本番運用パイプラインに移行**
+  - GitHub raw URL 経由での Excel ダウンロード配布完成（`side-fire-planner-2026.xlsx` がリポジトリに統合）
+  - ファイルアップロード不要 → GitHub 管理 → 記事更新時に自動同期される仕組み
+  - 配置：`projects/rakuda-sensei/downloads/side-fire-planner-2026.xlsx`
+
+- **note 公開URL自動キャプチャ機能実装**
+  - `post_to_note.py` に URL自動キャプチャ処理を追加
+  - 公開後の URL が `.last-published-url.txt` に自動保存
+  - 次段階：クロスポスト自動化スクリプト（`post-note-promo.py`）が この URL を検知 → X/Threads 告知を自動投稿
+
+- **publish-note-on-push.yml ワークフロー検証完了**
+  - git push トリガーで note 自動投稿の連鎖確認
+  - Issue #48（サイドFIRE記事公開）が LIVE 状態を確認
+
+- **ペイウォール機能（¥1,500）有効化完了**
+  - 記事は公開状態で、¥1,500 の購読制限が有効
+
+**運用メモ：**
+- 手動で仕組み込む部分：note のプロモーション機能 ON（SNS拡散割引 ¥500）+ 割引リンク Issue #48 に貼付（5分作業）
+- 古い下書きは note マイページから手動削除（2分作業）
+- X/Threads/IG の告知ツイート投稿（`x-variants.md` より copy-paste）
+
+**成果物：**
+- `projects/rakuda-sensei/downloads/side-fire-planner-2026.xlsx`（GitHub raw URL 配布対応）
+- `projects/rakuda-sensei/automation/post_to_note.py`（URL自動キャプチャ機能追加）
+- `.rotation.log`（柱 rotation 状態を記録：001/002 初期化）
+
+**実装パターン：**
+- テンプレート状態（xxxx プレースホルダ）→ note 公開 → URL確定 → 全ファイル自動置換 → SNS 告知自動投稿
+- このサイクルにより、「手動介入ポイント 0→1」に削減（UI操作のみ）
+
+**次ステップ：**
+- note のプロモーション設定（手動 5分）
+- X/Threads 告知投稿（手動 3分）
+- 月曜朝の自動パイプライン衝突対策：「投稿スキップ機能」の実装検討
+- 柱A・C の次の企画 3〜5本ストック作成
+
+**知見：**
+- URL一括置換スクリプト + GitHub Actions ワークフロー + テンプレート管理により、「公開 → 拡散 → 翌週リライト」のサイクルを「人間操作 5分 以下」に圧縮可能
+- テンプレート状態を維持しながら複数ファイル同期 → URL確定後に自動化 という設計が、スケーリング時の品質・速度両立を実現
+
+---
+
 ### [2026-06-02] rakuda-sensei — 投稿当日チェックリスト＆URL置換スクリプト完成
 
 **作業内容：**
