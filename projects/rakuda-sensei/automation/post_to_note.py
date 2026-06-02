@@ -737,33 +737,48 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             else:
                 print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
 
-            # 価格設定 - セレクタ拡充
+            # 「記事タイプ」を開く（noteの新UIは折りたたみで型を選ぶ）
+            try:
+                page.locator('button:has-text("記事タイプ")').first.click(timeout=3000)
+                page.wait_for_timeout(1500)
+                print("✅ 記事タイプを開いた")
+            except Exception:
+                print("ℹ️  記事タイプボタン展開不要 or 失敗")
+
+            # 価格設定 - 有料ラジオは invisible なので check(force=True) で直接選択
             if meta["price"] > 0:
-                paid_selectors = [
-                    'label:has-text("有料")',
-                    'input[value="paid"]',
-                    'button:has-text("有料")',
-                    'input[type="radio"][value*="paid"]',
-                    'input[type="radio"][value*="有料"]',
-                    '[data-testid*="paid"]',
-                    '[role="radio"]:has-text("有料")',
-                    'input[type="radio"] + label:has-text("有料")',
-                    '[class*="paid"] input',
-                ]
                 paid_clicked = False
-                for sel in paid_selectors:
-                    try:
-                        page.locator(sel).first.click(timeout=2000)
-                        paid_clicked = True
-                        page.wait_for_timeout(1500)
-                        break
-                    except Exception:
-                        continue
-                # 有料を選んだ後に価格入力欄が現れるので少し待つ
-                page.wait_for_timeout(2000)
+                # 第一手: 直接 input#paid を check(force=True)
+                try:
+                    paid_radio = page.locator('input#paid[name="is_paid"][value="paid"]').first
+                    paid_radio.check(force=True, timeout=3000)
+                    paid_clicked = True
+                    print("✅ 有料ラジオ check(force) 成功 (input#paid)")
+                    page.wait_for_timeout(2500)
+                except Exception as e:
+                    print(f"⚠️  input#paid check失敗: {e}")
+                # フォールバック: ラベルクリック
+                if not paid_clicked:
+                    paid_selectors = [
+                        'label[for="paid"]',
+                        'label:has-text("有料")',
+                        '[role="radio"]:has-text("有料")',
+                        'button:has-text("有料")',
+                    ]
+                    for sel in paid_selectors:
+                        try:
+                            page.locator(sel).first.click(timeout=2000)
+                            paid_clicked = True
+                            print(f"✅ 有料セレクタ クリック成功 ({sel})")
+                            page.wait_for_timeout(2500)
+                            break
+                        except Exception:
+                            continue
+                # 有料を選んだ後に価格入力欄が現れるので待ってから列挙
+                page.wait_for_timeout(2500)
                 shot(page, "07b-after-paid-radio")
                 dump_html(page, "07b-after-paid-radio")
-                enumerate_form_elements(page, "有料ラジオ押下後")
+                enumerate_form_elements(page, "有料ラジオcheck後")
                 price_selectors = [
                     'input[type="number"][name*="price"]',
                     'input[placeholder*="価格"]',
@@ -845,10 +860,11 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 browser.close()
                 return 0
 
-            # 最終投稿前にHTMLダンプ
-            page.wait_for_timeout(1500)
+            # 最終投稿前にHTMLダンプ + 列挙
+            page.wait_for_timeout(2000)
             shot(page, "08b-before-final-publish")
             dump_html(page, "08b-before-final-publish")
+            enumerate_form_elements(page, "最終投稿直前")
 
             # 最終投稿ボタン - セレクタ大幅拡充
             final_publish_selectors = [
@@ -887,13 +903,37 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 try:
                     loc = page.locator(sel).last
                     loc.wait_for(state="visible", timeout=2500)
-                    loc.click(timeout=2500)
-                    page.wait_for_timeout(6000)
+                    loc.click(timeout=2500, force=True)
+                    page.wait_for_timeout(8000)
                     published = True
                     print(f"✅ 投稿ボタンクリック (selector: {sel})")
                     break
-                except Exception:
+                except Exception as e:
                     continue
+
+            # 確認ダイアログが出る可能性 → 「投稿する」を再度クリック
+            if published:
+                try:
+                    page.wait_for_timeout(2000)
+                    confirm_btns = [
+                        'dialog button:has-text("投稿する")',
+                        'dialog button:has-text("公開する")',
+                        '[role="dialog"] button:has-text("投稿する")',
+                        '[role="dialog"] button:has-text("公開する")',
+                        'button:has-text("投稿する")',
+                    ]
+                    for csel in confirm_btns:
+                        try:
+                            cbtn = page.locator(csel).last
+                            cbtn.wait_for(state="visible", timeout=2000)
+                            cbtn.click(timeout=2000, force=True)
+                            page.wait_for_timeout(6000)
+                            print(f"✅ 確認ダイアログ '投稿する' クリック ({csel})")
+                            break
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
 
             shot(page, "09-after-final-click")
             dump_html(page, "09-after-final-click")
