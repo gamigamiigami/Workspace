@@ -237,14 +237,118 @@ def login_to_note(page, email: str, password: str) -> bool:
     return True
 
 
+SHOT_DIR = ROOT / "projects" / "rakuda-sensei" / "automation" / "screenshots"
+DUMP_DIR = ROOT / "projects" / "rakuda-sensei" / "automation" / "html-dumps"
+
+
 def shot(page, name: str):
     """各ステップでスクリーンショットを撮影（デバッグ用）"""
     try:
-        path = f"note-step-{name}.png"
-        page.screenshot(path=path, full_page=False)
-        print(f"📸 スクショ: {path}")
+        SHOT_DIR.mkdir(parents=True, exist_ok=True)
+        path = SHOT_DIR / f"note-step-{name}.png"
+        page.screenshot(path=str(path), full_page=True)
+        print(f"📸 スクショ: {path.name}")
     except Exception as e:
         print(f"WARNING: スクショ失敗 {name}: {e}", file=sys.stderr)
+
+
+def dump_html(page, name: str):
+    """重要ポイントで現在のHTMLをダンプ（セレクタ分析用）"""
+    try:
+        DUMP_DIR.mkdir(parents=True, exist_ok=True)
+        path = DUMP_DIR / f"note-step-{name}.html"
+        path.write_text(page.content(), encoding="utf-8")
+        print(f"📄 HTML dump: {path.name}")
+    except Exception as e:
+        print(f"WARNING: HTML dump失敗 {name}: {e}", file=sys.stderr)
+
+
+def delete_drafts_matching_title(page, title_prefix: str, max_delete: int = 10) -> int:
+    """note の下書き一覧から、タイトル前方一致するドラフトを削除する。
+    複数試行のたびに増えた重複ドラフトをクリーンアップ。"""
+    print(f"🧹 下書きクリーンアップ開始: '{title_prefix[:20]}...'")
+    deleted = 0
+    for attempt in range(max_delete):
+        try:
+            page.goto("https://note.com/notes/manage/draft",
+                      wait_until="domcontentloaded", timeout=15000)
+            page.wait_for_timeout(3000)
+            # タイトル一致のドラフトカードを探す（前方20文字一致）
+            matches = page.locator(f'a[href*="/edit"]:has-text("{title_prefix[:18]}")').all()
+            if not matches:
+                # 別パターン
+                matches = page.locator(f'[class*="article"]:has-text("{title_prefix[:18]}")').all()
+            if not matches:
+                print(f"  → 一致ドラフトなし（{deleted}件削除済み）")
+                break
+            print(f"  → {len(matches)}件のマッチ発見、最初の1件を削除試行")
+            # 1件目をクリックして編集ページへ
+            try:
+                matches[0].click(timeout=5000)
+                page.wait_for_load_state("domcontentloaded", timeout=10000)
+                page.wait_for_timeout(2000)
+                # 編集ページの設定メニュー（•••）→ 削除
+                menu_selectors = [
+                    'button[aria-label*="設定"]',
+                    'button[aria-label*="メニュー"]',
+                    'button:has-text("•••")',
+                    'button:has-text("⋯")',
+                    'button:has-text("…")',
+                    '[role="button"][aria-label*="操作"]',
+                ]
+                menu_clicked = False
+                for sel in menu_selectors:
+                    try:
+                        page.locator(sel).first.click(timeout=2000)
+                        menu_clicked = True
+                        page.wait_for_timeout(800)
+                        break
+                    except Exception:
+                        continue
+                if not menu_clicked:
+                    print(f"  ⚠️  ドラフトメニュー開けず → スキップ")
+                    break
+                delete_selectors = [
+                    'button:has-text("ノートを削除")',
+                    'button:has-text("削除")',
+                    '[role="menuitem"]:has-text("削除")',
+                    'li:has-text("削除")',
+                ]
+                deleted_this = False
+                for sel in delete_selectors:
+                    try:
+                        page.locator(sel).first.click(timeout=2000)
+                        page.wait_for_timeout(1000)
+                        # 確認ダイアログ
+                        confirm_selectors = [
+                            'button:has-text("削除する")',
+                            'button:has-text("OK")',
+                            'dialog button:has-text("削除")',
+                        ]
+                        for csel in confirm_selectors:
+                            try:
+                                page.locator(csel).first.click(timeout=2000)
+                                page.wait_for_timeout(2000)
+                                break
+                            except Exception:
+                                continue
+                        deleted += 1
+                        deleted_this = True
+                        print(f"  ✅ ドラフト削除成功 (累計{deleted}件)")
+                        break
+                    except Exception:
+                        continue
+                if not deleted_this:
+                    print(f"  ⚠️  削除ボタン押下失敗 → 中断")
+                    break
+            except Exception as e:
+                print(f"  ⚠️  ドラフト操作失敗: {e}")
+                break
+        except Exception as e:
+            print(f"  ⚠️  下書き一覧アクセス失敗: {e}")
+            break
+    print(f"🧹 下書きクリーンアップ完了: {deleted}件削除")
+    return deleted
 
 
 def normalize_cookies(raw_json: str) -> list:
@@ -400,6 +504,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     return 1
                 shot(page, "01-login-ok")
 
+            # 古い同タイトル下書きを削除（過去試行の汚れ掃除）
+            if not dry_run:
+                delete_drafts_matching_title(page, meta["title"])
+
             # 新規記事作成 - 複数のURL候補を試す
             compose_urls = [
                 "https://editor.note.com/new",       # 2024-2026 新URL
@@ -512,6 +620,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             # noteは数秒で自動下書き保存するので待機
             page.wait_for_timeout(4000)
             shot(page, "05-after-body-input")
+            dump_html(page, "05-after-body-input")
 
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
@@ -532,16 +641,57 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     btn = page.locator(sel).first
                     btn.wait_for(timeout=3000, state="visible")
                     btn.click()
-                    page.wait_for_timeout(2500)
+                    page.wait_for_timeout(4000)  # /publish/ ページのSPAレンダ待ち
                     publish_panel_opened = True
                     print(f"✅ 公開パネルを開いた (selector: {sel})")
                     shot(page, "06-publish-panel")
+                    dump_html(page, "06-publish-panel")
                     break
                 except Exception:
                     continue
             if not publish_panel_opened:
                 print("WARNING: 公開パネル開けず", file=sys.stderr)
                 shot(page, "06-no-publish-panel")
+                dump_html(page, "06-no-publish-panel")
+
+            # /publish/ ページに到達 → networkidle まで待つ
+            try:
+                page.wait_for_load_state("networkidle", timeout=10000)
+            except Exception:
+                pass
+            page.wait_for_timeout(2000)
+
+            # アイキャッチ画像（サムネ）アップロード
+            # 記事ファイル名から推定 (articles/002-foo.md → assets/thumbnails/002-foo.png)
+            thumbnail_path = (
+                ROOT / "projects" / "rakuda-sensei" / "assets" / "thumbnails"
+                / f"{md_path.stem}.png"
+            )
+            if thumbnail_path.exists():
+                print(f"🖼️  サムネ候補: {thumbnail_path.name}")
+                # Step 1: file input を直接探す（多くの場合 hidden で常駐）
+                file_input_selectors = [
+                    'input[type="file"][accept*="image"]',
+                    'input[type="file"]',
+                ]
+                thumb_set = False
+                for sel in file_input_selectors:
+                    try:
+                        # set_input_files は hidden input でも動作する
+                        page.locator(sel).first.set_input_files(
+                            str(thumbnail_path), timeout=3000)
+                        thumb_set = True
+                        print(f"✅ サムネ添付 (selector: {sel})")
+                        page.wait_for_timeout(6000)  # アップロード待ち
+                        shot(page, "07-after-thumbnail")
+                        break
+                    except Exception as e:
+                        continue
+                if not thumb_set:
+                    print(f"⚠️  サムネ添付失敗（file input 見つからず）")
+                    shot(page, "07-no-thumbnail")
+            else:
+                print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
 
             # 価格設定 - セレクタ拡充
             if meta["price"] > 0:
@@ -553,29 +703,50 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     'input[type="radio"][value*="有料"]',
                     '[data-testid*="paid"]',
                     '[role="radio"]:has-text("有料")',
+                    'input[type="radio"] + label:has-text("有料")',
+                    '[class*="paid"] input',
                 ]
                 paid_clicked = False
                 for sel in paid_selectors:
                     try:
                         page.locator(sel).first.click(timeout=2000)
                         paid_clicked = True
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(1500)
                         break
                     except Exception:
                         continue
+                # 有料を選んだ後に価格入力欄が現れるので少し待つ
+                page.wait_for_timeout(1500)
+                shot(page, "07b-after-paid-radio")
+                dump_html(page, "07b-after-paid-radio")
                 price_selectors = [
                     'input[type="number"][name*="price"]',
                     'input[placeholder*="価格"]',
                     'input[placeholder*="¥"]',
+                    'input[placeholder*="円"]',
+                    'input[placeholder*="100"]',
+                    'input[placeholder*="500"]',
                     'input[type="number"]',
+                    'input[inputmode="numeric"]',
+                    'input[inputmode="decimal"]',
                     'input[name="price"]',
+                    'input[name*="amount"]',
+                    'input[aria-label*="価格"]',
+                    'input[aria-label*="¥"]',
+                    '[class*="price"] input',
+                    '[class*="amount"] input',
+                    '[data-testid*="price"] input',
+                    'form input[type="text"]',
                 ]
                 price_set = False
                 for sel in price_selectors:
                     try:
-                        page.locator(sel).first.fill(str(meta["price"]), timeout=2000)
+                        loc = page.locator(sel).first
+                        loc.wait_for(state="visible", timeout=2000)
+                        loc.fill(str(meta["price"]), timeout=2000)
                         price_set = True
-                        page.wait_for_timeout(500)
+                        print(f"✅ 価格入力 (selector: {sel})")
+                        page.wait_for_timeout(800)
                         break
                     except Exception:
                         continue
@@ -583,17 +754,39 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     print(f"✅ 価格設定完了: ¥{meta['price']}")
                 else:
                     print(f"WARNING: 価格設定不完全 (paid={paid_clicked}, price={price_set})", file=sys.stderr)
+                    shot(page, "07c-price-fail")
+                    dump_html(page, "07c-price-fail")
 
-            # タグ設定
+            # タグ設定（複数セレクタ試行）
+            tag_input_selectors = [
+                'input[placeholder*="ハッシュタグ"]',
+                'input[placeholder*="タグ"]',
+                '[role="combobox"]',
+                'input[aria-autocomplete]',
+                '[class*="tag"] input[type="text"]',
+                '[class*="hashtag"] input',
+                'input[aria-label*="タグ"]',
+            ]
+            tag_input_locator = None
+            for sel in tag_input_selectors:
+                try:
+                    loc = page.locator(sel).first
+                    loc.wait_for(state="visible", timeout=2000)
+                    tag_input_locator = loc
+                    print(f"✅ タグ入力欄発見 (selector: {sel})")
+                    break
+                except Exception:
+                    continue
             for tag in meta["tags"][:5]:
                 tag = tag.strip().lstrip("#")
                 if not tag:
                     continue
+                if tag_input_locator is None:
+                    break
                 try:
-                    tag_input = page.locator('input[placeholder*="タグ"], [class*="tag"] input').first
-                    tag_input.fill(tag, timeout=5000)
-                    tag_input.press("Enter")
-                    page.wait_for_timeout(300)
+                    tag_input_locator.fill(tag, timeout=5000)
+                    tag_input_locator.press("Enter")
+                    page.wait_for_timeout(500)
                 except Exception:
                     pass
 
@@ -607,23 +800,50 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 browser.close()
                 return 0
 
-            # 最終投稿ボタン - セレクタ拡充
+            # 最終投稿前にHTMLダンプ
+            page.wait_for_timeout(1500)
+            shot(page, "08b-before-final-publish")
+            dump_html(page, "08b-before-final-publish")
+
+            # 最終投稿ボタン - セレクタ大幅拡充
             final_publish_selectors = [
+                # 標準
                 'button:has-text("投稿する")',
                 'button:has-text("公開する")',
                 'button:has-text("公開")',
                 'button:has-text("投稿")',
+                # 有料エリア確定ボタン経由フロー
+                'button:has-text("有料エリア設定を完了")',
+                'button:has-text("有料設定を完了")',
+                'button:has-text("設定を完了")',
+                # data-testid
                 '[data-testid="final-publish"]',
+                '[data-testid*="publish"]',
+                '[data-testid*="post"]',
+                # type submit
                 'button[type="submit"]:has-text("公開")',
                 'button[type="submit"]:has-text("投稿")',
+                'button[type="submit"]',
+                # ダイアログ/モーダル内
                 'dialog button:has-text("公開")',
                 '[role="dialog"] button:has-text("公開")',
+                '[class*="modal"] button:has-text("公開")',
+                # フッター/プライマリ系
+                'footer button:has-text("公開")',
+                'footer button:has-text("投稿")',
+                '[class*="footer"] button',
+                'button[class*="primary"]:has-text("公開")',
+                'button[class*="primary"]:has-text("投稿")',
+                # 一般プライマリボタン（最終手段）
+                'button[class*="primary"]:not([disabled])',
             ]
             published = False
             for sel in final_publish_selectors:
                 try:
-                    page.locator(sel).last.click(timeout=3000)
-                    page.wait_for_timeout(5000)
+                    loc = page.locator(sel).last
+                    loc.wait_for(state="visible", timeout=2500)
+                    loc.click(timeout=2500)
+                    page.wait_for_timeout(6000)
                     published = True
                     print(f"✅ 投稿ボタンクリック (selector: {sel})")
                     break
@@ -631,6 +851,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     continue
 
             shot(page, "09-after-final-click")
+            dump_html(page, "09-after-final-click")
             # noteは記事編集中なので、エディタURLにいる時点で既に「下書き」として保存されている
             edit_url = page.url
             print(f"📝 現在URL: {edit_url}")
