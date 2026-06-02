@@ -1,0 +1,29 @@
+{
+  "article_path": "projects/rakuda-sensei/articles/002-side-fire-sheet.md",
+  "article_title": "公務員夫婦のサイドFIRE達成診断シート｜5分入力で全部わかる",
+  "article_url_placeholder": "https://note.com/rakuda_sensei/n/xxxx",
+  "thumbnail": "projects/rakuda-sensei/assets/thumbnails/002-side-fire-sheet.png",
+  "pricing": {
+    "regular_price": 1500,
+    "share_discount_price": 500,
+    "feature": "SNSプロモーション機能",
+    "note": "noteの「SNSプロモーション機能」で常時設定。Xのリポストで応援すると割引価格で購入可能"
+  },
+  "tags": ["サイドFIRE", "公務員", "資産形成"],
+  "schedule": {
+    "publish_day": "Sunday 21:00 JST",
+    "first_x_post": "Day 1 (Sunday) 21:00",
+    "followup_posts": [
+      {"day": "Day 2", "time": "07:00", "variant": "A. ストーリー型"},
+      {"day": "Day 2", "time": "12:30", "variant": "B. ベネフィット列挙型"},
+      {"day": "Day 3", "time": "21:00", "variant": "A 軽リライト"},
+      {"day": "Day 7", "time": "21:00", "variant": "1週間レビュー+数字"}
+    ]
+  },
+  "auto_rt_template": "公務員夫婦のサイドFIRE達成診断シート、買いました。入力11項目で「あと月いくら積立増やせば達成？」が自動で出てくるExcel。夫婦の家計会議で使えます🐪 https://note.com/rakuda_sensei/n/xxxx",
+  "platforms": {
+    "x": "x-variants.md",
+    "threads": "threads.md",
+    "instagram": "instagram.md (※IGはSNSプロモ対象外・ブランディング目的のみ)"
+  }
+}
