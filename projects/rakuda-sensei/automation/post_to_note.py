@@ -289,7 +289,7 @@ def normalize_cookies(raw_json: str) -> list:
     return normalized
 
 
-def post_to_note(article_path: str, dry_run: bool = False) -> int:
+def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = False) -> int:
     email = os.environ.get("NOTE_EMAIL")
     password = os.environ.get("NOTE_PASSWORD")
     if not email or not password:
@@ -588,6 +588,16 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
                 except Exception:
                     pass
 
+            # 下書き保存モード: 最終投稿はせず、エディタの自動保存を待って終了
+            if save_draft:
+                print("📌 --save-draft モード: 下書き保存のみで終了します")
+                page.wait_for_timeout(4000)
+                shot(page, "08-draft-saved-only")
+                print(f"📝 下書き保存完了: {page.url}")
+                print("   → ファイル添付・SNSプロモ設定・公開は note UI で実施してください")
+                browser.close()
+                return 0
+
             # 最終投稿ボタン - セレクタ拡充
             final_publish_selectors = [
                 'button:has-text("投稿する")',
@@ -673,7 +683,12 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    if not args:
-        print("Usage: post_to_note.py <article_path> [--dry-run]", file=sys.stderr)
+    positional = [a for a in args if not a.startswith("--")]
+    if not positional:
+        print("Usage: post_to_note.py <article_path> [--dry-run] [--save-draft]", file=sys.stderr)
         sys.exit(1)
-    sys.exit(post_to_note(args[0], "--dry-run" in args))
+    sys.exit(post_to_note(
+        positional[0],
+        dry_run="--dry-run" in args,
+        save_draft="--save-draft" in args,
+    ))
