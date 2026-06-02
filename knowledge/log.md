@@ -4,6 +4,58 @@
 
 ---
 
+### [2026-06-01] rakuda-sensei — note記事公開→X/Threads告知の完全自動化 (集客動線完成)
+
+**作業内容：**
+
+- **自動告知パイプラインの実装**
+  - `post_note_promo.py`：note記事公開時にX/Threadsへ自動告知投稿
+    - weekly-content-pipeline で生成されたクロスポスト案から「失敗談パターン(パターンA)」を自動抽出
+    - X：Playwright + クッキー認証で高速投稿
+    - Threads：Meta APIで公式経由投稿
+    - `.promo-posted.log` で重複投稿を防止
+  
+  - `post-note-promo.yml`：GitHub Actions ワークフロー
+    - `workflow_dispatch` トリガー + 定期実行対応
+    - Playwright でブラウザ自動化
+    - 失敗時 artifact にスクショ保存
+  
+  - `weekly-content-pipeline.yml` に `trigger-note-promo` ジョブ追加
+    - `trigger-note-post` の60秒後に自動起動
+    - 完全自動連鎖：X生成 → note記事 → クロスポスト → **告知投稿**
+
+- **集客動線の7ステップ完全自動化**
+  ```
+  [毎週日曜 21:00 UTC] weekly-content-pipeline 起動
+       ↓
+  ① X週次21本生成 (1日3スロット×7日)
+  ② note記事1本生成 + 品質研磨
+  ③ クロスポスト一式生成 (X3パターン + Threads + IG)
+  ④ BOOTH商品HTML生成
+       ↓
+  ⑤ post-to-note: note記事を自動投稿
+       ↓ 60秒待機
+  ⑥ post-note-promo: X / Threads に告知を即時投稿 ⭐NEW
+       ↓
+     noteへの流入 → 記事閲覧 → 有料商品購入 → 売上
+  ```
+
+- **パターン選定ロジック**
+  - クロスポスト生成時に3パターン（失敗談／数字インパクト／問いかけ）を機械的に生成
+  - 告知投稿では「失敗談パターン」を採用（理由：SNSで最もエンゲージメント高）
+  - 例：「日本株デイトレで-50万出した時〜」という書き出しで読者関心を引き付け → note記事へ流入
+
+**成果物：**
+- `projects/rakuda-sensei/automation/post_note_promo.py`：告知投稿スクリプト
+- `.github/workflows/post-note-promo.yml`：自動化ワークフロー
+- PR #42 マージ完了（本流に統合）
+
+**費用:** ¥0（GitHub Models + Meta API 無料枠）
+
+**運用開始:** 来週日曜深夜から本自動稼働（何も操作不要）
+
+---
+
 ### [2026-06-01] rakuda-sensei — 商品ラインナップ・売上試算の完全整理 + 3フェーズ公開戦略確立
 
 **作業内容：**
