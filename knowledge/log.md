@@ -4,6 +4,41 @@
 
 ---
 
+### [2026-06-02] rakuda-sensei — 投稿当日チェックリスト＆URL置換スクリプト完成
+
+**作業内容：**
+
+- **投稿当日チェックリスト（LAUNCH_CHECKLIST.md）完成**
+  - タイムライン式：T-7（記事確認）→ T-1（最終校正）→ T-0（公開）→ T+7（リライト投稿）の4段階
+  - 各段階ごとに「確認項目」「実行スクリプト」「投稿文テンプレ」をコピペ形式で整備
+  - 記事投稿準備→SNS告知→翌週リライト案作成までの全工程をガイド化
+  - 配置：`projects/rakuda-sensei/sns/cross-posts/2026-06-02-side-fire-sheet/LAUNCH_CHECKLIST.md`
+
+- **URL一括置換スクリプト（replace_article_url.py）新規作成**
+  - 機能：記事URLが確定したら xxxx プレースホルダ + `[記事URL自動挿入]` テキストを実URLに一括置換
+  - 対応範囲：9ファイル以上の複数ファイルの同時置換対応
+  - dry-run モード：実行前に結果をプレビュー → 汚染されたURLを元の placeholder に復元可能
+  - 使用法：`python3 replace_article_url.py https://note.com/rakuda_sensei/n/n...`
+  - 配置：`projects/rakuda-sensei/automation/replace_article_url.py`
+
+**運用メモ：**
+- 新しいワークフロー：記事執筆完了（URLプレースホルダで複数ファイル同期）→ noteに投稿→URLが確定→置換スクリプト実行→全ファイルの参照URL自動更新
+
+**成果物：**
+- `projects/rakuda-sensei/sns/cross-posts/2026-06-02-side-fire-sheet/LAUNCH_CHECKLIST.md`（T-7〜T+7）
+- `projects/rakuda-sensei/automation/replace_article_url.py`（Python3）
+
+**知見：**
+- 月3本投稿リズム達成には「企画ストック 3〜5本」が必須（即座に投稿できる体制）
+- URL置換パターン（プレースホルダ）により、URL確定前は「テンプレート状態で複数ファイルが同期したまま管理」可能
+- チェックリスト化することで、セッション間のコンテキスト引き継ぎが不要に
+
+**次ステップ：**
+- Day 7 後のリライト投稿案（売上・PV・エンゲージメント分析に基づく記事の再構成版）を予め用意する検討
+- 柱A（ICT/AI時短）・C（教育ゲーム）の次の記事企画 3〜5本ストック作成が月3本リズムの鍵
+
+---
+
 ### [2026-06-02] rakuda-sensei — note第2弾記事「サイドFIRE計画シート」SNS告知バンドル完成
 
 **作業内容：**
