@@ -340,7 +340,10 @@ NG: 顔写真・本名・学校名・教室写真
 
 📥 **夫婦で実践｜サイドFIRE計画シート.xlsx**
 
-[ここに note の有料ファイル添付機能でアップロード]
+[こちらをクリック → ダウンロード（21KB / Excel形式）](https://raw.githubusercontent.com/gamigamiigami/Workspace/claude/addness-side-income-7cjy2/projects/rakuda-sensei/downloads/side-fire-planner-2026.xlsx)
+
+⚠️ ダウンロード後、Excel または無料の Google スプレッドシートで開けます。
+※ファイル名は半角英数の `side-fire-planner-2026.xlsx`。日本語名のシートは別途お渡し可能（X DM）。
 
 ---
 
