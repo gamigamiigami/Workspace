@@ -95,14 +95,41 @@ jobs:
           path: projects/rakuda-sensei/automation/screenshots/
           if-no-files-found: ignore
 
-      - name: Remove trigger file
+      - name: Apply published URL to cross-posts
+        if: success() && steps.trig.outputs.mode == 'publish'
+        run: |
+          URL_FILE="projects/rakuda-sensei/articles/.last-published-url.txt"
+          if [ -f "$URL_FILE" ]; then
+            URL=$(head -1 "$URL_FILE" | tr -d '\r\n')
+            echo "🔗 公開URL: $URL"
+            python3 projects/rakuda-sensei/automation/replace_article_url.py "$URL" || true
+          else
+            echo "⚠️  公開URLファイル無し（URL取得スキップ）"
+          fi
+
+      - name: Trigger cross-post promo (X / Threads)
+        if: success() && steps.trig.outputs.mode == 'publish'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 30
+          curl -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/post-note-promo.yml/dispatches" \
+            -d '{"ref":"${{ github.ref_name }}","inputs":{"dry_run":false}}' || true
+
+      - name: Remove trigger file and commit URL
         if: github.event_name == 'push' && success()
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add projects/rakuda-sensei/articles/.last-published-url.txt 2>/dev/null || true
+          git add projects/rakuda-sensei/sns/cross-posts/ 2>/dev/null || true
           git rm projects/rakuda-sensei/articles/.launch-trigger || true
           if ! git diff --staged --quiet; then
-            git commit -m "chore(auto): launch-trigger消化"
+            git commit -m "chore(auto): launch-trigger消化 + 公開URL反映"
             for i in 1 2 3; do
               git pull --rebase origin "${{ github.ref_name }}" || true
               git push && break
