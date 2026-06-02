@@ -943,12 +943,25 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
 
             if published:
                 shot(page, "10-after-publish-click")
-                # 公開URLパターン (note.com/{user}/n/{hash}) に遷移していれば成功
-                if "/n/" in page.url and "/notes/" not in page.url:
-                    print(f"✅ 公開完了！URL: {page.url}")
+                # 公開URLパターン (note.com/{user}/n/{hash}) または /first_post (初回公開達成ページ)
+                is_published_url = (
+                    ("/n/" in page.url and "/notes/" not in page.url) or
+                    "/first_post" in page.url or
+                    "/notes/n" in page.url and "/edit/" not in page.url and "/publish/" not in page.url
+                )
+                if is_published_url:
+                    # /first_post の場合は note ID から推定URLを構築
+                    actual_url = page.url
+                    import re as _re
+                    m = _re.search(r"/notes/(n[a-f0-9]+)", page.url)
+                    if m and "/first_post" in page.url:
+                        note_id = m.group(1)
+                        # 推定URL (実際の公開URLは user名 が必要だが note は redirect で対応)
+                        actual_url = f"https://note.com/notes/{note_id}"
+                    print(f"✅ 公開完了！URL: {actual_url}")
                     # 後続のクロスポスト連携用にURLを永続化
                     url_file = ROOT / "projects" / "rakuda-sensei" / "articles" / ".last-published-url.txt"
-                    url_file.write_text(page.url + "\n", encoding="utf-8")
+                    url_file.write_text(actual_url + "\n", encoding="utf-8")
                     print(f"💾 .last-published-url.txt に保存")
                 else:
                     # 念のため公開記事一覧をチェック
