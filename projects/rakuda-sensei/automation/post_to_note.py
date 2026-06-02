@@ -311,10 +311,19 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
         m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
         meta["title"] = m.group(1).strip() if m else md_path.stem
 
+    # 添付成果物が必要な記事は自動で下書きモードに切替（ファイル添付は note UI でしかできないため）
+    asset_m = re.search(r"\|\s*添付成果物\s*\|\s*([^|]+?)\s*\|", text)
+    has_attachment = bool(asset_m and "なし" not in asset_m.group(1))
+    if has_attachment and not save_draft and not dry_run:
+        print(f"⚠️  添付成果物あり ({asset_m.group(1).strip()}) → 自動で下書きモードに切替")
+        save_draft = True
+
     print(f"📄 投稿記事: {meta['title']}")
     print(f"💴 価格: ¥{meta['price']}")
     print(f"🏷 タグ: {', '.join(meta['tags'])}")
     print(f"📝 無料部分: {len(free_body)}字 / 有料部分: {len(paid_body)}字")
+    if save_draft:
+        print(f"💾 モード: --save-draft（下書き保存のみ）")
 
     if dry_run:
         print("✅ Dry run完了（実際には投稿していません）")
