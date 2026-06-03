@@ -394,6 +394,83 @@ def delete_drafts_matching_title(page, title_prefix: str, max_delete: int = 10) 
     return deleted
 
 
+_IMG_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+
+
+def insert_body_with_images(page, body: str):
+    """マークダウン本文を note エディタに入力する。
+
+    `![alt](path)` パターンを検出したら、その位置で画像を Playwright の
+    set_input_files でアップロードする。失敗時は alt テキストを文字として
+    残してフォールバックする。
+    """
+    pos = 0
+    inserted_imgs = 0
+    failed_imgs = 0
+
+    for m in _IMG_PATTERN.finditer(body):
+        # 画像参照の前のテキストを入力
+        chunk = body[pos:m.start()]
+        if chunk:
+            page.keyboard.insert_text(chunk)
+            page.wait_for_timeout(400)
+
+        alt = m.group(1)
+        rel_path = m.group(2).strip()
+        img_path = ROOT / rel_path
+
+        # 画像挿入位置を確保するために改行を入れる
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+
+        uploaded = False
+        if img_path.exists():
+            file_input_selectors = [
+                'input[type="file"][accept*="image"]',
+                'input[type="file"][accept*="image/png"]',
+                'input[type="file"]',
+            ]
+            for sel in file_input_selectors:
+                try:
+                    page.locator(sel).first.set_input_files(
+                        str(img_path), timeout=3500
+                    )
+                    # noteのアップロードが完了するまで余裕をもって待機
+                    page.wait_for_timeout(7000)
+                    uploaded = True
+                    inserted_imgs += 1
+                    print(f"🖼️  画像挿入: {img_path.name}")
+                    break
+                except Exception:
+                    continue
+            if not uploaded:
+                failed_imgs += 1
+                print(f"⚠️  画像アップロード失敗: {img_path.name} → alt をテキストとして残す", file=sys.stderr)
+                # フォールバック：alt テキストを残す
+                if alt:
+                    page.keyboard.insert_text(f"（画像：{alt}）")
+        else:
+            failed_imgs += 1
+            print(f"⚠️  画像ファイル不在: {img_path}", file=sys.stderr)
+            if alt:
+                page.keyboard.insert_text(f"（画像：{alt}）")
+
+        # 画像後に改行を入れて続きのテキストへ
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+
+        pos = m.end()
+
+    # 最後の画像参照より後ろのテキスト
+    remaining = body[pos:]
+    if remaining:
+        page.keyboard.insert_text(remaining)
+        page.wait_for_timeout(400)
+
+    if inserted_imgs or failed_imgs:
+        print(f"📷 画像処理結果: 成功 {inserted_imgs} / 失敗 {failed_imgs}")
+
+
 def normalize_cookies(raw_json: str) -> list:
     """
     Cookie-Editor 出力のJSONをPlaywright SetCookieParam形式に正規化する。
@@ -633,9 +710,8 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             page.keyboard.press("Tab")
             page.wait_for_timeout(500)
 
-            # 無料部分を入力
-            page.keyboard.insert_text(free_body)
-            page.wait_for_timeout(500)
+            # 無料部分を入力（画像参照を画像アップロードに展開）
+            insert_body_with_images(page, free_body)
 
             # ペイウォール挿入（有料部分がある場合）
             if paid_body and meta["price"] > 0:
@@ -656,8 +732,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     except Exception:
                         print("WARNING: ペイウォール挿入失敗。手動設定が必要かもしれません", file=sys.stderr)
 
-                page.keyboard.insert_text(paid_body)
-                page.wait_for_timeout(500)
+                insert_body_with_images(page, paid_body)
 
             print("✅ 本文入力完了")
             # noteは数秒で自動下書き保存するので待機
