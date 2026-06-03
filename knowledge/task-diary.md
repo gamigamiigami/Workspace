@@ -6,6 +6,34 @@
 
 ---
 
+### 2026-06-06（セッション47・Note.com クッキー認証ワークフロー調査・エディタドメイン課題特定）
+
+**うまくいったこと**
+- GitHub Actions ワークフローのジョブログ確認方法を習得
+  - `gh run view <run-id> --log` でワークフロー実行ログ全文取得可能
+  - `mcp__github__get_job_logs` ツールで個別ジョブのログ詳細確認可能
+
+**うまくいかなかったこと**
+- Note.com のクッキーベース認証が機能しない
+  - ログインリダイレクト： `https://note.com/login?redirectPath=...` に飛ばされてしまう
+  - クッキー JSON に `editor.note.com` ドメインのものが含まれていない可能性が高い
+
+**発見**
+- note.com は複数ドメインを使用
+  - `note.com`：トップページ
+  - `editor.note.com`：エディタ画面（別ドメイン）
+  - Cookie-Editor で export する際は、**`editor.note.com` を開いた状態で** export する必要がある
+  - 単一ドメイン（note.com のみ）での export では不足している可能性が指摘される
+- クッキー JSON の配列サイズが指標になる
+  - 正常：`[{...}, {...}, ...]` で 25〜40 個程度
+  - 不足：数個のみの場合、対象ドメインが狭い
+
+**次回への申し送り**
+- ユーザーが Cookie-Editor を `editor.note.com` で再度開き直し、export → GitHub Secrets に `NOTE_SESSION_COOKIE` として再登録を試す予定
+- 以降、email/password ログインに切り替える案も用意済み（`NOTE_EMAIL` + `NOTE_PASSWORD` Secrets）
+
+---
+
 ### 2026-06-05（セッション46・認識調整・ナレッジ更新方針確認）
 
 **うまくいったこと**
