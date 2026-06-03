@@ -797,22 +797,48 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 "https://note.com/notes/new",        # 旧URL
                 "https://note.com/sitesettings",
             ]
-            compose_loaded = False
-            for url in compose_urls:
+
+            def _is_editor_url(url: str) -> bool:
+                """エディタに本当に到達しているかを判定する。
+                /login?redirectPath=... のリダイレクト URL は除外する。
+                """
+                if "/login" in url:
+                    return False
+                if "editor.note.com" in url and "/edit" in url:
+                    return True
+                if "editor.note.com/new" in url or "editor.note.com/notes" in url:
+                    return True
+                if "/notes/" in url and "/manage/" not in url:
+                    return True
+                return False
+
+            def _try_compose_urls():
+                for url in compose_urls:
+                    try:
+                        print(f"🔗 試行: {url}")
+                        page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                        page.wait_for_timeout(3000)
+                        if _is_editor_url(page.url):
+                            print(f"✅ エディタ到達: {page.url}")
+                            return True
+                        else:
+                            print(f"⏭ {url} → リダイレクトor非エディタ ({page.url})")
+                    except Exception as e:
+                        print(f"⏭ {url} 失敗: {e}")
+                        continue
+                return False
+
+            compose_loaded = _try_compose_urls()
+
+            # クッキーで editor に行けなかった場合、email/password でログインを試みる
+            if not compose_loaded and "/login" in page.url:
+                print("🔁 editor 側のクッキー失効を検知 → email/password ログインに切替")
                 try:
-                    print(f"🔗 試行: {url}")
-                    page.goto(url, wait_until="domcontentloaded", timeout=20000)
-                    page.wait_for_timeout(3000)
-                    # editorっぽいURLに辿り着いたか
-                    if "editor" in page.url or "/notes/" in page.url or "edit" in page.url:
-                        print(f"✅ エディタ到達: {page.url}")
-                        compose_loaded = True
-                        break
-                    else:
-                        print(f"⏭ {url} → リダイレクトor非エディタ ({page.url})")
+                    if login_to_note(page, email, password):
+                        print("✅ email/password ログイン成功 → エディタ再試行")
+                        compose_loaded = _try_compose_urls()
                 except Exception as e:
-                    print(f"⏭ {url} 失敗: {e}")
-                    continue
+                    print(f"⚠️  フォールバックログイン失敗: {e}", file=sys.stderr)
 
             if not compose_loaded:
                 # 最後の手段: マイページから「投稿」ボタンを探す
