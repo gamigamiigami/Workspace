@@ -6,6 +6,42 @@
 
 ---
 
+### 2026-06-04（セッション44・note記事画像挿入・paste/drop 突破・公開判定改善必要）
+
+**うまくいったこと**
+- paste/drop dispatch 送信により、記事本文への画像挿入4枚すべて成功
+  - Playwright の page.dispatch_event("paste", {paste: True, drop: True}) が刺さる
+  - preview-01-conclusion.png, preview-03-living.png, preview-02-input.png, preview-04-yearly.png の4枚すべて本文に挿入確認
+  - 画像挿入処理：成功 4 / 失敗 0
+- ProseMirror ベースの note エディタに対する clipboard/drop イベント起動の方法を発見
+  - 従来の「+」ボタン → メニュー → file input という複雑なフローは不要
+  - dispatch_event で直接 paste/drop イベントを送信する方がシンプル＆確実
+
+**うまくいかなかったこと**
+- 公開判定ロジックが note の新フロー（`like_reaction_setting` リダイレクト）に未対応
+  - 投稿ボタンクリック後、note が意図せず `like_reaction_setting?kind=recommend` にリダイレクト
+  - スクリプトが「想定外の URL」として exit 1
+  - ただし投稿そのものは通っている可能性が高い（記事ID: nc23399bc3400）
+- 最終公開確認URL（https://note.com/large_pika8608/n/nc23399bc3400）が未検証
+
+**発見**
+- paste/drop dispatch 送信は、DOM に常駐しない file input に対する有効な回避手段
+  - `setInputFiles` + `click` よりも、clipboard イベント / drop イベント の直接送信が note エディタと相性が良い
+- note の投稿フロー改良により、`like_reaction_setting` ページへのリダイレクトが新規実装された可能性
+  - 編集URL から記事ID を抽出して `/users/{user}/n/{id}` 形式で公開URL を組み立てる方が確実
+
+**次回への申し送り**
+- 以下 2点の確認が必要
+  1. ブラウザで https://note.com/large_pika8608/n/nc23399bc3400 を開き、記事が公開されているか、プレビュー画像4枚が本文中に表示されているか確認
+  2. 確認結果に応じて以下の対応を検討
+     - 公開成功の場合：次セッション以降、価格設定とサムネ自動化に着手
+     - 公開失敗の場合：note の新フロー（`like_reaction_setting` 経由）に対応する公開判定ロジック修正
+- 既知問題（次セッション以降の改善対象）
+  - 価格設定：¥0 で公開される（目標は ¥1,500）、3回連続で `label[for=\"paid\"]` クリックが効いていない
+  - サムネ：未設定状態、自動アップロード機能未実装
+
+---
+
 ### 2026-06-04（セッション43・note記事への画像アップロード実装・部分成功）
 
 **うまくいったこと**
