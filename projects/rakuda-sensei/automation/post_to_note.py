@@ -398,7 +398,8 @@ _IMG_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 # noteのProseMirrorエディタに画像を投入するJS。
-# paste/drop イベントを発火させて、ProseMirror の画像ハンドラを起動させる。
+# paste イベントを優先して発火する。preventDefault されたら成功と判定し、
+# drop イベントは送らない（重複挿入を防ぐ）。
 _JS_DISPATCH_IMAGE = r"""
 async (params) => {
     const { dataB64, fileName, mimeType } = params;
@@ -421,7 +422,7 @@ async (params) => {
     }
     editor.focus();
 
-    // 現在のセレクション末尾に擬似的な位置を持たせる
+    // 現在のセレクション末尾にカーソルを置く
     const range = document.createRange();
     range.selectNodeContents(editor);
     range.collapse(false);
@@ -432,38 +433,49 @@ async (params) => {
     const dt = new DataTransfer();
     dt.items.add(file);
 
-    // 1) paste イベント
-    let pasteAccepted = false;
+    // paste を先に試す
+    let method = null;
     try {
         const pasteEvent = new ClipboardEvent('paste', {
             bubbles: true,
             cancelable: true,
             clipboardData: dt,
         });
-        pasteAccepted = !editor.dispatchEvent(pasteEvent);
+        const accepted = !editor.dispatchEvent(pasteEvent);
+        if (accepted) {
+            method = 'paste';
+        }
     } catch (e) { /* noop */ }
 
-    // 2) drop イベント（保険）
-    let dropAccepted = false;
-    try {
-        const rect = editor.getBoundingClientRect();
-        const dropEvent = new DragEvent('drop', {
-            bubbles: true,
-            cancelable: true,
-            dataTransfer: dt,
-            clientX: rect.left + rect.width / 2,
-            clientY: rect.top + rect.height / 2,
-        });
-        dropAccepted = !editor.dispatchEvent(dropEvent);
-    } catch (e) { /* noop */ }
+    // paste が受け入れられなかった時のみ drop を試す（重複防止）
+    if (!method) {
+        try {
+            const rect = editor.getBoundingClientRect();
+            const dropEvent = new DragEvent('drop', {
+                bubbles: true,
+                cancelable: true,
+                dataTransfer: dt,
+                clientX: rect.left + rect.width / 2,
+                clientY: rect.top + rect.height / 2,
+            });
+            const accepted = !editor.dispatchEvent(dropEvent);
+            if (accepted) {
+                method = 'drop';
+            }
+        } catch (e) { /* noop */ }
+    }
 
-    return { success: true, pasteAccepted, dropAccepted, editorClass: editor.className };
+    return { success: method !== null, method, editorClass: editor.className };
 }
 """
 
 
 def _upload_image_via_dispatch(page, img_path) -> bool:
-    """JS evaluate で paste/drop イベントを ProseMirror に直接発火する。"""
+    """JS evaluate で paste または drop イベントを ProseMirror に直接発火する。
+
+    paste が preventDefault されれば成功とみなし、drop は試さない。
+    両方無視されたら False を返す。
+    """
     import base64
     mime = "image/png" if img_path.suffix.lower() == ".png" else "image/jpeg"
     data_b64 = base64.b64encode(img_path.read_bytes()).decode()
@@ -474,12 +486,11 @@ def _upload_image_via_dispatch(page, img_path) -> bool:
             "mimeType": mime,
         })
         if not result.get("success"):
-            print(f"    dispatch失敗: {result.get('reason')}", file=sys.stderr)
+            print(f"    dispatch失敗: {result.get('reason') or 'method not detected'}", file=sys.stderr)
             return False
-        # アップロード完了を待つ
+        # noteがアップロード処理を行うのを待つ
         page.wait_for_timeout(8000)
-        # 画像が挿入されたかどうかは外側で判定する（ここでは送信成功を返す）
-        print(f"    ✓ paste/drop 送信 (paste={result.get('pasteAccepted')}, drop={result.get('dropAccepted')})")
+        print(f"    ✓ {result.get('method')} で挿入受理")
         return True
     except Exception as e:
         print(f"    dispatch例外: {e}", file=sys.stderr)
