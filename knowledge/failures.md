@@ -1,8 +1,74 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-05-31
+最終更新：2026-06-03
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## 認証・API連携
+
+### [2026-06-03] addness-side-income — クッキーベース認証が複数ドメイン間で失効する問題
+
+**状況：** Note.com の自動投稿ワークフローで、ブラウザのセッションクッキーを JSON 化して GitHub Secrets に登録し、GitHub Actions 上で Playwright を実行
+
+**問題：** 
+- クッキーが有効な状態でも、note.com での認証が失敗
+- `https://note.com/login?redirectPath=...` にリダイレクトされてしまう
+- ローカルテスト環境（localhost）では機能するが、GitHub Actions（ubuntu-latest）では失敗
+
+**原因（複合要因）：** 
+```
+① ドメイン隔離：
+   - note.com は複数のサブドメインを使用（note.com, editor.note.com, developer.note.com など）
+   - Cookie-Editor で export したクッキーが単一ドメイン（note.com）のみの可能性
+   - editor.note.com でのクッキーが含まれていない場合、エディタ画面での認証に失敗
+
+② クッキー有効期限・セキュリティ属性：
+   - HttpOnly + Secure フラグが設定されたクッキーは、JSON export で情報喪失
+   - ドメイン・パス・有効期限属性が JSON に含まれていても、ブラウザ外（Python/Playwright）での有効性が異なる
+   - AWS / GitHub Actions の外部実行環境でクッキーが無効化される可能性
+
+③ 環境依存：
+   - ローカル（Chrome/Firefox）では動作するが、GitHub Actions（Chromium）では失敗
+   - Cookie-Editor が複数タブ/ウィンドウのクッキーを完全キャプチャしていない可能性
+```
+
+**解決策（フォールバック実装）：** 
+```
+クッキー認証 → メール/パスワード認証の2段階フォールバック体制：
+
+① クッキー認証を試す
+   - GitHub Secrets に `NOTE_SESSION_COOKIE` を登録
+   - Playwright で JSON を読み込み、setCookie() で設定
+   - /login を含むURLが検出されたら → 次ステップへ
+
+② ログイン状態判定を改善
+   - _is_editor_url(url): /login を含む URL はエディタ未到達と判定
+   - 未到達の場合 → 次ステップへ
+
+③ メール/パスワード認証にフォールバック
+   - GitHub Secrets に `NOTE_EMAIL` + `NOTE_PASSWORD` を新規追加
+   - login_to_note() 関数を実装
+   - 実際にログインフォーム（メール入力 → 確認コード入力 → パスワード入力）を実行
+   - 成功後、compose_urls を再試行
+
+実装例（Python + Playwright）：
+```python
+# クッキー認証失敗時の判定
+if "/login" in page.url:
+    logger.warning("Cookie authentication failed, falling back to email/password")
+    await login_to_note(page, email, password)  # フォールバック
+    await page.goto(target_url, wait_until="load")  # リトライ
+```
+
+**再発防止：** 
+- クッキーベース認証は複数ドメイン・複数デバイス環境では脆弱
+- 本番環境（GitHub Actions）での自動化には、**メール/パスワード認証を第1選択肢**とする
+- クッキーは手動テスト用に限定
+- 認証が必須なサービス自動化では、最初から OAuth / API トークン / メール認証を用意する
+
+**タグ：** #cookie #authentication #note #playwright #github-actions #multi-domain #fallback
 
 ---
 
