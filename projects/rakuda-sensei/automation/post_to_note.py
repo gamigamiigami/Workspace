@@ -398,8 +398,8 @@ _IMG_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 
 
 # noteのProseMirrorエディタに画像を投入するJS。
-# paste イベントを優先して発火する。preventDefault されたら成功と判定し、
-# drop イベントは送らない（重複挿入を防ぐ）。
+# 「現在のキャレット位置に画像を入れる」のが目的なので、selectNodeContents は使わない。
+# Selection が無い時だけ末尾に collapse して保険にする。
 _JS_DISPATCH_IMAGE = r"""
 async (params) => {
     const { dataB64, fileName, mimeType } = params;
@@ -422,13 +422,15 @@ async (params) => {
     }
     editor.focus();
 
-    // 現在のセレクション末尾にカーソルを置く
-    const range = document.createRange();
-    range.selectNodeContents(editor);
-    range.collapse(false);
+    // 既存のキャレット位置があればそのまま使う。
+    // 無いときだけ末尾に collapse する（保険）。
     const sel = window.getSelection();
-    sel.removeAllRanges();
-    sel.addRange(range);
+    if (sel.rangeCount === 0) {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.collapse(false);
+        sel.addRange(range);
+    }
 
     const dt = new DataTransfer();
     dt.items.add(file);
@@ -566,15 +568,17 @@ def insert_body_with_images(page, body: str):
         chunk = body[pos:m.start()]
         if chunk:
             page.keyboard.insert_text(chunk)
-            page.wait_for_timeout(400)
+            # ProseMirror が React state を確定するまで余裕をもって待つ
+            page.wait_for_timeout(1500)
 
         alt = m.group(1)
         rel_path = m.group(2).strip()
         img_path = ROOT / rel_path
 
-        # 画像挿入位置を確保するために改行を入れる
-        page.keyboard.press("Enter")
-        page.wait_for_timeout(300)
+        # chunk が改行で終わっていない時のみ Enter を補う（既に空行ならスキップ）
+        if not chunk.endswith("\n"):
+            page.keyboard.press("Enter")
+            page.wait_for_timeout(500)
 
         uploaded = False
         if img_path.exists():
@@ -978,26 +982,49 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             )
             if thumbnail_path.exists():
                 print(f"🖼️  サムネ候補: {thumbnail_path.name}")
-                # Step 1: file input を直接探す（多くの場合 hidden で常駐）
-                file_input_selectors = [
+                thumb_set = False
+                # Step 1: 「画像を追加」「ヘッダー画像」のようなボタンを探してクリック
+                eyecatch_button_selectors = [
+                    'button:has-text("画像を追加")',
+                    'button:has-text("ヘッダー画像")',
+                    'button:has-text("アイキャッチ")',
+                    '[class*="eyecatch"] button',
+                    '[class*="thumbnail"] button',
+                    '[class*="cover"] button',
+                    'label:has-text("画像")',
+                ]
+                for sel in eyecatch_button_selectors:
+                    try:
+                        page.locator(sel).first.click(timeout=1500)
+                        page.wait_for_timeout(800)
+                        break
+                    except Exception:
+                        continue
+                # Step 2: file input に投入
+                for sel in [
                     'input[type="file"][accept*="image"]',
                     'input[type="file"]',
-                ]
-                thumb_set = False
-                for sel in file_input_selectors:
+                ]:
                     try:
-                        # set_input_files は hidden input でも動作する
                         page.locator(sel).first.set_input_files(
                             str(thumbnail_path), timeout=3000)
                         thumb_set = True
                         print(f"✅ サムネ添付 (selector: {sel})")
-                        page.wait_for_timeout(6000)  # アップロード待ち
+                        page.wait_for_timeout(7000)
                         shot(page, "07-after-thumbnail")
                         break
-                    except Exception as e:
+                    except Exception:
                         continue
+                # Step 3: JS dispatch で paste/drop（保険）
                 if not thumb_set:
-                    print(f"⚠️  サムネ添付失敗（file input 見つからず）")
+                    try:
+                        if _upload_image_via_dispatch(page, thumbnail_path):
+                            thumb_set = True
+                            print(f"✅ サムネ添付 (JS dispatch)")
+                    except Exception:
+                        pass
+                if not thumb_set:
+                    print(f"⚠️  サムネ添付失敗")
                     shot(page, "07-no-thumbnail")
             else:
                 print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
@@ -1010,27 +1037,47 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             except Exception:
                 print("ℹ️  記事タイプボタン展開不要 or 失敗")
 
-            # 価格設定 - 有料ラジオは invisible なので check(force=True) で直接選択
+            # 価格設定 - 有料ラジオは invisible なので JS で直接 checked + change イベント発火
             if meta["price"] > 0:
                 paid_clicked = False
-                # 第一手: 直接 input#paid を check(force=True)
+                # 第一手: JS で React state を強制更新（最も確実）
                 try:
-                    paid_radio = page.locator('input#paid[name="is_paid"][value="paid"]').first
-                    paid_radio.check(force=True, timeout=3000)
-                    paid_clicked = True
-                    print("✅ 有料ラジオ check(force) 成功 (input#paid)")
-                    page.wait_for_timeout(2500)
+                    js_result = page.evaluate("""
+                        () => {
+                            const input = document.querySelector('input#paid[name="is_paid"][value="paid"]');
+                            if (!input) return {ok: false, reason: 'not found'};
+                            // React の controlled state にも反映させるため native setter を使う
+                            const setter = Object.getOwnPropertyDescriptor(
+                                window.HTMLInputElement.prototype, 'checked'
+                            ).set;
+                            setter.call(input, true);
+                            input.dispatchEvent(new Event('input', {bubbles: true}));
+                            input.dispatchEvent(new Event('change', {bubbles: true}));
+                            input.click();
+                            return {ok: true, checked: input.checked};
+                        }
+                    """)
+                    if js_result.get('ok'):
+                        paid_clicked = True
+                        print(f"✅ JS経由で有料ラジオON (checked={js_result.get('checked')})")
+                        page.wait_for_timeout(2500)
+                    else:
+                        print(f"⚠️  JS経由でラジオ未発見: {js_result.get('reason')}")
                 except Exception as e:
-                    print(f"⚠️  input#paid check失敗: {e}")
-                # フォールバック: ラベルクリック
+                    print(f"⚠️  JS有料ラジオON失敗: {e}")
+                # 第二手: Playwright check(force=True)
                 if not paid_clicked:
-                    paid_selectors = [
-                        'label[for="paid"]',
-                        'label:has-text("有料")',
-                        '[role="radio"]:has-text("有料")',
-                        'button:has-text("有料")',
-                    ]
-                    for sel in paid_selectors:
+                    try:
+                        paid_radio = page.locator('input#paid[name="is_paid"][value="paid"]').first
+                        paid_radio.check(force=True, timeout=3000)
+                        paid_clicked = True
+                        print("✅ 有料ラジオ check(force) 成功")
+                        page.wait_for_timeout(2500)
+                    except Exception as e:
+                        print(f"⚠️  check(force)失敗: {e}")
+                # 第三手: ラベルクリック
+                if not paid_clicked:
+                    for sel in ['label[for="paid"]', 'label:has-text("有料")', '[role="radio"]:has-text("有料")']:
                         try:
                             page.locator(sel).first.click(timeout=2000)
                             paid_clicked = True
