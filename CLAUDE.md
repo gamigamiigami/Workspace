@@ -80,9 +80,12 @@ OK: 次回からの正しい対応
 場面: このルールが適用される状況
 ```
 
-### ファイルサイズのルール
+### ファイルサイズのルール（コンテキスト節約）
 - 1ファイルが **100行を超えたら分割を検討** する
-- log.md は **直近3ヶ月分のみ** 保持（古いものは `knowledge/log-archive/` へ）
+- profile.md は SessionStart hook で毎回読まれるので **30行以内** を維持
+- task-diary.md は **最新10セッションのみ** 保持（古いものは `knowledge/task-diary-archive/YYYY-MM.md` へ）
+- log.md は **直近7日分のみ** 保持（古いものは `knowledge/log-archive/YYYY-MM.md` へ）
+- アーカイブは月別ファイルに分けて、必要時のみ読む
 
 ---
 
