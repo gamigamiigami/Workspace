@@ -44,7 +44,7 @@ FP相談に行った → 担当者が勝手に計算してくる
 ## 1コメ目（リンク投稿）
 
 ```
-https://note.com/rakuda_sensei/n/xxxx
+https://note.com/large_pika8608/n/n5e8d77714f63
 
 ▼このシートで答えが出る質問
 ・夫婦の総資産いつ◯◯万円届く？

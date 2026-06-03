@@ -19,7 +19,7 @@ FIRE計算機5つ試したけど全部「ざっくり過ぎ」だった。
 
 同じ悩み持つ夫婦に。
 リポストで¥500↓
-https://note.com/rakuda_sensei/n/xxxx
+https://note.com/large_pika8608/n/n5e8d77714f63
 ```
 
 文字数：約220字（X140字制限なし・有料化以降は長文可）
@@ -39,7 +39,7 @@ https://note.com/rakuda_sensei/n/xxxx
 開いた瞬間に緑のヒーローバナーで結果が出ます。
 
 定価¥1,500 → リポストで¥500
-https://note.com/rakuda_sensei/n/xxxx
+https://note.com/large_pika8608/n/n5e8d77714f63
 
 #サイドFIRE #公務員
 ```
@@ -60,7 +60,7 @@ FIRE計画は精度が出ない。
 
 これを夫婦で5分で見える化するExcelシートを作った。
 リポストで¥500（定価¥1,500）
-https://note.com/rakuda_sensei/n/xxxx
+https://note.com/large_pika8608/n/n5e8d77714f63
 ```
 
 文字数：約220字
@@ -93,7 +93,7 @@ https://note.com/rakuda_sensei/n/xxxx
 入力11項目で「あと月いくら積立増やせば達成？」が
 自動で出てくるExcel。夫婦の家計会議で使えます🐪
 
-https://note.com/rakuda_sensei/n/xxxx
+https://note.com/large_pika8608/n/n5e8d77714f63
 ```
 
 文字数：約115字（拡散される側の文は短めがベター）
