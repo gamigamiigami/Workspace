@@ -6,6 +6,38 @@
 
 ---
 
+### 2026-06-07（セッション49・note記事クッキー認証再実装・画像4枚投稿成功）
+
+**うまくいったこと**
+- Note.com へのクッキー認証が復帰
+  - GitHub Secrets を `NOTE_SESSION_COOKIE` に更新後、`post_to_note.py` が正常に動作
+  - エディタ URL (`editor.note.com/notes/ncb8b7087bdb7/edit/`) へのアクセス成功
+- ProseMirror エディタへの画像挿入を dispatch_event("paste") で突破
+  - `preview-01-conclusion.png, preview-03-living.png, preview-02-input.png, preview-04-yearly.png` の4枚全て挿入成功
+  - 成功率 4 / 失敗 0（セッション44での paste/drop 手法が引き続き有効）
+  - 記事タイトルの全角縦線自動削除も確認
+- 画像挿入から投稿ボタン押下までの一連フローが完成
+  - タイトル入力 → 本文テキスト送信 → 画像4枚挿入 → 投稿ボタン押下が全て自動化成功
+
+**うまくいかなかったこと**
+- 最終公開確認フローが未検証
+  - 投稿ボタン押下後 URL が `publish/` のまま（公開確認ダイアログまで通れた判定が不明）
+  - ただし記事 ID（ncb8b7087bdb7）は確定済み、公開URL は https://note.com/large_pika8608/n/ncb8b7087bdb7
+
+**発見**
+- クッキー認証は `Cookie-Editor` で `editor.note.com` 開いた状態での export が確実性が高い
+- Note.com の新フロー（`like_reaction_setting` リダイレクト）への判定ロジック改良が引き続き課題
+- 画像挿入の dispatch_event("paste") は安定的に機能（セッション44以降、改修不要）
+
+**次回への申し送り**
+- ブラウザで https://note.com/large_pika8608/n/ncb8b7087bdb7 にアクセス、公開確認
+  - 公開されている場合：価格 ¥1,500 と サムネ設定だけ手動実施で完成
+  - 下書き止まりの場合：マイページから公開ボタン押下
+- 公開判定ロジック改良（note 新フロー対応）は次セッション予定
+  - 確認ダイアログの自動押下実装待ち
+
+---
+
 ### 2026-06-03（セッション48・ログインフォールバック実装・クッキー失効対策）
 
 **うまくいったこと**
