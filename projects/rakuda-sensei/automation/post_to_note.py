@@ -114,8 +114,8 @@ def find_body_section(text: str) -> str:
     # 1. HTMLコメントを除去
     cleaned = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
 
-    # 2. 「## 記事本文」セクションがあればそこから抽出
-    m = re.search(r"##\s+記事本文\s*\n+(.+?)(?:\n##\s+投稿後|\Z)", cleaned, re.DOTALL)
+    # 2. 「## 記事本文」セクションがあればそこから抽出（絵文字prefix対応）
+    m = re.search(r"##\s+(?:[^\w\s]+\s*)?記事本文[^\n]*\n+(.+?)(?:\n##\s+(?:[^\w\s]+\s*)?(?:投稿後|効果測定|内部メモ|レビュー)|\Z)", cleaned, re.DOTALL)
     if m:
         body = m.group(1).strip()
     else:
@@ -125,9 +125,11 @@ def find_body_section(text: str) -> str:
         for section in sections:
             # 内部メモらしいキーワードを含むセクションはスキップ
             skip_keywords = [
-                "投稿メタデータ", "サムネ", "投稿後アクション",
+                "投稿メタデータ", "サムネ", "投稿後アクション", "投稿後の告知",
                 "対応Addnessゴール", "note-writer skill",
                 "作成日：", "作成日:",
+                "効果測定", "スキ率", "購入率",
+                "内部メモ", "レビュー観点", "リライト",
             ]
             if any(kw in section for kw in skip_keywords):
                 continue
