@@ -490,6 +490,113 @@ except Exception as e:
 
 ## Web 自動化 / ブラウザ認証
 
+### [汎用] Note.com クッキー認証の複数ドメイン対応・フォールバック機構
+
+**用途：** note.com へのブラウザ自動化投稿（Playwright）で、クッキーベース認証が失効する場合の多段階フォールバック戦略。複数ドメインに跨ったクッキー取得・正規化と、メール/パスワード認証への自動切り替えで堅牢化
+
+**問題背景：**
+- Note.com は複数サブドメインを使用（note.com / editor.note.com / developer.note.com 等）
+- Cookie-Editor で export する際、**特定ドメイン（editor.note.com）を開いた状態**でなければ、必要なクッキーが不足する
+- クッキー配列が 25-40 個程度必要（不足→ログインリダイレクト発生）
+- 本番環境でクッキー有効期限切れ・セキュリティ属性の制限で認証失敗が頻発
+
+**セッション経歴：**
+- セッション47：`editor.note.com` ドメイン取得の必要性を発見
+- セッション48：email/password ログインフォールバック実装（GitHub Secrets: `NOTE_EMAIL` + `NOTE_PASSWORD`）
+- セッション49：クッキー認証復帰（正規化処理 `normalize_cookies()` で sameSite/expires を修正）
+
+**解決策：3段階クッキー正規化 + ログインフォールバック**
+
+```python
+def normalize_cookies(raw_json: str) -> list:
+    """Cookie-Editor 出力のJSONをPlaywright SetCookieParam形式に正規化する。
+    
+    必要な変換:
+      - expirationDate -> expires (float)
+      - sameSite "lax"/"strict"/"none"/"no_restriction" → "Lax"/"Strict"/"None"
+      - hostOnly / session / storeId 等の余計なフィールドを除去
+      - クッキーの正規化後、25-40個存在することを確認
+    """
+    import json as _json
+    raw = _json.loads(raw_json)
+    normalized = []
+    for c in raw:
+        new_c = {"name": c["name"], "value": c["value"]}
+        if c.get("domain"):
+            new_c["domain"] = c["domain"]
+        new_c["path"] = c.get("path", "/")
+        # sessionクッキー以外は expires をfloatで設定
+        if "expirationDate" in c and not c.get("session"):
+            try:
+                new_c["expires"] = float(c["expirationDate"])
+            except (TypeError, ValueError):
+                pass
+        if "sameSite" in c:
+            ss = str(c["sameSite"]).lower()
+            mapping = {"lax": "Lax", "strict": "Strict", "none": "None", "no_restriction": "None"}
+            if ss in mapping:
+                new_c["sameSite"] = mapping[ss]
+        if "httpOnly" in c:
+            new_c["httpOnly"] = bool(c["httpOnly"])
+        if "secure" in c:
+            new_c["secure"] = bool(c["secure"])
+        normalized.append(new_c)
+    return normalized
+```
+
+**ログイン状態判定と自動フォールバック：**
+
+```python
+def _is_editor_url(url: str) -> bool:
+    """エディタに本当に到達しているかを判定する。
+    /login?redirectPath=... のリダイレクト URL は除外する。
+    """
+    if "/login" in url:
+        return False
+    if "editor.note.com" in url and "/edit" in url:
+        return True
+    return False
+
+# メイン投稿フロー
+if cookie_auth:
+    page.goto("https://note.com/", wait_until="domcontentloaded", timeout=30000)
+    page.wait_for_timeout(2000)
+    if "/login" in page.url or "/signin" in page.url.lower():
+        print("ERROR: クッキーが無効/期限切れ。メール認証にフォールバック")
+        if not login_to_note(page, email, password):  # メール/パスワード認証へ
+            return 1
+else:
+    # クッキー未登録時点からメール認証で開始
+    if not login_to_note(page, email, password):
+        return 1
+```
+
+**Cookie-Editor 取得時のチェックリスト：**
+
+| 項目 | OK/NG | 対応 |
+|-----|-------|------|
+| Cookie-Editor で `editor.note.com` を開いている | 必須 | 必ず editor ドメイン |
+| 正規化後のクッキー個数が 25-40 個 | 必須 | 不足→全再取得 |
+| `editor.note.com` ドメインのクッキーが存在 | 必須 | 複数ドメイン取得 |
+| GitHub Secrets に NOTE_SESSION_COOKIE を登録 | 必須 | actions 再実行前に確認 |
+| フォールバック用 NOTE_EMAIL + NOTE_PASSWORD を登録 | 推奨 | クッキー失敗時の保険 |
+
+**効果：**
+- クッキー認証→ログインリダイレクト検出→メール認証への自動切り替えで、ユーザー操作なしで復旧
+- 複数ドメインクッキーを正規化することで、ブラウザ仕様の変更に追従
+- session クッキーと期限付きクッキーの区別により、有効期限切れにも対応
+
+**失敗時の診断：**
+- ログにクッキー個数を出力：`🍪 クッキー認証 (25個・正規化済み)` → 25個未満なら要再取得
+- `/login` リダイレクト検知：クッキー無効フラグ、メール認証へ自動遷移
+- GitHub Actions ログに スクリーンショット・ページ状態 を自動保存
+
+**使用プロジェクト：** addness-side-income（post_to_note.py）
+
+**タグ：** #playwright #note-com #cookies #authentication #fallback #multi-domain
+
+---
+
 ### [汎用] Playwright stealth + クッキー認証による Bot 検出回避
 
 **用途：** Web サイト（特に X/Twitter などの Bot 検出厳格なサイト）への自動ログインで、Playwright 単体では bot として検出・ブロックされる場合、`playwright-stealth` プラグイン + 複数クッキーの正規化で人間のアクセスを偽装
