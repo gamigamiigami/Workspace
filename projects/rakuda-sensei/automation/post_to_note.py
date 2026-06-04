@@ -1510,38 +1510,164 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
                             save_draft = True
 
-            # タグ設定（複数セレクタ試行）
+            # タグ設定（複数セレクタ試行 + JS フォールバック）
+            # publish パネル内をスクロールしてから検索する
+            try:
+                page.evaluate("() => window.scrollTo(0, 0)")
+                page.wait_for_timeout(500)
+            except Exception:
+                pass
+
             tag_input_selectors = [
                 'input[placeholder*="ハッシュタグ"]',
                 'input[placeholder*="タグ"]',
+                'input[placeholder*="#"]',
+                'input[aria-label*="タグ"]',
+                'input[aria-label*="ハッシュタグ"]',
                 '[role="combobox"]',
                 'input[aria-autocomplete]',
                 '[class*="tag"] input[type="text"]',
                 '[class*="hashtag"] input',
-                'input[aria-label*="タグ"]',
+                '[class*="Tag"] input',
+                '[data-testid*="tag"] input',
             ]
             tag_input_locator = None
             for sel in tag_input_selectors:
                 try:
                     loc = page.locator(sel).first
-                    loc.wait_for(state="visible", timeout=2000)
+                    loc.wait_for(state="visible", timeout=1500)
                     tag_input_locator = loc
                     print(f"✅ タグ入力欄発見 (selector: {sel})")
                     break
                 except Exception:
                     continue
-            for tag in meta["tags"][:5]:
-                tag = tag.strip().lstrip("#")
-                if not tag:
-                    continue
-                if tag_input_locator is None:
-                    break
+
+            # JS フォールバック: タグ関連 input をテキスト/属性で網羅探索
+            if tag_input_locator is None:
                 try:
-                    tag_input_locator.fill(tag, timeout=5000)
-                    tag_input_locator.press("Enter")
-                    page.wait_for_timeout(500)
-                except Exception:
-                    pass
+                    result = page.evaluate("""
+                        () => {
+                            const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+                            for (const inp of inputs) {
+                                const txt = (inp.placeholder || '') + (inp.getAttribute('aria-label') || '') + (inp.name || '') + (inp.className || '');
+                                if (/タグ|ハッシュタグ|tag|Tag/.test(txt)) {
+                                    inp.scrollIntoView({block: 'center'});
+                                    inp.focus();
+                                    return {found: true, info: txt.slice(0, 100)};
+                                }
+                            }
+                            // ラベルから input を辿る
+                            const labels = document.querySelectorAll('label');
+                            for (const lb of labels) {
+                                if (/タグ|ハッシュタグ/.test(lb.textContent || '')) {
+                                    const inp = lb.querySelector('input') || (lb.htmlFor && document.getElementById(lb.htmlFor));
+                                    if (inp) {
+                                        inp.scrollIntoView({block: 'center'});
+                                        inp.focus();
+                                        return {found: true, info: 'via label: ' + lb.textContent.slice(0, 50)};
+                                    }
+                                }
+                            }
+                            return {found: false};
+                        }
+                    """)
+                    if result.get('found'):
+                        # フォーカスされた input を改めて捕まえる
+                        try:
+                            tag_input_locator = page.locator(':focus').first
+                            print(f"✅ タグ入力欄発見 (JS evaluate: {result.get('info')})")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"WARNING: タグ入力欄 JS 探索失敗: {e}", file=sys.stderr)
+
+            if tag_input_locator is None:
+                print("⚠️  タグ入力欄が見つからず（タグ設定スキップ）", file=sys.stderr)
+                shot(page, "07e-tag-input-missing")
+                dump_html(page, "07e-tag-input-missing")
+            else:
+                tag_count = 0
+                for tag in meta["tags"][:7]:
+                    tag = tag.strip().lstrip("#")
+                    if not tag:
+                        continue
+                    try:
+                        tag_input_locator.fill(tag, timeout=3000)
+                        page.wait_for_timeout(400)
+                        tag_input_locator.press("Enter")
+                        page.wait_for_timeout(600)
+                        tag_count += 1
+                    except Exception as e:
+                        print(f"   タグ '{tag}' 入力失敗: {e}", file=sys.stderr)
+                print(f"✅ タグ設定: {tag_count} 個")
+                shot(page, "07e-after-tags")
+
+            # SNSプロモーション機能（拡散割引 ¥500）
+            # 価格が ¥0 でない有料記事の場合だけ設定
+            if meta["price"] > 0:
+                share_discount = 500
+                print(f"💰 SNSプロモーション設定試行: ¥{share_discount}")
+                try:
+                    # まず「SNSプロモーション」「プロモーション」ラベルを含む section を見つけて開く
+                    sns_section_clicked = False
+                    for sel in [
+                        'button:has-text("SNSプロモーション")',
+                        'button:has-text("プロモーション")',
+                        'button:has-text("拡散")',
+                        'summary:has-text("SNSプロモーション")',
+                        'summary:has-text("プロモーション")',
+                        '[class*="promotion"] button',
+                    ]:
+                        try:
+                            page.locator(sel).first.click(timeout=1500)
+                            page.wait_for_timeout(1200)
+                            sns_section_clicked = True
+                            print(f"   SNSプロモ section 展開: {sel}")
+                            break
+                        except Exception:
+                            continue
+                    # 有効化トグル/チェックボックス
+                    if sns_section_clicked:
+                        for sel in [
+                            'input[type="checkbox"][name*="promo"]',
+                            'input[type="checkbox"][name*="share"]',
+                            'input[type="checkbox"][name*="discount"]',
+                            'button[role="switch"]',
+                            'input[role="switch"]',
+                        ]:
+                            try:
+                                el = page.locator(sel).first
+                                el.wait_for(state="visible", timeout=1000)
+                                # 既に checked か確認
+                                is_checked = el.evaluate("e => e.checked || e.getAttribute('aria-checked') === 'true'")
+                                if not is_checked:
+                                    el.click(force=True, timeout=1500)
+                                    page.wait_for_timeout(800)
+                                print(f"   プロモ有効化トグル: {sel}")
+                                break
+                            except Exception:
+                                continue
+                    # 割引価格入力
+                    discount_set = False
+                    for sel in [
+                        'input[placeholder*="割引"]',
+                        'input[aria-label*="割引"]',
+                        'input[name*="discount"]',
+                        'input[name*="promo"]',
+                    ]:
+                        try:
+                            page.locator(sel).first.fill(str(share_discount), timeout=1500)
+                            discount_set = True
+                            print(f"   割引価格 ¥{share_discount} 設定 (selector: {sel})")
+                            break
+                        except Exception:
+                            continue
+                    if not discount_set:
+                        print(f"   ⚠️  SNSプロモ割引欄が見つからず（スキップ）")
+                    page.wait_for_timeout(800)
+                except Exception as e:
+                    print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
+                shot(page, "07f-after-sns-promo")
 
             # 下書き保存モード: 最終投稿はせず、エディタの自動保存を待って終了
             if save_draft:
@@ -1669,54 +1795,85 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                 note_id = note_id_m.group(1)
                                 editor_url = f"https://editor.note.com/notes/{note_id}/edit/"
                                 print(f"🖼️  公開後サムネ設定モード: {editor_url}")
-                                page.goto(editor_url, wait_until="domcontentloaded", timeout=20000)
+                                page.goto(editor_url, wait_until="domcontentloaded", timeout=25000)
                                 try:
-                                    page.wait_for_load_state("networkidle", timeout=10000)
+                                    page.wait_for_load_state("networkidle", timeout=15000)
                                 except Exception:
                                     pass
-                                page.wait_for_timeout(4000)
+                                page.wait_for_timeout(6000)
                                 shot(page, "13a-editor-for-thumbnail")
                                 dump_html(page, "13a-editor-for-thumbnail")
+                                enumerate_form_elements(page, "公開後エディタ (サムネ設定用)")
+
+                                # ページ上部にスクロール（ヘッダー画像エリアは最上部）
+                                try:
+                                    page.evaluate("() => window.scrollTo(0, 0)")
+                                    page.wait_for_timeout(800)
+                                except Exception:
+                                    pass
 
                                 thumb_set = False
-                                # Step 1: ヘッダー画像ボタンを探してクリック
-                                eyecatch_button_selectors = [
-                                    'button:has-text("画像を追加")',
-                                    'button:has-text("ヘッダー画像")',
-                                    'button:has-text("アイキャッチ")',
-                                    'button:has-text("カバー画像")',
-                                    'button:has-text("記事画像")',
-                                    '[class*="eyecatch"] button',
-                                    '[class*="thumbnail"] button',
-                                    '[class*="cover"] button',
-                                    '[class*="header-image"] button',
-                                    '[aria-label*="画像"]',
-                                    'label:has-text("画像")',
-                                ]
-                                for sel in eyecatch_button_selectors:
-                                    try:
-                                        page.locator(sel).first.click(timeout=1500)
-                                        page.wait_for_timeout(800)
-                                        print(f"   ヘッダー画像ボタン押下: {sel}")
-                                        break
-                                    except Exception:
-                                        continue
-                                # Step 2: file input に投入
+                                # Step 1: 既に file input が visible ならそのまま set_input_files
+                                # （note の最新 UI ではボタンクリック不要で input が常設の可能性）
                                 for sel in [
                                     'input[type="file"][accept*="image"]',
                                     'input[type="file"]',
                                 ]:
                                     try:
-                                        page.locator(sel).first.set_input_files(
-                                            str(thumbnail_path), timeout=3000)
+                                        loc = page.locator(sel).first
+                                        # visible でなくても set_input_files は動く
+                                        loc.set_input_files(str(thumbnail_path), timeout=3000)
                                         thumb_set = True
-                                        print(f"✅ サムネ添付 (selector: {sel})")
+                                        print(f"✅ サムネ添付 (file input 直接: {sel})")
                                         page.wait_for_timeout(8000)
-                                        shot(page, "13b-after-thumbnail-upload")
+                                        shot(page, "13b-after-thumbnail-direct")
                                         break
                                     except Exception:
                                         continue
-                                # Step 3: JS dispatch
+
+                                # Step 2: ヘッダー画像エリアっぽいボタンをクリックしてから file input
+                                if not thumb_set:
+                                    eyecatch_button_selectors = [
+                                        'button:has-text("画像を追加")',
+                                        'button:has-text("ヘッダー画像")',
+                                        'button:has-text("画像をアップロード")',
+                                        'button:has-text("カバー画像")',
+                                        'button:has-text("アイキャッチ")',
+                                        'button:has-text("記事画像")',
+                                        'div:has-text("画像を追加") > button',
+                                        '[class*="eyecatch"] button',
+                                        '[class*="thumbnail"] button',
+                                        '[class*="cover"] button',
+                                        '[class*="header-image"] button',
+                                        '[class*="HeaderImage"] button',
+                                        '[aria-label*="画像"]',
+                                        'label:has-text("画像")',
+                                    ]
+                                    for sel in eyecatch_button_selectors:
+                                        try:
+                                            page.locator(sel).first.click(timeout=1500)
+                                            page.wait_for_timeout(1000)
+                                            print(f"   ヘッダー画像ボタン押下: {sel}")
+                                            # クリック後に再度 file input 探索
+                                            for fsel in [
+                                                'input[type="file"][accept*="image"]',
+                                                'input[type="file"]',
+                                            ]:
+                                                try:
+                                                    page.locator(fsel).first.set_input_files(
+                                                        str(thumbnail_path), timeout=3000)
+                                                    thumb_set = True
+                                                    print(f"   ✅ サムネ添付 (post-click: {fsel})")
+                                                    page.wait_for_timeout(8000)
+                                                    break
+                                                except Exception:
+                                                    continue
+                                            if thumb_set:
+                                                break
+                                        except Exception:
+                                            continue
+
+                                # Step 3: JS dispatch で paste/drop
                                 if not thumb_set:
                                     try:
                                         if _upload_image_via_dispatch(page, thumbnail_path):
@@ -1727,43 +1884,44 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                         pass
 
                                 if thumb_set:
-                                    # 更新ボタン押下で保存
+                                    # 更新ボタン押下で保存（記事タイプ等の他フィールドは既に確定済）
                                     page.wait_for_timeout(3000)
-                                    update_selectors = [
-                                        'button:has-text("更新する")',
-                                        'button:has-text("更新")',
-                                        'button:has-text("保存")',
-                                        'button[type="submit"]:has-text("更新")',
-                                    ]
-                                    # まず「公開に進む」/「公開設定」のような publish-panel 系を押す
-                                    publish_again_selectors = [
+                                    shot(page, "13c-before-update-click")
+                                    # まず「公開設定/公開に進む」を再度開いて更新ボタンを出す
+                                    for sel in [
                                         'button:has-text("公開に進む")',
                                         'button:has-text("公開設定")',
-                                    ]
-                                    for sel in publish_again_selectors:
+                                    ]:
                                         try:
                                             page.locator(sel).first.click(timeout=2000)
-                                            page.wait_for_timeout(3500)
+                                            page.wait_for_timeout(4000)
                                             print(f"   公開パネル再展開: {sel}")
                                             break
                                         except Exception:
                                             continue
                                     updated = False
-                                    for sel in update_selectors:
+                                    for sel in [
+                                        'button:has-text("更新する")',
+                                        'button:has-text("更新")',
+                                        'button:has-text("投稿する")',
+                                        'button:has-text("公開する")',
+                                        'button[type="submit"]:has-text("更新")',
+                                    ]:
                                         try:
                                             page.locator(sel).last.click(timeout=2500, force=True)
-                                            page.wait_for_timeout(6000)
+                                            page.wait_for_timeout(8000)
                                             updated = True
                                             print(f"✅ サムネ反映で更新クリック: {sel}")
                                             break
                                         except Exception:
                                             continue
-                                    shot(page, "13c-after-thumbnail-update")
+                                    shot(page, "13d-after-thumbnail-update")
                                     if not updated:
                                         print("⚠️  サムネはアップロードしたが更新ボタンが押せず（自動保存に期待）")
                                 else:
-                                    print(f"⚠️  公開後サムネ添付失敗")
+                                    print(f"⚠️  公開後サムネ添付失敗（全手段）")
                                     shot(page, "13b-no-thumbnail")
+                                    dump_html(page, "13b-no-thumbnail")
                             else:
                                 print(f"⚠️  公開URLから note ID 取れず（サムネスキップ）: {actual_url}")
                         except Exception as e:
