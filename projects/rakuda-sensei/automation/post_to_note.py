@@ -1265,18 +1265,60 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     dump_html(page, "07c-price-fail")
 
                 # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
+                # note公式仕様: ボタン押下後、本文に戻されて有料ラインのカーソルが出る
+                # → 有料にしたい段落をクリックして位置を確定する
+                area_button_pressed = False
                 try:
                     page.locator('button:has-text("有料エリア設定")').first.click(timeout=3000)
                     page.wait_for_timeout(2500)
                     print("✅ 有料エリア設定 ボタン押下")
+                    area_button_pressed = True
                 except Exception:
                     try:
-                        # フォールバック: 別表記
                         page.locator('button:has-text("有料エリアを設定")').first.click(timeout=2000)
                         page.wait_for_timeout(2500)
                         print("✅ 有料エリアを設定 ボタン押下")
+                        area_button_pressed = True
                     except Exception:
                         print("ℹ️  有料エリア設定 ボタン未発見（不要 or 既に設定済の可能性）")
+
+                # 有料ライン位置クリック: 📥 マーカー段落を狙う
+                if area_button_pressed:
+                    try:
+                        target = page.evaluate("""
+                            (marker) => {
+                                const editor = document.querySelector('.ProseMirror');
+                                if (!editor) return null;
+                                const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+                                let node;
+                                while ((node = walker.nextNode())) {
+                                    if (node.textContent && node.textContent.includes(marker)) {
+                                        let el = node.parentElement;
+                                        while (el && el !== editor && getComputedStyle(el).display === 'inline') {
+                                            el = el.parentElement;
+                                        }
+                                        if (el && el !== editor) {
+                                            el.scrollIntoView({block: 'center'});
+                                            const rect = el.getBoundingClientRect();
+                                            return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                                        }
+                                    }
+                                }
+                                return null;
+                            }
+                        """, "📥")
+                        if target:
+                            page.wait_for_timeout(800)
+                            page.mouse.click(target['x'], target['y'])
+                            page.wait_for_timeout(1500)
+                            print(f"✅ 有料ライン位置クリック: 📥段落 ({target['x']:.0f}, {target['y']:.0f})")
+                            shot(page, "07d-paywall-positioned")
+                        else:
+                            print("WARNING: 📥 マーカー段落が見つかりませんでした", file=sys.stderr)
+                            shot(page, "07d-paywall-marker-missing")
+                    except Exception as e:
+                        print(f"WARNING: 有料ライン位置クリック失敗: {e}", file=sys.stderr)
+                        shot(page, "07d-paywall-click-fail")
 
             # タグ設定（複数セレクタ試行）
             tag_input_selectors = [
