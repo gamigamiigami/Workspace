@@ -1286,96 +1286,272 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # note の仕様 = 各段落の間に「ラインをこの場所に変更」ボタンが出現する。
                 # クリックするとそのボタンより上が無料、下が有料になる。
                 # → 📥 段落の直前にあるボタンをクリックする。
+                #
+                # 重要: 座標クリック (page.mouse.click) では note の UI が反応しないケース有り。
+                # JS .click() + PointerEvent dispatch + Playwright locator click の三段構え。
+                # 各方法後にクリック成果を検証してリトライ判断する。
                 if area_button_pressed:
-                    try:
-                        result = page.evaluate("""
-                            (marker) => {
-                                const editor = document.querySelector('.ProseMirror');
-                                if (!editor) return {error: 'editor not found'};
+                    paywall_set_ok = False
+                    for attempt in range(4):
+                        try:
+                            # 1) 候補ボタン探索 + 1段目の JS クリック実行
+                            result = page.evaluate(
+                                """
+                                (args) => {
+                                    const marker = args.marker;
+                                    const attempt = args.attempt;
 
-                                // 📥 を含むテキストノードを探す
-                                const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
-                                let markerNode = null;
-                                let node;
-                                while ((node = walker.nextNode())) {
-                                    if (node.textContent && node.textContent.includes(marker)) {
-                                        markerNode = node;
-                                        break;
-                                    }
-                                }
-                                if (!markerNode) return {error: 'marker not found'};
+                                    // クリック対象を直接タグ問わず広く探索
+                                    const candidatesSet = new Set();
+                                    const addClickable = (el) => {
+                                        if (!el) return;
+                                        // テキストを持つ最近接 button/role=button 祖先を採用
+                                        let target = el;
+                                        for (let i = 0; i < 6 && target && target !== document.body; i++) {
+                                            const tag = target.tagName;
+                                            const role = target.getAttribute && target.getAttribute('role');
+                                            if (tag === 'BUTTON' || role === 'button') break;
+                                            target = target.parentElement;
+                                        }
+                                        if (target && target !== document.body) candidatesSet.add(target);
+                                    };
+                                    document.querySelectorAll('*').forEach(el => {
+                                        if (!el.children.length && el.textContent &&
+                                            el.textContent.indexOf('ラインをこの場所に変更') !== -1) {
+                                            addClickable(el);
+                                        }
+                                    });
+                                    const candidates = Array.from(candidatesSet);
 
-                                // marker のブロック要素 (editor の直下) まで上る
-                                let markerEl = markerNode.parentElement;
-                                while (markerEl && markerEl.parentElement && markerEl.parentElement !== editor) {
-                                    markerEl = markerEl.parentElement;
-                                }
-                                if (!markerEl) return {error: 'marker block not found'};
+                                    // 既に黒ボタンが正しい位置にあるか先にチェック
+                                    const activeSet = new Set();
+                                    document.querySelectorAll('*').forEach(el => {
+                                        if (!el.children.length && el.textContent &&
+                                            el.textContent.indexOf('このラインより先を有料にする') !== -1) {
+                                            let target = el;
+                                            for (let i = 0; i < 6 && target && target !== document.body; i++) {
+                                                if (target.tagName === 'BUTTON' || (target.getAttribute && target.getAttribute('role') === 'button')) break;
+                                                target = target.parentElement;
+                                            }
+                                            if (target) activeSet.add(target);
+                                        }
+                                    });
 
-                                markerEl.scrollIntoView({block: 'center'});
-                                const markerRect = markerEl.getBoundingClientRect();
-
-                                // 既に正しい位置に「このラインより先を有料にする」(黒ボタン) が居るかチェック
-                                const activeButtons = Array.from(document.querySelectorAll('button')).filter(b =>
-                                    b.textContent && b.textContent.includes('このラインより先を有料にする')
-                                );
-                                for (const btn of activeButtons) {
-                                    const rect = btn.getBoundingClientRect();
-                                    if (rect.bottom <= markerRect.top + 5 && markerRect.top - rect.bottom < 120) {
-                                        return {alreadyCorrect: true};
-                                    }
-                                }
-
-                                // 「ラインをこの場所に変更」ボタンを全て取得
-                                const changeButtons = Array.from(document.querySelectorAll('button')).filter(b =>
-                                    b.textContent && b.textContent.includes('ラインをこの場所に変更')
-                                );
-                                if (changeButtons.length === 0) {
-                                    return {error: 'no change buttons found'};
-                                }
-
-                                // 📥 段落の直前にあるボタン (一番近く、上にある) を探す
-                                let bestBtn = null;
-                                let bestDistance = Infinity;
-                                for (const btn of changeButtons) {
-                                    const rect = btn.getBoundingClientRect();
-                                    if (rect.bottom <= markerRect.top + 5) {
-                                        const distance = markerRect.top - rect.bottom;
-                                        if (distance < bestDistance) {
-                                            bestDistance = distance;
-                                            bestBtn = btn;
+                                    // 📥 を含むテキストノードを document 全体から探す
+                                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                                    let markerNode = null;
+                                    let n;
+                                    while ((n = walker.nextNode())) {
+                                        if (n.textContent && n.textContent.indexOf(marker) !== -1) {
+                                            markerNode = n;
+                                            break;
                                         }
                                     }
+                                    if (!markerNode) {
+                                        return {error: 'marker text not found', candidates: candidates.length};
+                                    }
+
+                                    // marker の block 要素まで上る (display !== inline まで)
+                                    let markerEl = markerNode.parentElement;
+                                    while (markerEl && markerEl !== document.body) {
+                                        const d = getComputedStyle(markerEl).display;
+                                        if (d !== 'inline' && d !== 'inline-block' && d !== 'contents') break;
+                                        markerEl = markerEl.parentElement;
+                                    }
+                                    if (!markerEl) return {error: 'marker block not found'};
+
+                                    markerEl.scrollIntoView({block: 'center'});
+                                    void document.body.offsetHeight;  // force layout
+                                    const markerRect = markerEl.getBoundingClientRect();
+
+                                    // 既に黒ボタンが 📥 直前にあるか
+                                    for (const btn of activeSet) {
+                                        const r = btn.getBoundingClientRect();
+                                        if (r.width === 0 && r.height === 0) continue;
+                                        if (r.bottom <= markerRect.top + 5 && markerRect.top - r.bottom < 250) {
+                                            return {alreadyCorrect: true, candidates: candidates.length};
+                                        }
+                                    }
+
+                                    if (candidates.length === 0) {
+                                        return {error: 'no candidates', activeCount: activeSet.size};
+                                    }
+
+                                    // 📥 直前のボタン (bottom <= markerRect.top, 一番近い) を選ぶ
+                                    let bestBtn = null;
+                                    let bestDistance = Infinity;
+                                    for (const btn of candidates) {
+                                        const r = btn.getBoundingClientRect();
+                                        if (r.width === 0 || r.height === 0) continue;
+                                        if (r.bottom <= markerRect.top + 5) {
+                                            const d = markerRect.top - r.bottom;
+                                            if (d < bestDistance) {
+                                                bestDistance = d;
+                                                bestBtn = btn;
+                                            }
+                                        }
+                                    }
+
+                                    if (!bestBtn) {
+                                        return {error: 'no button above marker', candidates: candidates.length, markerY: markerRect.top};
+                                    }
+
+                                    // スクロール → reflow 強制 → 座標取得
+                                    bestBtn.scrollIntoView({block: 'center'});
+                                    void document.body.offsetHeight;
+                                    const rect = bestBtn.getBoundingClientRect();
+                                    const x = rect.x + rect.width / 2;
+                                    const y = rect.y + rect.height / 2;
+
+                                    // フル PointerEvent + MouseEvent 連打 → 最後に .click()
+                                    const evtOpts = {
+                                        bubbles: true, cancelable: true, composed: true,
+                                        view: window, clientX: x, clientY: y, screenX: x, screenY: y,
+                                        button: 0, buttons: 1, isPrimary: true, pointerType: 'mouse', pointerId: 1,
+                                    };
+                                    const upOpts = {...evtOpts, buttons: 0};
+                                    try { bestBtn.dispatchEvent(new PointerEvent('pointerover', upOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new PointerEvent('pointerenter', upOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new MouseEvent('mouseover', upOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new PointerEvent('pointerdown', evtOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new MouseEvent('mousedown', evtOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new PointerEvent('pointerup', upOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new MouseEvent('mouseup', upOpts)); } catch (e) {}
+                                    try { bestBtn.dispatchEvent(new MouseEvent('click', upOpts)); } catch (e) {}
+                                    try { bestBtn.click(); } catch (e) {}
+
+                                    return {
+                                        x: x, y: y,
+                                        btnTag: bestBtn.tagName,
+                                        btnText: (bestBtn.textContent || '').trim().slice(0, 40),
+                                        candidates: candidates.length,
+                                        markerY: markerRect.top,
+                                        distance: bestDistance,
+                                        attempt: attempt,
+                                    };
                                 }
+                                """,
+                                {"marker": "📥", "attempt": attempt},
+                            )
 
-                                if (!bestBtn) return {error: 'no suitable button above marker'};
+                            if result.get('alreadyCorrect'):
+                                print(f"✅ 有料ライン位置: 既に 📥 直前に黒ボタン (attempt={attempt}, candidates={result.get('candidates')})")
+                                paywall_set_ok = True
+                                shot(page, f"07d-paywall-ok-attempt{attempt}")
+                                break
 
-                                bestBtn.scrollIntoView({block: 'center'});
-                                const rect = bestBtn.getBoundingClientRect();
-                                return {
-                                    x: rect.x + rect.width / 2,
-                                    y: rect.y + rect.height / 2,
-                                    btnCount: changeButtons.length,
-                                };
-                            }
-                        """, "📥")
+                            if result.get('error'):
+                                print(f"WARNING: 探索失敗 attempt={attempt}: {result}", file=sys.stderr)
+                                shot(page, f"07d-paywall-find-fail-attempt{attempt}")
+                                if attempt == 0:
+                                    dump_html(page, f"07d-paywall-find-fail-attempt{attempt}")
+                                # 失敗時は少し待ってリトライ
+                                page.wait_for_timeout(1500)
+                                continue
 
-                        if result.get('alreadyCorrect'):
-                            print("✅ 有料ライン位置: 既に 📥 直前に設定済み")
-                            shot(page, "07d-paywall-already-correct")
-                        elif result.get('error'):
-                            print(f"WARNING: 有料ライン位置探索失敗: {result['error']}", file=sys.stderr)
-                            shot(page, "07d-paywall-position-fail")
-                            dump_html(page, "07d-paywall-position-fail")
-                        else:
+                            # 2) JS dispatch 後の追い打ち: mouse.click + Playwright locator click
+                            print(f"📍 attempt={attempt}: 候補={result.get('candidates')}, btnText={result.get('btnText')!r}, distance={result.get('distance'):.0f}, markerY={result.get('markerY'):.0f}")
                             page.wait_for_timeout(800)
-                            page.mouse.click(result['x'], result['y'])
-                            page.wait_for_timeout(2000)
-                            print(f"✅ 有料ライン位置クリック完了: 📥直前ボタン ({result['x']:.0f}, {result['y']:.0f}) / 候補数={result.get('btnCount')}")
-                            shot(page, "07d-paywall-positioned")
-                    except Exception as e:
-                        print(f"WARNING: 有料ライン位置クリック失敗: {e}", file=sys.stderr)
-                        shot(page, "07d-paywall-click-exception")
+                            try:
+                                page.mouse.click(result['x'], result['y'])
+                            except Exception as e:
+                                print(f"   mouse.click 失敗: {e}", file=sys.stderr)
+                            page.wait_for_timeout(800)
+
+                            # Playwright locator でも叩く
+                            try:
+                                # 候補数と同じ数のロケータを得て、ベストに対応する idx を選ぶ
+                                btns = page.locator('button:has-text("ラインをこの場所に変更"), [role="button"]:has-text("ラインをこの場所に変更")')
+                                cnt = btns.count()
+                                for i in range(cnt):
+                                    bx = btns.nth(i).bounding_box()
+                                    if not bx:
+                                        continue
+                                    # btnText/x/y の中点が近いものを叩く
+                                    cx = bx['x'] + bx['width'] / 2
+                                    cy = bx['y'] + bx['height'] / 2
+                                    if abs(cx - result['x']) < 20 and abs(cy - result['y']) < 30:
+                                        btns.nth(i).click(timeout=2000, force=True)
+                                        print(f"   Playwright locator click 成功 (idx={i})")
+                                        break
+                            except Exception as e:
+                                print(f"   Playwright locator click 失敗: {e}", file=sys.stderr)
+                            page.wait_for_timeout(1500)
+
+                            # 3) 検証: 黒ボタンが 📥 直前にあるか
+                            verify = page.evaluate(
+                                """
+                                (marker) => {
+                                    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+                                    let mNode = null;
+                                    let n;
+                                    while ((n = walker.nextNode())) {
+                                        if (n.textContent && n.textContent.indexOf(marker) !== -1) {
+                                            mNode = n; break;
+                                        }
+                                    }
+                                    if (!mNode) return {verified: false, reason: 'marker missing'};
+                                    let mEl = mNode.parentElement;
+                                    while (mEl && mEl !== document.body) {
+                                        const d = getComputedStyle(mEl).display;
+                                        if (d !== 'inline' && d !== 'inline-block' && d !== 'contents') break;
+                                        mEl = mEl.parentElement;
+                                    }
+                                    if (!mEl) return {verified: false, reason: 'block missing'};
+                                    const mRect = mEl.getBoundingClientRect();
+
+                                    const active = [];
+                                    document.querySelectorAll('*').forEach(el => {
+                                        if (!el.children.length && el.textContent &&
+                                            el.textContent.indexOf('このラインより先を有料にする') !== -1) {
+                                            let t = el;
+                                            for (let i = 0; i < 6 && t && t !== document.body; i++) {
+                                                if (t.tagName === 'BUTTON' || (t.getAttribute && t.getAttribute('role') === 'button')) break;
+                                                t = t.parentElement;
+                                            }
+                                            if (t) active.push(t);
+                                        }
+                                    });
+                                    if (active.length === 0) return {verified: false, reason: 'no active button', mY: mRect.top};
+
+                                    for (const b of active) {
+                                        const r = b.getBoundingClientRect();
+                                        if (r.bottom <= mRect.top + 5 && mRect.top - r.bottom < 250) {
+                                            return {verified: true, distance: mRect.top - r.bottom};
+                                        }
+                                    }
+                                    const closest = active.map(b => {
+                                        const r = b.getBoundingClientRect();
+                                        return {y: r.top, bottom: r.bottom};
+                                    });
+                                    return {verified: false, reason: 'black button not above marker', mY: mRect.top, active: closest};
+                                }
+                                """,
+                                "📥",
+                            )
+                            if verify.get('verified'):
+                                print(f"✅✅ 有料ライン確定 attempt={attempt} (distance={verify.get('distance'):.0f}px)")
+                                paywall_set_ok = True
+                                shot(page, f"07d-paywall-verified-attempt{attempt}")
+                                break
+                            else:
+                                print(f"❌ 検証失敗 attempt={attempt}: {verify}", file=sys.stderr)
+                                shot(page, f"07d-paywall-verify-fail-attempt{attempt}")
+                                page.wait_for_timeout(1500)
+                        except Exception as e:
+                            print(f"WARNING: ライン位置クリック例外 attempt={attempt}: {e}", file=sys.stderr)
+                            shot(page, f"07d-paywall-exception-attempt{attempt}")
+                            page.wait_for_timeout(1500)
+
+                    if not paywall_set_ok:
+                        print("ERROR: 有料ライン位置を 📥 直前に設定できませんでした", file=sys.stderr)
+                        dump_html(page, "07d-paywall-FINAL-FAIL")
+                        shot(page, "07d-paywall-FINAL-FAIL")
+                        # 公開モードでもラインが正しく設定できなければ 強制的に下書き止めにする
+                        # → 「1行目から有料」のまま公開してしまう事故を防ぐ
+                        if not save_draft:
+                            print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
+                            save_draft = True
 
             # タグ設定（複数セレクタ試行）
             tag_input_selectors = [
@@ -1431,8 +1607,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # 標準
                 'button:has-text("投稿する")',
                 'button:has-text("公開する")',
+                'button:has-text("更新する")',
                 'button:has-text("公開")',
                 'button:has-text("投稿")',
+                'button:has-text("更新")',
                 # 有料エリア確定ボタン経由フロー
                 'button:has-text("有料エリア設定を完了")',
                 'button:has-text("有料設定を完了")',
