@@ -414,7 +414,7 @@ async (params) => {
     const blob = new Blob([ab], { type: mimeType });
     const file = new File([blob], fileName, { type: mimeType, lastModified: Date.now() });
 
-    // 編集領域を特定（ProseMirror が第一候補）
+    // 編集領域を特定
     let editor = document.querySelector('.ProseMirror')
               || document.querySelector('[contenteditable="true"]');
     if (!editor) {
@@ -422,20 +422,18 @@ async (params) => {
     }
     editor.focus();
 
-    // 既存のキャレット位置があればそのまま使う。
-    // 無いときだけ末尾に collapse する（保険）。
+    // セレクションを必ず末尾に折り畳む（テキスト上書きを防ぐため）
     const sel = window.getSelection();
-    if (sel.rangeCount === 0) {
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        sel.addRange(range);
-    }
+    sel.removeAllRanges();
+    const range = document.createRange();
+    range.selectNodeContents(editor);
+    range.collapse(false);
+    sel.addRange(range);
 
     const dt = new DataTransfer();
     dt.items.add(file);
 
-    // paste を先に試す
+    // paste のみ発火（drop は重複防止のため省略）
     let method = null;
     try {
         const pasteEvent = new ClipboardEvent('paste', {
@@ -449,7 +447,7 @@ async (params) => {
         }
     } catch (e) { /* noop */ }
 
-    // paste が受け入れられなかった時のみ drop を試す（重複防止）
+    // paste が受け入れられなかった時のみ drop を試す
     if (!method) {
         try {
             const rect = editor.getBoundingClientRect();
@@ -567,15 +565,22 @@ def insert_body_with_images(page, body: str):
         # 画像参照の前のテキストを入力
         chunk = body[pos:m.start()]
         if chunk:
+            # 末尾にキャレットを移動してから入力（途中位置への上書きを防ぐ）
+            page.keyboard.press("Control+End")
+            page.wait_for_timeout(200)
             page.keyboard.insert_text(chunk)
             # ProseMirror が React state を確定するまで余裕をもって待つ
-            page.wait_for_timeout(1500)
+            page.wait_for_timeout(1800)
 
         alt = m.group(1)
         rel_path = m.group(2).strip()
         img_path = ROOT / rel_path
 
-        # chunk が改行で終わっていない時のみ Enter を補う（既に空行ならスキップ）
+        # 画像挿入前にもキャレットを末尾に強制（テキスト上書きを防ぐ）
+        page.keyboard.press("Control+End")
+        page.wait_for_timeout(200)
+
+        # chunk が改行で終わっていない時のみ Enter を補う
         if not chunk.endswith("\n"):
             page.keyboard.press("Enter")
             page.wait_for_timeout(500)
@@ -621,17 +626,21 @@ def insert_body_with_images(page, body: str):
             if alt:
                 page.keyboard.insert_text(f"（画像：{alt}）")
 
-        # 画像後に改行を入れて続きのテキストへ
+        # 画像後にキャレットを末尾に戻して改行
+        page.keyboard.press("Control+End")
+        page.wait_for_timeout(200)
         page.keyboard.press("Enter")
-        page.wait_for_timeout(300)
+        page.wait_for_timeout(500)
 
         pos = m.end()
 
     # 最後の画像参照より後ろのテキスト
     remaining = body[pos:]
     if remaining:
+        page.keyboard.press("Control+End")
+        page.wait_for_timeout(200)
         page.keyboard.insert_text(remaining)
-        page.wait_for_timeout(400)
+        page.wait_for_timeout(1500)
 
     if inserted_imgs or failed_imgs:
         print(f"📷 画像処理結果: 成功 {inserted_imgs} / 失敗 {failed_imgs}")
@@ -905,25 +914,17 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             # 無料部分を入力（画像参照を画像アップロードに展開）
             insert_body_with_images(page, free_body)
 
-            # ペイウォール挿入（有料部分がある場合）
+            # 有料部分も連続して入力（ペイウォール位置はあとで JS で指定）
+            paywall_marker_text = ""
             if paid_body and meta["price"] > 0:
+                page.keyboard.press("Control+End")
+                page.wait_for_timeout(300)
                 page.keyboard.press("Enter")
                 page.keyboard.press("Enter")
-                try:
-                    paywall_btn = page.locator('button[aria-label*="有料"], button:has-text("ここから先は")').first
-                    paywall_btn.click(timeout=5000)
-                    page.wait_for_timeout(500)
-                except Exception:
-                    try:
-                        plus_btn = page.locator('button[aria-label*="ブロック"], button.ProseMirror-menuitem').first
-                        plus_btn.click(timeout=5000)
-                        page.wait_for_timeout(300)
-                        paywall_item = page.locator('button:has-text("有料"), li:has-text("有料")').first
-                        paywall_item.click(timeout=5000)
-                        page.wait_for_timeout(500)
-                    except Exception:
-                        print("WARNING: ペイウォール挿入失敗。手動設定が必要かもしれません", file=sys.stderr)
-
+                page.wait_for_timeout(500)
+                # 有料部分の境界を特定するためのユニークな目印を最初の一文字として残す
+                # paid_body の冒頭は「📥」絵文字なのでこれを目印に使う
+                paywall_marker_text = "📥"
                 insert_body_with_images(page, paid_body)
 
             print("✅ 本文入力完了")
@@ -931,6 +932,45 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             page.wait_for_timeout(4000)
             shot(page, "05-after-body-input")
             dump_html(page, "05-after-body-input")
+
+            # 「公開に進む」を押す直前に、有料エリアの開始位置（📥 の直前）に
+            # キャレットを移動しておく。publish パネルの「有料エリア設定」が
+            # 現在のキャレット位置を基準にすることを期待。
+            if paywall_marker_text:
+                try:
+                    moved = page.evaluate("""
+                        (marker) => {
+                            const editor = document.querySelector('.ProseMirror');
+                            if (!editor) return {ok: false, reason: 'no editor'};
+                            const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null);
+                            let node;
+                            while ((node = walker.nextNode())) {
+                                const idx = node.textContent.indexOf(marker);
+                                if (idx >= 0) {
+                                    editor.focus();
+                                    const range = document.createRange();
+                                    range.setStart(node, idx);
+                                    range.collapse(true);
+                                    const sel = window.getSelection();
+                                    sel.removeAllRanges();
+                                    sel.addRange(range);
+                                    // 視認できるようスクロール
+                                    if (node.parentElement && node.parentElement.scrollIntoView) {
+                                        node.parentElement.scrollIntoView({block: 'center'});
+                                    }
+                                    return {ok: true, sampleText: node.textContent.slice(0, 40)};
+                                }
+                            }
+                            return {ok: false, reason: 'marker not found'};
+                        }
+                    """, paywall_marker_text)
+                    if moved.get('ok'):
+                        print(f"📍 ペイウォール位置にキャレット移動: {moved.get('sampleText')!r}")
+                        page.wait_for_timeout(1000)
+                    else:
+                        print(f"⚠️  キャレット移動失敗: {moved.get('reason')}")
+                except Exception as e:
+                    print(f"⚠️  キャレット移動例外: {e}")
 
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
