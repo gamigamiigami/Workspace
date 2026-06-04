@@ -1282,43 +1282,100 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     except Exception:
                         print("ℹ️  有料エリア設定 ボタン未発見（不要 or 既に設定済の可能性）")
 
-                # 有料ライン位置クリック: 📥 マーカー段落を狙う
+                # 有料ライン位置を確定:
+                # note の仕様 = 各段落の間に「ラインをこの場所に変更」ボタンが出現する。
+                # クリックするとそのボタンより上が無料、下が有料になる。
+                # → 📥 段落の直前にあるボタンをクリックする。
                 if area_button_pressed:
                     try:
-                        target = page.evaluate("""
+                        result = page.evaluate("""
                             (marker) => {
                                 const editor = document.querySelector('.ProseMirror');
-                                if (!editor) return null;
+                                if (!editor) return {error: 'editor not found'};
+
+                                // 📥 を含むテキストノードを探す
                                 const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+                                let markerNode = null;
                                 let node;
                                 while ((node = walker.nextNode())) {
                                     if (node.textContent && node.textContent.includes(marker)) {
-                                        let el = node.parentElement;
-                                        while (el && el !== editor && getComputedStyle(el).display === 'inline') {
-                                            el = el.parentElement;
-                                        }
-                                        if (el && el !== editor) {
-                                            el.scrollIntoView({block: 'center'});
-                                            const rect = el.getBoundingClientRect();
-                                            return {x: rect.x + rect.width / 2, y: rect.y + rect.height / 2};
+                                        markerNode = node;
+                                        break;
+                                    }
+                                }
+                                if (!markerNode) return {error: 'marker not found'};
+
+                                // marker のブロック要素 (editor の直下) まで上る
+                                let markerEl = markerNode.parentElement;
+                                while (markerEl && markerEl.parentElement && markerEl.parentElement !== editor) {
+                                    markerEl = markerEl.parentElement;
+                                }
+                                if (!markerEl) return {error: 'marker block not found'};
+
+                                markerEl.scrollIntoView({block: 'center'});
+                                const markerRect = markerEl.getBoundingClientRect();
+
+                                // 既に正しい位置に「このラインより先を有料にする」(黒ボタン) が居るかチェック
+                                const activeButtons = Array.from(document.querySelectorAll('button')).filter(b =>
+                                    b.textContent && b.textContent.includes('このラインより先を有料にする')
+                                );
+                                for (const btn of activeButtons) {
+                                    const rect = btn.getBoundingClientRect();
+                                    if (rect.bottom <= markerRect.top + 5 && markerRect.top - rect.bottom < 120) {
+                                        return {alreadyCorrect: true};
+                                    }
+                                }
+
+                                // 「ラインをこの場所に変更」ボタンを全て取得
+                                const changeButtons = Array.from(document.querySelectorAll('button')).filter(b =>
+                                    b.textContent && b.textContent.includes('ラインをこの場所に変更')
+                                );
+                                if (changeButtons.length === 0) {
+                                    return {error: 'no change buttons found'};
+                                }
+
+                                // 📥 段落の直前にあるボタン (一番近く、上にある) を探す
+                                let bestBtn = null;
+                                let bestDistance = Infinity;
+                                for (const btn of changeButtons) {
+                                    const rect = btn.getBoundingClientRect();
+                                    if (rect.bottom <= markerRect.top + 5) {
+                                        const distance = markerRect.top - rect.bottom;
+                                        if (distance < bestDistance) {
+                                            bestDistance = distance;
+                                            bestBtn = btn;
                                         }
                                     }
                                 }
-                                return null;
+
+                                if (!bestBtn) return {error: 'no suitable button above marker'};
+
+                                bestBtn.scrollIntoView({block: 'center'});
+                                const rect = bestBtn.getBoundingClientRect();
+                                return {
+                                    x: rect.x + rect.width / 2,
+                                    y: rect.y + rect.height / 2,
+                                    btnCount: changeButtons.length,
+                                };
                             }
                         """, "📥")
-                        if target:
-                            page.wait_for_timeout(800)
-                            page.mouse.click(target['x'], target['y'])
-                            page.wait_for_timeout(1500)
-                            print(f"✅ 有料ライン位置クリック: 📥段落 ({target['x']:.0f}, {target['y']:.0f})")
-                            shot(page, "07d-paywall-positioned")
+
+                        if result.get('alreadyCorrect'):
+                            print("✅ 有料ライン位置: 既に 📥 直前に設定済み")
+                            shot(page, "07d-paywall-already-correct")
+                        elif result.get('error'):
+                            print(f"WARNING: 有料ライン位置探索失敗: {result['error']}", file=sys.stderr)
+                            shot(page, "07d-paywall-position-fail")
+                            dump_html(page, "07d-paywall-position-fail")
                         else:
-                            print("WARNING: 📥 マーカー段落が見つかりませんでした", file=sys.stderr)
-                            shot(page, "07d-paywall-marker-missing")
+                            page.wait_for_timeout(800)
+                            page.mouse.click(result['x'], result['y'])
+                            page.wait_for_timeout(2000)
+                            print(f"✅ 有料ライン位置クリック完了: 📥直前ボタン ({result['x']:.0f}, {result['y']:.0f}) / 候補数={result.get('btnCount')}")
+                            shot(page, "07d-paywall-positioned")
                     except Exception as e:
                         print(f"WARNING: 有料ライン位置クリック失敗: {e}", file=sys.stderr)
-                        shot(page, "07d-paywall-click-fail")
+                        shot(page, "07d-paywall-click-exception")
 
             # タグ設定（複数セレクタ試行）
             tag_input_selectors = [
