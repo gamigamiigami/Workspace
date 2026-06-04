@@ -911,6 +911,29 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             page.keyboard.press("Tab")
             page.wait_for_timeout(500)
 
+            # 既存の本文を全消去（既存記事の編集時にゴミ ("/有料" や前回の残骸) が
+            # 累積するのを防ぐ）
+            try:
+                page.evaluate("""
+                    () => {
+                        const editor = document.querySelector('.ProseMirror');
+                        if (!editor) return false;
+                        editor.focus();
+                        const range = document.createRange();
+                        range.selectNodeContents(editor);
+                        const sel = window.getSelection();
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                        return true;
+                    }
+                """)
+                page.wait_for_timeout(300)
+                page.keyboard.press("Delete")
+                page.wait_for_timeout(800)
+                print("🧹 本文クリア完了 (既存内容を全削除)")
+            except Exception as e:
+                print(f"WARNING: 本文クリア失敗: {e}", file=sys.stderr)
+
             # 無料部分を入力（画像参照を画像アップロードに展開）
             insert_body_with_images(page, free_body)
 
@@ -970,56 +993,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 except Exception as e:
                     print(f"⚠️  キャレット移動例外: {e}")
 
-                # Step 2: その位置で 改行→有料エリアブロックを挿入
-                # 試行1: 直接「有料エリア」ボタンが本文側にあるか探す
-                paywall_inserted = False
-                for sel in [
-                    'button:has-text("有料エリア")',
-                    'button[aria-label*="有料エリア"]',
-                    'button[aria-label*="ペイウォール"]',
-                    'button:has-text("ここから先は有料")',
-                ]:
-                    try:
-                        page.locator(sel).first.click(timeout=1500)
-                        paywall_inserted = True
-                        print(f"✅ 有料エリアブロック挿入 (selector: {sel})")
-                        page.wait_for_timeout(1500)
-                        break
-                    except Exception:
-                        continue
-
-                # 試行2: スラッシュコマンド '/有料'
-                if not paywall_inserted:
-                    try:
-                        page.keyboard.press("/")
-                        page.wait_for_timeout(600)
-                        page.keyboard.type("有料")
-                        page.wait_for_timeout(800)
-                        for sel in [
-                            '[role="option"]:has-text("有料エリア")',
-                            '[role="menuitem"]:has-text("有料エリア")',
-                            'li:has-text("有料エリア")',
-                            'button:has-text("有料エリア")',
-                            '[role="option"]:has-text("有料")',
-                            'li:has-text("有料")',
-                        ]:
-                            try:
-                                page.locator(sel).first.click(timeout=1200)
-                                paywall_inserted = True
-                                print(f"✅ スラッシュコマンドで有料エリア挿入 ({sel})")
-                                page.wait_for_timeout(1500)
-                                break
-                            except Exception:
-                                continue
-                        if not paywall_inserted:
-                            # 候補が出なかったので Escape して閉じる
-                            page.keyboard.press("Escape")
-                            page.wait_for_timeout(300)
-                    except Exception as e:
-                        print(f"⚠️  スラッシュコマンド例外: {e}")
-
-                if not paywall_inserted:
-                    print("ℹ️  本文側での有料エリア挿入は失敗 → publish パネル側で再試行する")
+                # 本文側でのスラッシュコマンド挿入は撤廃:
+                # → 失敗時に "/有料" などのリテラルテキストが本文に残る不具合があった
+                # → publish パネル側「有料エリア設定」+ 段落クリックの方式に一本化する
+                print("ℹ️  本文側の有料エリア挿入はスキップ (publish パネル側で確定)")
 
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
@@ -1287,12 +1264,15 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # クリックするとそのボタンより上が無料、下が有料になる。
                 # → 📥 段落の直前にあるボタンをクリックする。
                 #
-                # 重要: 座標クリック (page.mouse.click) では note の UI が反応しないケース有り。
-                # JS .click() + PointerEvent dispatch + Playwright locator click の三段構え。
-                # 各方法後にクリック成果を検証してリトライ判断する。
+                # 記事は構造上 📥 が最後の段落 → 最後のボタン = 正解 になるよう設計。
+                # 戦略: attempt 0=最後のボタン / 1=最後から2番目 / 2=座標(📥直前) / 3=最後から3番目
+                # 各 attempt で多重クリック方法 → 検証 を実施。
                 if area_button_pressed:
                     paywall_set_ok = False
-                    for attempt in range(4):
+                    # 戦略リスト: 'last_n=N' は最後から N+1 番目のボタンを指す
+                    strategies = ['last_n=0', 'last_n=1', 'coordinate', 'last_n=2']
+                    for attempt in range(len(strategies)):
+                        strategy = strategies[attempt]
                         try:
                             # 1) 候補ボタン探索 + 1段目の JS クリック実行
                             result = page.evaluate(
@@ -1300,6 +1280,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                 (args) => {
                                     const marker = args.marker;
                                     const attempt = args.attempt;
+                                    const strategy = args.strategy;
 
                                     // クリック対象を直接タグ問わず広く探索
                                     const candidatesSet = new Set();
@@ -1377,23 +1358,39 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                         return {error: 'no candidates', activeCount: activeSet.size};
                                     }
 
-                                    // 📥 直前のボタン (bottom <= markerRect.top, 一番近い) を選ぶ
+                                    // ボタンを Y 座標で sort (上から下へ)
+                                    const sorted = candidates.slice().sort((a, b) => {
+                                        return a.getBoundingClientRect().top - b.getBoundingClientRect().top;
+                                    });
+
                                     let bestBtn = null;
-                                    let bestDistance = Infinity;
-                                    for (const btn of candidates) {
-                                        const r = btn.getBoundingClientRect();
-                                        if (r.width === 0 || r.height === 0) continue;
-                                        if (r.bottom <= markerRect.top + 5) {
-                                            const d = markerRect.top - r.bottom;
-                                            if (d < bestDistance) {
-                                                bestDistance = d;
-                                                bestBtn = btn;
+                                    let bestDistance = -1;
+
+                                    if (strategy && strategy.startsWith('last_n=')) {
+                                        // strategy: 最後から N+1 番目のボタンを選択
+                                        const n = parseInt(strategy.split('=')[1], 10) || 0;
+                                        const idx = sorted.length - 1 - n;
+                                        if (idx >= 0 && idx < sorted.length) {
+                                            bestBtn = sorted[idx];
+                                            bestDistance = markerRect.top - bestBtn.getBoundingClientRect().bottom;
+                                        }
+                                    } else {
+                                        // 座標方式: 📥 直前のボタン (bottom <= markerRect.top, 一番近い)
+                                        for (const btn of candidates) {
+                                            const r = btn.getBoundingClientRect();
+                                            if (r.width === 0 || r.height === 0) continue;
+                                            if (r.bottom <= markerRect.top + 5) {
+                                                const d = markerRect.top - r.bottom;
+                                                if (bestDistance < 0 || d < bestDistance) {
+                                                    bestDistance = d;
+                                                    bestBtn = btn;
+                                                }
                                             }
                                         }
                                     }
 
                                     if (!bestBtn) {
-                                        return {error: 'no button above marker', candidates: candidates.length, markerY: markerRect.top};
+                                        return {error: 'no button selected by strategy: ' + strategy, candidates: candidates.length, markerY: markerRect.top};
                                     }
 
                                     // スクロール → reflow 強制 → 座標取得
@@ -1431,7 +1428,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                     };
                                 }
                                 """,
-                                {"marker": "📥", "attempt": attempt},
+                                {"marker": "📥", "attempt": attempt, "strategy": strategy},
                             )
 
                             if result.get('alreadyCorrect'):
@@ -1450,7 +1447,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                 continue
 
                             # 2) JS dispatch 後の追い打ち: mouse.click + Playwright locator click
-                            print(f"📍 attempt={attempt}: 候補={result.get('candidates')}, btnText={result.get('btnText')!r}, distance={result.get('distance'):.0f}, markerY={result.get('markerY'):.0f}")
+                            print(f"📍 attempt={attempt} strategy={strategy}: 候補={result.get('candidates')}, btnText={result.get('btnText')!r}, distance={result.get('distance'):.0f}, markerY={result.get('markerY'):.0f}")
                             page.wait_for_timeout(800)
                             try:
                                 page.mouse.click(result['x'], result['y'])

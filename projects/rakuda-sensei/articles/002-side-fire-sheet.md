@@ -391,14 +391,8 @@ note：https://note.com/rakuda_sensei
 
 ここから先で、Excelシート本体のダウンロードリンクを渡します。本文はここまでで読み終えても、シートの中身を理解する分には十分な内容にしてあります。手元に置いて夫婦会議で使いたい方だけ、有料パートに進んでください。
 
+質問・改善要望は X DM までお気軽に。
+
 ────────── ペイウォール ──────────
 
-📥 **夫婦で実践｜サイドFIRE計画シート.xlsx**（21KB）
-
-[ダウンロードはこちら](https://raw.githubusercontent.com/gamigamiigami/Workspace/claude/addness-side-income-7cjy2/projects/rakuda-sensei/downloads/side-fire-planner-2026.xlsx)
-
-Excel もしくは無料の Google スプレッドシートで開けます。ファイル名は半角英数の `side-fire-planner-2026.xlsx` にしています。日本語名で受け取りたい場合は X の DM でどうぞ。
-
----
-
-質問・改善要望は X DM までお気軽に。
+📥 **夫婦で実践｜サイドFIRE計画シート.xlsx**（21KB） — [ダウンロードはこちら](https://raw.githubusercontent.com/gamigamiigami/Workspace/claude/addness-side-income-7cjy2/projects/rakuda-sensei/downloads/side-fire-planner-2026.xlsx) — Excel もしくは無料の Google スプレッドシートで開けます。ファイル名は半角英数の `side-fire-planner-2026.xlsx`。日本語名で受け取りたい場合は X の DM でどうぞ。
