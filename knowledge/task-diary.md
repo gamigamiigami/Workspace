@@ -6,6 +6,28 @@
 
 ---
 
+### 2026-06-04（セッション60・rebuild_fire_v4作成・ワークフロー待機）
+
+**うまくいったこと**
+- rebuild_fire_v4.py を作成完了（生活費内訳・貯金/運用分離・結論ヒーロー強化を実装）
+- 前セッションの GitHub Actions workflow 認証フロー終了、次のセッションで確認可能な状態に
+
+**うまくいかなかったこと**
+- 本セッションではセッション継続時点で workflow 完了待機中のため、新たな実行や確認が実施不可
+- rebuild_fire_v4.py の実行・検証が未実施（セッション終了時点）
+
+**発見**
+- 複数の background task（99e7212、fac4e5b、148c507 workflow 待機）が並行稼働中
+- セッション継続中は実行再開不可、次セッション開始時に検証が必要
+
+**次回への申し送り**
+- rebuild_fire_v4.py の実行：`python3 projects/rakuda-sensei/automation/rebuild_fire_v4.py`
+- 生成された xlsx ファイルの検証（生活費シート、貯金/運用分離の確認）
+- ファイル送信・commit・push・PR 作成（"feat(fire-v4): 生活費内訳化 + 貯金/運用分離 + 結論ヒーロー強化"）
+- GitHub Actions workflow 実行結果の確認（3つの workflow）
+
+---
+
 ### 2026-06-04（セッション59・ボタン押下ロジック検証待機）
 
 **うまくいったこと**
