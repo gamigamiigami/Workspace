@@ -75,6 +75,78 @@
 
 ---
 
+## ワークフロー自動化・マルチセッション継続
+
+### [汎用] バックグラウンドワークフロー監視パターン（マルチセッション対応）
+
+**用途：** GitHub Actions や長時間実行の自動化ワークフローを、セッション跨ぎで監視し、完了を自動検出して次セッションで結果を継続実行
+
+**背景：**
+- note 記事の自動投稿ワークフロー（記事編集・圧縮・メタ設定・サムネ投入）は 20-30 分かかる
+- セッション中に 1 回のみ起動可能だが、結果確認までセッションが続きやすい
+- 従来は「ワークフロー起動 → セッション終了」で結果が次のセッションに遅延
+- 「非同期で監視→結果を自動通知」フロー が必要
+
+**実装パターン（rakuda-sensei）：**
+
+```python
+# 1. セッション中：ワークフロー起動 + trigger ファイルを Git に commit
+git add projects/rakuda-sensei/articles/.launch-trigger
+git commit -m 'trigger: 記事自動投稿ワークフロー起動'
+git push origin HEAD
+# → GitHub Actions が自動検出して実行開始
+
+# 2. バックグラウンドタスク：30秒ごとに trigger consumption ポーリング
+# settings.json の background_task で無限ループ
+def poll_workflow_completion():
+    for i in range(100):  # 最大50分間監視
+        git fetch --prune
+        if not Path('.launch-trigger').exists():
+            # ワークフローが trigger を消費 → 完了
+            result_url = Path('.last-published-url.txt').read_text()
+            # 3. task-notification で次セッションに通知
+            notify_session(f"ワークフロー完了: {result_url}")
+            break
+        time.sleep(30)
+
+# 3. 次セッション：自動通知を受け取ると、.last-published-url.txt から URL 復帰
+```
+
+**設定ファイル（.claude/settings.json）：**
+```json
+{
+  "background_tasks": [
+    {
+      "name": "Monitor: Wait for workflow completion",
+      "command": "while [ -f 'projects/rakuda-sensei/articles/.launch-trigger' ]; do sleep 30; git fetch --prune; done && cat 'projects/rakuda-sensei/articles/.last-published-url.txt' 2>/dev/null || true",
+      "run_on_start": true,
+      "notify_on_complete": true
+    }
+  ]
+}
+```
+
+**利点：**
+- **セッション跨ぎ対応**：ワークフロー実行中に別セッションを開いても、完了時に自動通知
+- **トークン節約**：polling は bash で実行、Claude は最終結果のみ処理
+- **ユーザー体験向上**：「実行→待機」の中断なく「実行→(自動)→結果確認」が可能
+- **エラー検出**：trigger が一定時間消費されないと、Issue 自動起票で人間に報告
+
+**制約：**
+- trigger consumption ファイルの存在確認が必須（ワークフローが消費すること）
+- ポーリング間隔が長いと検出遅延（30秒推奨、最長 50 分）
+- trigger ファイルが誤って削除されるとループ完了と誤認識
+
+**実装例（rakuda-sensei 記事自動投稿）：**
+- セッション 65-66：ワークフロー起動 + trigger 設置
+- セッション 67-68：polling 動作確認 → ワークフロー完了 → URL 自動反映
+- セッション 69：Monitor 通知受領 → 前セッション結果の検証実施
+- セッション 70 続：前セッション結果を使い、最終検証項目を提示
+
+**タグ：** #github-actions #workflow #monitoring #background-task #async #multiprocess #rakuda-sensei
+
+---
+
 ## SNS運用・コンテンツ発信
 
 ### [汎用] 「投稿数 vs 質」の時系列最適化パターン
