@@ -933,10 +933,9 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             shot(page, "05-after-body-input")
             dump_html(page, "05-after-body-input")
 
-            # 「公開に進む」を押す直前に、有料エリアの開始位置（📥 の直前）に
-            # キャレットを移動しておく。publish パネルの「有料エリア設定」が
-            # 現在のキャレット位置を基準にすることを期待。
+            # 📥 直前にキャレットを移動して、その位置に有料エリアブロックを挿入する
             if paywall_marker_text:
+                # Step 1: JS でカーソル移動
                 try:
                     moved = page.evaluate("""
                         (marker) => {
@@ -954,7 +953,6 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                     const sel = window.getSelection();
                                     sel.removeAllRanges();
                                     sel.addRange(range);
-                                    // 視認できるようスクロール
                                     if (node.parentElement && node.parentElement.scrollIntoView) {
                                         node.parentElement.scrollIntoView({block: 'center'});
                                     }
@@ -966,11 +964,62 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     """, paywall_marker_text)
                     if moved.get('ok'):
                         print(f"📍 ペイウォール位置にキャレット移動: {moved.get('sampleText')!r}")
-                        page.wait_for_timeout(1000)
+                        page.wait_for_timeout(800)
                     else:
                         print(f"⚠️  キャレット移動失敗: {moved.get('reason')}")
                 except Exception as e:
                     print(f"⚠️  キャレット移動例外: {e}")
+
+                # Step 2: その位置で 改行→有料エリアブロックを挿入
+                # 試行1: 直接「有料エリア」ボタンが本文側にあるか探す
+                paywall_inserted = False
+                for sel in [
+                    'button:has-text("有料エリア")',
+                    'button[aria-label*="有料エリア"]',
+                    'button[aria-label*="ペイウォール"]',
+                    'button:has-text("ここから先は有料")',
+                ]:
+                    try:
+                        page.locator(sel).first.click(timeout=1500)
+                        paywall_inserted = True
+                        print(f"✅ 有料エリアブロック挿入 (selector: {sel})")
+                        page.wait_for_timeout(1500)
+                        break
+                    except Exception:
+                        continue
+
+                # 試行2: スラッシュコマンド '/有料'
+                if not paywall_inserted:
+                    try:
+                        page.keyboard.press("/")
+                        page.wait_for_timeout(600)
+                        page.keyboard.type("有料")
+                        page.wait_for_timeout(800)
+                        for sel in [
+                            '[role="option"]:has-text("有料エリア")',
+                            '[role="menuitem"]:has-text("有料エリア")',
+                            'li:has-text("有料エリア")',
+                            'button:has-text("有料エリア")',
+                            '[role="option"]:has-text("有料")',
+                            'li:has-text("有料")',
+                        ]:
+                            try:
+                                page.locator(sel).first.click(timeout=1200)
+                                paywall_inserted = True
+                                print(f"✅ スラッシュコマンドで有料エリア挿入 ({sel})")
+                                page.wait_for_timeout(1500)
+                                break
+                            except Exception:
+                                continue
+                        if not paywall_inserted:
+                            # 候補が出なかったので Escape して閉じる
+                            page.keyboard.press("Escape")
+                            page.wait_for_timeout(300)
+                    except Exception as e:
+                        print(f"⚠️  スラッシュコマンド例外: {e}")
+
+                if not paywall_inserted:
+                    print("ℹ️  本文側での有料エリア挿入は失敗 → publish パネル側で再試行する")
 
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
