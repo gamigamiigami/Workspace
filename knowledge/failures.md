@@ -1,8 +1,128 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-05-24
+最終更新：2026-05-31
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## GitHub Actions
+
+### [2026-05-31] addness-side-income — GitHub Actions で issue:write 権限が明示的に必要
+
+**状況：** GitHub Actions ワークフロー（`post-to-x.yml`）内で GitHub Issue を自動作成する機能を実装
+
+**問題：** 
+- Issue 作成時に以下のエラーが発生
+  ```
+  GraphQL: Resource not accessible by integration (createIssue)
+  ```
+- ワークフロームの `permissions` セクションで権限を指定していない状態
+
+**原因：** 
+- GitHub Actions の `GITHUB_TOKEN` はデフォルトで `contents: read` のみ持つ
+- Issue 作成（`createIssue` GraphQL mutation）には明示的に `issues: write` 権限が必要
+- ワークフロー YAML の `permissions` セクションに `issues: write` を記載していなかった
+
+**解決策：**
+```yaml
+jobs:
+  post-to-x:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read    # コード読み込み用
+      issues: write     # Issue 作成用（これが必須）
+    steps:
+      - uses: actions/checkout@v3
+      - name: Post to X and create issue
+        run: python scripts/post_to_x.py
+```
+
+**再発防止：**
+- GitHub Actions で外部リソース操作が必要な場合は、各操作に対応する `permissions` フラグを事前に調べて記載
+- よく使う権限セット：
+  - `contents: read` — リポジトリコード参照
+  - `contents: write` — コミット、PR作成
+  - `issues: write` — Issue作成・更新
+  - `pull-requests: write` — PR操作
+  - `secrets: read` — Secret参照（デフォルトで有効）
+
+**タグ：** #github-actions #permissions #issue #automation
+
+---
+
+## 自動化・ROI判定
+
+### [2026-06-02] rakuda-sensei — BOOTH完全自動出品：自動化コストが手動運用を上回ったケース
+
+**状況：** BOOTH へのシステム販売品完全自動出品（商品情報入力 → 説明文 → PDF添付 → 出品ボタン押下まで）を 5 セッション（セッション9-13）にわたって自動化しようとした
+
+**問題：** 
+- セッション12まで30時間以上を投資
+- セッション13で「出品ボタン押下後、実際には出品されていない（サイレント失敗）」という障壁を検出
+- PDF自動アップロード、ファイル形式検証、ボタンのアクティブ状態判定など、複数の未知の障壁が次々と発見
+- 3回のワークフロー実行で同じ失敗パターン（サイレント失敗）が再現
+
+**原因（複合要因）：** 
+```
+① 仕様不明確：
+   - BOOTH の出品フロー仕様が公開ドキュメント化されていない
+   - PDFが必須なのか、どの段階でファイル検証が走るのか不明
+   - 複数のUI段階（プルダウン、ラジオボタン、テキスト入力、ファイルアップロード）で
+     各々の依存関係・バリデーション順序が不明
+
+② 自動化の複雑性：
+   - 複数のページ遷移 + 動的UI + ファイルアップロード + 外部システム連携（BOOTH在庫DB）
+   - Playwright でセレクタ検出（複数パターンフォールバック）+ スクショ + ダンプ出力などの
+     診断ロジックを実装しても、実際の出品完了まで観測できない
+   - テスト環境なし（本番環境のみ、出品実績が留まる）
+
+③ ROI 計算の過小評価：
+   - 初期見積：「複数の出品フロー統合で 月50件の自動化」
+   - 実績：月3-5件程度（新カリキュラム開発頻度）
+   - 実装投資：セッション9-13で 30時間
+   - 月次運用コスト（保守・デバッグ）：5時間以上（新障壁検出ごとに対応）
+```
+
+**解決策（撤退判断）：** 
+```
+BOOTH 完全自動化は断念 → 現実的なハイブリッドモデルへ転換：
+
+旧：[AI] → [Playwright自動出品] → [完成]（失敗が頻発）
+
+新：[AI] → [商品HTML生成] → [GitHub Issue自動起票] → [人間2-3分] → [完成]
+              ↑完全自動        ↑100%成功                 手動出品フロー
+                              （リマインダー機能）      （BOOTH フォーム入力）
+
+時間コスト比較：
+- 旧：初期30時間 + 月5時間保守 = 月5時間，ROI逆転点150ヶ月（12年）
+- 新：初期5時間（Issue テンプレ） + 月0.2時間（Issue作成） + 月0.5時間（手動出品10分×4週）
+     = 月0.7時間，ROI正転状態
+
+差分： 月 4.3時間 削減 = 年 51.6時間 削減
+```
+
+**再発防止（自動化 ROI 判定基準）：** 
+```
+≥ 3回同じ障壁で失敗 → スコープ見直しフェーズへ（自動化完全化を放棄）
+
+判定軸（セッション12-13で実装されるべきだった）：
+1. 「技術的に解決可能か」
+   - セッション9-11：「実装パターンはある」と判断 → 続行
+   - セッション12：失敗から「仕様不明確 + 本番環境のみ」と判明 → 警告レベル「黄」
+   - セッション13：3回失敗でテストモルモット状態が確定 → 判定「赤・スコープ縮小へ」
+
+2. ROI が正の領域か
+   - 月次利用量 × 自動化で削減される時間 > 初期実装 + 月次保守
+   - rakuda-sensei BOOTH：月3-5件 × 3分 = 月15分 < 月5時間保守（大赤字）
+
+3. テスト環境が存在するか
+   - note：下書き投稿でテスト可能 → 自動化適性「高」
+   - BOOTH：本番在庫システム直結（テスト環境なし） → 自動化適性「低」
+   - 要件：「Staging 環境で100回テスト後，本番導入」くらいの余裕が必要
+```
+
+**タグ：** #automation #roi #business-judgment #deployment #testing
 
 ---
 
@@ -23,6 +143,196 @@
 
 **タグ：** #css #javascript #ios など
 ```
+
+---
+
+## 自動化の根本的限界
+
+### [2026-05-31] rakuda-sensei — Playwright bot検知回避とクッキー自動取得の根本的限界
+
+**状況：** note.com へのクッキー自動取得を Playwright で実装しようとした（セッション自動化の一環）
+
+**問題：** 
+- Playwright での自動クッキー取得を検討したが、実装不可であることが判明
+- 過去の「bot検知対策（playwright-stealth）」では解決できない層がある
+
+**原因：** クッキー取得フローには、技術対策では補えない3つの制約がある：
+```
+① クラウド実行環境からブラウザアクセス不可
+   → AI実行環境（クラウドコンテナ）にはGUIがない
+   → note.comのログインフォームは JavaScript ベースで人間のブラウザ操作を要求
+
+② IP ベースのブロック
+   → データセンター IP は自動的に reCAPTCHA 直撃判定される
+   → Playwright の navigator 偽装では IP は偽装不可
+   → 複数のbotサイネチャ（headless + IPアドレス）の組み合わせで検知
+
+③ セキュリティ設計の制約
+   → クッキー取得にはパスワード/2FA が必要な場合がある
+   → AI には本人のパスワード共有は避けるべき（セキュリティポリシー推奨）
+```
+
+**解決策：** 
+ユーザー（本人）がブラウザでログイン済みの状態を活用する運用フロー：
+```
+1. ユーザーがブラウザで note.com にログイン
+2. Cookie-Editor 拡張機能でクッキーを JSON エクスポート
+3. その JSON を GitHub Secrets に登録
+4. Playwright スクリプトが Secrets から読み込んで使用
+```
+
+**再発防止：** 
+- 「自動化できない業務」の判定軸：
+  ✗ 本人認証（初回ログイン、2FA、デバイス登録）→ 人間操作必須
+  ✗ ブラウザのセッション/クッキー取得 → 本人ブラウザのみ
+  ✓ クッキー取得後の操作（投稿、ページ遷移） → Playwright で自動化可能
+
+- 多層防御（IP + 振る舞い + 認証状態）には、すべての層を同時にクリアする必要がある
+  → IP 偽装は無理だが、クッキーで既に認証済み状態をシミュレートできる
+
+**タグ：** #automation #security #playwright #bot-detection #cookies
+
+---
+
+## GitHub Actions & 自動投稿
+
+### [2026-05-31] rakuda-sensei — GitHub Actions 自動投稿での Secrets 未登録 / パスワード違いエラー
+
+**状況：** GitHub Actions で BOOTH / note への自動投稿ワークフローを実装し、実行した
+
+**問題：** 
+- BOOTH投稿が管理画面に「何も表示されない」状態
+- note投稿が管理画面に「何も表示されない」状態
+
+**原因：** 
+1. BOOTH：ショップのサブドメイン（`rakuda-sensei`）が設定されていない
+2. note：GitHub Secrets で `NOTE_EMAIL` / `NOTE_PASSWORD` が登録されていない、または パスワード相違
+
+**解決策：** 
+1. BOOTH の場合：`https://manage.booth.pm/settings` → ショップURL欄に サブドメイン名 を入力して保存 → ワークフロー再実行
+2. note の場合：`https://github.com/{owner}/{repo}/settings/secrets/actions` で Secrets登録状況を確認 → `NOTE_EMAIL` / `NOTE_PASSWORD` が存在するか確認 → 存在しない場合は登録 → ワークフロー再実行
+3. 詳細なエラーメッセージは GitHub Actions ログの「最後10行」を見る
+
+**トラブルシューティング手順：**
+```
+① Secrets確認ページを開く
+   https://github.com/{owner}/{repo}/settings/secrets/actions
+
+② 「Repository secrets」セクションで以下が表示されているか確認：
+   - NOTE_EMAIL
+   - NOTE_PASSWORD
+   （存在しない場合は New repository secret ボタンで追加）
+
+③ ワークフロー実行ログを確認
+   https://github.com/{owner}/{repo}/actions/workflows/post-to-note.yml
+   → 最新の run をクリック
+   → post ジョブをクリック
+   → "Post to note.com" ステップを展開
+   → ログの最後10行を確認
+   
+④ ログに表示される内容で原因確定：
+   - "NOTE_EMAIL が設定されていません" → Secrets 未登録
+   - "noteログイン失敗" → パスワード相違
+   - "✅ noteログイン成功" → 問題なし（投稿は発生している）
+```
+
+**再発防止：** 
+- 新しい自動投稿ワークフロー追加時は、Secrets登録 → ワークフロー実行 → ログで「成功」確認 を初回セットアップフロー化する
+- ログの「最後10行」を見ることが最速の原因特定方法
+
+**タグ：** #github-actions #automation #secrets #troubleshooting
+
+---
+
+### [2026-05-31] rakuda-sensei — Playwright による headless Chrome bot検知の回避策
+
+**状況：** GitHub Actions 上で Playwright を使って自動投稿ワークフローを実装している。note・BOOTH はブラウザからのアクセスを自動化で検知して拒否する可能性がある。
+
+**問題：** 
+- Playwright (headless mode) は `navigator.webdriver === true` で検知される
+- bot検知エンジンが複数のシグナルを監視している可能性が高い
+
+**原因：** 
+Playwright のデフォルト設定では以下が bot と判定される：
+```javascript
+navigator.webdriver === true  // Playwright特有
+chrome.webstore === undefined  // Chromium特有
+window.chrome === undefined    // bot検知シグナル
+navigator.plugins.length === 0 // bot特性
+```
+
+**解決策：** 
+Playwright 起動時に以下の偽装を実装：
+```python
+# post_to_note.py の browser 起動部分
+browser = await playwright.chromium.launch(
+    headless=True,
+    args=[
+        '--disable-dev-shm-usage',
+        '--no-first-run',
+        '--no-default-browser-check'
+    ]
+)
+
+context = await browser.new_context(
+    user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+)
+
+# ページ開く前に偽装スクリプトを注入
+await page.add_init_script("""
+  Object.defineProperty(navigator, 'webdriver', {
+    get: () => undefined,
+  });
+  window.chrome = { runtime: {} };
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => [1, 2, 3],
+  });
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['ja-JP', 'ja', 'en-US', 'en'],
+  });
+""")
+
+context = await browser.new_context(...)
+page = await context.new_page()
+await page.add_init_script(...)  # スクリプト注入
+```
+
+**注意点：**
+- bot検知ロジックは各サイトで秘匿されている → 完全な防御は不可能
+- IP ベースのブロック（GitHub Actions IPが既にブロックリストに入っている場合）には対応不可
+- UI 構造の大幅変更には複数セレクタ候補でカバーしきれない可能性がある
+
+**事前診断ワークフロー（check-cookies.yml）の導入：**
+- 本番投稿前に「認証テストのみ」を実行するワークフローを追加
+- クッキー形式の正規化確認 + ログイン状態確認 + screenshot 取得
+- このステップで認証OK → 本番実行時の成功確率が大幅向上
+- 失敗時は screenshot artifact で実際の画面が可視化できるため、UI構造の変更検知が容易
+
+**トラブルシューティング手順（ユーザー向け）：**
+```
+① Cookie-Editorで取得したクッキーを GitHub Secrets に登録
+   https://github.com/{owner}/{repo}/settings/secrets/actions
+   → NOTE_COOKIES（JSON形式）
+
+② 事前診断ワークフローを実行
+   https://github.com/{owner}/{repo}/actions/workflows/check-cookies.yml
+   → Run workflow → Artifacts でスクリーンショット確認
+   → ✅ ログインOKの確認
+
+③ スクリーンショットで実際の画面確認
+   - note・BOOTH の「認証後」画面が表示されているか
+   - UI構造に変化があれば、セレクタを修正
+
+④ 本番投稿ワークフロー実行
+   https://github.com/{owner}/{repo}/actions/workflows/post-to-note.yml
+```
+
+**再発防止：** 
+- bot検知は「試してみるしかない」ため、GitHub Actions環境での実機実行が必須
+- 「クッキー認証+事前診断」パターンを標準フロー化する
+- UI構造変更は定期的に事前診断で監視
+
+**タグ：** #playwright #bot-detection #github-actions #automation #resilience
 
 ---
 

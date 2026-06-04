@@ -1,0 +1,540 @@
+<!--
+============================================================
+BOOTH商品メタデータ（コピペして商品ページ作成に使用）
+============================================================
+
+【タイトル】
+中2国語『助動詞の識別』ワークシート｜5問×3レベル＋解答＋採点ルーブリック付き
+
+【商品説明文】
+「らしい」「ようだ」「そうだ」——
+中2の助動詞の識別、毎年つまずく生徒が多くないですか？
+
+このワークシートは、現役の中学校国語教員「残業嫌いのらくだ先生🐪」が
+実際の授業で使っている、即配布できる教材です。
+
+■収録内容
+・基礎5問（識別のみ・選択式）
+・応用5問（識別＋意味説明・記述式）
+・発展5問（生徒の誤答を指摘する力を養う・記述式）
+・解答＋解説（裏面想定）
+・採点ルーブリック（A/B/C 3段階）
+
+■この教材の特徴
+✅ B4二つ折り（中綴じ風）・両面印刷で完結
+✅ 解答が裏面にあるので、別ファイルを管理しなくてOK
+✅ 採点ルーブリック付きで「評価軸」を考える時間ゼロ
+✅ 印刷してすぐ配布できる完成済PDF
+
+■こんな先生に
+・助動詞の指導で「結局ここを毎年やり直してる」
+・採点で評価軸を毎回考え直していて疲れている
+・「ゼロから作る」をやめたい
+・授業準備に週末を潰したくない
+
+■使い方
+1. PDFをダウンロード（A4 or B4印刷推奨。B4二つ折りが最適）
+2. 両面印刷して生徒に配布
+3. 採点はルーブリック表に従って即決
+
+■商品形式
+PDF（B4横・両面印刷想定）
+
+ぼくの時短ルーティンの全公開記事もnoteで公開中（本商品の制作背景）：
+→ [note URL を投稿後に追記]
+
+【価格】¥300（試し買い特別価格）
+
+【サムネ指示】
+サイズ: 1200×630
+中央上: 大きく「中2国語『助動詞の識別』」
+中央: 「5問×3レベル＋解答＋ルーブリック」
+左下: らくだアイコン
+右下: 「¥300｜残業嫌いのらくだ先生🐪」
+背景: 白＋薄ベージュ
+NG: 教室写真・生徒写真
+
+【タグ】教材, 国語, 中学校, ワークシート, 助動詞, 文法
+
+【出品先】BOOTH
+【ファイル名】joshi-chu2-worksheet-v1.pdf （HTMLからブラウザの「印刷→PDFとして保存」で生成）
+
+============================================================
+人間アクション：
+1. このHTMLをブラウザで開く
+2. ⌘P / Ctrl+P で印刷ダイアログ
+3. 「PDFとして保存」を選択
+4. 用紙：B4 横（or A4 横でも可）
+5. 余白：最小
+6. 保存ファイル名：joshi-chu2-worksheet-v1.pdf
+7. BOOTHに上記メタ情報＋PDFをアップロード
+============================================================
+-->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>中2国語 助動詞の識別ワークシート｜残業嫌いのらくだ先生</title>
+  <style>
+    /* ===== 基本スタイル ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Hiragino Mincho ProN", "Yu Mincho", serif;
+      font-size: 11pt;
+      line-height: 1.6;
+      color: #222;
+      background: #f5f5f5;
+      padding: 20px;
+    }
+    .page {
+      background: white;
+      width: 364mm;          /* B4横 */
+      min-height: 257mm;
+      padding: 12mm;
+      margin: 0 auto 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      page-break-after: always;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8mm;
+    }
+    .panel {
+      border: 1px solid #ddd;
+      padding: 6mm;
+      position: relative;
+    }
+    .panel h2 {
+      font-size: 14pt;
+      border-bottom: 2px solid #8a6d3b;
+      padding-bottom: 3mm;
+      margin-bottom: 4mm;
+    }
+    .panel .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4mm;
+      font-size: 9pt;
+      color: #777;
+    }
+    .question {
+      margin-bottom: 4mm;
+      page-break-inside: avoid;
+    }
+    .question-no {
+      display: inline-block;
+      background: #8a6d3b;
+      color: white;
+      width: 6mm;
+      height: 6mm;
+      text-align: center;
+      line-height: 6mm;
+      border-radius: 50%;
+      font-size: 9pt;
+      margin-right: 2mm;
+      font-weight: bold;
+    }
+    .quote {
+      background: #faf6ee;
+      padding: 2mm 4mm;
+      margin: 2mm 0;
+      border-left: 3px solid #8a6d3b;
+      font-style: italic;
+    }
+    .choices {
+      list-style: none;
+      margin-left: 8mm;
+    }
+    .choices li {
+      margin: 1mm 0;
+    }
+    .answer-line {
+      border-bottom: 1px solid #999;
+      min-height: 8mm;
+      margin-top: 2mm;
+    }
+    .level-label {
+      display: inline-block;
+      padding: 1mm 3mm;
+      border-radius: 3mm;
+      font-size: 9pt;
+      font-weight: bold;
+      margin-right: 2mm;
+    }
+    .level-basic { background: #d4edda; color: #155724; }
+    .level-applied { background: #fff3cd; color: #856404; }
+    .level-advanced { background: #f8d7da; color: #721c24; }
+    .footer {
+      position: absolute;
+      bottom: 4mm;
+      right: 6mm;
+      font-size: 8pt;
+      color: #aaa;
+    }
+    .rubric {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 9pt;
+      margin-top: 2mm;
+    }
+    .rubric th, .rubric td {
+      border: 1px solid #999;
+      padding: 1.5mm 2mm;
+      vertical-align: top;
+    }
+    .rubric th {
+      background: #f5efe0;
+      font-weight: bold;
+    }
+    .answer-box {
+      background: #fafafa;
+      padding: 2mm 4mm;
+      border-left: 3px solid #5cb85c;
+      margin-top: 1mm;
+      font-size: 10pt;
+    }
+    .explanation {
+      font-size: 9pt;
+      color: #555;
+      margin-top: 1mm;
+    }
+    .brand {
+      font-size: 10pt;
+      color: #8a6d3b;
+      text-align: right;
+      margin-bottom: 2mm;
+    }
+
+    /* ===== 印刷スタイル ===== */
+    @media print {
+      @page { size: B4 landscape; margin: 8mm; }
+      body { background: white; padding: 0; }
+      .page { box-shadow: none; margin: 0; padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== 表面（問題） ===== -->
+  <div class="page">
+    <!-- 左パネル -->
+    <div class="panel">
+      <div class="header">
+        <span>中学2年 国語 ／ 助動詞の識別 ワークシート</span>
+        <span>名前：　　　　　　　　　　　</span>
+      </div>
+      <h2>「らしい」「ようだ」「そうだ」を見分けよう</h2>
+      <p style="font-size:9pt; margin-bottom:4mm;">
+        以下の文中の傍線部の働きを答えなさい。<br>
+        基礎→応用→発展の順に挑戦。記述は完全文で。
+      </p>
+
+      <!-- 基礎 1〜5 -->
+      <div class="question">
+        <span class="level-label level-basic">基礎</span>
+        <span class="question-no">1</span>
+        <span>次の文の「<u>らしい</u>」の品詞・意味として最も適切なものを選びなさい。</span>
+        <div class="quote">明日は雨が降る<u>らしい</u>。</div>
+        <ol class="choices">
+          <li>ア　推定の助動詞</li>
+          <li>イ　様態の助動詞</li>
+          <li>ウ　形容詞「らしい」の語幹</li>
+          <li>エ　接尾語「らしい」</li>
+        </ol>
+        <div>答え：　　　</div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-basic">基礎</span>
+        <span class="question-no">2</span>
+        <span>次の文の「<u>らしい</u>」の品詞・意味として最も適切なものを選びなさい。</span>
+        <div class="quote">彼は子ども<u>らしく</u>ない。</div>
+        <ol class="choices">
+          <li>ア　推定の助動詞</li>
+          <li>イ　様態の助動詞</li>
+          <li>ウ　形容詞</li>
+          <li>エ　接尾語「らしい」</li>
+        </ol>
+        <div>答え：　　　</div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-basic">基礎</span>
+        <span class="question-no">3</span>
+        <span>次の文の「<u>そうだ</u>」の意味として正しいものを選びなさい。</span>
+        <div class="quote">雪が降り<u>そうだ</u>。</div>
+        <ol class="choices">
+          <li>ア　伝聞</li>
+          <li>イ　様態</li>
+          <li>ウ　推定</li>
+          <li>エ　形容動詞「そうだ」</li>
+        </ol>
+        <div>答え：　　　</div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-basic">基礎</span>
+        <span class="question-no">4</span>
+        <span>次の文の「<u>そうだ</u>」の意味として正しいものを選びなさい。</span>
+        <div class="quote">天気予報によると、明日は晴れる<u>そうだ</u>。</div>
+        <ol class="choices">
+          <li>ア　伝聞</li>
+          <li>イ　様態</li>
+          <li>ウ　推定</li>
+          <li>エ　形容動詞「そうだ」</li>
+        </ol>
+        <div>答え：　　　</div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-basic">基礎</span>
+        <span class="question-no">5</span>
+        <span>次の文の「<u>ようだ</u>」の意味として正しいものを選びなさい。</span>
+        <div class="quote">あの人は元気な<u>ようだ</u>。</div>
+        <ol class="choices">
+          <li>ア　推定</li>
+          <li>イ　例示</li>
+          <li>ウ　比喩</li>
+          <li>エ　形容動詞</li>
+        </ol>
+        <div>答え：　　　</div>
+      </div>
+
+      <div class="footer">残業嫌いのらくだ先生🐪 ／ 1枚目</div>
+    </div>
+
+    <!-- 右パネル -->
+    <div class="panel">
+      <div class="header">
+        <span>応用＋発展問題</span>
+        <span>記述は完全文で答えること</span>
+      </div>
+
+      <!-- 応用 6〜10 -->
+      <div class="question">
+        <span class="level-label level-applied">応用</span>
+        <span class="question-no">6</span>
+        <span>次の文中の「らしい」「ようだ」「そうだ」を抜き出し、品詞と意味を答えなさい。</span>
+        <div class="quote">あの様子では、もうすぐ着く<u>ようだ</u>。</div>
+        <div>抜き出し：　　　　　　／品詞：　　　　　／意味：　　　　　　　　　　</div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-applied">応用</span>
+        <span class="question-no">7</span>
+        <span>次の文の「ようだ」と同じ意味のものをア〜ウから選び、その理由を一文で書きなさい。</span>
+        <div class="quote">彼女は天使の<u>ようだ</u>。</div>
+        <ol class="choices">
+          <li>ア　雨が降る<u>ようだ</u>。</li>
+          <li>イ　たとえば桜の花の<u>ようだ</u>。</li>
+          <li>ウ　手紙はもう届いた<u>ようだ</u>。</li>
+        </ol>
+        <div>答え：　　　／理由：</div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-applied">応用</span>
+        <span class="question-no">8</span>
+        <span>次の二つの「そうだ」の意味の違いを、それぞれ一文で説明しなさい。</span>
+        <div class="quote">A：彼は明日来る<u>そうだ</u>。<br>B：彼は明日来<u>そうだ</u>。</div>
+        <div>A：</div>
+        <div class="answer-line"></div>
+        <div>B：</div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-applied">応用</span>
+        <span class="question-no">9</span>
+        <span>「らしい」を使い、「推定の助動詞」として使った例文を1つ作りなさい。</span>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-applied">応用</span>
+        <span class="question-no">10</span>
+        <span>「らしい」を使い、「形容詞（〜にふさわしい）」として使った例文を1つ作りなさい。</span>
+        <div class="answer-line"></div>
+      </div>
+
+      <!-- 発展 11〜15 -->
+      <div class="question">
+        <span class="level-label level-advanced">発展</span>
+        <span class="question-no">11</span>
+        <span>次の生徒の答えに対して、誤りを指摘し、正しい説明を一文で書きなさい。</span>
+        <div class="quote">問題：「雨が降りそうだ」の「そうだ」の意味は？<br>生徒の答え：伝聞</div>
+        <div>あなたの指摘：</div>
+        <div class="answer-line"></div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-advanced">発展</span>
+        <span class="question-no">12</span>
+        <span>次の文の「ようだ」を、別の意味の「ようだ」に置き換えた例文を作りなさい。</span>
+        <div class="quote">桜のような美しさだ。（比喩）</div>
+        <div>→</div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-advanced">発展</span>
+        <span class="question-no">13</span>
+        <span>「らしい」「ようだ」「そうだ」のうち、自分が一番見分けにくいと感じるものを1つ選び、見分けるコツを後輩に教えるつもりで説明しなさい。</span>
+        <div class="answer-line"></div>
+        <div class="answer-line"></div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-advanced">発展</span>
+        <span class="question-no">14</span>
+        <span>「彼は来るそうだ」が「伝聞」になるか「様態」になるか、品詞分解しながら理由を説明しなさい。</span>
+        <div class="answer-line"></div>
+        <div class="answer-line"></div>
+      </div>
+
+      <div class="question">
+        <span class="level-label level-advanced">発展</span>
+        <span class="question-no">15</span>
+        <span>助動詞の識別が苦手な人へのアドバイスを、3つの箇条書きで書きなさい。</span>
+        <div>① </div><div class="answer-line"></div>
+        <div>② </div><div class="answer-line"></div>
+        <div>③ </div><div class="answer-line"></div>
+      </div>
+
+      <div class="footer">残業嫌いのらくだ先生🐪 ／ 1枚目（裏：解答）</div>
+    </div>
+  </div>
+
+  <!-- ===== 裏面（解答＋ルーブリック） ===== -->
+  <div class="page">
+    <!-- 左パネル：解答 -->
+    <div class="panel">
+      <div class="brand">残業嫌いのらくだ先生🐪 解答編</div>
+      <h2>解答と解説</h2>
+
+      <div class="question">
+        <span class="question-no">1</span> <strong>ア（推定の助動詞）</strong>
+        <div class="explanation">活用語の終止形「降る」に接続し、確かな根拠に基づいた推定を表す。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">2</span> <strong>エ（接尾語）</strong>
+        <div class="explanation">「子ども」という名詞に直接接続。「〜にふさわしい・ぴったりだ」の意。「子供らしくない＝子どもにふさわしくない」。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">3</span> <strong>イ（様態）</strong>
+        <div class="explanation">動詞の連用形「降り」に接続。今にも降りそうな見た目の様子。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">4</span> <strong>ア（伝聞）</strong>
+        <div class="explanation">活用語の終止形「晴れる」に接続。「〜と聞いた」「〜と書いてある」の意。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">5</span> <strong>ア（推定）</strong>
+        <div class="explanation">「元気だ」（形容動詞）の連体形「元気な」に接続。「〜のようだ」で根拠ある推定。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">6</span> 抜き出し：<strong>ようだ</strong>／品詞：<strong>助動詞</strong>／意味：<strong>推定</strong>
+        <div class="explanation">「着く」の終止形に接続。状況からの判断。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">7</span> 答え：<strong>イ</strong>／理由（例）：<strong>例示の「ようだ」だから。問題文も「天使という具体例で表現する比喩」と一見近いが、ここは「のような」と他のものに重ねる比喩。</strong>
+        <div class="explanation">※生徒回答例：「ウは過去の事実を推測しているから違う。アは未来推定。イは『たとえば〜』なので比喩・例示の用法に近い」。指導時の補足ポイント：「比喩」と「例示」の境界。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">8</span>
+        <div class="answer-box">A：「来る（終止形）」に接続 → <strong>伝聞</strong>（他者から聞いた情報）</div>
+        <div class="answer-box">B：「来（連用形）」に接続 → <strong>様態</strong>（見た目から判断）</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">9</span> 例：<strong>明日は雨が降るらしい。</strong>
+      </div>
+
+      <div class="question">
+        <span class="question-no">10</span> 例：<strong>あの先生は教師らしい。</strong>（教師として相応しい、の意）
+      </div>
+
+      <div class="footer">解答編 ／ 1枚目</div>
+    </div>
+
+    <!-- 右パネル：解答続き＋ルーブリック -->
+    <div class="panel">
+      <div class="question">
+        <span class="question-no">11</span> 誤り指摘例：<strong>「降り（連用形）」に接続しているので様態。伝聞は「降る（終止形）」に接続する。</strong>
+        <div class="explanation">接続する活用形を見るのが識別の最短ルート。</div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">12</span> 例：
+        <div class="answer-box">推定：<strong>もうすぐ春が来るようだ。</strong></div>
+        <div class="answer-box">例示：<strong>桜のような花が咲く樹を3つ挙げよ。</strong></div>
+      </div>
+
+      <div class="question">
+        <span class="question-no">13</span> 例：「そうだ」が一番見分けにくい。コツは「直前の活用形」を見ること。終止形＋そうだ＝伝聞、連用形＋そうだ＝様態。
+      </div>
+
+      <div class="question">
+        <span class="question-no">14</span> 「来る」は終止形なので<strong>伝聞</strong>。一方「来そうだ」なら「来」は連用形で様態となる。
+      </div>
+
+      <div class="question">
+        <span class="question-no">15</span> 例：①直前の語の活用形を必ず確認する。②文脈の意味（根拠ある？聞いた？例えてる？）も同時に見る。③迷ったら他の助動詞に置き換えて意味が通るか確かめる。
+      </div>
+
+      <hr style="margin: 4mm 0;">
+
+      <h2 style="font-size: 12pt; border-bottom: 2px solid #8a6d3b; padding-bottom: 2mm; margin-bottom: 3mm;">採点ルーブリック（評価基準）</h2>
+
+      <table class="rubric">
+        <thead>
+          <tr>
+            <th style="width:18%">観点</th>
+            <th>A（十分達成）</th>
+            <th>B（おおむね達成）</th>
+            <th>C（努力要）</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>識別力</strong><br>基礎1〜5</td>
+            <td>5問正答</td>
+            <td>3〜4問正答</td>
+            <td>2問以下</td>
+          </tr>
+          <tr>
+            <td><strong>説明力</strong><br>応用6〜10</td>
+            <td>すべて意味と接続根拠を説明</td>
+            <td>意味は答えられる</td>
+            <td>意味も不明確</td>
+          </tr>
+          <tr>
+            <td><strong>応用力</strong><br>発展11〜15</td>
+            <td>誤答指摘と理由付けが明確</td>
+            <td>誤りに気づける</td>
+            <td>気づけない</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <p style="font-size:9pt; margin-top:3mm; color:#555;">
+        ※採点目安：A=満点（15問中13問以上正答かつ説明明確）／B=10〜12問／C=9問以下
+      </p>
+
+      <div class="footer">解答編 ／ 1枚目（裏）</div>
+    </div>
+  </div>
+
+</body>
+</html>

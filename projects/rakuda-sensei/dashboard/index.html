@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🐪 らくだ先生 投稿管理ダッシュボード</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>🐪 らくだ先生 投稿管理ダッシュボード</h1>
+    <p class="subtitle">X / Threads / Instagram / note / BOOTH を一画面で管理</p>
+  </header>
+
+  <main>
+    <!-- 初回セットアップ -->
+    <section id="auth-section" class="card">
+      <h2>🔑 GitHub接続</h2>
+      <p>GitHub Personal Access Token を入力してください（初回のみ・ブラウザに保存）</p>
+      <details>
+        <summary>PATの作り方</summary>
+        <ol>
+          <li>GitHub右上のアバター → Settings</li>
+          <li>左下 Developer settings → Personal access tokens → Tokens (classic)</li>
+          <li>Generate new token (classic)</li>
+          <li>スコープ: <code>repo</code> と <code>workflow</code> にチェック</li>
+          <li>Generateを押す → トークン文字列をコピー</li>
+          <li>このページで入力</li>
+        </ol>
+      </details>
+      <div class="auth-form">
+        <input type="password" id="github-token" placeholder="ghp_xxxxxxxxxx..." autocomplete="off">
+        <input type="text" id="repo-owner" placeholder="リポジトリオーナー (例: gamigamiigami)" value="gamigamiigami">
+        <input type="text" id="repo-name" placeholder="リポジトリ名 (例: Workspace)" value="Workspace">
+        <button onclick="saveAuth()">接続</button>
+        <button onclick="clearAuth()" class="secondary">クリア</button>
+      </div>
+      <div id="auth-status"></div>
+    </section>
+
+    <!-- SNS 横断投稿 -->
+    <section id="sns-section" class="card hidden">
+      <h2>📅 今週のSNS投稿（X / Threads / Instagram）</h2>
+      <div class="filter-bar">
+        <button class="filter-btn active" data-filter="all">すべて</button>
+        <button class="filter-btn" data-filter="pending">未投稿のみ</button>
+        <button class="filter-btn" data-filter="posted">投稿済みのみ</button>
+      </div>
+      <div id="sns-posts" class="post-grid">
+        <p class="placeholder">読み込み中...</p>
+      </div>
+    </section>
+
+    <!-- note記事 -->
+    <section id="note-section" class="card hidden">
+      <h2>📝 note 記事ドラフト</h2>
+      <div id="note-articles" class="post-grid">
+        <p class="placeholder">読み込み中...</p>
+      </div>
+    </section>
+
+    <!-- BOOTH商品 -->
+    <section id="booth-section" class="card hidden">
+      <h2>🛒 BOOTH 商品</h2>
+      <div id="booth-products" class="post-grid">
+        <p class="placeholder">読み込み中...</p>
+      </div>
+    </section>
+
+    <!-- 直近のActions実行ログ -->
+    <section id="runs-section" class="card hidden">
+      <h2>📊 直近の自動化実行（最新10件）</h2>
+      <button onclick="loadRuns()" class="secondary">🔄 更新</button>
+      <div id="runs-list">
+        <p class="placeholder">読み込み中...</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>無料縛り運用 / 全プラットフォーム¥0 / <a href="https://github.com/gamigamiigami/Workspace" target="_blank">リポジトリ</a></p>
+  </footer>
+
+  <!-- ツイート投稿モーダル -->
+  <div id="post-modal" class="modal hidden">
+    <div class="modal-content">
+      <h3 id="modal-title">投稿する</h3>
+      <p id="modal-content"></p>
+      <div class="platform-checks">
+        <label><input type="checkbox" id="platform-x" checked> X (Twitter)</label>
+        <label><input type="checkbox" id="platform-threads"> Threads</label>
+      </div>
+      <div class="modal-buttons">
+        <button onclick="executePost()" id="execute-btn">🚀 今すぐ投稿</button>
+        <button onclick="closeModal()" class="secondary">キャンセル</button>
+      </div>
+      <div id="modal-result"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
