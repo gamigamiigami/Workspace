@@ -1053,7 +1053,116 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             # 公開パネルの全要素を列挙（ログから selector を逆引きするため）
             enumerate_form_elements(page, "公開パネル直後 (/publish/)")
 
-            # (サムネは publish パネル開く前のエディタページで投入済み)
+            # (サムネは公開後にエディタへ戻って設定する仕様)
+
+            # === ハッシュタグは公開パネル最上部にあるので、最初に設定する ===
+            # ユーザー指摘: 有料/無料設定と同じ画面の一番上にハッシュタグ欄がある
+            try:
+                page.evaluate("() => window.scrollTo(0, 0)")
+                page.wait_for_timeout(600)
+            except Exception:
+                pass
+
+            tag_input_selectors = [
+                'input[placeholder*="ハッシュタグ"]',
+                'input[placeholder*="タグ"]',
+                'input[placeholder*="#"]',
+                'input[aria-label*="タグ"]',
+                'input[aria-label*="ハッシュタグ"]',
+                '[role="combobox"]',
+                'input[aria-autocomplete]',
+                '[class*="tag"] input[type="text"]',
+                '[class*="hashtag"] input',
+                '[class*="Tag"] input',
+                '[data-testid*="tag"] input',
+            ]
+            tag_input_locator = None
+            for sel in tag_input_selectors:
+                try:
+                    loc = page.locator(sel).first
+                    loc.wait_for(state="visible", timeout=1500)
+                    tag_input_locator = loc
+                    print(f"✅ タグ入力欄発見 (selector: {sel})")
+                    break
+                except Exception:
+                    continue
+
+            # JS フォールバック: タグ関連 input をテキスト/属性で網羅探索 + focus
+            if tag_input_locator is None:
+                try:
+                    result = page.evaluate("""
+                        () => {
+                            const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
+                            for (const inp of inputs) {
+                                const txt = (inp.placeholder || '') + (inp.getAttribute('aria-label') || '') + (inp.name || '') + (inp.className || '');
+                                if (/タグ|ハッシュタグ|tag|Tag|hashtag/i.test(txt)) {
+                                    inp.scrollIntoView({block: 'center'});
+                                    inp.focus();
+                                    return {found: true, info: txt.slice(0, 100)};
+                                }
+                            }
+                            const labels = document.querySelectorAll('label');
+                            for (const lb of labels) {
+                                if (/タグ|ハッシュタグ/.test(lb.textContent || '')) {
+                                    const inp = lb.querySelector('input') || (lb.htmlFor && document.getElementById(lb.htmlFor));
+                                    if (inp) {
+                                        inp.scrollIntoView({block: 'center'});
+                                        inp.focus();
+                                        return {found: true, info: 'via label: ' + lb.textContent.slice(0, 50)};
+                                    }
+                                }
+                            }
+                            return {found: false};
+                        }
+                    """)
+                    if result.get('found'):
+                        try:
+                            tag_input_locator = page.locator(':focus').first
+                            print(f"✅ タグ入力欄発見 (JS evaluate: {result.get('info')})")
+                        except Exception:
+                            pass
+                except Exception as e:
+                    print(f"WARNING: タグ入力欄 JS 探索失敗: {e}", file=sys.stderr)
+
+            if tag_input_locator is None:
+                print("⚠️  タグ入力欄が見つからず（タグ設定スキップ）", file=sys.stderr)
+                shot(page, "06b-tag-input-missing")
+                dump_html(page, "06b-tag-input-missing")
+            else:
+                tag_count = 0
+                for tag in meta["tags"][:7]:
+                    tag = tag.strip().lstrip("#")
+                    if not tag:
+                        continue
+                    try:
+                        # クリックして focus → 入力 → サジェスト出るまで待つ → Enter で確定
+                        tag_input_locator.click(timeout=2000)
+                        page.wait_for_timeout(300)
+                        tag_input_locator.fill(tag, timeout=3000)
+                        page.wait_for_timeout(900)  # サジェスト表示待ち
+                        # サジェストがあればクリック (note は input 候補と既存 popular 候補を出す)
+                        suggestion_clicked = False
+                        for ssel in [
+                            f'[role="option"]:has-text("{tag}")',
+                            f'li:has-text("{tag}")',
+                            f'[class*="suggestion"]:has-text("{tag}")',
+                            f'[class*="Suggest"]:has-text("{tag}")',
+                            f'button:has-text("{tag}")',
+                        ]:
+                            try:
+                                page.locator(ssel).first.click(timeout=800)
+                                suggestion_clicked = True
+                                break
+                            except Exception:
+                                continue
+                        if not suggestion_clicked:
+                            tag_input_locator.press("Enter")
+                        page.wait_for_timeout(700)
+                        tag_count += 1
+                    except Exception as e:
+                        print(f"   タグ '{tag}' 入力失敗: {e}", file=sys.stderr)
+                print(f"✅ タグ設定: {tag_count} 個")
+                shot(page, "06c-after-tags")
 
             # 「記事タイプ」を開く（noteの新UIは折りたたみで型を選ぶ）
             try:
@@ -1510,97 +1619,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
                             save_draft = True
 
-            # タグ設定（複数セレクタ試行 + JS フォールバック）
-            # publish パネル内をスクロールしてから検索する
-            try:
-                page.evaluate("() => window.scrollTo(0, 0)")
-                page.wait_for_timeout(500)
-            except Exception:
-                pass
-
-            tag_input_selectors = [
-                'input[placeholder*="ハッシュタグ"]',
-                'input[placeholder*="タグ"]',
-                'input[placeholder*="#"]',
-                'input[aria-label*="タグ"]',
-                'input[aria-label*="ハッシュタグ"]',
-                '[role="combobox"]',
-                'input[aria-autocomplete]',
-                '[class*="tag"] input[type="text"]',
-                '[class*="hashtag"] input',
-                '[class*="Tag"] input',
-                '[data-testid*="tag"] input',
-            ]
-            tag_input_locator = None
-            for sel in tag_input_selectors:
-                try:
-                    loc = page.locator(sel).first
-                    loc.wait_for(state="visible", timeout=1500)
-                    tag_input_locator = loc
-                    print(f"✅ タグ入力欄発見 (selector: {sel})")
-                    break
-                except Exception:
-                    continue
-
-            # JS フォールバック: タグ関連 input をテキスト/属性で網羅探索
-            if tag_input_locator is None:
-                try:
-                    result = page.evaluate("""
-                        () => {
-                            const inputs = Array.from(document.querySelectorAll('input[type="text"], input:not([type])'));
-                            for (const inp of inputs) {
-                                const txt = (inp.placeholder || '') + (inp.getAttribute('aria-label') || '') + (inp.name || '') + (inp.className || '');
-                                if (/タグ|ハッシュタグ|tag|Tag/.test(txt)) {
-                                    inp.scrollIntoView({block: 'center'});
-                                    inp.focus();
-                                    return {found: true, info: txt.slice(0, 100)};
-                                }
-                            }
-                            // ラベルから input を辿る
-                            const labels = document.querySelectorAll('label');
-                            for (const lb of labels) {
-                                if (/タグ|ハッシュタグ/.test(lb.textContent || '')) {
-                                    const inp = lb.querySelector('input') || (lb.htmlFor && document.getElementById(lb.htmlFor));
-                                    if (inp) {
-                                        inp.scrollIntoView({block: 'center'});
-                                        inp.focus();
-                                        return {found: true, info: 'via label: ' + lb.textContent.slice(0, 50)};
-                                    }
-                                }
-                            }
-                            return {found: false};
-                        }
-                    """)
-                    if result.get('found'):
-                        # フォーカスされた input を改めて捕まえる
-                        try:
-                            tag_input_locator = page.locator(':focus').first
-                            print(f"✅ タグ入力欄発見 (JS evaluate: {result.get('info')})")
-                        except Exception:
-                            pass
-                except Exception as e:
-                    print(f"WARNING: タグ入力欄 JS 探索失敗: {e}", file=sys.stderr)
-
-            if tag_input_locator is None:
-                print("⚠️  タグ入力欄が見つからず（タグ設定スキップ）", file=sys.stderr)
-                shot(page, "07e-tag-input-missing")
-                dump_html(page, "07e-tag-input-missing")
-            else:
-                tag_count = 0
-                for tag in meta["tags"][:7]:
-                    tag = tag.strip().lstrip("#")
-                    if not tag:
-                        continue
-                    try:
-                        tag_input_locator.fill(tag, timeout=3000)
-                        page.wait_for_timeout(400)
-                        tag_input_locator.press("Enter")
-                        page.wait_for_timeout(600)
-                        tag_count += 1
-                    except Exception as e:
-                        print(f"   タグ '{tag}' 入力失敗: {e}", file=sys.stderr)
-                print(f"✅ タグ設定: {tag_count} 個")
-                shot(page, "07e-after-tags")
+            # (タグは公開パネル開いた直後に設定済み)
 
             # SNSプロモーション機能（拡散割引 ¥500）
             # 価格が ¥0 でない有料記事の場合だけ設定
