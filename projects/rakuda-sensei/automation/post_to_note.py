@@ -1086,48 +1086,108 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             break
                         except Exception:
                             continue
-                # 有料を選んだ後に価格入力欄が現れるので待ってから列挙
-                page.wait_for_timeout(2500)
+                # 有料を選んだ後に価格入力欄が現れるので、長めに待ってから探す
+                page.wait_for_timeout(5000)
                 shot(page, "07b-after-paid-radio")
                 dump_html(page, "07b-after-paid-radio")
                 enumerate_form_elements(page, "有料ラジオcheck後")
-                price_selectors = [
-                    'input[type="number"][name*="price"]',
-                    'input[placeholder*="価格"]',
-                    'input[placeholder*="¥"]',
-                    'input[placeholder*="円"]',
-                    'input[placeholder*="100"]',
-                    'input[placeholder*="500"]',
-                    'input[type="number"]',
-                    'input[inputmode="numeric"]',
-                    'input[inputmode="decimal"]',
-                    'input[name="price"]',
-                    'input[name*="amount"]',
-                    'input[aria-label*="価格"]',
-                    'input[aria-label*="¥"]',
-                    '[class*="price"] input',
-                    '[class*="amount"] input',
-                    '[data-testid*="price"] input',
-                    'form input[type="text"]',
-                ]
+
                 price_set = False
-                for sel in price_selectors:
-                    try:
-                        loc = page.locator(sel).first
-                        loc.wait_for(state="visible", timeout=2000)
-                        loc.fill(str(meta["price"]), timeout=2000)
+
+                # 第一手: JS で「価格」ラベル近傍の input を探して値をセット
+                try:
+                    js_price = page.evaluate("""
+                        (price) => {
+                            const targets = [];
+                            // 「価格」というテキストを持つ要素を見つける
+                            const walker = document.createTreeWalker(
+                                document.body, NodeFilter.SHOW_TEXT, null
+                            );
+                            let node;
+                            while ((node = walker.nextNode())) {
+                                if (node.textContent.trim() === '価格') {
+                                    targets.push(node.parentElement);
+                                }
+                            }
+                            // 各候補の祖先内で input を探す
+                            for (const el of targets) {
+                                let parent = el;
+                                for (let i = 0; i < 6 && parent; i++) {
+                                    const inputs = parent.querySelectorAll(
+                                        'input[type="text"], input[type="number"], input[inputmode="numeric"], input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"])'
+                                    );
+                                    for (const input of inputs) {
+                                        if (input.offsetParent === null) continue;  // visible only
+                                        const setter = Object.getOwnPropertyDescriptor(
+                                            window.HTMLInputElement.prototype, 'value'
+                                        ).set;
+                                        setter.call(input, String(price));
+                                        input.dispatchEvent(new Event('input', {bubbles: true}));
+                                        input.dispatchEvent(new Event('change', {bubbles: true}));
+                                        input.dispatchEvent(new Event('blur', {bubbles: true}));
+                                        return {ok: true, value: input.value, name: input.name || input.placeholder};
+                                    }
+                                    parent = parent.parentElement;
+                                }
+                            }
+                            return {ok: false, reason: '価格ラベル近傍に input なし', candidates: targets.length};
+                        }
+                    """, meta["price"])
+                    if js_price.get('ok'):
                         price_set = True
-                        print(f"✅ 価格入力 (selector: {sel})")
-                        page.wait_for_timeout(800)
-                        break
-                    except Exception:
-                        continue
+                        print(f"✅ JS経由で価格入力: {js_price.get('value')} (input.name={js_price.get('name')})")
+                        page.wait_for_timeout(1000)
+                    else:
+                        print(f"⚠️  JS価格入力スキップ: {js_price.get('reason')} (候補={js_price.get('candidates')})")
+                except Exception as e:
+                    print(f"⚠️  JS価格入力例外: {e}")
+
+                # 第二手: 通常のセレクタフォールバック
+                if not price_set:
+                    price_selectors = [
+                        'input[type="number"][name*="price"]',
+                        'input[placeholder*="価格"]',
+                        'input[placeholder*="¥"]',
+                        'input[placeholder*="円"]',
+                        'input[type="number"]',
+                        'input[inputmode="numeric"]',
+                        'input[name="price"]',
+                        'input[name*="amount"]',
+                        '[class*="price"] input',
+                        '[class*="amount"] input',
+                    ]
+                    for sel in price_selectors:
+                        try:
+                            loc = page.locator(sel).first
+                            loc.wait_for(state="visible", timeout=2000)
+                            loc.fill(str(meta["price"]), timeout=2000)
+                            price_set = True
+                            print(f"✅ 価格入力 (selector: {sel})")
+                            page.wait_for_timeout(800)
+                            break
+                        except Exception:
+                            continue
+
                 if paid_clicked and price_set:
                     print(f"✅ 価格設定完了: ¥{meta['price']}")
                 else:
                     print(f"WARNING: 価格設定不完全 (paid={paid_clicked}, price={price_set})", file=sys.stderr)
                     shot(page, "07c-price-fail")
                     dump_html(page, "07c-price-fail")
+
+                # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
+                try:
+                    page.locator('button:has-text("有料エリア設定")').first.click(timeout=3000)
+                    page.wait_for_timeout(2500)
+                    print("✅ 有料エリア設定 ボタン押下")
+                except Exception:
+                    try:
+                        # フォールバック: 別表記
+                        page.locator('button:has-text("有料エリアを設定")').first.click(timeout=2000)
+                        page.wait_for_timeout(2500)
+                        print("✅ 有料エリアを設定 ボタン押下")
+                    except Exception:
+                        print("ℹ️  有料エリア設定 ボタン未発見（不要 or 既に設定済の可能性）")
 
             # タグ設定（複数セレクタ試行）
             tag_input_selectors = [
