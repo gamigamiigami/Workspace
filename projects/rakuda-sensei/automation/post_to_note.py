@@ -998,6 +998,70 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # → publish パネル側「有料エリア設定」+ 段落クリックの方式に一本化する
                 print("ℹ️  本文側の有料エリア挿入はスキップ (publish パネル側で確定)")
 
+            # アイキャッチ画像（サムネ）アップロード
+            # ⚠️ 配置注意: publish パネル開く前のエディタページで実施
+            # （セッション51で publish パネル直後には file input が存在しないと判明）
+            # 記事ファイル名から推定 (articles/002-foo.md → assets/thumbnails/002-foo.png)
+            thumbnail_path = (
+                ROOT / "projects" / "rakuda-sensei" / "assets" / "thumbnails"
+                / f"{md_path.stem}.png"
+            )
+            if thumbnail_path.exists():
+                print(f"🖼️  サムネ候補: {thumbnail_path.name} (エディタページ側で投入)")
+                thumb_set = False
+                # Step 1: 「ヘッダー画像」「画像を追加」のようなボタンを探してクリック
+                # note のエディタでは記事タイトル上部に画像エリアがある
+                eyecatch_button_selectors = [
+                    'button:has-text("画像を追加")',
+                    'button:has-text("ヘッダー画像")',
+                    'button:has-text("アイキャッチ")',
+                    'button:has-text("カバー画像")',
+                    'button:has-text("記事画像")',
+                    '[class*="eyecatch"] button',
+                    '[class*="thumbnail"] button',
+                    '[class*="cover"] button',
+                    '[class*="header-image"] button',
+                    '[aria-label*="画像"]',
+                    'label:has-text("画像")',
+                ]
+                for sel in eyecatch_button_selectors:
+                    try:
+                        page.locator(sel).first.click(timeout=1500)
+                        page.wait_for_timeout(800)
+                        print(f"   ボタン押下: {sel}")
+                        break
+                    except Exception:
+                        continue
+                # Step 2: file input に投入
+                for sel in [
+                    'input[type="file"][accept*="image"]',
+                    'input[type="file"]',
+                ]:
+                    try:
+                        page.locator(sel).first.set_input_files(
+                            str(thumbnail_path), timeout=3000)
+                        thumb_set = True
+                        print(f"✅ サムネ添付 (selector: {sel})")
+                        page.wait_for_timeout(7000)
+                        shot(page, "05b-after-thumbnail")
+                        break
+                    except Exception:
+                        continue
+                # Step 3: JS dispatch で paste/drop（保険）
+                if not thumb_set:
+                    try:
+                        if _upload_image_via_dispatch(page, thumbnail_path):
+                            thumb_set = True
+                            print(f"✅ サムネ添付 (JS dispatch)")
+                    except Exception:
+                        pass
+                if not thumb_set:
+                    print(f"⚠️  サムネ添付失敗 (エディタページ側)")
+                    shot(page, "05b-no-thumbnail")
+                    dump_html(page, "05b-no-thumbnail")
+            else:
+                print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
+
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
                 'button:has-text("公開に進む")',
@@ -1040,60 +1104,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             # 公開パネルの全要素を列挙（ログから selector を逆引きするため）
             enumerate_form_elements(page, "公開パネル直後 (/publish/)")
 
-            # アイキャッチ画像（サムネ）アップロード
-            # 記事ファイル名から推定 (articles/002-foo.md → assets/thumbnails/002-foo.png)
-            thumbnail_path = (
-                ROOT / "projects" / "rakuda-sensei" / "assets" / "thumbnails"
-                / f"{md_path.stem}.png"
-            )
-            if thumbnail_path.exists():
-                print(f"🖼️  サムネ候補: {thumbnail_path.name}")
-                thumb_set = False
-                # Step 1: 「画像を追加」「ヘッダー画像」のようなボタンを探してクリック
-                eyecatch_button_selectors = [
-                    'button:has-text("画像を追加")',
-                    'button:has-text("ヘッダー画像")',
-                    'button:has-text("アイキャッチ")',
-                    '[class*="eyecatch"] button',
-                    '[class*="thumbnail"] button',
-                    '[class*="cover"] button',
-                    'label:has-text("画像")',
-                ]
-                for sel in eyecatch_button_selectors:
-                    try:
-                        page.locator(sel).first.click(timeout=1500)
-                        page.wait_for_timeout(800)
-                        break
-                    except Exception:
-                        continue
-                # Step 2: file input に投入
-                for sel in [
-                    'input[type="file"][accept*="image"]',
-                    'input[type="file"]',
-                ]:
-                    try:
-                        page.locator(sel).first.set_input_files(
-                            str(thumbnail_path), timeout=3000)
-                        thumb_set = True
-                        print(f"✅ サムネ添付 (selector: {sel})")
-                        page.wait_for_timeout(7000)
-                        shot(page, "07-after-thumbnail")
-                        break
-                    except Exception:
-                        continue
-                # Step 3: JS dispatch で paste/drop（保険）
-                if not thumb_set:
-                    try:
-                        if _upload_image_via_dispatch(page, thumbnail_path):
-                            thumb_set = True
-                            print(f"✅ サムネ添付 (JS dispatch)")
-                    except Exception:
-                        pass
-                if not thumb_set:
-                    print(f"⚠️  サムネ添付失敗")
-                    shot(page, "07-no-thumbnail")
-            else:
-                print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
+            # (サムネは publish パネル開く前のエディタページで投入済み)
 
             # 「記事タイプ」を開く（noteの新UIは折りたたみで型を選ぶ）
             try:
