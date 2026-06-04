@@ -88,9 +88,9 @@ def extract_meta_from_table(text: str) -> dict:
     if price_m:
         meta["price"] = int(price_m.group(1).replace(",", ""))
 
-    tags_m = re.search(r"推奨タグ.*?(`#[\w\s]+`)+", text)
+    tags_m = re.search(r"推奨タグ.*", text)
     if tags_m:
-        meta["tags"] = re.findall(r"`#([\w\s]+)`", tags_m.group(0))
+        meta["tags"] = re.findall(r"`#([^\s`]+)`", tags_m.group(0))
 
     return meta
 
@@ -998,67 +998,16 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 # → publish パネル側「有料エリア設定」+ 段落クリックの方式に一本化する
                 print("ℹ️  本文側の有料エリア挿入はスキップ (publish パネル側で確定)")
 
-            # アイキャッチ画像（サムネ）アップロード
-            # ⚠️ 配置注意: publish パネル開く前のエディタページで実施
-            # （セッション51で publish パネル直後には file input が存在しないと判明）
-            # 記事ファイル名から推定 (articles/002-foo.md → assets/thumbnails/002-foo.png)
+            # サムネ画像はスクリプトで投入しない仕様に変更（ユーザー判断）
+            # → 公開後にユーザーが手動で設定する
+            # → 完了 Issue でリマインドする
             thumbnail_path = (
                 ROOT / "projects" / "rakuda-sensei" / "assets" / "thumbnails"
                 / f"{md_path.stem}.png"
             )
             if thumbnail_path.exists():
-                print(f"🖼️  サムネ候補: {thumbnail_path.name} (エディタページ側で投入)")
-                thumb_set = False
-                # Step 1: 「ヘッダー画像」「画像を追加」のようなボタンを探してクリック
-                # note のエディタでは記事タイトル上部に画像エリアがある
-                eyecatch_button_selectors = [
-                    'button:has-text("画像を追加")',
-                    'button:has-text("ヘッダー画像")',
-                    'button:has-text("アイキャッチ")',
-                    'button:has-text("カバー画像")',
-                    'button:has-text("記事画像")',
-                    '[class*="eyecatch"] button',
-                    '[class*="thumbnail"] button',
-                    '[class*="cover"] button',
-                    '[class*="header-image"] button',
-                    '[aria-label*="画像"]',
-                    'label:has-text("画像")',
-                ]
-                for sel in eyecatch_button_selectors:
-                    try:
-                        page.locator(sel).first.click(timeout=1500)
-                        page.wait_for_timeout(800)
-                        print(f"   ボタン押下: {sel}")
-                        break
-                    except Exception:
-                        continue
-                # Step 2: file input に投入
-                for sel in [
-                    'input[type="file"][accept*="image"]',
-                    'input[type="file"]',
-                ]:
-                    try:
-                        page.locator(sel).first.set_input_files(
-                            str(thumbnail_path), timeout=3000)
-                        thumb_set = True
-                        print(f"✅ サムネ添付 (selector: {sel})")
-                        page.wait_for_timeout(7000)
-                        shot(page, "05b-after-thumbnail")
-                        break
-                    except Exception:
-                        continue
-                # Step 3: JS dispatch で paste/drop（保険）
-                if not thumb_set:
-                    try:
-                        if _upload_image_via_dispatch(page, thumbnail_path):
-                            thumb_set = True
-                            print(f"✅ サムネ添付 (JS dispatch)")
-                    except Exception:
-                        pass
-                if not thumb_set:
-                    print(f"⚠️  サムネ添付失敗 (エディタページ側)")
-                    shot(page, "05b-no-thumbnail")
-                    dump_html(page, "05b-no-thumbnail")
+                print(f"ℹ️  サムネ候補ファイル: {thumbnail_path.name}")
+                print(f"   → 公開後にユーザーが手動設定する仕様 (リマインドを後で出す)")
             else:
                 print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
 
@@ -1709,6 +1658,117 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     url_file = ROOT / "projects" / "rakuda-sensei" / "articles" / ".last-published-url.txt"
                     url_file.write_text(actual_url + "\n", encoding="utf-8")
                     print(f"💾 .last-published-url.txt に保存")
+
+                    # === 公開後のサムネ設定 ===
+                    # 公開フロー中ではエディタの file input が見つからない問題があるため
+                    # 公開完了 → エディタへ戻る → サムネ投入 → 更新 の流れに分離
+                    if thumbnail_path.exists():
+                        try:
+                            note_id_m = _re.search(r"/n/(n[a-z0-9]+)", actual_url) or _re.search(r"/notes/(n[a-z0-9]+)", actual_url)
+                            if note_id_m:
+                                note_id = note_id_m.group(1)
+                                editor_url = f"https://editor.note.com/notes/{note_id}/edit/"
+                                print(f"🖼️  公開後サムネ設定モード: {editor_url}")
+                                page.goto(editor_url, wait_until="domcontentloaded", timeout=20000)
+                                try:
+                                    page.wait_for_load_state("networkidle", timeout=10000)
+                                except Exception:
+                                    pass
+                                page.wait_for_timeout(4000)
+                                shot(page, "13a-editor-for-thumbnail")
+                                dump_html(page, "13a-editor-for-thumbnail")
+
+                                thumb_set = False
+                                # Step 1: ヘッダー画像ボタンを探してクリック
+                                eyecatch_button_selectors = [
+                                    'button:has-text("画像を追加")',
+                                    'button:has-text("ヘッダー画像")',
+                                    'button:has-text("アイキャッチ")',
+                                    'button:has-text("カバー画像")',
+                                    'button:has-text("記事画像")',
+                                    '[class*="eyecatch"] button',
+                                    '[class*="thumbnail"] button',
+                                    '[class*="cover"] button',
+                                    '[class*="header-image"] button',
+                                    '[aria-label*="画像"]',
+                                    'label:has-text("画像")',
+                                ]
+                                for sel in eyecatch_button_selectors:
+                                    try:
+                                        page.locator(sel).first.click(timeout=1500)
+                                        page.wait_for_timeout(800)
+                                        print(f"   ヘッダー画像ボタン押下: {sel}")
+                                        break
+                                    except Exception:
+                                        continue
+                                # Step 2: file input に投入
+                                for sel in [
+                                    'input[type="file"][accept*="image"]',
+                                    'input[type="file"]',
+                                ]:
+                                    try:
+                                        page.locator(sel).first.set_input_files(
+                                            str(thumbnail_path), timeout=3000)
+                                        thumb_set = True
+                                        print(f"✅ サムネ添付 (selector: {sel})")
+                                        page.wait_for_timeout(8000)
+                                        shot(page, "13b-after-thumbnail-upload")
+                                        break
+                                    except Exception:
+                                        continue
+                                # Step 3: JS dispatch
+                                if not thumb_set:
+                                    try:
+                                        if _upload_image_via_dispatch(page, thumbnail_path):
+                                            thumb_set = True
+                                            print(f"✅ サムネ添付 (JS dispatch)")
+                                            page.wait_for_timeout(8000)
+                                    except Exception:
+                                        pass
+
+                                if thumb_set:
+                                    # 更新ボタン押下で保存
+                                    page.wait_for_timeout(3000)
+                                    update_selectors = [
+                                        'button:has-text("更新する")',
+                                        'button:has-text("更新")',
+                                        'button:has-text("保存")',
+                                        'button[type="submit"]:has-text("更新")',
+                                    ]
+                                    # まず「公開に進む」/「公開設定」のような publish-panel 系を押す
+                                    publish_again_selectors = [
+                                        'button:has-text("公開に進む")',
+                                        'button:has-text("公開設定")',
+                                    ]
+                                    for sel in publish_again_selectors:
+                                        try:
+                                            page.locator(sel).first.click(timeout=2000)
+                                            page.wait_for_timeout(3500)
+                                            print(f"   公開パネル再展開: {sel}")
+                                            break
+                                        except Exception:
+                                            continue
+                                    updated = False
+                                    for sel in update_selectors:
+                                        try:
+                                            page.locator(sel).last.click(timeout=2500, force=True)
+                                            page.wait_for_timeout(6000)
+                                            updated = True
+                                            print(f"✅ サムネ反映で更新クリック: {sel}")
+                                            break
+                                        except Exception:
+                                            continue
+                                    shot(page, "13c-after-thumbnail-update")
+                                    if not updated:
+                                        print("⚠️  サムネはアップロードしたが更新ボタンが押せず（自動保存に期待）")
+                                else:
+                                    print(f"⚠️  公開後サムネ添付失敗")
+                                    shot(page, "13b-no-thumbnail")
+                            else:
+                                print(f"⚠️  公開URLから note ID 取れず（サムネスキップ）: {actual_url}")
+                        except Exception as e:
+                            print(f"WARNING: 公開後サムネ設定で例外: {e}", file=sys.stderr)
+                            shot(page, "13-thumbnail-exception")
                 else:
                     # 念のため公開記事一覧をチェック
                     print(f"⚠️ 投稿クリックしたがURLが想定外: {page.url}")
