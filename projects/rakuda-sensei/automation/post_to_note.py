@@ -1806,6 +1806,39 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     shot(page, "07c3-area-button-fail")
                     dump_html(page, "07c3-area-button-fail")
 
+                # 「有料エリア設定」ボタン押下後、ページ2への遷移完了を待つ
+                # = 「ラインをこの場所に変更」要素が DOM に attached になるまで最大15秒待機
+                # SNSプロモ設定が前段にあると遷移時間が長くなる場合の対策
+                if area_button_pressed:
+                    try:
+                        page.wait_for_function(
+                            """
+                            () => {
+                                const walker = document.createTreeWalker(
+                                    document.body, NodeFilter.SHOW_TEXT, null
+                                );
+                                let n;
+                                while ((n = walker.nextNode())) {
+                                    if ((n.textContent || '').indexOf('ラインをこの場所に変更') !== -1) {
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }
+                            """,
+                            timeout=15000,
+                        )
+                        print("✅ 「ラインをこの場所に変更」ボタン出現を確認")
+                        page.wait_for_timeout(800)
+                    except Exception:
+                        print("⚠️  「ラインをこの場所に変更」ボタンが15秒以内に出現せず、追加スクロール+再試行", file=sys.stderr)
+                        # 本文側にスクロールして待つ
+                        try:
+                            page.evaluate("() => { const e = document.querySelector('.ProseMirror'); if (e) e.scrollIntoView({block: 'center'}); }")
+                            page.wait_for_timeout(3000)
+                        except Exception:
+                            pass
+
                 # 有料ライン位置を確定:
                 # note の仕様 = 各段落の間に「ラインをこの場所に変更」ボタンが出現する。
                 # クリックするとそのボタンより上が無料、下が有料になる。
