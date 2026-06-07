@@ -2173,14 +2173,10 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             page.wait_for_timeout(1500)
 
                     if not paywall_set_ok:
-                        print("ERROR: 有料ライン位置を 📥 直前に設定できませんでした", file=sys.stderr)
+                        print("⚠️  有料ライン位置を 📥 直前に設定できませんでした → そのまま投稿フローへ続行", file=sys.stderr)
                         dump_html(page, "07d-paywall-FINAL-FAIL")
                         shot(page, "07d-paywall-FINAL-FAIL")
-                        # 公開モードでもラインが正しく設定できなければ 強制的に下書き止めにする
-                        # → 「1行目から有料」のまま公開してしまう事故を防ぐ
-                        if not save_draft:
-                            print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
-                            save_draft = True
+                        # ユーザー指示: ペイウォール未確定でも下書き止めにせず publish まで進める
 
             # (SNSプロモは「有料エリア設定」ボタン押下の前の設定ページで既に完了済み)
 
