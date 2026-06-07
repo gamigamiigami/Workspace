@@ -38,7 +38,10 @@ ROTATION_LOG = ROOT / "projects" / "rakuda-sensei" / "articles" / ".rotation.log
 
 GH_MODELS_ENDPOINT = "https://models.github.ai/inference"
 MODEL = "openai/gpt-4o-mini"
-MAX_TOKENS = 8192
+# GitHub Models gpt-4o-mini の制約:
+#   - input: 8,000 tokens 上限 (413 tokens_limit_reached エラー回避)
+#   - max_tokens(output): 4,000 程度に抑える（記事5,500字 ≈ 3,700 tokens）
+MAX_TOKENS = 4000
 JST = ZoneInfo("Asia/Tokyo")
 
 # 3本柱のテーマ定義
@@ -224,10 +227,10 @@ def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
    （抽象的なノウハウだけは絶対NG・売れない）
 
 ==== 最優先参照1: 伊神さんの実際の口調・人物情報 ====
-{voice}
+{voice[:2000]}
 
 ==== 最優先参照2: 売れる有料記事の戦略 ====
-{sales}
+{sales[:2500]}
 
 上記2ファイルは**ペルソナ厳守より優先**して反映する。
 口調・NG表現・人物情報は voice-and-style から、
@@ -240,22 +243,22 @@ def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
 推奨タグ: {pillar_info['tags']}
 
 ==== ペルソナ（基本情報）====
-{persona}
+{persona[:1500]}
 
 ==== SNSプレイブック（柱と一貫性）====
-{playbook[:3000]}
+{playbook[:1500]}
 
 ==== 商品制作プレイブック ====
-{product_pb[:2000]}
+{product_pb[:1000]}
 
 ==== note記事執筆ノウハウ ====
-{note_skill[:5000]}
+{note_skill[:2500]}
 
 ==== 前月のPDCAインサイト ====
-{insights}
+{insights[:800]}
 
 ==== 既存記事タイトル（重複回避）====
-{chr(10).join('- ' + t for t in used_topics_list[:20])}
+{chr(10).join('- ' + t for t in used_topics_list[:10])}
 
 ==== 価格戦略（最重要・2026-06-01 戦略転換）====
 {pricing_instruction}
@@ -361,15 +364,27 @@ def main() -> int:
     sales = SALES_PATH.read_text(encoding="utf-8") if SALES_PATH.exists() else ""
     insights = latest_pdca_insights()
 
+    prompt = build_prompt(pillar, topic, persona, playbook,
+                           product_pb, note_skill, insights, used,
+                           voice=voice, sales=sales)
+    # GitHub Models gpt-4o-mini の 8,000 token 上限超過を事前検知
+    # 日本語は ~1.5 char/token、英数記号は ~4 char/token なのでざっくり 2.0 char/token で見積もる
+    est_tokens = len(prompt) // 2
+    print(f"📐 プロンプト推定: {len(prompt):,}字 / 約{est_tokens:,}トークン (上限8,000)")
+    if est_tokens > 7500:
+        print(f"❌ プロンプトが上限近接 → 各 knowledge ファイルの slice を縮小してください", file=sys.stderr)
+        print(f"   現在のサイズ: voice={len(voice)} sales={len(sales)} persona={len(persona)} "
+              f"playbook={len(playbook)} product_pb={len(product_pb)} skill={len(note_skill)}",
+              file=sys.stderr)
+        return 1
+
     client = OpenAI(base_url=GH_MODELS_ENDPOINT, api_key=token)
     response = client.chat.completions.create(
         model=MODEL,
         max_tokens=MAX_TOKENS,
         temperature=0.85,
         messages=[
-            {"role": "user", "content": build_prompt(pillar, topic, persona, playbook,
-                                                     product_pb, note_skill, insights, used,
-                                                     voice=voice, sales=sales)},
+            {"role": "user", "content": prompt},
         ],
     )
 
