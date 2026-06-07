@@ -368,9 +368,17 @@ def main() -> int:
                            product_pb, note_skill, insights, used,
                            voice=voice, sales=sales)
     # GitHub Models gpt-4o-mini の 8,000 token 上限超過を事前検知
-    # 日本語は ~1.5 char/token、英数記号は ~4 char/token なのでざっくり 2.0 char/token で見積もる
-    est_tokens = len(prompt) // 2
-    print(f"📐 プロンプト推定: {len(prompt):,}字 / 約{est_tokens:,}トークン (上限8,000)")
+    # tiktoken で正確に測る (失敗時は len//2 のラフ推定にフォールバック)
+    exact_tokens = None
+    try:
+        import tiktoken
+        enc = tiktoken.encoding_for_model("gpt-4o-mini")
+        exact_tokens = len(enc.encode(prompt))
+    except Exception as e:
+        print(f"ℹ️  tiktoken 実測スキップ ({e}) → 推定値で判定", file=sys.stderr)
+    est_tokens = exact_tokens if exact_tokens is not None else len(prompt) // 2
+    method = "tiktoken実測" if exact_tokens is not None else "len//2推定"
+    print(f"📐 プロンプト: {len(prompt):,}字 / {est_tokens:,}トークン ({method}, 上限8,000)")
     if est_tokens > 7500:
         print(f"❌ プロンプトが上限近接 → 各 knowledge ファイルの slice を縮小してください", file=sys.stderr)
         print(f"   現在のサイズ: voice={len(voice)} sales={len(sales)} persona={len(persona)} "

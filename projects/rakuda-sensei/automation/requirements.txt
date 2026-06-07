@@ -1,4 +1,5 @@
 openai>=1.50.0
+tiktoken>=0.7.0
 playwright>=1.40.0
 tf-playwright-stealth>=1.2.0
 requests>=2.31.0
