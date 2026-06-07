@@ -1580,233 +1580,169 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 share_discount = meta.get("share_discount") or 0
                 rt_message = meta.get("rt_message") or ""
 
-                # 旧 SNS プロモブロック（移動前）の if ガード - 常に False で実行スキップ
-                if False and share_discount > 0 and rt_message:
-                    print(f"💰 SNSプロモーション設定試行: ¥{share_discount} / RT文 {len(rt_message)}字")
+                # === SNSプロモーション設定（有料エリア設定ボタン押下の前）===
+                # note のフロー: 設定ページ (価格・SNSプロモ) → 「有料エリア設定」ボタン → 次ページ (ペイウォール位置) → 公開
+                # ペイウォール位置確定後に戻ってきた時にはセールsectionの radio が DOM から消えるので、
+                # SNSプロモは必ず「有料エリア設定」ボタンを押す前のこのページで設定する。
+                if share_discount > 0 and rt_message:
+                    print(f"💰 SNSプロモーション設定試行 (有料エリア設定前): ¥{share_discount} / RT文 {len(rt_message)}字")
                     try:
-                        # 1) セール section を開く（折りたたまれているケースが大半）
-                        for sel in [
-                            'button:has-text("セール")',
-                            'summary:has-text("セール")',
-                            '[aria-label*="セール"]',
-                            'button:has-text("販売設定")',
-                        ]:
-                            try:
-                                page.locator(sel).first.click(timeout=1500)
-                                page.wait_for_timeout(1000)
-                                print(f"   セール section 展開: {sel}")
-                                break
-                            except Exception:
-                                continue
-                        # 2) SNSプロモーション radio を選択
-                        # 注意: 「SNSプロモーション」テキストの親を辿りすぎると有料設定パネル全体に届き、
-                        # 最初の radio (is_paid=free) を誤クリックして有料設定を解除してしまう。
-                        # → ラベル直下の input のみを対象にし、name="is_paid" を明示的に除外する。
+                        # ページ最下部までスクロールしてセール section を画面に表示
+                        try:
+                            page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+                            page.wait_for_timeout(800)
+                        except Exception:
+                            pass
+                        # 1) セール section を確実に展開（JS で要素特定 + click）
+                        try:
+                            js_open = page.evaluate(
+                                """
+                                () => {
+                                    const walker = document.createTreeWalker(
+                                        document.body, NodeFilter.SHOW_TEXT, null
+                                    );
+                                    let node;
+                                    const candidates = [];
+                                    while ((node = walker.nextNode())) {
+                                        const t = (node.textContent || '').trim();
+                                        if (t === 'セール' || t === 'セール設定') {
+                                            let el = node.parentElement;
+                                            for (let i = 0; i < 5 && el; i++) {
+                                                if (el.tagName === 'BUTTON' || el.tagName === 'SUMMARY' || el.getAttribute('role') === 'button') {
+                                                    candidates.push(el);
+                                                    break;
+                                                }
+                                                el = el.parentElement;
+                                            }
+                                        }
+                                    }
+                                    if (candidates.length === 0) return {ok: false, reason: 'no セール clickable'};
+                                    const target = candidates[0];
+                                    target.scrollIntoView({block: 'center'});
+                                    const isExpanded = document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]') !== null;
+                                    if (!isExpanded) target.click();
+                                    return {ok: true, already: isExpanded, text: (target.textContent || '').trim().slice(0, 30)};
+                                }
+                                """
+                            )
+                            if js_open.get("ok"):
+                                print(f"   セール section: {'既展開' if js_open.get('already') else '展開'}")
+                                page.wait_for_timeout(1500)
+                            else:
+                                print(f"   ⚠️  セール section 検出失敗: {js_open.get('reason')}")
+                        except Exception as e:
+                            print(f"   ⚠️  セール section 展開例外: {e}")
+                        # 2) radio が DOM に出現するまで wait
+                        try:
+                            page.wait_for_selector(
+                                'input[type="radio"][name="sale_setting"][value="twitter_retweet"]',
+                                state="attached",
+                                timeout=5000,
+                            )
+                            print("   ✓ sale_setting radio DOM 出現")
+                        except Exception:
+                            print("   ⚠️  radio 不出現 → 強制リトライ")
+                            for sel in ['button:has-text("セール")', '[aria-label*="セール"]']:
+                                try:
+                                    page.locator(sel).first.click(timeout=1500, force=True)
+                                    page.wait_for_timeout(2000)
+                                    break
+                                except Exception:
+                                    continue
+                        # 3) SNSプロモ radio ON: id 直接指定 (name=sale_setting value=twitter_retweet)
                         promo_selected = False
                         try:
                             js_promo = page.evaluate(
                                 """
                                 () => {
-                                    // 候補テキストノードを全部探す（label/span/div より広く）
-                                    const walker = document.createTreeWalker(
-                                        document.body, NodeFilter.SHOW_TEXT, null
-                                    );
-                                    const targets = [];
-                                    let node;
-                                    while ((node = walker.nextNode())) {
-                                        const t = (node.textContent || '').trim();
-                                        if (/^SNSプロモーション/.test(t) || t === 'SNSプロモーション機能') {
-                                            if (node.parentElement) targets.push(node.parentElement);
-                                        }
-                                    }
-                                    if (targets.length === 0) {
-                                        return {ok: false, reason: 'no SNSプロモーション text node'};
-                                    }
-                                    // 各候補について、最も近い label / [role=radio] / li を見つける
-                                    // そこに含まれる radio (name != is_paid) を選ぶ
-                                    for (const el of targets) {
-                                        // 最近接の label or radiogroup item
-                                        let host = el.closest('label')
-                                                 || el.closest('[role="radio"]')
-                                                 || el.closest('li')
-                                                 || el.closest('[class*="radio"]');
-                                        if (!host) {
-                                            // 直接の親が <label> でないなら兄弟まで含めた小さい範囲を試す
-                                            host = el.parentElement;
-                                        }
-                                        if (!host) continue;
-                                        // host 内の radio で is_paid 以外を抽出
-                                        const radios = Array.from(host.querySelectorAll(
-                                            'input[type="radio"]'
-                                        )).filter(r => r.name !== 'is_paid');
-                                        if (radios.length > 0) {
-                                            const radio = radios[0];
-                                            const setter = Object.getOwnPropertyDescriptor(
-                                                window.HTMLInputElement.prototype, 'checked').set;
-                                            setter.call(radio, true);
-                                            radio.dispatchEvent(new Event('input', {bubbles: true}));
-                                            radio.dispatchEvent(new Event('change', {bubbles: true}));
-                                            radio.click();
-                                            return {ok: true, name: radio.name, value: radio.value, hostTag: host.tagName};
-                                        }
-                                    }
-                                    // ↑で見つからない場合、role=radio の祖先で text が SNSプロモーションを含むものを直接 click
-                                    const allRadioGroups = Array.from(document.querySelectorAll(
-                                        '[role="radio"], label.radio, label:has(input[type="radio"])'
-                                    ));
-                                    for (const rg of allRadioGroups) {
-                                        const text = (rg.textContent || '').trim();
-                                        if (/SNSプロモーション/.test(text)) {
-                                            // 内部の radio で is_paid 以外
-                                            const r = Array.from(rg.querySelectorAll('input[type="radio"]'))
-                                                .find(x => x.name !== 'is_paid');
-                                            if (r) {
-                                                const setter = Object.getOwnPropertyDescriptor(
-                                                    window.HTMLInputElement.prototype, 'checked').set;
-                                                setter.call(r, true);
-                                                r.dispatchEvent(new Event('input', {bubbles: true}));
-                                                r.dispatchEvent(new Event('change', {bubbles: true}));
-                                                r.click();
-                                                return {ok: true, name: r.name, value: r.value, hostTag: 'role-radio'};
-                                            }
-                                            // それでも無ければラジオグループ自体を click
-                                            rg.click();
-                                            return {ok: true, name: '(role-radio click)', value: '(text-match)', hostTag: 'rg.click'};
-                                        }
-                                    }
-                                    return {ok: false, reason: 'no non-is_paid radio near SNSプロモーション label'};
+                                    const radio = document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]');
+                                    if (!radio) return {ok: false, reason: 'radio not in DOM'};
+                                    radio.scrollIntoView({block: 'center'});
+                                    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked').set;
+                                    setter.call(radio, true);
+                                    radio.dispatchEvent(new Event('input', {bubbles: true}));
+                                    radio.dispatchEvent(new Event('change', {bubbles: true}));
+                                    const label = document.querySelector('label[for="' + radio.id + '"]');
+                                    if (label) label.click();
+                                    else radio.click();
+                                    return {ok: true, checked: radio.checked};
                                 }
                                 """
                             )
                             if js_promo.get("ok"):
-                                # 安全弁: is_paid=free を間違えてクリックした疑いがある場合は失敗扱い
-                                if js_promo.get("name") == "is_paid":
-                                    print(f"   ⚠️  JS で is_paid={js_promo.get('value')} に当たった→誤検出として却下")
-                                else:
-                                    promo_selected = True
-                                    print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')}, host={js_promo.get('hostTag')})")
-                                    page.wait_for_timeout(1500)
+                                promo_selected = True
+                                print(f"   ✅ SNSプロモ radio ON (checked={js_promo.get('checked')})")
+                                page.wait_for_timeout(2500)
                             else:
-                                print(f"   ⚠️  JS promo radio スキップ: {js_promo.get('reason')}")
+                                print(f"   ⚠️  SNSプロモ radio 失敗: {js_promo.get('reason')}")
                         except Exception as e:
-                            print(f"   ⚠️  JS promo radio 例外: {e}")
-                        # 第二手: ラベル/テキスト直接クリック
-                        if not promo_selected:
-                            for sel in [
-                                'label:has-text("SNSプロモーション")',
-                                'label:has-text("SNSプロモ")',
-                                '[role="radio"]:has-text("SNSプロモーション")',
-                                'div:has-text("SNSプロモーション機能") input[type="radio"]',
-                            ]:
-                                try:
-                                    page.locator(sel).first.click(timeout=1500, force=True)
-                                    promo_selected = True
-                                    print(f"   ✅ SNSプロモ ラベルクリック ({sel})")
-                                    page.wait_for_timeout(1500)
-                                    break
-                                except Exception:
-                                    continue
-                        # 3) RT文（自動投稿される文）を textarea に入力
+                            print(f"   ⚠️  SNSプロモ radio 例外: {e}")
+                        # 4) RT文 textarea
                         if promo_selected:
-                            rt_set = False
-                            for sel in [
-                                'textarea[placeholder*="投稿"]',
-                                'textarea[placeholder*="ツイート"]',
-                                'textarea[placeholder*="X"]',
-                                'textarea[name*="share"]',
-                                'textarea[name*="promo"]',
-                                'textarea[aria-label*="プロモ"]',
-                            ]:
-                                try:
-                                    page.locator(sel).first.fill(rt_message, timeout=2000)
-                                    rt_set = True
-                                    print(f"   ✅ RT文 入力 ({len(rt_message)}字, selector: {sel})")
-                                    break
-                                except Exception:
-                                    continue
-                            if not rt_set:
-                                # JS フォールバック: 直近の textarea に setter で値投入
-                                try:
-                                    js_rt = page.evaluate(
-                                        """
-                                        (msg) => {
-                                            const tas = Array.from(document.querySelectorAll('textarea'));
-                                            // visible なものに絞り、ラベルが「投稿/プロモ/拡散」のいずれかに近いもの優先
-                                            const visible = tas.filter(t => t.offsetParent !== null);
-                                            if (visible.length === 0) return {ok: false, reason: 'no textarea'};
-                                            const ta = visible[visible.length - 1];
-                                            const setter = Object.getOwnPropertyDescriptor(
-                                                window.HTMLTextAreaElement.prototype, 'value').set;
-                                            setter.call(ta, msg);
-                                            ta.dispatchEvent(new Event('input', {bubbles: true}));
-                                            ta.dispatchEvent(new Event('change', {bubbles: true}));
-                                            return {ok: true, len: msg.length};
-                                        }
-                                        """,
-                                        rt_message,
-                                    )
-                                    if js_rt.get("ok"):
-                                        rt_set = True
-                                        print(f"   ✅ RT文 入力 (JS fallback, {js_rt.get('len')}字)")
-                                except Exception as e:
-                                    print(f"   ⚠️  RT文 JS fallback例外: {e}")
-                            if not rt_set:
-                                print(f"   ⚠️  RT文 入力欄が見つからず（スキップ）")
-                            # 4) 割引価格入力
+                            try:
+                                js_rt = page.evaluate(
+                                    """
+                                    (msg) => {
+                                        const tas = Array.from(document.querySelectorAll('textarea'));
+                                        const visible = tas.filter(t => t.offsetParent !== null && !(t.placeholder || '').match(/AI|タイトル/));
+                                        if (visible.length === 0) return {ok: false};
+                                        const ta = visible[visible.length - 1];
+                                        const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+                                        setter.call(ta, msg);
+                                        ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                        ta.dispatchEvent(new Event('change', {bubbles: true}));
+                                        return {ok: true, len: msg.length};
+                                    }
+                                    """,
+                                    rt_message,
+                                )
+                                if js_rt.get("ok"):
+                                    print(f"   ✅ RT文 入力 ({js_rt.get('len')}字)")
+                                else:
+                                    print(f"   ⚠️  RT文 textarea 未発見")
+                            except Exception as e:
+                                print(f"   ⚠️  RT文 例外: {e}")
+                            # 5) 割引価格 (input#discountedPrice が note の正規 selector)
                             discount_set = False
                             for sel in [
-                                'input[placeholder*="割引"]',
-                                'input[aria-label*="割引"]',
-                                'input[name*="discount"]',
-                                'input[name*="promo_price"]',
-                                'input[name*="promotion"]',
+                                'input#discountedPrice',
+                                'input[name="discountedPrice"]',
                             ]:
                                 try:
-                                    page.locator(sel).first.fill(str(share_discount), timeout=1500)
+                                    page.locator(sel).first.fill(str(share_discount), timeout=2000)
                                     discount_set = True
-                                    print(f"   ✅ 割引価格 ¥{share_discount} 設定 (selector: {sel})")
+                                    print(f"   ✅ 割引価格 ¥{share_discount} 設定 ({sel})")
                                     break
                                 except Exception:
                                     continue
                             if not discount_set:
-                                # JS フォールバック: 価格欄の次に出る数値inputを優先
                                 try:
                                     js_d = page.evaluate(
                                         """
                                         (discount) => {
-                                            const inputs = Array.from(document.querySelectorAll(
-                                                'input[type="number"], input[inputmode="numeric"]'));
-                                            const visible = inputs.filter(i => i.offsetParent !== null);
-                                            // 価格本体(1500)以外の数値inputを優先
-                                            const target = visible.find(i => {
-                                                const v = i.value || '';
-                                                return v !== '1500' && v !== '';
-                                            }) || visible[visible.length - 1];
-                                            if (!target) return {ok: false};
-                                            const setter = Object.getOwnPropertyDescriptor(
-                                                window.HTMLInputElement.prototype, 'value').set;
-                                            setter.call(target, String(discount));
-                                            target.dispatchEvent(new Event('input', {bubbles: true}));
-                                            target.dispatchEvent(new Event('change', {bubbles: true}));
-                                            return {ok: true, name: target.name};
+                                            const inp = document.querySelector('input#discountedPrice, input[name="discountedPrice"]');
+                                            if (!inp) return {ok: false};
+                                            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
+                                            setter.call(inp, String(discount));
+                                            inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                            inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                            inp.dispatchEvent(new Event('blur', {bubbles: true}));
+                                            return {ok: true, value: inp.value};
                                         }
                                         """,
                                         share_discount,
                                     )
                                     if js_d.get("ok"):
                                         discount_set = True
-                                        print(f"   ✅ 割引価格 ¥{share_discount} 設定 (JS fallback, name={js_d.get('name')})")
+                                        print(f"   ✅ 割引価格 設定 (JS, value={js_d.get('value')})")
                                 except Exception as e:
-                                    print(f"   ⚠️  割引価格 JS fallback例外: {e}")
+                                    print(f"   ⚠️  割引価格 JS例外: {e}")
                             if not discount_set:
-                                print(f"   ⚠️  割引価格入力欄が見つからず（スキップ）")
-                            page.wait_for_timeout(1000)
-                        else:
-                            print("   ⚠️  SNSプロモ radio 選択失敗 → 設定スキップ")
+                                print("   ⚠️  割引価格欄に値を入れられず")
+                            page.wait_for_timeout(1200)
                     except Exception as e:
                         print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
-                    shot(page, "07c2-after-sns-promo-in-paid-panel")
-                # 旧 SNS プロモブロックは無効化済み（後段に移動）
+                    shot(page, "07c2-after-sns-promo")
 
                 # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
                 # note公式仕様: ボタン押下後、本文に戻されて有料ラインのカーソルが出る
@@ -2161,205 +2097,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
                             save_draft = True
 
-            # === SNSプロモーション機能（拡散割引）設定 — ペイウォール位置確定後にここで実施 ===
-            # 順序が重要: 価格 → 有料エリア設定ボタン → ペイウォール位置 → SNSプロモ → 投稿
-            # （SNSプロモを先にやると セール section が「有料エリア設定」ボタンを隠して publish 失敗する）
-            # 注: ペイウォール確定で /edit/ に遷移 → /publish/ に戻った時、セール section が
-            # 折りたたみリセットされ radio が DOM から消える。展開＋出現待ちが必須。
-            if meta["price"] > 0 and share_discount > 0 and rt_message:
-                print(f"💰 SNSプロモーション設定試行 (ペイウォール後): ¥{share_discount} / RT文 {len(rt_message)}字")
-                try:
-                    # ページ最下部までスクロールしてセール section を画面に表示
-                    try:
-                        page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
-                        page.wait_for_timeout(800)
-                    except Exception:
-                        pass
-
-                    # 1) セール section を確実に展開（JS で要素探索 + click）
-                    sale_opened = False
-                    try:
-                        js_open = page.evaluate(
-                            """
-                            () => {
-                                // 「セール」を含むテキストノードを探し、その先祖の button/summary を click
-                                const walker = document.createTreeWalker(
-                                    document.body, NodeFilter.SHOW_TEXT, null
-                                );
-                                let node;
-                                const candidates = [];
-                                while ((node = walker.nextNode())) {
-                                    const t = (node.textContent || '').trim();
-                                    if (t === 'セール' || t === 'セール設定') {
-                                        let el = node.parentElement;
-                                        for (let i = 0; i < 5 && el; i++) {
-                                            const tag = el.tagName;
-                                            if (tag === 'BUTTON' || tag === 'SUMMARY' || el.getAttribute('role') === 'button') {
-                                                candidates.push(el);
-                                                break;
-                                            }
-                                            el = el.parentElement;
-                                        }
-                                    }
-                                }
-                                if (candidates.length === 0) return {ok: false, reason: 'no セール clickable found'};
-                                const target = candidates[0];
-                                target.scrollIntoView({block: 'center'});
-                                // 既に展開されているか: aria-expanded か、近くの input[type=radio][name=sale_setting] の有無で判定
-                                const isExpanded = target.getAttribute('aria-expanded') === 'true'
-                                    || document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]') !== null;
-                                if (isExpanded) {
-                                    return {ok: true, already: true, text: (target.textContent || '').trim().slice(0, 30)};
-                                }
-                                target.click();
-                                return {ok: true, already: false, text: (target.textContent || '').trim().slice(0, 30)};
-                            }
-                            """
-                        )
-                        if js_open.get("ok"):
-                            sale_opened = True
-                            print(f"   セール section: {('既展開' if js_open.get('already') else '展開クリック')} ('{js_open.get('text')}')")
-                            page.wait_for_timeout(1200)
-                        else:
-                            print(f"   ⚠️  セール section 検出失敗: {js_open.get('reason')}")
-                    except Exception as e:
-                        print(f"   ⚠️  セール section 展開例外: {e}")
-
-                    # 2) radio が DOM に出現するまで wait (最大 5秒)
-                    try:
-                        page.wait_for_selector(
-                            'input[type="radio"][name="sale_setting"][value="twitter_retweet"]',
-                            state="attached",
-                            timeout=5000,
-                        )
-                        print("   ✓ sale_setting radio が DOM に出現")
-                    except Exception:
-                        print("   ⚠️  sale_setting radio が DOM に出ない（再展開リトライ）")
-                        # フォールバック: aria-label/text で再クリック
-                        for sel in [
-                            'button:has-text("セール")',
-                            '[aria-label*="セール"]',
-                            'summary:has-text("セール")',
-                        ]:
-                            try:
-                                page.locator(sel).first.click(timeout=1500, force=True)
-                                page.wait_for_timeout(1500)
-                                break
-                            except Exception:
-                                continue
-
-                    # 3) SNSプロモ radio: 直接 ID で click
-                    promo_selected = False
-                    try:
-                        js_promo = page.evaluate(
-                            """
-                            () => {
-                                const radio = document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]');
-                                if (!radio) {
-                                    return {ok: false, reason: 'twitter_retweet radio not in DOM'};
-                                }
-                                radio.scrollIntoView({block: 'center'});
-                                const setter = Object.getOwnPropertyDescriptor(
-                                    window.HTMLInputElement.prototype, 'checked').set;
-                                setter.call(radio, true);
-                                radio.dispatchEvent(new Event('input', {bubbles: true}));
-                                radio.dispatchEvent(new Event('change', {bubbles: true}));
-                                // ラベル click でフォーム再描画を確実に
-                                const label = document.querySelector('label[for="' + radio.id + '"]');
-                                if (label) {
-                                    label.click();
-                                } else {
-                                    radio.click();
-                                }
-                                return {ok: true, name: radio.name, value: radio.value, checked: radio.checked};
-                            }
-                            """
-                        )
-                        if js_promo.get("ok"):
-                            promo_selected = True
-                            print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')}, checked={js_promo.get('checked')})")
-                            page.wait_for_timeout(2500)
-                        else:
-                            print(f"   ⚠️  SNSプロモ radio 未発見: {js_promo.get('reason')}")
-                    except Exception as e:
-                        print(f"   ⚠️  SNSプロモ radio 例外: {e}")
-                    if promo_selected:
-                        # RT文 textarea
-                        rt_set = False
-                        try:
-                            js_rt = page.evaluate(
-                                """
-                                (msg) => {
-                                    const tas = Array.from(document.querySelectorAll('textarea'));
-                                    const visible = tas.filter(t => t.offsetParent !== null && !t.placeholder?.match(/AI|タイトル/));
-                                    if (visible.length === 0) return {ok: false, reason: 'no suitable textarea'};
-                                    const ta = visible[visible.length - 1];
-                                    const setter = Object.getOwnPropertyDescriptor(
-                                        window.HTMLTextAreaElement.prototype, 'value').set;
-                                    setter.call(ta, msg);
-                                    ta.dispatchEvent(new Event('input', {bubbles: true}));
-                                    ta.dispatchEvent(new Event('change', {bubbles: true}));
-                                    return {ok: true, len: msg.length};
-                                }
-                                """,
-                                rt_message,
-                            )
-                            if js_rt.get("ok"):
-                                rt_set = True
-                                print(f"   ✅ RT文 入力 ({js_rt.get('len')}字)")
-                        except Exception as e:
-                            print(f"   ⚠️  RT文 例外: {e}")
-                        if not rt_set:
-                            print("   ⚠️  RT文 入力欄が見つからず")
-                        # 割引価格 input (id=discountedPrice が note の正規 selector)
-                        discount_set = False
-                        for sel in [
-                            'input#discountedPrice',
-                            'input[id="discountedPrice"]',
-                            'input[name="discountedPrice"]',
-                            'input[placeholder*="割引"]',
-                            'input[aria-label*="割引"]',
-                        ]:
-                            try:
-                                page.locator(sel).first.fill(str(share_discount), timeout=2000)
-                                discount_set = True
-                                print(f"   ✅ 割引価格 ¥{share_discount} 設定 (selector: {sel})")
-                                break
-                            except Exception:
-                                continue
-                        if not discount_set:
-                            # JS フォールバック: discountedPrice id 直接
-                            try:
-                                js_d = page.evaluate(
-                                    """
-                                    (discount) => {
-                                        const inp = document.querySelector(
-                                            'input#discountedPrice, input[name="discountedPrice"]'
-                                        );
-                                        if (!inp) return {ok: false, reason: 'discountedPrice input not found'};
-                                        const setter = Object.getOwnPropertyDescriptor(
-                                            window.HTMLInputElement.prototype, 'value').set;
-                                        setter.call(inp, String(discount));
-                                        inp.dispatchEvent(new Event('input', {bubbles: true}));
-                                        inp.dispatchEvent(new Event('change', {bubbles: true}));
-                                        inp.dispatchEvent(new Event('blur', {bubbles: true}));
-                                        return {ok: true, value: inp.value};
-                                    }
-                                    """,
-                                    share_discount,
-                                )
-                                if js_d.get("ok"):
-                                    discount_set = True
-                                    print(f"   ✅ 割引価格 ¥{share_discount} 設定 (JS, value={js_d.get('value')})")
-                            except Exception as e:
-                                print(f"   ⚠️  割引価格 JS 例外: {e}")
-                        if not discount_set:
-                            print("   ⚠️  割引価格欄に値を入れられず（スキップ）")
-                        page.wait_for_timeout(1200)
-                except Exception as e:
-                    print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
-                shot(page, "07e-after-sns-promo")
-                dump_html(page, "07e-after-sns-promo")
+            # (SNSプロモは「有料エリア設定」ボタン押下の前の設定ページで既に完了済み)
 
             # 下書き保存モード: 最終投稿はせず、エディタの自動保存を待って終了
             if save_draft:
