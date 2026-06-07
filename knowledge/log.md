@@ -4,6 +4,56 @@
 
 ---
 
+### [2026-06-07] rakuda-sensei — 1000円フレームワーク反映・note β機能ファイル添付・SNSプロモ自動化（夜間）
+
+**作業内容：**
+
+- **記事002リライト（1000円note設計フレームワーク反映）**
+  - タイトル変更：`公務員夫婦のサイドFIRE達成診断シート　5分入力で答えが出る`（28字）→ `公務員夫婦のサイドFIRE診断　5分で必要資産額が出るシート`（30字）
+  - 数字（5分・11項目）＋ ペルソナ（公務員夫婦）＋ 具体ベネフィット（必要資産額）を前半15字に集約
+  - 冒頭リードを「老後2,000万問題、夫婦で話したことありますか？」型に変更（research 推奨パターンA）
+  - 有料部分を大幅増強：5ステップ手順 + 失敗パターン3つと回避策 + 職種別応用編4種 + CTA
+  - 「これにより」「ポイント」「いかがでしたか？」など AI 臭表現を排除
+  - ペイウォール直下に予告（ここから渡すもの）を明示
+
+- **note β機能ファイル添付の自動化（GitHub raw URL からの脱却）**
+  - 本文中の `[[FILE_ATTACH:relative/path]]` マーカを検出 → ProseMirror に paste/drop イベント発火 → note が自動でダウンロード形式に展開
+  - Excel/PDF/Word/PSD など 50MB まで対応（note 公式 β機能準拠）
+  - 失敗時は +メニュー → ファイル → file input の三段フォールバック
+  - 添付成果物あり時の自動 draft 切替を撤廃（マーカ＋実体ファイル両方OKなら publish 通常進行）
+
+- **SNSプロモーション機能の自動設定（有料設定パネル内）**
+  - 旧実装：タグ設定後にプロモボタン探索 → UI 構造ミスマッチで毎回失敗
+  - 新実装：価格設定 → セール section 展開 → SNSプロモーション radio 選択 → RT文 textarea 入力 → 割引価格 input という note 実際の UI フローに合わせて移動
+  - RT文・割引価格は記事 md の `拡散RT文` `拡散割引価格` メタフィールドから自動抽出
+  - JS evaluate による fallback 2段構え（ラベル探索 → setter 値投入）
+
+- **サムネ画像の刷新**
+  - 旧サムネ：Excel スプレッドシートのスクショ風（記事内容が伝わらず）
+  - 新サムネ：紺グラデ背景 + キャッチ「あと何年、働くか分からない夫婦へ」+ 大タイトル「サイドFIRE達成診断シート / 5分入力で答えが出る」+ 3バッジ（11項目 / 達成率自動 / 4択提示）+ 著者署名
+  - PIL で自動生成（`automation/build_thumbnail_002.py`）→ 何度でも再生成可能
+
+- **売れてる有料note記事の研究（10分リサーチ）**
+  - WebSearch 10件 + note 公式ヘルプ + 編集部 500件分析 + クロネコ屋／hina-asp／まいまい京都メソッドを参照
+  - 結果を `knowledge/note-bestpractices.md` に体系化（7セクション・297行）
+  - 主要発見：①タイトル前半15字にペルソナ×ベネフィット集約 ②冒頭は「悩み列挙→原因→具体例→解決」5段構え ③AI 臭の正体は「これにより」「ポイント」「〜と言えるでしょう」の3表現
+
+**成果物：**
+- `articles/002-side-fire-sheet.md`（リライト完了・自動添付マーカ入り）
+- `automation/post_to_note.py`（_FILE_ATTACH_PATTERN, _upload_file_via_dispatch, _upload_file_via_plus_menu, セール section 内 SNSプロモ自動化）
+- `automation/build_thumbnail_002.py`（PIL によるサムネ生成スクリプト）
+- `assets/thumbnails/002-side-fire-sheet.png`（新サムネ 1280×670）
+- `knowledge/note-bestpractices.md`（リサーチ知見・以後の記事全てに適用）
+- `sns/cross-posts/2026-06-02-side-fire-sheet/threads.md`（新タイトル反映）
+- `sns/cross-posts/2026-06-02-side-fire-sheet/x-variants.md`（RT文の出所を md メタへ）
+
+**次回タスク：**
+- `.launch-trigger` 起動でワークフロー実行（save-draft モードで安全に検証）
+- 公開後に SNS プロモ画面と添付ファイルの実際の見え方を確認
+- 不具合があれば post_to_note.py のセレクタを微調整
+
+---
+
 ### [2026-06-04] rakuda-sensei — ワークフロー完了・記事002公開・ユーザー検証待機（セッション74）
 
 **作業内容：**

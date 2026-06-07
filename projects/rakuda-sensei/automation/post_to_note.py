@@ -77,8 +77,14 @@ def try_selectors(page, selectors: list[str], action: str = "fill", value: str =
 
 
 def extract_meta_from_table(text: str) -> dict:
-    """記事MDの投稿メタデータ表からタイトル・価格・タグを抽出"""
-    meta = {"title": "", "price": 0, "tags": []}
+    """記事MDの投稿メタデータ表からタイトル・価格・タグ・SNSプロモ設定を抽出"""
+    meta = {
+        "title": "",
+        "price": 0,
+        "tags": [],
+        "share_discount": 0,  # SNSプロモ拡散割引価格（0なら未設定）
+        "rt_message": "",     # SNSプロモ自動投稿テキスト
+    }
 
     title_m = re.search(r"\|\s*\*\*タイトル\*\*\s*\|\s*(.+?)\s*\|", text)
     if title_m:
@@ -87,6 +93,20 @@ def extract_meta_from_table(text: str) -> dict:
     price_m = re.search(r"\|\s*\*\*価格\*\*\s*\|\s*¥?([\d,]+)", text)
     if price_m:
         meta["price"] = int(price_m.group(1).replace(",", ""))
+
+    discount_m = re.search(r"\|\s*拡散割引価格\s*\|\s*¥?([\d,]+)", text)
+    if discount_m:
+        try:
+            meta["share_discount"] = int(discount_m.group(1).replace(",", ""))
+        except ValueError:
+            pass
+
+    rt_m = re.search(
+        r"\|\s*拡散RT文\s*\|\s*([^|]+?)\s*\|",
+        text,
+    )
+    if rt_m:
+        meta["rt_message"] = rt_m.group(1).strip().replace("\\n", "\n")
 
     tags_m = re.search(r"推奨タグ.*", text)
     if tags_m:
@@ -395,6 +415,30 @@ def delete_drafts_matching_title(page, title_prefix: str, max_delete: int = 10) 
 
 
 _IMG_PATTERN = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+_FILE_ATTACH_PATTERN = re.compile(r"\[\[FILE_ATTACH:([^\]]+)\]\]")
+# 画像とファイル添付を同一ストリームで扱うための統合パターン
+_ASSET_PATTERN = re.compile(
+    r"(?P<img>!\[(?P<alt>[^\]]*)\]\((?P<imgpath>[^)]+)\))"
+    r"|"
+    r"(?P<file>\[\[FILE_ATTACH:(?P<filepath>[^\]]+)\]\])"
+)
+
+
+def _guess_mime(file_path) -> str:
+    import mimetypes
+    mime, _ = mimetypes.guess_type(str(file_path))
+    if mime:
+        return mime
+    ext = file_path.suffix.lower()
+    return {
+        ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        ".xls": "application/vnd.ms-excel",
+        ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        ".doc": "application/msword",
+        ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        ".pdf": "application/pdf",
+        ".zip": "application/zip",
+    }.get(ext, "application/octet-stream")
 
 
 # noteのProseMirrorエディタに画像を投入するJS。
@@ -497,6 +541,84 @@ def _upload_image_via_dispatch(page, img_path) -> bool:
         return False
 
 
+def _upload_file_via_dispatch(page, file_path, wait_after_ms: int = 12000) -> bool:
+    """任意ファイル (Excel/PDF/Word 等) を ProseMirror に paste/drop で投入。
+
+    note の新機能 (β) では画像以外のファイルは自動的に「ダウンロードボタン付き
+    ブロック」に展開される (PDF/Excel/Word/PSD/Sketch まで対応・50MB/件)。
+    """
+    import base64
+    mime = _guess_mime(file_path)
+    data_b64 = base64.b64encode(file_path.read_bytes()).decode()
+    try:
+        result = page.evaluate(_JS_DISPATCH_IMAGE, {
+            "dataB64": data_b64,
+            "fileName": file_path.name,
+            "mimeType": mime,
+        })
+        if not result.get("success"):
+            print(f"    file dispatch失敗: {result.get('reason') or 'method not detected'}", file=sys.stderr)
+            return False
+        page.wait_for_timeout(wait_after_ms)
+        print(f"    ✓ {result.get('method')} でファイル投入 ({file_path.name}, {mime})")
+        return True
+    except Exception as e:
+        print(f"    file dispatch例外: {e}", file=sys.stderr)
+        return False
+
+
+def _upload_file_via_plus_menu(page, file_path) -> bool:
+    """+ メニューで「ファイル」を開いて file input にセット。
+
+    note の β版ファイル添付 UI は +メニューに「ファイル」項目を出すか、
+    サイドバーの アップロードアイコン に出す（環境差）。両方試す。
+    """
+    # 1) +ボタン
+    plus_selectors = [
+        'button[aria-label*="ブロック"]',
+        'button[aria-label*="挿入"]',
+        'button[aria-label*="追加"]',
+        'button[aria-label*="アップロード"]',
+        'button[aria-label*="upload"]',
+        '[class*="addBlock"] button',
+        '[class*="add-block"] button',
+        '.ProseMirror-menu button',
+        'button:has-text("+")',
+    ]
+    for sel in plus_selectors:
+        try:
+            page.locator(sel).first.click(timeout=1200)
+            page.wait_for_timeout(400)
+            break
+        except Exception:
+            continue
+    # 2) ファイル/アップロード メニュー
+    for sel in [
+        'button:has-text("ファイル")',
+        '[role="menuitem"]:has-text("ファイル")',
+        'li:has-text("ファイル")',
+        '[aria-label*="ファイル"]',
+        'button:has-text("アップロード")',
+        '[role="menuitem"]:has-text("アップロード")',
+    ]:
+        try:
+            page.locator(sel).first.click(timeout=1200)
+            page.wait_for_timeout(400)
+            break
+        except Exception:
+            continue
+    # 3) file input
+    try:
+        page.locator('input[type="file"]').first.set_input_files(
+            str(file_path), timeout=3500
+        )
+        page.wait_for_timeout(12000)
+        print(f"    ✓ +メニュー経由でファイル投入 ({file_path.name})")
+        return True
+    except Exception:
+        return False
+
+
 def _upload_image_via_plus_menu(page, img_path) -> bool:
     """ +メニューで「画像」を選んで file input に流す方式。"""
     # 1) + ボタンを探す
@@ -552,81 +674,111 @@ def _upload_image_via_plus_menu(page, img_path) -> bool:
 def insert_body_with_images(page, body: str):
     """マークダウン本文を note エディタに入力する。
 
-    `![alt](path)` パターンを検出したら、その位置で画像を以下の優先順で投入する。
-    1) JS evaluate で paste/drop イベント発火 (ProseMirror 直叩き)
-    2) +メニュー経由でファイル選択
-    3) どちらも失敗時は alt テキストを `（画像：xxx）` として残す
+    扱うアセット2種:
+      - `![alt](path)`      → 画像 (paste/drop でインライン挿入)
+      - `[[FILE_ATTACH:path]]` → ファイル添付 (note β機能 / ダウンロード形式)
+
+    どちらも失敗時はテキストでフォールバック。
     """
     pos = 0
     inserted_imgs = 0
     failed_imgs = 0
+    inserted_files = 0
+    failed_files = 0
 
-    for m in _IMG_PATTERN.finditer(body):
-        # 画像参照の前のテキストを入力
+    for m in _ASSET_PATTERN.finditer(body):
+        # 参照の前のテキストを入力
         chunk = body[pos:m.start()]
         if chunk:
-            # 末尾にキャレットを移動してから入力（途中位置への上書きを防ぐ）
             page.keyboard.press("Control+End")
             page.wait_for_timeout(200)
             page.keyboard.insert_text(chunk)
-            # ProseMirror が React state を確定するまで余裕をもって待つ
             page.wait_for_timeout(1800)
 
-        alt = m.group(1)
-        rel_path = m.group(2).strip()
-        img_path = ROOT / rel_path
-
-        # 画像挿入前にもキャレットを末尾に強制（テキスト上書きを防ぐ）
         page.keyboard.press("Control+End")
         page.wait_for_timeout(200)
-
-        # chunk が改行で終わっていない時のみ Enter を補う
         if not chunk.endswith("\n"):
             page.keyboard.press("Enter")
             page.wait_for_timeout(500)
 
-        uploaded = False
-        if img_path.exists():
-            # 方法1: JS evaluate で paste/drop
-            print(f"🖼️  {img_path.name} 挿入試行")
-            uploaded = _upload_image_via_dispatch(page, img_path)
-
-            # 方法2: +メニュー経由
-            if not uploaded:
-                uploaded = _upload_image_via_plus_menu(page, img_path)
-
-            # 方法3: 通常の file input（旧ロジック、保険）
-            if not uploaded:
-                for sel in [
-                    'input[type="file"][accept*="image"]',
-                    'input[type="file"]',
-                ]:
-                    try:
-                        page.locator(sel).first.set_input_files(
-                            str(img_path), timeout=2500
-                        )
-                        page.wait_for_timeout(7000)
-                        uploaded = True
-                        print(f"    ✓ file input 経由でアップロード")
-                        break
-                    except Exception:
-                        continue
-
-            if uploaded:
-                inserted_imgs += 1
-                print(f"    🟢 {img_path.name} 挿入成功")
+        if m.group("img"):
+            alt = m.group("alt") or ""
+            rel_path = (m.group("imgpath") or "").strip()
+            img_path = ROOT / rel_path
+            uploaded = False
+            if img_path.exists():
+                print(f"🖼️  {img_path.name} 挿入試行")
+                uploaded = _upload_image_via_dispatch(page, img_path)
+                if not uploaded:
+                    uploaded = _upload_image_via_plus_menu(page, img_path)
+                if not uploaded:
+                    for sel in [
+                        'input[type="file"][accept*="image"]',
+                        'input[type="file"]',
+                    ]:
+                        try:
+                            page.locator(sel).first.set_input_files(
+                                str(img_path), timeout=2500
+                            )
+                            page.wait_for_timeout(7000)
+                            uploaded = True
+                            print(f"    ✓ file input 経由でアップロード")
+                            break
+                        except Exception:
+                            continue
+                if uploaded:
+                    inserted_imgs += 1
+                    print(f"    🟢 {img_path.name} 挿入成功")
+                else:
+                    failed_imgs += 1
+                    print(f"    🔴 {img_path.name} 全手段失敗 → alt テキストでフォールバック", file=sys.stderr)
+                    if alt:
+                        page.keyboard.insert_text(f"（画像：{alt}）")
             else:
                 failed_imgs += 1
-                print(f"    🔴 {img_path.name} 全手段失敗 → alt テキストでフォールバック", file=sys.stderr)
+                print(f"⚠️  画像ファイル不在: {img_path}", file=sys.stderr)
                 if alt:
                     page.keyboard.insert_text(f"（画像：{alt}）")
         else:
-            failed_imgs += 1
-            print(f"⚠️  画像ファイル不在: {img_path}", file=sys.stderr)
-            if alt:
-                page.keyboard.insert_text(f"（画像：{alt}）")
+            # [[FILE_ATTACH:path]] = ファイル添付（ダウンロード形式）
+            rel_path = (m.group("filepath") or "").strip()
+            file_path = ROOT / rel_path
+            uploaded = False
+            if file_path.exists():
+                size_kb = file_path.stat().st_size // 1024
+                print(f"📎 {file_path.name} ({size_kb}KB) 添付試行")
+                uploaded = _upload_file_via_dispatch(page, file_path)
+                if not uploaded:
+                    uploaded = _upload_file_via_plus_menu(page, file_path)
+                if not uploaded:
+                    for sel in [
+                        'input[type="file"]:not([accept*="image"])',
+                        'input[type="file"]',
+                    ]:
+                        try:
+                            page.locator(sel).first.set_input_files(
+                                str(file_path), timeout=2500
+                            )
+                            page.wait_for_timeout(12000)
+                            uploaded = True
+                            print(f"    ✓ file input 経由でファイル投入")
+                            break
+                        except Exception:
+                            continue
+                if uploaded:
+                    inserted_files += 1
+                    print(f"    🟢 {file_path.name} 添付成功")
+                else:
+                    failed_files += 1
+                    print(f"    🔴 {file_path.name} 添付失敗 → テキスト案内に切替", file=sys.stderr)
+                    page.keyboard.insert_text(
+                        f"（ファイル：{file_path.name} の自動添付に失敗しました。手動で添付してください）"
+                    )
+            else:
+                failed_files += 1
+                print(f"⚠️  添付ファイル不在: {file_path}", file=sys.stderr)
+                page.keyboard.insert_text(f"（ファイル：{file_path.name} が見つかりません）")
 
-        # 画像後にキャレットを末尾に戻して改行
         page.keyboard.press("Control+End")
         page.wait_for_timeout(200)
         page.keyboard.press("Enter")
@@ -634,7 +786,6 @@ def insert_body_with_images(page, body: str):
 
         pos = m.end()
 
-    # 最後の画像参照より後ろのテキスト
     remaining = body[pos:]
     if remaining:
         page.keyboard.press("Control+End")
@@ -644,6 +795,8 @@ def insert_body_with_images(page, body: str):
 
     if inserted_imgs or failed_imgs:
         print(f"📷 画像処理結果: 成功 {inserted_imgs} / 失敗 {failed_imgs}")
+    if inserted_files or failed_files:
+        print(f"📎 ファイル処理結果: 成功 {inserted_files} / 失敗 {failed_files}")
 
 
 def normalize_cookies(raw_json: str) -> list:
@@ -710,12 +863,30 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
         m = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
         meta["title"] = m.group(1).strip() if m else md_path.stem
 
-    # 添付成果物が必要な記事は自動で下書きモードに切替（ファイル添付は note UI でしかできないため）
-    asset_m = re.search(r"\|\s*添付成果物\s*\|\s*([^|]+?)\s*\|", text)
-    has_attachment = bool(asset_m and "なし" not in asset_m.group(1))
-    if has_attachment and not save_draft and not dry_run:
-        print(f"⚠️  添付成果物あり ({asset_m.group(1).strip()}) → 自動で下書きモードに切替")
-        save_draft = True
+    # 添付成果物（外部ダウンロードリンク）= 旧仕様。
+    # 新仕様: 本文中の [[FILE_ATTACH:relative/path]] マーカを note β機能で自動添付する。
+    # → マーカが本文にある & ファイル実体が存在する場合は下書き切替えずに通常公開。
+    # → 「添付成果物あり」表記だけでマーカが無い場合は安全側に倒して下書き保存。
+    file_attach_matches = list(_FILE_ATTACH_PATTERN.finditer(text))
+    if file_attach_matches:
+        files_ok = []
+        files_ng = []
+        for fm in file_attach_matches:
+            fp = ROOT / fm.group(1).strip()
+            (files_ok if fp.exists() else files_ng).append(fp.name)
+        if files_ok:
+            print(f"📎 自動添付ファイル: {', '.join(files_ok)}")
+        if files_ng:
+            print(f"⚠️  添付マーカに該当ファイルが見つからず: {', '.join(files_ng)}", file=sys.stderr)
+        if files_ng and not save_draft and not dry_run:
+            print("→ 一部ファイルが不在のため安全に下書き保存モードへ切替")
+            save_draft = True
+    else:
+        asset_m = re.search(r"\|\s*添付成果物\s*\|\s*([^|]+?)\s*\|", text)
+        has_attachment = bool(asset_m and "なし" not in asset_m.group(1))
+        if has_attachment and not save_draft and not dry_run:
+            print(f"⚠️  添付成果物あり ({asset_m.group(1).strip()}) かつ FILE_ATTACH マーカ無し → 下書きモードに切替")
+            save_draft = True
 
     print(f"📄 投稿記事: {meta['title']}")
     print(f"💴 価格: ¥{meta['price']}")
@@ -1310,6 +1481,189 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     shot(page, "07c-price-fail")
                     dump_html(page, "07c-price-fail")
 
+                # === SNSプロモーション機能（有料設定パネル内・セール section） ===
+                # note の有料設定パネルは: 価格 → 返金申請 → セール (折りたたみ)
+                # セール の中に 設定しない / タイムセール / SNSプロモーション機能 の radio がある
+                # ここで設定しないと publish パネル外なので押せなくなる
+                share_discount = meta.get("share_discount") or 0
+                rt_message = meta.get("rt_message") or ""
+                if share_discount > 0 and rt_message:
+                    print(f"💰 SNSプロモーション設定試行: ¥{share_discount} / RT文 {len(rt_message)}字")
+                    try:
+                        # 1) セール section を開く（折りたたまれているケースが大半）
+                        for sel in [
+                            'button:has-text("セール")',
+                            'summary:has-text("セール")',
+                            '[aria-label*="セール"]',
+                            'button:has-text("販売設定")',
+                        ]:
+                            try:
+                                page.locator(sel).first.click(timeout=1500)
+                                page.wait_for_timeout(1000)
+                                print(f"   セール section 展開: {sel}")
+                                break
+                            except Exception:
+                                continue
+                        # 2) SNSプロモーション radio を選択
+                        promo_selected = False
+                        # 第一手: JS で input[type="radio"] のうち SNSプロモーションラベル直近を check
+                        try:
+                            js_promo = page.evaluate(
+                                """
+                                () => {
+                                    const labels = Array.from(document.querySelectorAll('label, span, div'));
+                                    const target = labels.find(el => /SNSプロモーション/.test((el.textContent || '').trim()));
+                                    if (!target) return {ok: false, reason: 'label SNSプロモーション not found'};
+                                    // 自身か親の label/li 内の radio を探す
+                                    let scope = target;
+                                    let radio = null;
+                                    for (let i = 0; i < 5 && scope && !radio; i++) {
+                                        radio = scope.querySelector('input[type="radio"]');
+                                        scope = scope.parentElement;
+                                    }
+                                    if (!radio) {
+                                        // 同じ親階層内の兄弟から探す
+                                        const sib = target.closest('label');
+                                        if (sib) radio = sib.querySelector('input[type="radio"]');
+                                    }
+                                    if (!radio) return {ok: false, reason: 'no radio near label'};
+                                    const setter = Object.getOwnPropertyDescriptor(
+                                        window.HTMLInputElement.prototype, 'checked').set;
+                                    setter.call(radio, true);
+                                    radio.dispatchEvent(new Event('input', {bubbles: true}));
+                                    radio.dispatchEvent(new Event('change', {bubbles: true}));
+                                    radio.click();
+                                    return {ok: true, name: radio.name, value: radio.value};
+                                }
+                                """
+                            )
+                            if js_promo.get("ok"):
+                                promo_selected = True
+                                print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')})")
+                                page.wait_for_timeout(1500)
+                            else:
+                                print(f"   ⚠️  JS promo radio スキップ: {js_promo.get('reason')}")
+                        except Exception as e:
+                            print(f"   ⚠️  JS promo radio 例外: {e}")
+                        # 第二手: ラベル/テキスト直接クリック
+                        if not promo_selected:
+                            for sel in [
+                                'label:has-text("SNSプロモーション")',
+                                'label:has-text("SNSプロモ")',
+                                '[role="radio"]:has-text("SNSプロモーション")',
+                                'div:has-text("SNSプロモーション機能") input[type="radio"]',
+                            ]:
+                                try:
+                                    page.locator(sel).first.click(timeout=1500, force=True)
+                                    promo_selected = True
+                                    print(f"   ✅ SNSプロモ ラベルクリック ({sel})")
+                                    page.wait_for_timeout(1500)
+                                    break
+                                except Exception:
+                                    continue
+                        # 3) RT文（自動投稿される文）を textarea に入力
+                        if promo_selected:
+                            rt_set = False
+                            for sel in [
+                                'textarea[placeholder*="投稿"]',
+                                'textarea[placeholder*="ツイート"]',
+                                'textarea[placeholder*="X"]',
+                                'textarea[name*="share"]',
+                                'textarea[name*="promo"]',
+                                'textarea[aria-label*="プロモ"]',
+                            ]:
+                                try:
+                                    page.locator(sel).first.fill(rt_message, timeout=2000)
+                                    rt_set = True
+                                    print(f"   ✅ RT文 入力 ({len(rt_message)}字, selector: {sel})")
+                                    break
+                                except Exception:
+                                    continue
+                            if not rt_set:
+                                # JS フォールバック: 直近の textarea に setter で値投入
+                                try:
+                                    js_rt = page.evaluate(
+                                        """
+                                        (msg) => {
+                                            const tas = Array.from(document.querySelectorAll('textarea'));
+                                            // visible なものに絞り、ラベルが「投稿/プロモ/拡散」のいずれかに近いもの優先
+                                            const visible = tas.filter(t => t.offsetParent !== null);
+                                            if (visible.length === 0) return {ok: false, reason: 'no textarea'};
+                                            const ta = visible[visible.length - 1];
+                                            const setter = Object.getOwnPropertyDescriptor(
+                                                window.HTMLTextAreaElement.prototype, 'value').set;
+                                            setter.call(ta, msg);
+                                            ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                            ta.dispatchEvent(new Event('change', {bubbles: true}));
+                                            return {ok: true, len: msg.length};
+                                        }
+                                        """,
+                                        rt_message,
+                                    )
+                                    if js_rt.get("ok"):
+                                        rt_set = True
+                                        print(f"   ✅ RT文 入力 (JS fallback, {js_rt.get('len')}字)")
+                                except Exception as e:
+                                    print(f"   ⚠️  RT文 JS fallback例外: {e}")
+                            if not rt_set:
+                                print(f"   ⚠️  RT文 入力欄が見つからず（スキップ）")
+                            # 4) 割引価格入力
+                            discount_set = False
+                            for sel in [
+                                'input[placeholder*="割引"]',
+                                'input[aria-label*="割引"]',
+                                'input[name*="discount"]',
+                                'input[name*="promo_price"]',
+                                'input[name*="promotion"]',
+                            ]:
+                                try:
+                                    page.locator(sel).first.fill(str(share_discount), timeout=1500)
+                                    discount_set = True
+                                    print(f"   ✅ 割引価格 ¥{share_discount} 設定 (selector: {sel})")
+                                    break
+                                except Exception:
+                                    continue
+                            if not discount_set:
+                                # JS フォールバック: 価格欄の次に出る数値inputを優先
+                                try:
+                                    js_d = page.evaluate(
+                                        """
+                                        (discount) => {
+                                            const inputs = Array.from(document.querySelectorAll(
+                                                'input[type="number"], input[inputmode="numeric"]'));
+                                            const visible = inputs.filter(i => i.offsetParent !== null);
+                                            // 価格本体(1500)以外の数値inputを優先
+                                            const target = visible.find(i => {
+                                                const v = i.value || '';
+                                                return v !== '1500' && v !== '';
+                                            }) || visible[visible.length - 1];
+                                            if (!target) return {ok: false};
+                                            const setter = Object.getOwnPropertyDescriptor(
+                                                window.HTMLInputElement.prototype, 'value').set;
+                                            setter.call(target, String(discount));
+                                            target.dispatchEvent(new Event('input', {bubbles: true}));
+                                            target.dispatchEvent(new Event('change', {bubbles: true}));
+                                            return {ok: true, name: target.name};
+                                        }
+                                        """,
+                                        share_discount,
+                                    )
+                                    if js_d.get("ok"):
+                                        discount_set = True
+                                        print(f"   ✅ 割引価格 ¥{share_discount} 設定 (JS fallback, name={js_d.get('name')})")
+                                except Exception as e:
+                                    print(f"   ⚠️  割引価格 JS fallback例外: {e}")
+                            if not discount_set:
+                                print(f"   ⚠️  割引価格入力欄が見つからず（スキップ）")
+                            page.wait_for_timeout(1000)
+                        else:
+                            print("   ⚠️  SNSプロモ radio 選択失敗 → 設定スキップ")
+                    except Exception as e:
+                        print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
+                    shot(page, "07c2-after-sns-promo-in-paid-panel")
+                elif meta["price"] > 0:
+                    print(f"ℹ️  SNSプロモ設定なし (share_discount={share_discount}, rt_message={'有' if rt_message else '無'})")
+
                 # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
                 # note公式仕様: ボタン押下後、本文に戻されて有料ラインのカーソルが出る
                 # → 有料にしたい段落をクリックして位置を確定する
@@ -1619,74 +1973,7 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
                             save_draft = True
 
-            # (タグは公開パネル開いた直後に設定済み)
-
-            # SNSプロモーション機能（拡散割引 ¥500）
-            # 価格が ¥0 でない有料記事の場合だけ設定
-            if meta["price"] > 0:
-                share_discount = 500
-                print(f"💰 SNSプロモーション設定試行: ¥{share_discount}")
-                try:
-                    # まず「SNSプロモーション」「プロモーション」ラベルを含む section を見つけて開く
-                    sns_section_clicked = False
-                    for sel in [
-                        'button:has-text("SNSプロモーション")',
-                        'button:has-text("プロモーション")',
-                        'button:has-text("拡散")',
-                        'summary:has-text("SNSプロモーション")',
-                        'summary:has-text("プロモーション")',
-                        '[class*="promotion"] button',
-                    ]:
-                        try:
-                            page.locator(sel).first.click(timeout=1500)
-                            page.wait_for_timeout(1200)
-                            sns_section_clicked = True
-                            print(f"   SNSプロモ section 展開: {sel}")
-                            break
-                        except Exception:
-                            continue
-                    # 有効化トグル/チェックボックス
-                    if sns_section_clicked:
-                        for sel in [
-                            'input[type="checkbox"][name*="promo"]',
-                            'input[type="checkbox"][name*="share"]',
-                            'input[type="checkbox"][name*="discount"]',
-                            'button[role="switch"]',
-                            'input[role="switch"]',
-                        ]:
-                            try:
-                                el = page.locator(sel).first
-                                el.wait_for(state="visible", timeout=1000)
-                                # 既に checked か確認
-                                is_checked = el.evaluate("e => e.checked || e.getAttribute('aria-checked') === 'true'")
-                                if not is_checked:
-                                    el.click(force=True, timeout=1500)
-                                    page.wait_for_timeout(800)
-                                print(f"   プロモ有効化トグル: {sel}")
-                                break
-                            except Exception:
-                                continue
-                    # 割引価格入力
-                    discount_set = False
-                    for sel in [
-                        'input[placeholder*="割引"]',
-                        'input[aria-label*="割引"]',
-                        'input[name*="discount"]',
-                        'input[name*="promo"]',
-                    ]:
-                        try:
-                            page.locator(sel).first.fill(str(share_discount), timeout=1500)
-                            discount_set = True
-                            print(f"   割引価格 ¥{share_discount} 設定 (selector: {sel})")
-                            break
-                        except Exception:
-                            continue
-                    if not discount_set:
-                        print(f"   ⚠️  SNSプロモ割引欄が見つからず（スキップ）")
-                    page.wait_for_timeout(800)
-                except Exception as e:
-                    print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
-                shot(page, "07f-after-sns-promo")
+            # (タグ + SNSプロモ設定は公開パネル開いた直後の有料設定パネル内で実施済み)
 
             # 下書き保存モード: 最終投稿はせず、エディタの自動保存を待って終了
             if save_draft:
