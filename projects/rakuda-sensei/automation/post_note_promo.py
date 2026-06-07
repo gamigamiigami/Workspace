@@ -61,18 +61,48 @@ def find_latest_crosspost_dir() -> Path | None:
 
 
 def extract_x_variant(x_md_path: Path, variant: str = "A") -> str | None:
-    """x-variants.md から指定パターンの本文を抽出"""
+    """x-variants.md から指定パターンの本文を抽出。
+    対応構造（いずれもマッチ）:
+      ## パターンA xxx
+      ## A. ストーリー型
+      ## A xxx
+    code fence ``` で囲まれた本文を優先抽出する。
+    """
     if not x_md_path.exists():
         return None
     text = x_md_path.read_text(encoding="utf-8")
-    pattern = rf"## パターン{re.escape(variant)}[^\n]*\n+(.+?)(?=\n## パターン|\Z)"
-    m = re.search(pattern, text, re.DOTALL)
-    if not m:
+    # 「## A」「## パターンA」「## A.」のいずれにもマッチ
+    patterns = [
+        rf"##\s+パターン{re.escape(variant)}[^\n]*\n+(.+?)(?=\n##\s+パターン|\n##\s+[A-Z]\.|\Z)",
+        rf"##\s+{re.escape(variant)}\.\s[^\n]*\n+(.+?)(?=\n##\s+[A-Z]\.|\n##\s+パターン|\Z)",
+        rf"##\s+{re.escape(variant)}\s[^\n]*\n+(.+?)(?=\n##\s+[A-Z]|\Z)",
+    ]
+    body = None
+    for pat in patterns:
+        m = re.search(pat, text, re.DOTALL)
+        if m:
+            body = m.group(1).strip()
+            break
+    if not body:
         return None
-    body = m.group(1).strip()
+    # code fence ``` で囲まれた本文を抽出（あれば優先）
+    fence_m = re.search(r"```(?:\w*)?\n(.+?)\n```", body, re.DOTALL)
+    if fence_m:
+        body = fence_m.group(1).strip()
     # 末尾のセクション区切りを除去
     body = re.sub(r"\n+---\s*$", "", body).strip()
+    # 元記事URL plceholder を実URL置換 (https://note.com/... が含まれてれば OK)
     return body if body else None
+
+
+def get_published_url() -> str | None:
+    """直近の公開URL を .last-published-url.txt から取得 (クエリ除去)"""
+    url_file = ROOT / "projects" / "rakuda-sensei" / "articles" / ".last-published-url.txt"
+    if not url_file.exists():
+        return None
+    url = url_file.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+    # ?app_launch=false や ?flash_message_key=... を除去
+    return re.sub(r"\?.*$", "", url) if url else None
 
 
 def extract_threads_text(threads_md_path: Path) -> str | None:
@@ -300,17 +330,33 @@ def main(dry_run: bool = False) -> int:
         return 0
 
     # メタ情報読み込み
+    meta = {}
     meta_path = latest / "promo-meta.json"
     if meta_path.exists():
         try:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            print(f"   元記事: {meta.get('source_title', '?')}")
+            # source_title / article_title いずれにも対応
+            title = meta.get("source_title") or meta.get("article_title") or "?"
+            print(f"   元記事: {title}")
         except Exception:
             pass
+
+    # 公開URL を取得 (古い placeholder を実URL に置換するため)
+    real_url = get_published_url()
+    if real_url:
+        print(f"   公開URL: {real_url}")
 
     # X 投稿
     x_text = extract_x_variant(latest / "x-variants.md", "A")
     threads_text = extract_threads_text(latest / "threads.md")
+
+    # URL を実URL で上書き (x_text / threads_text 内の note.com/.../n... を置換)
+    if real_url:
+        url_pat = re.compile(r"https?://note\.com/[\w\-]+/n/n[a-z0-9]+(?:\?[^\s]*)?")
+        if x_text:
+            x_text = url_pat.sub(real_url, x_text)
+        if threads_text:
+            threads_text = url_pat.sub(real_url, threads_text)
 
     posted_platforms = []
 
