@@ -4,6 +4,32 @@
 
 ---
 
+### [2026-06-08] rakuda-sensei — SNSプロモ設定位置修正・post_to_note.py 調整（セッション82）
+
+**実装内容：**
+
+- **SNSプロモ設定フロー修正**
+  - ユーザー指摘により、正しいページフロー確認：ページ1（価格+SNSプロモ）→ ページ2（ペイウォール位置）
+  - 問題特定：ページ遷移後に radio DOM が削除される → ペイウォール確定後の SNS設定不可
+  - 解決策：SNSプロモブロックを「有料エリア設定ボタン押下の直前」に移動（同じページ内で価格と一緒に設定）
+  - 実証済み：update_sns_promo.py（セッション79）の動く版フロー を post_to_note.py に統一
+
+- **post_to_note.py の修正詳細**
+  - セール section 展開 → twitter_retweet radio 直接クリック → RT文 textarea 入力 → 割引価格 #discountedPrice 設定
+  - ペイウォール位置確定後の SNSプロモブロック（二重実装）を削除
+  - DOM ライフサイクル対策で確実に設定完了
+
+**コミット情報：**
+- d1933e0: `fix(rakuda): SNSプロモ設定を正しい位置に修正 (有料エリア設定ボタン押下の前)`
+  - 1 file changed, 117 insertions(+), 379 deletions(-)
+  - Push 完了、ブランチ claude/addness-side-income-7cjy2 に追跡設定
+
+**次ステップ：**
+- 次回 `generate_note_article` → `post_to_note` 連鎖実行時に検証
+- セッション81申し送り項目継続：サムネ再生成、note ファイルアップロード、記事品質向上
+
+---
+
 ### [2026-06-07] rakuda-sensei — 既存公開記事SNSプロモ自動化・ワークフロー実装（セッション79・夜間）
 
 **作業内容：**
