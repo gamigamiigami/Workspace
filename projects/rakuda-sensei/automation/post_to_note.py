@@ -2164,25 +2164,91 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             # === SNSプロモーション機能（拡散割引）設定 — ペイウォール位置確定後にここで実施 ===
             # 順序が重要: 価格 → 有料エリア設定ボタン → ペイウォール位置 → SNSプロモ → 投稿
             # （SNSプロモを先にやると セール section が「有料エリア設定」ボタンを隠して publish 失敗する）
+            # 注: ペイウォール確定で /edit/ に遷移 → /publish/ に戻った時、セール section が
+            # 折りたたみリセットされ radio が DOM から消える。展開＋出現待ちが必須。
             if meta["price"] > 0 and share_discount > 0 and rt_message:
                 print(f"💰 SNSプロモーション設定試行 (ペイウォール後): ¥{share_discount} / RT文 {len(rt_message)}字")
                 try:
-                    # セール section を開く
+                    # ページ最下部までスクロールしてセール section を画面に表示
+                    try:
+                        page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
+                        page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+
+                    # 1) セール section を確実に展開（JS で要素探索 + click）
                     sale_opened = False
-                    for sel in [
-                        'button:has-text("セール")',
-                        'summary:has-text("セール")',
-                        '[aria-label*="セール"]',
-                    ]:
-                        try:
-                            page.locator(sel).first.click(timeout=1500, force=True)
-                            page.wait_for_timeout(1200)
-                            print(f"   セール section 展開: {sel}")
+                    try:
+                        js_open = page.evaluate(
+                            """
+                            () => {
+                                // 「セール」を含むテキストノードを探し、その先祖の button/summary を click
+                                const walker = document.createTreeWalker(
+                                    document.body, NodeFilter.SHOW_TEXT, null
+                                );
+                                let node;
+                                const candidates = [];
+                                while ((node = walker.nextNode())) {
+                                    const t = (node.textContent || '').trim();
+                                    if (t === 'セール' || t === 'セール設定') {
+                                        let el = node.parentElement;
+                                        for (let i = 0; i < 5 && el; i++) {
+                                            const tag = el.tagName;
+                                            if (tag === 'BUTTON' || tag === 'SUMMARY' || el.getAttribute('role') === 'button') {
+                                                candidates.push(el);
+                                                break;
+                                            }
+                                            el = el.parentElement;
+                                        }
+                                    }
+                                }
+                                if (candidates.length === 0) return {ok: false, reason: 'no セール clickable found'};
+                                const target = candidates[0];
+                                target.scrollIntoView({block: 'center'});
+                                // 既に展開されているか: aria-expanded か、近くの input[type=radio][name=sale_setting] の有無で判定
+                                const isExpanded = target.getAttribute('aria-expanded') === 'true'
+                                    || document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]') !== null;
+                                if (isExpanded) {
+                                    return {ok: true, already: true, text: (target.textContent || '').trim().slice(0, 30)};
+                                }
+                                target.click();
+                                return {ok: true, already: false, text: (target.textContent || '').trim().slice(0, 30)};
+                            }
+                            """
+                        )
+                        if js_open.get("ok"):
                             sale_opened = True
-                            break
-                        except Exception:
-                            continue
-                    # SNSプロモ radio: name="sale_setting" value="twitter_retweet" を直接 click
+                            print(f"   セール section: {('既展開' if js_open.get('already') else '展開クリック')} ('{js_open.get('text')}')")
+                            page.wait_for_timeout(1200)
+                        else:
+                            print(f"   ⚠️  セール section 検出失敗: {js_open.get('reason')}")
+                    except Exception as e:
+                        print(f"   ⚠️  セール section 展開例外: {e}")
+
+                    # 2) radio が DOM に出現するまで wait (最大 5秒)
+                    try:
+                        page.wait_for_selector(
+                            'input[type="radio"][name="sale_setting"][value="twitter_retweet"]',
+                            state="attached",
+                            timeout=5000,
+                        )
+                        print("   ✓ sale_setting radio が DOM に出現")
+                    except Exception:
+                        print("   ⚠️  sale_setting radio が DOM に出ない（再展開リトライ）")
+                        # フォールバック: aria-label/text で再クリック
+                        for sel in [
+                            'button:has-text("セール")',
+                            '[aria-label*="セール"]',
+                            'summary:has-text("セール")',
+                        ]:
+                            try:
+                                page.locator(sel).first.click(timeout=1500, force=True)
+                                page.wait_for_timeout(1500)
+                                break
+                            except Exception:
+                                continue
+
+                    # 3) SNSプロモ radio: 直接 ID で click
                     promo_selected = False
                     try:
                         js_promo = page.evaluate(
@@ -2190,8 +2256,9 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             () => {
                                 const radio = document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]');
                                 if (!radio) {
-                                    return {ok: false, reason: 'twitter_retweet radio not found'};
+                                    return {ok: false, reason: 'twitter_retweet radio not in DOM'};
                                 }
+                                radio.scrollIntoView({block: 'center'});
                                 const setter = Object.getOwnPropertyDescriptor(
                                     window.HTMLInputElement.prototype, 'checked').set;
                                 setter.call(radio, true);
@@ -2199,16 +2266,19 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                                 radio.dispatchEvent(new Event('change', {bubbles: true}));
                                 // ラベル click でフォーム再描画を確実に
                                 const label = document.querySelector('label[for="' + radio.id + '"]');
-                                if (label) label.click();
-                                else radio.click();
-                                return {ok: true, name: radio.name, value: radio.value};
+                                if (label) {
+                                    label.click();
+                                } else {
+                                    radio.click();
+                                }
+                                return {ok: true, name: radio.name, value: radio.value, checked: radio.checked};
                             }
                             """
                         )
                         if js_promo.get("ok"):
                             promo_selected = True
-                            print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')})")
-                            page.wait_for_timeout(2000)
+                            print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')}, checked={js_promo.get('checked')})")
+                            page.wait_for_timeout(2500)
                         else:
                             print(f"   ⚠️  SNSプロモ radio 未発見: {js_promo.get('reason')}")
                     except Exception as e:
