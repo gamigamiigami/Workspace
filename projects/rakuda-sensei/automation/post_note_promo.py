@@ -238,21 +238,66 @@ def post_to_x(text: str, dry_run: bool = False) -> bool:
                 browser.close()
                 return False
 
-            # 投稿ボタン
+            # 投稿ボタン - 2024-2026 X UI (旧 Tweet → ポスト/ポストする にリネーム)
             posted = False
-            for sel in ['[data-testid="tweetButton"]',
-                        '[data-testid="tweetButtonInline"]',
-                        'button[data-testid*="tweet"]']:
+            post_btn_selectors = [
+                '[data-testid="tweetButtonInline"]',
+                '[data-testid="tweetButton"]',
+                'button[data-testid*="tweet"]',
+                'button:has-text("ポストする")',
+                'button:has-text("ポスト")',
+                'div[role="button"]:has-text("ポストする")',
+                'div[role="button"]:has-text("ポスト")',
+                'button[type="submit"]',
+            ]
+            for sel in post_btn_selectors:
                 try:
-                    page.locator(sel).first.click(timeout=3000)
+                    btn = page.locator(sel).first
+                    btn.wait_for(timeout=3000, state="visible")
+                    btn.click(timeout=4000, force=True)
                     page.wait_for_timeout(5000)
                     posted = True
+                    print(f"   ✅ X 投稿ボタンクリック (selector: {sel})")
                     break
                 except Exception:
                     continue
 
+            # JS evaluate フォールバック
+            if not posted:
+                try:
+                    js_res = page.evaluate("""
+                        () => {
+                            const buttons = Array.from(document.querySelectorAll(
+                                'button, div[role="button"]'
+                            ));
+                            const target = buttons.find(b => {
+                                const t = (b.textContent || '').trim();
+                                return t === 'ポストする' || t === 'ポスト' || t === 'Post';
+                            });
+                            if (!target) return {ok: false, count: buttons.length};
+                            target.scrollIntoView({block: 'center'});
+                            target.click();
+                            return {ok: true, text: (target.textContent || '').trim().slice(0, 20)};
+                        }
+                    """)
+                    if js_res.get("ok"):
+                        posted = True
+                        print(f"   ✅ X 投稿ボタン JS click ({js_res.get('text')})")
+                        page.wait_for_timeout(5000)
+                    else:
+                        print(f"   ⚠️  JS でも投稿ボタン未発見 (button候補数: {js_res.get('count')})")
+                except Exception as e:
+                    print(f"   ⚠️  JS click 例外: {e}")
+
             if not posted:
                 print("❌ X 投稿ボタンが見つからない")
+                try:
+                    page.screenshot(path="x-promo-button-failed.png")
+                    html = page.content()[:5000]
+                    print(f"   現在URL: {page.url}")
+                    print(f"   HTML head: {html[:500]}")
+                except Exception:
+                    pass
                 browser.close()
                 return False
 
