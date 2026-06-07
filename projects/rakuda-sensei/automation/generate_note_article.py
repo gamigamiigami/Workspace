@@ -387,17 +387,49 @@ def main() -> int:
         return 1
 
     client = OpenAI(base_url=GH_MODELS_ENDPOINT, api_key=token)
-    response = client.chat.completions.create(
-        model=MODEL,
-        max_tokens=MAX_TOKENS,
-        temperature=0.85,
-        messages=[
-            {"role": "user", "content": prompt},
-        ],
-    )
+    # 429 (rate limit) の指数バックオフリトライ (最大3回)
+    import time
+    response = None
+    for attempt in range(3):
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                max_tokens=MAX_TOKENS,
+                temperature=0.85,
+                messages=[
+                    {"role": "user", "content": prompt},
+                ],
+            )
+            break
+        except Exception as e:
+            msg = str(e)
+            is_rate_limit = "429" in msg or "rate" in msg.lower() or "quota" in msg.lower()
+            if is_rate_limit and attempt < 2:
+                wait_s = (attempt + 1) * 30  # 30s, 60s
+                print(f"⏳ レート制限ヒット → {wait_s}秒待機して再試行 ({attempt+1}/3)", file=sys.stderr)
+                time.sleep(wait_s)
+                continue
+            print(f"ERROR: OpenAI API 呼び出し失敗: {e}", file=sys.stderr)
+            return 1
+    if response is None:
+        print("ERROR: API応答取得失敗 (リトライ尽きた)", file=sys.stderr)
+        return 1
 
     body = response.choices[0].message.content or ""
     usage = response.usage
+    finish_reason = response.choices[0].finish_reason
+
+    # 出力切り捨て検出: finish_reason == 'length' は max_tokens 到達 = 記事が途中で終わってる
+    if finish_reason == "length":
+        print(f"⚠️  生成が max_tokens={MAX_TOKENS} で切り捨てられた可能性 (finish_reason=length)", file=sys.stderr)
+        print(f"   出力トークン: {usage.completion_tokens if usage else '?'} / 本文字数: {len(body):,}", file=sys.stderr)
+        print(f"   → 記事末尾が途中で切れているはず。MAX_TOKENS を増やすか、無料部分の字数指定を縮小してください", file=sys.stderr)
+
+    # 空レスポンス検出: 1,500字未満は明らかに失敗
+    if len(body) < 1500:
+        print(f"ERROR: 生成本文が異常に短い ({len(body)}字) - API応答失敗の可能性", file=sys.stderr)
+        print(f"   finish_reason={finish_reason} / 生本文プレビュー: {body[:200]!r}", file=sys.stderr)
+        return 1
 
     # ========== 品質チェック & 自動研磨 ==========
     quality_report_md = ""
