@@ -4,6 +4,46 @@
 
 ---
 
+### [2026-06-07] rakuda-sensei — 既存公開記事SNSプロモ自動化・ワークフロー実装（セッション79・夜間）
+
+**作業内容：**
+
+- **既存公開記事への SNS プロモ自動化ワークフロー実装**
+  - ターゲット記事：`n3ceca55fdd43`（セッション77で公開した記事002）
+  - 課題：既存公開済み記事への SNS プロモ設定は post_to_note.py 再実行では新規記事になってしまう
+  - 解決策：新スクリプト `update_sns_promo.py` で既存記事の `/publish/` ページに直接 goto → SNSプロモ設定のみ更新
+
+- **`update_sns_promo.py` 実装**
+  - 公開URL から note ID 抽出ロジック
+  - editor.note.com の `/publish/` ページへの直接遷移
+  - セール section 展開 → SNSプロモ radio 選択
+  - 記事メタ（md ファイル）から `rt_message` と `share_discount` を自動抽出
+  - RT文・割引価格（¥500）を input に投入
+  - セッション77 の修正コード継承（radio DOM 再取得 & 正順序設定）
+
+- **`.github/workflows/update-sns-promo.yml` ワークフロー新規作成**
+  - トリガー：`.sns-promo-trigger` ファイルの push or workflow_dispatch
+  - Python スクリプト実行 → Playwright ブラウザ自動化 → 既存記事の SNSプロモ設定更新
+  - ワークフロー完了後、トリガーファイル自動削除
+
+- **`.sns-promo-trigger` セット & push**
+  - ファイル内容：`https://note.com/large_pika8608/n/n3ceca55fdd43`（既存公開記事URL）
+  - push による自動ワークフロー起動確認
+  - RUN_ID=27106042770 として background task で監視中
+
+**成果物：**
+- `projects/rakuda-sensei/automation/update_sns_promo.py`（既存記事SNSプロモ更新スクリプト）
+- `.github/workflows/update-sns-promo.yml`（自動化ワークフロー）
+- `.sns-promo-trigger`（トリガーファイル・記事URL 設定済み）
+
+**次回タスク：**
+- ワークフロー RUN_ID=27106042770 の実行結果確認（CONCLUSION）
+- note 側で SNSプロモが正常に反映されたか確認
+- 複数記事メタ管理ファイル設計→ SNS プロモ汎用化
+- ワークフロー統合：publish + SNSプロモ + Dashboard反映の全自動フロー
+
+---
+
 ### [2026-06-07] rakuda-sensei — 1000円フレームワーク反映・note β機能ファイル添付・SNSプロモ自動化（夜間）
 
 **作業内容：**
