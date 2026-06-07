@@ -1182,18 +1182,55 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             else:
                 print(f"ℹ️  サムネファイル無し: {thumbnail_path.name}")
 
+            # === AIアシスタントパネルを閉じる（note 新UIで右側に常駐表示される）===
+            # AIアシスタントが overlay すると「公開に進む」が押せても publish パネルに遷移しない事故が起きる
+            try:
+                ai_closed = page.evaluate("""
+                    () => {
+                        // AIアシスタントの「閉じる」ボタンを探す
+                        // 目印: 同じドロワー内に「会話をやりなおす」「誤字、表記揺れを修正」がある
+                        const buttons = Array.from(document.querySelectorAll('button'));
+                        const aiAnchors = buttons.filter(b => /会話をやりなおす|誤字、表記揺れを修正|内容のレビューを聞く/.test((b.textContent || '').trim()));
+                        if (aiAnchors.length === 0) return {ok: false, reason: 'AI panel not detected'};
+                        // 共通の祖先 (AI アシスタントドロワー) を取る
+                        let root = aiAnchors[0];
+                        for (let i = 0; i < 8 && root; i++) {
+                            if (aiAnchors.every(a => root.contains(a))) break;
+                            root = root.parentElement;
+                        }
+                        if (!root) return {ok: false, reason: 'no common ancestor'};
+                        // そのドロワー内の「閉じる」ボタン
+                        const closeBtn = Array.from(root.querySelectorAll('button')).find(
+                            b => (b.textContent || '').trim() === '閉じる' || /閉じる/.test(b.getAttribute('aria-label') || '')
+                        );
+                        if (!closeBtn) return {ok: false, reason: 'close button not found in AI panel'};
+                        closeBtn.click();
+                        return {ok: true};
+                    }
+                """)
+                if ai_closed.get("ok"):
+                    print("🤖 AIアシスタントパネルを閉じました")
+                    page.wait_for_timeout(1500)
+                else:
+                    print(f"ℹ️  AIアシスタント対応スキップ: {ai_closed.get('reason')}")
+            except Exception as e:
+                print(f"⚠️  AIアシスタント閉じる例外: {e}")
+
+            # === エディタからフォーカス外す（ProseMirror に居ると header ボタンが押せない事象対策）===
+            try:
+                page.evaluate("() => { document.body.click(); }")
+                page.wait_for_timeout(400)
+            except Exception:
+                pass
+
             # 公開設定パネルを開く - セレクタ大幅拡充
             publish_open_selectors = [
                 'button:has-text("公開に進む")',
                 'button:has-text("公開設定")',
-                'button:has-text("公開する")',
-                'button:has-text("公開")',
-                'button:has-text("投稿する")',
-                'button:has-text("投稿")',
                 '[data-testid="publish-button"]',
                 'header button[type="button"]',
                 'nav button:has-text("公開")',
-                'button[aria-label*="公開"]',
+                'button[aria-label*="公開に進む"]',
             ]
             publish_panel_opened = False
             for sel in publish_open_selectors:
@@ -1201,18 +1238,58 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     btn = page.locator(sel).first
                     btn.wait_for(timeout=3000, state="visible")
                     btn.click()
-                    page.wait_for_timeout(4000)  # /publish/ ページのSPAレンダ待ち
-                    publish_panel_opened = True
-                    print(f"✅ 公開パネルを開いた (selector: {sel})")
-                    shot(page, "06-publish-panel")
-                    dump_html(page, "06-publish-panel")
-                    break
+                    # クリック後、URL に /publish/ が含まれるか、または ハッシュタグ入力欄が現れるまで待つ
+                    try:
+                        page.wait_for_url(re.compile(r"/publish/"), timeout=8000)
+                        publish_panel_opened = True
+                        print(f"✅ 公開パネル URL 遷移確認 (selector: {sel}, url={page.url})")
+                    except Exception:
+                        # URL 変わらないけど SPA パターン: ハッシュタグ要素が出るか確認
+                        try:
+                            page.locator('input[placeholder*="ハッシュタグ"]').first.wait_for(
+                                state="visible", timeout=5000
+                            )
+                            publish_panel_opened = True
+                            print(f"✅ ハッシュタグ要素出現で公開パネル確認 (selector: {sel})")
+                        except Exception:
+                            print(f"⚠️  クリックしたが publish パネル未確認 ({sel})")
+                    if publish_panel_opened:
+                        shot(page, "06-publish-panel")
+                        dump_html(page, "06-publish-panel")
+                        break
                 except Exception:
                     continue
+            # フォールバック: note ID から /publish/ URL を組み立てて直接 goto
             if not publish_panel_opened:
-                print("WARNING: 公開パネル開けず", file=sys.stderr)
+                print("🛟 「公開に進む」のクリック遷移失敗 → /publish/ URL に直接 goto")
+                try:
+                    m = re.search(r"/notes/(n[a-z0-9]+)", page.url)
+                    if m:
+                        publish_url = f"https://editor.note.com/notes/{m.group(1)}/publish/"
+                        page.goto(publish_url, wait_until="domcontentloaded", timeout=20000)
+                        page.wait_for_timeout(4000)
+                        try:
+                            page.locator('input[placeholder*="ハッシュタグ"]').first.wait_for(
+                                state="visible", timeout=8000
+                            )
+                            publish_panel_opened = True
+                            print(f"✅ 直接 goto で公開パネル到達: {publish_url}")
+                            shot(page, "06-publish-panel-via-goto")
+                            dump_html(page, "06-publish-panel-via-goto")
+                        except Exception:
+                            print(f"❌ 直接 goto しても publish パネル要素見つからず")
+                            shot(page, "06-goto-failed")
+                            dump_html(page, "06-goto-failed")
+                    else:
+                        print(f"❌ 現在URLから note ID 抽出失敗: {page.url}", file=sys.stderr)
+                except Exception as e:
+                    print(f"❌ 公開パネル goto 例外: {e}", file=sys.stderr)
+
+            if not publish_panel_opened:
+                print("WARNING: 公開パネル開けず → 下書き保存で終了します", file=sys.stderr)
                 shot(page, "06-no-publish-panel")
                 dump_html(page, "06-no-publish-panel")
+                save_draft = True  # 強制で下書き
 
             # /publish/ ページに到達 → networkidle まで待つ
             try:
@@ -2042,15 +2119,13 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
             dump_html(page, "08b-before-final-publish")
             enumerate_form_elements(page, "最終投稿直前")
 
-            # 最終投稿ボタン - セレクタ大幅拡充
+            # 最終投稿ボタン - 「公開に進む」(これは publish パネル開くボタン) との誤クリックを避ける
+            # 「公開に進む」が含まれるテキスト/aria-label を持つボタンは絶対に押さない
             final_publish_selectors = [
-                # 標準
+                # 標準（完全一致系を最優先）
                 'button:has-text("投稿する")',
                 'button:has-text("公開する")',
                 'button:has-text("更新する")',
-                'button:has-text("公開")',
-                'button:has-text("投稿")',
-                'button:has-text("更新")',
                 # 有料エリア確定ボタン経由フロー
                 'button:has-text("有料エリア設定を完了")',
                 'button:has-text("有料設定を完了")',
@@ -2059,22 +2134,13 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                 '[data-testid="final-publish"]',
                 '[data-testid*="publish"]',
                 '[data-testid*="post"]',
-                # type submit
-                'button[type="submit"]:has-text("公開")',
-                'button[type="submit"]:has-text("投稿")',
-                'button[type="submit"]',
-                # ダイアログ/モーダル内
-                'dialog button:has-text("公開")',
-                '[role="dialog"] button:has-text("公開")',
-                '[class*="modal"] button:has-text("公開")',
-                # フッター/プライマリ系
-                'footer button:has-text("公開")',
-                'footer button:has-text("投稿")',
-                '[class*="footer"] button',
-                'button[class*="primary"]:has-text("公開")',
-                'button[class*="primary"]:has-text("投稿")',
-                # 一般プライマリボタン（最終手段）
-                'button[class*="primary"]:not([disabled])',
+                # ダイアログ/モーダル内（公開モーダルの「投稿する」「公開する」のみ）
+                'dialog button:has-text("投稿する")',
+                'dialog button:has-text("公開する")',
+                '[role="dialog"] button:has-text("投稿する")',
+                '[role="dialog"] button:has-text("公開する")',
+                '[class*="modal"] button:has-text("投稿する")',
+                '[class*="modal"] button:has-text("公開する")',
             ]
             published = False
             for sel in final_publish_selectors:
