@@ -940,6 +940,23 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
 
         page = context.new_page()
 
+        # === ブラウザ console エラー / network 失敗を捕捉 (publish失敗時の原因特定用) ===
+        def _on_console(msg):
+            t = msg.type
+            if t in ("error", "warning"):
+                text = msg.text[:300] if hasattr(msg, "text") else str(msg)[:300]
+                print(f"   🌐 browser-{t}: {text}", file=sys.stderr)
+
+        def _on_response(resp):
+            try:
+                if resp.status >= 400 and ("api" in resp.url or "note.com" in resp.url):
+                    print(f"   🌐 HTTP {resp.status} {resp.request.method} {resp.url[:150]}", file=sys.stderr)
+            except Exception:
+                pass
+
+        page.on("console", _on_console)
+        page.on("response", _on_response)
+
         # playwright-stealth で19種類以上のbot検知回避を適用 (最初のgoto前)
         try:
             from playwright_stealth import stealth_sync
@@ -1558,13 +1575,13 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     shot(page, "07c-price-fail")
                     dump_html(page, "07c-price-fail")
 
-                # === SNSプロモーション機能（有料設定パネル内・セール section） ===
-                # note の有料設定パネルは: 価格 → 返金申請 → セール (折りたたみ)
-                # セール の中に 設定しない / タイムセール / SNSプロモーション機能 の radio がある
-                # ここで設定しないと publish パネル外なので押せなくなる
+                # === SNSプロモーション設定は後段（ペイウォール位置確定後）に移動 ===
+                # ここでは share_discount / rt_message を読み取るだけで実際の処理は後段で行う
                 share_discount = meta.get("share_discount") or 0
                 rt_message = meta.get("rt_message") or ""
-                if share_discount > 0 and rt_message:
+
+                # 旧 SNS プロモブロック（移動前）の if ガード - 常に False で実行スキップ
+                if False and share_discount > 0 and rt_message:
                     print(f"💰 SNSプロモーション設定試行: ¥{share_discount} / RT文 {len(rt_message)}字")
                     try:
                         # 1) セール section を開く（折りたたまれているケースが大半）
@@ -1789,26 +1806,69 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                     except Exception as e:
                         print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
                     shot(page, "07c2-after-sns-promo-in-paid-panel")
-                elif meta["price"] > 0:
-                    print(f"ℹ️  SNSプロモ設定なし (share_discount={share_discount}, rt_message={'有' if rt_message else '無'})")
+                # 旧 SNS プロモブロックは無効化済み（後段に移動）
 
                 # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
                 # note公式仕様: ボタン押下後、本文に戻されて有料ラインのカーソルが出る
                 # → 有料にしたい段落をクリックして位置を確定する
+                # 強化: JS evaluate + visible 検証 + force click の三段構え（前回失敗の死因対策）
                 area_button_pressed = False
                 try:
-                    page.locator('button:has-text("有料エリア設定")').first.click(timeout=3000)
-                    page.wait_for_timeout(2500)
-                    print("✅ 有料エリア設定 ボタン押下")
-                    area_button_pressed = True
-                except Exception:
-                    try:
-                        page.locator('button:has-text("有料エリアを設定")').first.click(timeout=2000)
-                        page.wait_for_timeout(2500)
-                        print("✅ 有料エリアを設定 ボタン押下")
+                    js_area = page.evaluate(
+                        """
+                        () => {
+                            const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                            const target = buttons.find(b => {
+                                const t = (b.textContent || '').trim();
+                                return t === '有料エリア設定' || t === '有料エリアを設定' || t.startsWith('有料エリア');
+                            });
+                            if (!target) return {ok: false, reason: 'button text 有料エリア設定 not found', total: buttons.length};
+                            target.scrollIntoView({block: 'center'});
+                            const rect = target.getBoundingClientRect();
+                            const visible = rect.width > 0 && rect.height > 0 && target.offsetParent !== null;
+                            if (!visible) return {ok: false, reason: 'button not visible', rect: {x: rect.x, y: rect.y, w: rect.width, h: rect.height}};
+                            // PointerEvent + MouseEvent フル発火
+                            const x = rect.x + rect.width/2, y = rect.y + rect.height/2;
+                            const opts = {bubbles: true, cancelable: true, composed: true, view: window, clientX: x, clientY: y, button: 0, buttons: 1, isPrimary: true};
+                            try { target.dispatchEvent(new PointerEvent('pointerdown', opts)); } catch(e) {}
+                            try { target.dispatchEvent(new MouseEvent('mousedown', opts)); } catch(e) {}
+                            try { target.dispatchEvent(new PointerEvent('pointerup', {...opts, buttons: 0})); } catch(e) {}
+                            try { target.dispatchEvent(new MouseEvent('mouseup', {...opts, buttons: 0})); } catch(e) {}
+                            try { target.dispatchEvent(new MouseEvent('click', opts)); } catch(e) {}
+                            try { target.click(); } catch(e) {}
+                            return {ok: true, text: (target.textContent || '').trim().slice(0, 30), tag: target.tagName};
+                        }
+                        """
+                    )
+                    if js_area.get("ok"):
                         area_button_pressed = True
-                    except Exception:
-                        print("ℹ️  有料エリア設定 ボタン未発見（不要 or 既に設定済の可能性）")
+                        print(f"✅ JS で 有料エリア設定 ボタン押下: '{js_area.get('text')}' ({js_area.get('tag')})")
+                        page.wait_for_timeout(3000)
+                    else:
+                        print(f"⚠️  JS 有料エリア設定 検出失敗: {js_area.get('reason')}")
+                except Exception as e:
+                    print(f"⚠️  JS 有料エリア設定 例外: {e}")
+
+                # フォールバック: Playwright locator + force=True
+                if not area_button_pressed:
+                    for sel in [
+                        'button:has-text("有料エリア設定")',
+                        'button:has-text("有料エリアを設定")',
+                        'button:has-text("有料エリア")',
+                    ]:
+                        try:
+                            page.locator(sel).first.click(timeout=3000, force=True)
+                            page.wait_for_timeout(2500)
+                            area_button_pressed = True
+                            print(f"✅ 有料エリア設定 ボタン押下 (locator+force: {sel})")
+                            break
+                        except Exception as e:
+                            print(f"   ⚠️  locator失敗 ({sel}): {str(e)[:80]}")
+
+                if not area_button_pressed:
+                    print("❌ 有料エリア設定 ボタンクリック全手段失敗（publish が拒否されるリスク）", file=sys.stderr)
+                    shot(page, "07c3-area-button-fail")
+                    dump_html(page, "07c3-area-button-fail")
 
                 # 有料ライン位置を確定:
                 # note の仕様 = 各段落の間に「ラインをこの場所に変更」ボタンが出現する。
@@ -2101,7 +2161,135 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             print("🛑 publish モードだが ライン未確定 → 下書きに切り替えて公開停止", file=sys.stderr)
                             save_draft = True
 
-            # (タグ + SNSプロモ設定は公開パネル開いた直後の有料設定パネル内で実施済み)
+            # === SNSプロモーション機能（拡散割引）設定 — ペイウォール位置確定後にここで実施 ===
+            # 順序が重要: 価格 → 有料エリア設定ボタン → ペイウォール位置 → SNSプロモ → 投稿
+            # （SNSプロモを先にやると セール section が「有料エリア設定」ボタンを隠して publish 失敗する）
+            if meta["price"] > 0 and share_discount > 0 and rt_message:
+                print(f"💰 SNSプロモーション設定試行 (ペイウォール後): ¥{share_discount} / RT文 {len(rt_message)}字")
+                try:
+                    # セール section を開く
+                    sale_opened = False
+                    for sel in [
+                        'button:has-text("セール")',
+                        'summary:has-text("セール")',
+                        '[aria-label*="セール"]',
+                    ]:
+                        try:
+                            page.locator(sel).first.click(timeout=1500, force=True)
+                            page.wait_for_timeout(1200)
+                            print(f"   セール section 展開: {sel}")
+                            sale_opened = True
+                            break
+                        except Exception:
+                            continue
+                    # SNSプロモ radio: name="sale_setting" value="twitter_retweet" を直接 click
+                    promo_selected = False
+                    try:
+                        js_promo = page.evaluate(
+                            """
+                            () => {
+                                const radio = document.querySelector('input[type="radio"][name="sale_setting"][value="twitter_retweet"]');
+                                if (!radio) {
+                                    return {ok: false, reason: 'twitter_retweet radio not found'};
+                                }
+                                const setter = Object.getOwnPropertyDescriptor(
+                                    window.HTMLInputElement.prototype, 'checked').set;
+                                setter.call(radio, true);
+                                radio.dispatchEvent(new Event('input', {bubbles: true}));
+                                radio.dispatchEvent(new Event('change', {bubbles: true}));
+                                // ラベル click でフォーム再描画を確実に
+                                const label = document.querySelector('label[for="' + radio.id + '"]');
+                                if (label) label.click();
+                                else radio.click();
+                                return {ok: true, name: radio.name, value: radio.value};
+                            }
+                            """
+                        )
+                        if js_promo.get("ok"):
+                            promo_selected = True
+                            print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')})")
+                            page.wait_for_timeout(2000)
+                        else:
+                            print(f"   ⚠️  SNSプロモ radio 未発見: {js_promo.get('reason')}")
+                    except Exception as e:
+                        print(f"   ⚠️  SNSプロモ radio 例外: {e}")
+                    if promo_selected:
+                        # RT文 textarea
+                        rt_set = False
+                        try:
+                            js_rt = page.evaluate(
+                                """
+                                (msg) => {
+                                    const tas = Array.from(document.querySelectorAll('textarea'));
+                                    const visible = tas.filter(t => t.offsetParent !== null && !t.placeholder?.match(/AI|タイトル/));
+                                    if (visible.length === 0) return {ok: false, reason: 'no suitable textarea'};
+                                    const ta = visible[visible.length - 1];
+                                    const setter = Object.getOwnPropertyDescriptor(
+                                        window.HTMLTextAreaElement.prototype, 'value').set;
+                                    setter.call(ta, msg);
+                                    ta.dispatchEvent(new Event('input', {bubbles: true}));
+                                    ta.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return {ok: true, len: msg.length};
+                                }
+                                """,
+                                rt_message,
+                            )
+                            if js_rt.get("ok"):
+                                rt_set = True
+                                print(f"   ✅ RT文 入力 ({js_rt.get('len')}字)")
+                        except Exception as e:
+                            print(f"   ⚠️  RT文 例外: {e}")
+                        if not rt_set:
+                            print("   ⚠️  RT文 入力欄が見つからず")
+                        # 割引価格 input (id=discountedPrice が note の正規 selector)
+                        discount_set = False
+                        for sel in [
+                            'input#discountedPrice',
+                            'input[id="discountedPrice"]',
+                            'input[name="discountedPrice"]',
+                            'input[placeholder*="割引"]',
+                            'input[aria-label*="割引"]',
+                        ]:
+                            try:
+                                page.locator(sel).first.fill(str(share_discount), timeout=2000)
+                                discount_set = True
+                                print(f"   ✅ 割引価格 ¥{share_discount} 設定 (selector: {sel})")
+                                break
+                            except Exception:
+                                continue
+                        if not discount_set:
+                            # JS フォールバック: discountedPrice id 直接
+                            try:
+                                js_d = page.evaluate(
+                                    """
+                                    (discount) => {
+                                        const inp = document.querySelector(
+                                            'input#discountedPrice, input[name="discountedPrice"]'
+                                        );
+                                        if (!inp) return {ok: false, reason: 'discountedPrice input not found'};
+                                        const setter = Object.getOwnPropertyDescriptor(
+                                            window.HTMLInputElement.prototype, 'value').set;
+                                        setter.call(inp, String(discount));
+                                        inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                        inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                        inp.dispatchEvent(new Event('blur', {bubbles: true}));
+                                        return {ok: true, value: inp.value};
+                                    }
+                                    """,
+                                    share_discount,
+                                )
+                                if js_d.get("ok"):
+                                    discount_set = True
+                                    print(f"   ✅ 割引価格 ¥{share_discount} 設定 (JS, value={js_d.get('value')})")
+                            except Exception as e:
+                                print(f"   ⚠️  割引価格 JS 例外: {e}")
+                        if not discount_set:
+                            print("   ⚠️  割引価格欄に値を入れられず（スキップ）")
+                        page.wait_for_timeout(1200)
+                except Exception as e:
+                    print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
+                shot(page, "07e-after-sns-promo")
+                dump_html(page, "07e-after-sns-promo")
 
             # 下書き保存モード: 最終投稿はせず、エディタの自動保存を待って終了
             if save_draft:
@@ -2178,6 +2366,61 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             continue
                 except Exception:
                     pass
+
+            # === 投稿クリック後の診断: URL変化 / エラートースト / role=alert を捕捉 ===
+            # 公開成功すれば URL が /n/{hash} などに遷移する。
+            # 失敗時は publish ページのまま + エラートースト表示が典型。
+            if published:
+                try:
+                    page.wait_for_url(
+                        re.compile(r"/(n/|first_post|notes/n[a-f0-9]+/?$)"),
+                        timeout=12000,
+                    )
+                    print(f"🎉 公開URLへの遷移を確認: {page.url}")
+                except Exception:
+                    print(f"⚠️  /n/ URL への遷移なし (現在: {page.url})", file=sys.stderr)
+                    # エラー表示を網羅捕捉
+                    try:
+                        err_dump = page.evaluate(
+                            """
+                            () => {
+                                const out = {alerts: [], toasts: [], dialogs: [], snackbars: [], generic_red: []};
+                                // role=alert
+                                document.querySelectorAll('[role="alert"]').forEach(el => {
+                                    const t = (el.textContent || '').trim();
+                                    if (t) out.alerts.push(t.slice(0, 300));
+                                });
+                                // role=status (toast/snackbar の多くがこれ)
+                                document.querySelectorAll('[role="status"]').forEach(el => {
+                                    const t = (el.textContent || '').trim();
+                                    if (t) out.toasts.push(t.slice(0, 300));
+                                });
+                                // 一般的な toast/snackbar クラス名
+                                document.querySelectorAll(
+                                    '[class*="toast"], [class*="Toast"], [class*="snackbar"], [class*="Snackbar"], [class*="notification"], [class*="Notification"]'
+                                ).forEach(el => {
+                                    const t = (el.textContent || '').trim();
+                                    if (t && t.length < 500) out.snackbars.push(t.slice(0, 300));
+                                });
+                                // モーダル/ダイアログのテキスト
+                                document.querySelectorAll('dialog, [role="dialog"]').forEach(el => {
+                                    const t = (el.textContent || '').trim();
+                                    if (t) out.dialogs.push(t.slice(0, 500));
+                                });
+                                // 赤色エラー表示 (style.color や class でエラーらしきもの)
+                                document.querySelectorAll('[class*="error"], [class*="Error"]').forEach(el => {
+                                    const t = (el.textContent || '').trim();
+                                    if (t && t.length > 0 && t.length < 300) out.generic_red.push(t);
+                                });
+                                return out;
+                            }
+                            """
+                        )
+                        for key in ["alerts", "toasts", "snackbars", "dialogs", "generic_red"]:
+                            for msg in (err_dump.get(key) or [])[:5]:
+                                print(f"   🚨 publish後 {key}: {msg[:200]}", file=sys.stderr)
+                    except Exception as e:
+                        print(f"   ⚠️  エラー dump 失敗: {e}", file=sys.stderr)
 
             shot(page, "09-after-final-click")
             dump_html(page, "09-after-final-click")
