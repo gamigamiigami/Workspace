@@ -4,6 +4,11 @@ name: Post Note Promo (X/Threads自動告知)
 # weekly-content-pipeline.yml から workflow_call or workflow_dispatch で呼ばれる
 
 on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "projects/rakuda-sensei/sns/.promo-trigger"
   workflow_dispatch:
     inputs:
       dry_run:
@@ -51,12 +56,13 @@ jobs:
           fi
           python projects/rakuda-sensei/automation/post_note_promo.py $DRY
 
-      - name: Commit posted log
+      - name: Commit posted log and consume trigger
         if: success() && inputs.dry_run != true
         run: |
-          git add projects/rakuda-sensei/sns/.promo-posted.log
+          git add projects/rakuda-sensei/sns/.promo-posted.log 2>/dev/null || true
+          git rm projects/rakuda-sensei/sns/.promo-trigger 2>/dev/null || true
           if ! git diff --staged --quiet; then
-            git commit -m "chore(auto): note告知投稿ログ更新"
+            git commit -m "chore(auto): note告知投稿ログ更新 + trigger消化"
             for i in 1 2 3 4 5; do
               git pull --rebase origin "${{ github.ref_name }}" || true
               if git push; then exit 0; fi
