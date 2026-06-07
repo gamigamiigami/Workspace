@@ -1,8 +1,66 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-04
+最終更新：2026-06-07
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+### [2026-06-07] addness-side-income — note 公開後の後続クロスポスト（post_note_promo.py, post_to_x.py）が部分失敗
+
+**状況：** note 記事の公開が成功したが、GitHub Actions ワークフロー（RUN_ID: 27107153214）内で、その後の「クロスポスト追加投稿」機能が失敗
+
+**問題：**
+1. **post_note_promo.py の失敗（Threads への投稿）**
+   - 元記事URL置換が失敗：`https://note.com/large_pika8608/n/n96918f980528?flash_message_key=twitter_status_posted%3Fapp_launch%3Dfalse` というクエリパラメータ付き URL が「URL形式が正しくありません」で弾かれた
+   - x-variants.md から本文抽出失敗：X 用バリエーション本文が構造マッチしなかった
+   - THREADS_ACCESS_TOKEN 未設定で Threads スキップ
+
+2. **post_to_x.py の週次X投稿が失敗**
+   - 6/8(月) 朝のツイート本文を `2026-06-01-x-posts.md` に見つけられず
+   - 同ファイルは 6/1-6/7 分しか含まない（6/8以降のコンテンツが未生成）
+   - weekly-content-pipeline は毎週日曜深夜実行のため、月曜朝の投稿分が事前生成されていなかった
+
+**原因：**
+1. **URL形式検証の過度な厳密化**：replace_article_url.py が `?flash_message_key=...` のクエリパラメータを含む URL を拒否（本来は受け入れるべき）
+2. **x-variants.md の構造仕様が不明確**：「X 用バリエーション」セクションの Markdown 形式が、正規表現マッチと相性が悪い
+3. **weekly-content-pipeline の範囲設定**：「前週分」を生成すべきだが、「今週分のみ」生成する実装になっている
+
+**影響度：**
+- ✅ メイン動線（note 公開 → X への自動拡散）は完全に機能（SNSプロモ機能経由）
+- ❌ 補助的なクロスポスト追加投稿（X単独ツイート / Threads 投稿）は失敗
+- → 記事公開～X拡散の主要フロー自体は損なわれず
+
+**解決策：**
+1. `replace_article_url.py` のURL検証：クエリパラメータを許可するよう拡張
+   ```python
+   # 修正前：`https://note.com/...` の形式のみ許可（クエリパラメータ拒否）
+   # 修正後：`https://note.com/.../n/[ID](\?.*)?` で パラメータを削除後に利用
+   import urllib.parse
+   parsed = urllib.parse.urlparse(url)
+   clean_url = urllib.parse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+   ```
+
+2. `x-variants.md` の構造統一：Markdown セクションの命名・形式を明確化
+   - 現在：セクション名が `## X向けバリエーション` / `### X用本文` など混在
+   - 改善案：常に `## X バリエーション` で統一 → 正規表現マッチ率向上
+
+3. `weekly-content-pipeline` の日程範囲：「次の週分」ではなく「前週分も含める」実装
+   ```python
+   # 修正案：月曜朝の投稿分は前週時点で生成済みとするため、
+   # 「今日から過去7日分」ではなく「今日から過去14日分を再スキャン」
+   ```
+
+**教訓：** 複数のワークフロー連鎖（note公開 → X拡散 → クロスポスト追加）では、各々の境界責任を明確にすべき
+- note公開直後の「SNSプロモによるX自動投稿」はメイン動線（note ネイティブ機能利用）
+- クロスポスト追加投稿は「オプション」として位置づけ、失敗しても記事公開に影響を与えない設計
+
+**再発防止：**
+- URL形式の柔軟化（クエリパラメータ許可）を全フロー共通化
+- x-variants.md など、複数スクリプトが参照する Markdown 形式は「スキーマ定義書」を別途作成
+- ワークフロー連鎖時の「失敗の層別」：メイン機能が失敗したら即座に止める、補助機能は失敗時も継続する
+
+**タグ：** #github-actions #note-api #cross-post #url-parsing #markdown-schema
 
 ---
 
