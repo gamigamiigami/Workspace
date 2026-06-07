@@ -6,6 +6,40 @@
 
 ---
 
+### 2026-06-07（セッション91・note 記事001公開完全成功・SNS自動拡散・クロスポスト機能部分失敗）
+
+**うまくいったこと**
+- note 記事001の公開が完全成功（URL: https://note.com/large_pika8608/n/n96918f980528）
+- SNSプロモーション機能（¥500割引）が有効に機能し、X への自動拡散が成功
+- GitHub Actions ワークフロー（RUN_ID: 27106042770, RUN_ID: 27107153214）が正常完了
+- ペイウォール位置が最終確定・正常動作確認
+- 「投稿する内容を保存」ボタン押下から本公開フロー完了
+- complete_article_publication（記事公開完全フロー）が end-to-end で動作確認
+
+**うまくいかなかったこと**
+- post_note_promo.py の後続クロスポスト機能が部分失敗
+  - 元記事URL置換失敗（flash_message_key パラメータ付き URL が検証ロジックで弾かれた）
+  - x-variants.md の構造が想定と異なり、本文抽出失敗
+  - THREADS_ACCESS_TOKEN が未設定で Threads 投稿スキップ
+- post_to_x.py の週次X投稿ジョブが不足
+  - 6/8（月）朝ツイート本文が 2026-06-01-x-posts.md に未生成
+  - weekly-content-pipeline が日曜深夜実行のため、月曜朝の投稿分がカバーできず
+
+**発見**
+- note 記事公開による X 自動拡散は note のSNSプロモ機能経由で完全に動作
+- クロスポスト追加投稿（X単独ツイート・Threads）は独立した機能で、失敗してもメイン動線（記事公開）に影響なし
+- URL形式検証が flash_message_key パラメータを含む URL に対して厳密化
+- 複数のワークフロー（RUN_ID）の並行監視が background_tasks で安定稼働
+
+**次回への申し送り**
+- post_note_promo.py のURL置換ロジック柔軟化（flash_message_key パラメータ対応）
+- x-variants.md の構造検証・本文抽出ロジック修正（マークダウン形式再確認）
+- THREADS_ACCESS_TOKEN 設定の必須判定確認
+- weekly-content-pipeline の日程範囲拡張（前週分も生成する仕様へ）
+- サムネ更新ボタンの UI 改善検討（自動保存サイクルとの同期化）
+
+---
+
 ### 2026-06-07（セッション90・note 記事公開完了・クロスポスト追加投稿は部分失敗）
 
 **うまくいったこと**

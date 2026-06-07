@@ -4,6 +4,69 @@
 
 ---
 
+### [2026-06-07] rakuda-sensei — note 記事001公開完全自動化成功・SNSプロモ有効・クロスポスト機能部分失敗（セッション91）
+
+**成功した作業：**
+
+- **note 記事公開完全自動化達成**
+  - 記事001の完全公開成功（URL: https://note.com/large_pika8608/n/n96918f980528）
+  - ペイウォール位置確定・自動設定
+  - GitHub Actions ワークフロー（RUN_ID: 27106042770, RUN_ID: 27107153214）正常完了
+
+- **SNSプロモーション機能が有効に動作**
+  - ¥500割引設定が自動反映
+  - X への自動拡散投稿が note 経由で完了（twitter_status_posted パラメータで確認）
+  - note のSNS拡散機能統合により、X リーチの確保
+
+- **post_to_note.py の完全実装**
+  - 記事公開フロー（draft → save-draft → publish）の全段階が自動化
+  - DOM フレームワークの遅延レンダリング対応（page.wait_for_timeout(3000) 追加）
+  - セール section 展開 → radio DOM 再取得 → SNSプロモ設定の正規フロー確立
+
+**失敗した作業（オプション機能の部分失敗）：**
+
+- **post_note_promo.py のクロスポスト追加投稿が失敗**
+  - 原因：flash_message_key パラメータ付き URL が URL形式検証で弾かれた
+    - note 公開時に自動付与される URL：`https://note.com/.../n/xxx?flash_message_key=twitter_status_posted%3Fapp_launch%3Dfalse`
+    - replace_article_url.py の正規表現判定で「URL形式が正しくない」と誤判定
+
+- **post_to_x.py の週次X投稿が不足分**
+  - 6/8（月）朝ツイート本文が生成されず（6/8以降がパイプライン範囲外）
+  - weekly-content-pipeline が日曜深夜実行のため、月曜朝の投稿分がカバーできず仕様
+
+**発見・知見：**
+
+1. **note 記事公開は完全自動化された**
+   - クロスポスト追加投稿（X・Threads）は分離された独立機能
+   - メイン動線（記事公開）は全機能統合で end-to-end 動作
+
+2. **複数ワークフロー並行監視が安定稼働**
+   - background_tasks で複数の RUN_ID を同時監視可能
+   - セッション終了後も trigger consumption 監視が継続（次セッション開始まで）
+
+3. **URL形式検証の過度な厳密化が障害になる**
+   - クエリパラメータ付き URL を拒否する検証ロジックが存在
+   - note の自動付与パラメータに対応する必要あり
+
+**コミット情報：**
+- edaa3ac: `chore: knowledge 更新 (note公開完全自動化達成記録)`
+- b5e2b2d: `chore(auto): launch-trigger消化 + 公開URL反映`
+
+**次ステップ（次セッションへの申し送り）：**
+
+1. **post_note_promo.py のURL置換ロジック修正**
+   - flash_message_key パラメータ対応（クエリパラメータを strip or whitelist）
+   - URL正規表現の柔軟化
+
+2. **x-variants.md の構造検証**
+   - 本文抽出ロジックの再確認（マークダウン形式）
+   - THREADS_ACCESS_TOKEN の設定検討
+
+3. **weekly-content-pipeline の日程範囲拡張**
+   - 前週分も生成する仕様へ（月曜朝の投稿カバー）
+
+---
+
 ### [2026-06-08] rakuda-sensei — SNSプロモ設定位置修正・post_to_note.py 調整（セッション82）
 
 **実装内容：**
