@@ -1,9 +1,60 @@
 # 成功パターン集
 
-最終更新：2026-12-22
+最終更新：2026-06-08
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
+
+---
+
+## Puppeteer・Playwright 自動化
+
+### [汎用] DOM 遅延レンダリング待機パターン
+
+**用途：** JavaScript ライブラリ（React・Vue 等）で遅延レンダリングされる UI 要素をクリック・入力する際、「タイムアウト」「要素が見つからない」エラーを防ぐ方法
+
+**背景：**
+- note.com の有料設定パネル（radio button・入力フォーム等）が展開後も即座にクリック不可
+- セール section や SNS プロモーション radio が「DOM には存在するが、クリック可能な状態まで3-5秒の遅延あり」という仕様
+- `page.waitForSelector()` で要素検出成功 → すぐクリック試行 → 「要素が表示されていない」エラーが発生
+
+**解決パターン：**
+
+```python
+# ❌ 不充分（DOM 検出直後のクリック）
+page.wait_for_selector('input[type="radio"][data-qa="sale_sns_promo"]', timeout=5000)
+page.click('input[type="radio"][data-qa="sale_sns_promo"]')  # → エラー
+
+# ✅ 効果的（検出後に固定待機を追加）
+page.wait_for_selector('input[type="radio"][data-qa="sale_sns_promo"]', timeout=5000)
+page.wait_for_timeout(3000)  # ← JS フレームワークの再レンダリング完了を待つ
+page.click('input[type="radio"][data-qa="sale_sns_promo"]')  # OK
+```
+
+**根本原因：**
+- DOM ツリーには要素が存在しても、ブラウザの描画エンジン（reflow/repaint）やイベントリスナー登録に遅延あり
+- `page.waitForSelector()` は「HTML に要素がある」を判定するだけで、「JavaScript 初期化済み & インタラクティブ」かは検証しない
+
+**推奨値：**
+- note.com セール/SNSプロモ section：`3000ms` (3秒)
+- 一般的な React SPA：`1000-2000ms` (1-2秒)
+- トリッキーな UI（Discourse など）：`5000ms` (5秒)
+
+**応用例：**
+```python
+# 複数操作の場合は「操作ごと」に待機を挟む
+page.wait_for_selector(selector_a)
+page.wait_for_timeout(3000)
+page.click(selector_a)
+
+page.wait_for_selector(selector_b)
+page.wait_for_timeout(3000)
+page.fill(selector_b, "text")
+```
+
+**注意点：**
+- 固定待機なので「最悪 3秒待つ」が必ず発生 → 自動化で多数実行時は累積時間が大きくなる
+- 将来的には `page.waitForFunction()` + `requestAnimationFrame` で待機時間を短縮可能だが、実装複雑
 
 ---
 
