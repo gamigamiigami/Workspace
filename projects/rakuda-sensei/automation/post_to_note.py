@@ -1744,6 +1744,58 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                         print(f"WARNING: SNSプロモ設定例外: {e}", file=sys.stderr)
                     shot(page, "07c2-after-sns-promo")
 
+                # === 「変更を保存」ボタン押下 ===
+                # ユーザー指摘: SNSプロモ + 価格を設定したら、「有料エリア設定」に進む前に
+                # 「変更を保存」ボタンを押して設定値を確定する必要がある。
+                # ボタンのラベル候補: 「変更を保存」「投稿する内容を保存」「保存」
+                if meta["price"] > 0:
+                    save_pressed = False
+                    try:
+                        js_save = page.evaluate(
+                            """
+                            () => {
+                                const buttons = Array.from(document.querySelectorAll('button, [role="button"]'));
+                                const target = buttons.find(b => {
+                                    const t = (b.textContent || '').trim();
+                                    return t === '変更を保存' || t === '投稿する内容を保存' || t === '保存する' || t === '設定を保存';
+                                });
+                                if (!target) return {ok: false, reason: 'save button not found'};
+                                target.scrollIntoView({block: 'center'});
+                                const r = target.getBoundingClientRect();
+                                if (r.width === 0 || r.height === 0 || target.disabled) {
+                                    return {ok: false, reason: 'save button not interactive', disabled: target.disabled};
+                                }
+                                target.click();
+                                return {ok: true, text: (target.textContent || '').trim().slice(0, 30)};
+                            }
+                            """
+                        )
+                        if js_save.get("ok"):
+                            save_pressed = True
+                            print(f"💾 「{js_save.get('text')}」ボタン押下成功")
+                            page.wait_for_timeout(2500)
+                        else:
+                            print(f"ℹ️  保存ボタン未発見（不要 or 既に保存済み）: {js_save.get('reason')}")
+                    except Exception as e:
+                        print(f"⚠️  保存ボタン JS 例外: {e}")
+                    # フォールバック: locator
+                    if not save_pressed:
+                        for sel in [
+                            'button:has-text("変更を保存")',
+                            'button:has-text("投稿する内容を保存")',
+                            'button:has-text("保存する")',
+                        ]:
+                            try:
+                                page.locator(sel).first.click(timeout=2000, force=True)
+                                page.wait_for_timeout(2500)
+                                save_pressed = True
+                                print(f"💾 保存ボタン locator 押下: {sel}")
+                                break
+                            except Exception:
+                                continue
+                    if save_pressed:
+                        shot(page, "07c2b-after-save-button")
+
                 # 「有料エリア設定」ボタンを押す（noteの本物のペイウォール確定操作）
                 # note公式仕様: ボタン押下後、本文に戻されて有料ラインのカーソルが出る
                 # → 有料にしたい段落をクリックして位置を確定する
