@@ -1505,42 +1505,93 @@ def post_to_note(article_path: str, dry_run: bool = False, save_draft: bool = Fa
                             except Exception:
                                 continue
                         # 2) SNSプロモーション radio を選択
+                        # 注意: 「SNSプロモーション」テキストの親を辿りすぎると有料設定パネル全体に届き、
+                        # 最初の radio (is_paid=free) を誤クリックして有料設定を解除してしまう。
+                        # → ラベル直下の input のみを対象にし、name="is_paid" を明示的に除外する。
                         promo_selected = False
-                        # 第一手: JS で input[type="radio"] のうち SNSプロモーションラベル直近を check
                         try:
                             js_promo = page.evaluate(
                                 """
                                 () => {
-                                    const labels = Array.from(document.querySelectorAll('label, span, div'));
-                                    const target = labels.find(el => /SNSプロモーション/.test((el.textContent || '').trim()));
-                                    if (!target) return {ok: false, reason: 'label SNSプロモーション not found'};
-                                    // 自身か親の label/li 内の radio を探す
-                                    let scope = target;
-                                    let radio = null;
-                                    for (let i = 0; i < 5 && scope && !radio; i++) {
-                                        radio = scope.querySelector('input[type="radio"]');
-                                        scope = scope.parentElement;
+                                    // 候補テキストノードを全部探す（label/span/div より広く）
+                                    const walker = document.createTreeWalker(
+                                        document.body, NodeFilter.SHOW_TEXT, null
+                                    );
+                                    const targets = [];
+                                    let node;
+                                    while ((node = walker.nextNode())) {
+                                        const t = (node.textContent || '').trim();
+                                        if (/^SNSプロモーション/.test(t) || t === 'SNSプロモーション機能') {
+                                            if (node.parentElement) targets.push(node.parentElement);
+                                        }
                                     }
-                                    if (!radio) {
-                                        // 同じ親階層内の兄弟から探す
-                                        const sib = target.closest('label');
-                                        if (sib) radio = sib.querySelector('input[type="radio"]');
+                                    if (targets.length === 0) {
+                                        return {ok: false, reason: 'no SNSプロモーション text node'};
                                     }
-                                    if (!radio) return {ok: false, reason: 'no radio near label'};
-                                    const setter = Object.getOwnPropertyDescriptor(
-                                        window.HTMLInputElement.prototype, 'checked').set;
-                                    setter.call(radio, true);
-                                    radio.dispatchEvent(new Event('input', {bubbles: true}));
-                                    radio.dispatchEvent(new Event('change', {bubbles: true}));
-                                    radio.click();
-                                    return {ok: true, name: radio.name, value: radio.value};
+                                    // 各候補について、最も近い label / [role=radio] / li を見つける
+                                    // そこに含まれる radio (name != is_paid) を選ぶ
+                                    for (const el of targets) {
+                                        // 最近接の label or radiogroup item
+                                        let host = el.closest('label')
+                                                 || el.closest('[role="radio"]')
+                                                 || el.closest('li')
+                                                 || el.closest('[class*="radio"]');
+                                        if (!host) {
+                                            // 直接の親が <label> でないなら兄弟まで含めた小さい範囲を試す
+                                            host = el.parentElement;
+                                        }
+                                        if (!host) continue;
+                                        // host 内の radio で is_paid 以外を抽出
+                                        const radios = Array.from(host.querySelectorAll(
+                                            'input[type="radio"]'
+                                        )).filter(r => r.name !== 'is_paid');
+                                        if (radios.length > 0) {
+                                            const radio = radios[0];
+                                            const setter = Object.getOwnPropertyDescriptor(
+                                                window.HTMLInputElement.prototype, 'checked').set;
+                                            setter.call(radio, true);
+                                            radio.dispatchEvent(new Event('input', {bubbles: true}));
+                                            radio.dispatchEvent(new Event('change', {bubbles: true}));
+                                            radio.click();
+                                            return {ok: true, name: radio.name, value: radio.value, hostTag: host.tagName};
+                                        }
+                                    }
+                                    // ↑で見つからない場合、role=radio の祖先で text が SNSプロモーションを含むものを直接 click
+                                    const allRadioGroups = Array.from(document.querySelectorAll(
+                                        '[role="radio"], label.radio, label:has(input[type="radio"])'
+                                    ));
+                                    for (const rg of allRadioGroups) {
+                                        const text = (rg.textContent || '').trim();
+                                        if (/SNSプロモーション/.test(text)) {
+                                            // 内部の radio で is_paid 以外
+                                            const r = Array.from(rg.querySelectorAll('input[type="radio"]'))
+                                                .find(x => x.name !== 'is_paid');
+                                            if (r) {
+                                                const setter = Object.getOwnPropertyDescriptor(
+                                                    window.HTMLInputElement.prototype, 'checked').set;
+                                                setter.call(r, true);
+                                                r.dispatchEvent(new Event('input', {bubbles: true}));
+                                                r.dispatchEvent(new Event('change', {bubbles: true}));
+                                                r.click();
+                                                return {ok: true, name: r.name, value: r.value, hostTag: 'role-radio'};
+                                            }
+                                            // それでも無ければラジオグループ自体を click
+                                            rg.click();
+                                            return {ok: true, name: '(role-radio click)', value: '(text-match)', hostTag: 'rg.click'};
+                                        }
+                                    }
+                                    return {ok: false, reason: 'no non-is_paid radio near SNSプロモーション label'};
                                 }
                                 """
                             )
                             if js_promo.get("ok"):
-                                promo_selected = True
-                                print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')})")
-                                page.wait_for_timeout(1500)
+                                # 安全弁: is_paid=free を間違えてクリックした疑いがある場合は失敗扱い
+                                if js_promo.get("name") == "is_paid":
+                                    print(f"   ⚠️  JS で is_paid={js_promo.get('value')} に当たった→誤検出として却下")
+                                else:
+                                    promo_selected = True
+                                    print(f"   ✅ SNSプロモ radio ON (name={js_promo.get('name')}, value={js_promo.get('value')}, host={js_promo.get('hostTag')})")
+                                    page.wait_for_timeout(1500)
                             else:
                                 print(f"   ⚠️  JS promo radio スキップ: {js_promo.get('reason')}")
                         except Exception as e:
