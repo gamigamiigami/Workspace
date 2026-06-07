@@ -1,0 +1,91 @@
+name: Update SNS Promo (existing published article)
+
+# 既存の公開済み note 記事に SNSプロモ設定だけを反映する
+# トリガー:
+#   - projects/rakuda-sensei/articles/.sns-promo-trigger を push
+#     1行目: 記事 md パス
+#     2行目: 公開URL
+#   - workflow_dispatch で article_path + published_url を渡す
+
+on:
+  push:
+    branches:
+      - "**"
+    paths:
+      - "projects/rakuda-sensei/articles/.sns-promo-trigger"
+  workflow_dispatch:
+    inputs:
+      article_path:
+        description: "記事MDファイルのパス"
+        required: true
+        type: string
+      published_url:
+        description: "公開済み記事URL"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  actions: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse trigger
+        id: trig
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "article_path=${{ inputs.article_path }}" >> $GITHUB_OUTPUT
+            echo "published_url=${{ inputs.published_url }}" >> $GITHUB_OUTPUT
+          else
+            echo "article_path=$(sed -n '1p' projects/rakuda-sensei/articles/.sns-promo-trigger | tr -d '\r\n')" >> $GITHUB_OUTPUT
+            echo "published_url=$(sed -n '2p' projects/rakuda-sensei/articles/.sns-promo-trigger | tr -d '\r\n')" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+          cache-dependency-path: projects/rakuda-sensei/automation/requirements.txt
+
+      - run: pip install -r projects/rakuda-sensei/automation/requirements.txt
+      - run: playwright install chromium --with-deps
+
+      - name: Update SNS promo
+        env:
+          NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
+          NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
+          NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+        run: |
+          python projects/rakuda-sensei/automation/update_sns_promo.py \
+            "${{ steps.trig.outputs.article_path }}" \
+            "${{ steps.trig.outputs.published_url }}"
+
+      - name: Upload error screenshot
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: update-sns-promo-error
+          path: update-sns-promo-error.png
+          if-no-files-found: ignore
+
+      - name: Remove trigger file
+        if: github.event_name == 'push' && success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm projects/rakuda-sensei/articles/.sns-promo-trigger || true
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(auto): sns-promo-trigger 消化"
+            for i in 1 2 3; do
+              git pull --rebase origin "${{ github.ref_name }}" || true
+              git push && break
+              sleep $((i * 3))
+            done
+          fi
