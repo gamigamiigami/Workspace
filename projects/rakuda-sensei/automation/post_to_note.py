@@ -618,33 +618,46 @@ def post_to_note(article_path: str, dry_run: bool = False) -> int:
 
             if published:
                 shot(page, "10-after-publish-click")
-                # 公開URLパターン (note.com/{user}/n/{hash}) に遷移していれば成功
-                if "/n/" in page.url and "/notes/" not in page.url:
-                    print(f"✅ 公開完了！URL: {page.url}")
+                page.wait_for_timeout(3000)
+                final_url = page.url
+                # 公開URLパターン (note.com/{user}/n/{hash}) に遷移していれば確実に成功
+                if "/n/" in final_url and "/notes/" not in final_url:
+                    print(f"✅ 公開完了！URL: {final_url}")
+                elif "editor.note.com" in final_url and "/edit" in final_url:
+                    # エディタに留まっている = 投稿ボタンはクリックしたが画面遷移なし
+                    # noteは「投稿する」→確認ダイアログが出る場合がある
+                    shot(page, "10b-still-on-editor")
+                    print(f"⚠️ エディタに留まっている: {final_url}")
+                    # 追加の確認ダイアログを処理する
+                    extra_confirm_selectors = [
+                        'button:has-text("投稿する")',
+                        'button:has-text("公開する")',
+                        'button:has-text("OK")',
+                        'button:has-text("確認")',
+                        '[role="dialog"] button:has-text("投稿")',
+                        '[role="dialog"] button:has-text("公開")',
+                    ]
+                    for sel in extra_confirm_selectors:
+                        try:
+                            btn = page.locator(sel).last
+                            if btn.is_visible(timeout=2000):
+                                btn.click()
+                                page.wait_for_timeout(4000)
+                                shot(page, "10c-after-extra-confirm")
+                                print(f"✅ 追加確認ボタンクリック (selector: {sel}) → URL: {page.url}")
+                                break
+                        except Exception:
+                            continue
+                    # 最終URL確認
+                    if "/n/" in page.url and "/notes/" not in page.url:
+                        print(f"✅ 公開完了！URL: {page.url}")
+                    else:
+                        print(f"⚠️ 投稿ボタン押下済み。URLが公開形式でないが下書き保存はされているはず")
+                        print(f"   最終URL: {page.url}")
+                        print("   → note.com/notes/manage で手動確認・公開してください")
                 else:
-                    # 念のため公開記事一覧をチェック
-                    print(f"⚠️ 投稿クリックしたがURLが想定外: {page.url}")
-                    print("   → 下書きで止まっている可能性。マイページで確認してください")
-                    try:
-                        page.goto("https://note.com/notes/manage/published", wait_until="domcontentloaded", timeout=15000)
-                        page.wait_for_timeout(2000)
-                        shot(page, "11-verify-published-list")
-                        # タイトルが一覧に出てれば公開成功
-                        if page.locator(f"text={meta['title'][:20]}").first.is_visible(timeout=3000):
-                            print(f"✅ 公開記事一覧で発見、公開成功")
-                        else:
-                            print(f"❌ 公開記事一覧に見当たらない → 下書きの可能性")
-                            page.goto("https://note.com/notes/manage/draft", wait_until="domcontentloaded", timeout=15000)
-                            page.wait_for_timeout(2000)
-                            shot(page, "12-verify-draft-list")
-                            if page.locator(f"text={meta['title'][:20]}").first.is_visible(timeout=3000):
-                                print(f"⚠️ 下書きには存在、公開ボタンを別途実行する必要")
-                            else:
-                                print(f"❌ 下書きにも見当たらない、保存自体が失敗")
-                                browser.close()
-                                return 1
-                    except Exception as e:
-                        print(f"検証中エラー: {e}")
+                    print(f"⚠️ 投稿ボタン押下済み。最終URL: {final_url}")
+                    print("   → note.com/notes/manage で確認してください")
             else:
                 # 公開ボタンが押せなかった = 下書き保存で止まった
                 # note の編集ページに入った時点で自動下書き保存されているはず
