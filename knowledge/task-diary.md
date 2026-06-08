@@ -4,6 +4,31 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-11（セッション47・ワークフロー実装・マージ完了）
+
+**うまくいったこと**
+- post-funnel-articles ワークフロー実装の最終化
+  - PR #82 の修正＆マージを完了
+  - ワークフローファイルの YAML 構文すべて正常化
+  - GitHub Actions 実行環境への統合完了
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- 前セッションの実装により、ワークフロー実行は人間のハンドオフへ（AIの自動化完了段階）
+- デフォルトブランチへのマージで、GitHub UI から "Run workflow" ボタンが利用可能な状態に
+
+**次回への申し送り**
+- 【人間操作待機中】GitHub Actions "Run workflow" ボタン実行
+  - https://github.com/gamigamiigami/Workspace/actions/workflows/post-funnel-articles.yml
+  - 投稿するファネル: 「全部（8本）」
+  - Dry run: チェックしない
+- 実行後、ログで成功/失敗を確認
+- Instagram・スレッズの自動投稿機能も同様の仕組みで実装可能（知見蓄積）
+
+---
+
 ### 2026-06-10（セッション46・post-funnel-articles ワークフロー実行ガイダンス＆修正完了）
 
 **うまくいったこと**
