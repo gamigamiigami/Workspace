@@ -29,7 +29,7 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
-  post-通知表-A:
+  post-tsuchihyo-A:
     if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
     runs-on: ubuntu-latest
     steps:
@@ -59,9 +59,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  post-通知表-B:
+  post-tsuchihyo-B:
     if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
-    needs: post-通知表-A
+    needs: post-tsuchihyo-A
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,9 +90,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  post-通知表-C:
+  post-tsuchihyo-C:
     if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
-    needs: post-通知表-B
+    needs: post-tsuchihyo-B
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -121,9 +121,9 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  post-通知表-D:
+  post-tsuchihyo-D:
     if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
-    needs: post-通知表-C
+    needs: post-tsuchihyo-C
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
