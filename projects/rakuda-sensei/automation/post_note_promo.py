@@ -172,11 +172,17 @@ def main(dry_run: bool = False) -> int:
         threads_text = url_pat.sub(real_url, threads_text)
 
     posted_platforms = []
+    skipped_intentionally = False  # Threads トークン未設定など意図的スキップを区別
 
     if threads_text:
-        print(f"\n🧵 Threads 投稿: {threads_text[:80]}...")
-        if post_to_threads(threads_text, dry_run=dry_run):
-            posted_platforms.append("Threads")
+        has_threads_token = bool(os.environ.get("THREADS_ACCESS_TOKEN") and os.environ.get("THREADS_USER_ID"))
+        if not has_threads_token:
+            print("\nℹ️ THREADS_ACCESS_TOKEN / THREADS_USER_ID 未設定 → Threads 自動投稿は無効化")
+            skipped_intentionally = True
+        else:
+            print(f"\n🧵 Threads 投稿: {threads_text[:80]}...")
+            if post_to_threads(threads_text, dry_run=dry_run):
+                posted_platforms.append("Threads")
     else:
         print("⚠️ Threads 本文が抽出できず")
 
@@ -185,7 +191,9 @@ def main(dry_run: bool = False) -> int:
 
     print(f"\n📊 投稿成功: {posted_platforms or 'なし'}")
     print("ℹ️ X 告知は note の SNS プロモ連携が publish 時に自動投稿済み (本スクリプトでは扱わない)")
-    return 0 if posted_platforms or dry_run else 1
+    # Threads トークン未設定で意図的にスキップした場合は成功扱い
+    # (X は note 側で自動投稿済みなので、ここで「投稿数=0」でも問題ない)
+    return 0 if posted_platforms or dry_run or skipped_intentionally else 1
 
 
 if __name__ == "__main__":
