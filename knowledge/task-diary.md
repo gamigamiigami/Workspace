@@ -6,6 +6,29 @@
 
 ---
 
+### 2026-06-08（セッション95・SNS投稿機能の二重投稿整理・post_note_promo リファクタ完結）
+
+**うまくいったこと**
+- `post_note_promo.py` から X 関連コード一式（`post_to_x`, `extract_x_variant`, `normalize_cookies`, `STEALTH_JS`, `USER_AGENT`）を完全削除
+- 二重投稿の責務分離を確認・整理：
+  - **X 記事告知** → note の SNS プロモ連携が publish 時に自動実行（人間・AI介入不要）
+  - **X 日次運用ツイート** → `post_to_x.py` の cron ジョブが継続
+  - **Threads** → `post_note_promo.py` が担当（note 非対応分のみ）
+- post-note-promo.yml ワークフロー から X_SESSION_COOKIE secret 参照を削除
+- 全変更を commit・push で完全保存
+
+**うまくいかなかったこと**
+- なし（リファクタ計画どおり実行完了）
+
+**発見**
+- SNS 投稿の責務境界を整理することで、maintenance burden と二重投稿リスクを低減可能
+- 自動化ツール群の責務が明確になると、トリガー・依存関係・テスト範囲も自動的に整理される
+
+**次回への申し送り**
+- なし（本リファクタで SNS 投稿機能の整理完結）
+
+---
+
 ### 2026-06-08（セッション94・自動投稿ワークフローリファクタ・background poll実装）
 
 **うまくいったこと**

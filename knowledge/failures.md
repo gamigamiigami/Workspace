@@ -28,6 +28,8 @@
 
 **対応：** post_note_promo.py から X 関連コード一式を削除。post-note-promo.yml の X_SESSION_COOKIE secret も外した。
 
+**完了日：** 2026-06-08（セッション95）— リファクタ完全完了・全変更 commit・push 済み
+
 ---
 
 ### [2026-06-07] addness-side-income — note 公開後の後続クロスポスト（post_note_promo.py, post_to_x.py）が部分失敗
