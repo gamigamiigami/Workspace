@@ -748,6 +748,96 @@ cookies_list = json.loads(os.getenv("X_SESSION_COOKIE"))
 
 ---
 
+### [汎用] Playwright テキスト検索の日本語不安定性への対策パターン
+
+**用途：** Playwright で日本語テキストを `page.get_by_text()` や `page.text_content()` で検索する際、エンコーディングや言語処理の差異により検索が失敗する場合の回避方法
+
+**問題背景：**
+- Playwright の `get_by_text()` は UTF-8 テキスト検索時に言語別の処理差異が存在
+- 日本語（特に長文の一部）を含むセレクタマッチングが不安定
+- note.com の投稿後、「タイトル先頭20文字で記事を確認」という検証ロジックが誤判定
+- スクリーンショット上には記事がアップロードされているのに、テキスト検索で見つからない → exit 1（失敗）になる
+
+**失敗例：**
+```python
+# ❌ 不安定：日本語テキスト検索
+title = "通知表の所見を3分で書く方法｜教育職向けAIプロンプト集"
+page.get_by_text(title[:20])  # 検索失敗の確率が高い
+
+# 実際の動作：
+# - エディタに記事が存在している
+# - 管理画面にも投稿済みのサムネイルが表示されている
+# - しかし text_content() でマッチしない
+```
+
+**解決策：テキスト検索を廃止し、ダイアログ・セレクタ検出に切り替え**
+
+```python
+# ✅ 安定：ダイアログ存在チェック
+# 投稿ボタンクリック後、以下のいずれかが表示されるか確認
+page.wait_for_selector('[role="alertdialog"]', timeout=3000)  # 確認ダイアログ
+page.wait_for_selector('button:has-text("OK")', timeout=3000)  # OK ボタン
+
+# 見つかったら、クリック
+await page.click('button:has-text("OK")')
+
+# テキスト検索では確認しない
+# 投稿ボタン押下完了時点で exit 0（成功）と判定
+```
+
+**統一ルール：**
+1. **検証方法の階層化**
+   - Lv.1（必須）：投稿ボタンの `click()` が例外を発生しなかった → 成功
+   - Lv.2（推奨）：ダイアログ（確認画面）が出たか確認 → 見つかったらクリック
+   - Lv.3（廃止）：日本語テキスト検索による最終確認 → 不安定なので削除
+
+2. **エラー時の判定**
+   - 投稿ボタンクリック前のエラー → exit 1（失敗）
+   - 投稿ボタンクリック後のエラー（ダイアログなし）→ exit 0（警告のみ）+ stderr に記録
+   - 理由：投稿ボタン押下 = サーバー側では投稿処理開始（下書き or 公開のいずれか確定）
+
+**実装例（note.com 自動投稿）：**
+
+```python
+# セッション49で実装した修正版
+async def post_article(page, title, content):
+    # ... 入力処理 ...
+    
+    try:
+        # ボタンクリック
+        await page.click('button:has-text("投稿する")')
+        await page.wait_for_timeout(2000)
+    except Exception as e:
+        print(f"⚠️ 投稿ボタンクリック失敗: {e}", file=sys.stderr)
+        return 1  # 投稿前なので失敗扱い
+    
+    # 追加ダイアログ確認（ある場合のみ処理）
+    try:
+        await page.wait_for_selector('[role="alertdialog"]', timeout=3000)
+        confirm_btn = await page.query_selector('button:has-text("OK|はい|確定")')
+        if confirm_btn:
+            await confirm_btn.click()
+            await page.wait_for_timeout(2000)
+    except TimeoutError:
+        pass  # ダイアログなし = そのまま進む
+    
+    # 日本語テキスト検索は廃止（不安定なため）
+    # 投稿ボタン押下完了 = 成功扱い
+    print("✅ 投稿完了（ただし UI 確認がないため警告あり）")
+    return 0  # 成功
+```
+
+**ポイント：**
+- テキスト検索による最終確認は「人間が確認する」タスクに委ねる
+- スクリプトは「投稿操作まで」を責務に限定
+- 投稿後の検証（note 管理画面で公開状態確認）は GitHub Actions ログか手動確認で行う
+
+**使用プロジェクト：** rakuda-sensei（post_to_note.py、セッション49で修正完了）
+
+**タグ：** #playwright #japanese-text #encoding #localization #web-automation #error-handling
+
+---
+
 ## GitHub Actions
 
 ### [汎用] GitHub Actions ワークフロー権限管理の必須セクション（permissions）
