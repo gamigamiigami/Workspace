@@ -1,8 +1,32 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-07
+最終更新：2026-06-08
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+### [2026-06-08] addness-side-income — note SNSプロモ自動投稿と post_note_promo.py の X 投稿が二重に走っていた
+
+**状況：** note 記事を publish した時点で、note の「SNSプロモ連携」が自動的に著者の X アカウントから告知ツイートを投稿する（`twitter_status_posted` フラッシュキーで検知）。にもかかわらず `post_note_promo.py` でも独自に X compose 経由でツイートを送っていた。
+
+**問題：**
+- 同じ note 記事に対して、note 純正の自動投稿 + post_note_promo.py の投稿 = **2回ツイート**
+- X 側のセレクタ修正・post_to_x.py 流用などのデバッグ工数が無駄になっていた
+- 真の責務分離が見えていなかった
+
+**正しい責務分担：**
+- **X (note 記事告知)**: note の SNSプロモ連携が publish 時に自動投稿（人間/AI 介入不要）
+- **X (日次運用ツイート)**: `post_to_x.py` が cron で `weekly/*-x-posts.md` から抽出して投稿
+- **Threads**: note が対応していないので `post_note_promo.py` が Meta Graph API で投稿
+- **post_note_promo.py の X 機能**: ❌ 削除（重複投稿の原因）
+
+**教訓：**
+- 「自動化が部分的に動いてる」状態で別経路の自動化を追加する前に、**先に重複していないか確認**
+- ベンダー (note) が標準で持つ機能を、自前で再実装しない
+- 「投稿ボタンが見つからない」エラーは、まず「そもそも投稿する必要があるか」を疑う
+
+**対応：** post_note_promo.py から X 関連コード一式を削除。post-note-promo.yml の X_SESSION_COOKIE secret も外した。
 
 ---
 

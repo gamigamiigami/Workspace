@@ -1,7 +1,8 @@
-name: Post Note Promo (X/Threads自動告知)
+name: Post Note Promo (Threads自動告知)
 
-# note 記事生成後に X/Threads に告知投稿を即時打つ
-# weekly-content-pipeline.yml から workflow_call or workflow_dispatch で呼ばれる
+# note 記事公開後の Threads 告知投稿を担当する。
+# X 告知は note の SNS プロモ連携が publish 時に自動投稿するため、ここでは扱わない。
+# 日次の X 投稿は post-to-x.yml が cron で実行する。
 
 on:
   push:
@@ -44,9 +45,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Post promo to X/Threads
+      - name: Post promo to Threads
         env:
-          X_SESSION_COOKIE: ${{ secrets.X_SESSION_COOKIE }}
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
         run: |

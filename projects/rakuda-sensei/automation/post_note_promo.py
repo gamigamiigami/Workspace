@@ -1,20 +1,21 @@
 #!/usr/bin/env python3
 """
-note 記事公開時の自動 X/Threads 告知投稿
+note 記事公開時の自動 Threads 告知投稿
+
+X 告知は note の SNS プロモ連携が publish 時に自動で行うため、ここでは扱わない。
+日常的な X 投稿は post_to_x.py (weekly cron) が担当する。
 
 generate_cross_post.py が生成した sns/cross-posts/{date}-{slug}/ から
-最新のクロスポスト案を読み込んで、X と Threads に告知を即時投稿する。
+最新のクロスポスト案を読み込んで、Threads に告知を即時投稿する。
 
 【動作】
 1. sns/cross-posts/ の最新ディレクトリを発見
-2. x-variants.md から「パターンA (失敗談から)」を抽出
-3. threads.md から本文を抽出
-4. .promo-posted.log で重複投稿を防止
-5. X: クッキー認証で投稿
-6. Threads: Meta Graph API で投稿
+2. threads.md から本文を抽出
+3. .promo-posted.log で重複投稿を防止
+4. Threads: Meta Graph API で投稿
 
 【使い方】
-GitHub Actions から自動呼び出し (weekly-content-pipeline.yml 経由)
+GitHub Actions から自動呼び出し (post-note-promo.yml 経由)
 ローカル手動: python post_note_promo.py [--dry-run]
 """
 
@@ -30,25 +31,11 @@ from zoneinfo import ZoneInfo
 
 import requests
 
-sys.path.insert(0, str(Path(__file__).parent))
-
-from post_to_x import post_tweet as x_post_tweet  # 動作確認済みの投稿ロジックを流用
-
 ROOT = Path(__file__).resolve().parents[3]
 CROSSPOST_DIR = ROOT / "projects" / "rakuda-sensei" / "sns" / "cross-posts"
 POSTED_LOG = ROOT / "projects" / "rakuda-sensei" / "sns" / ".promo-posted.log"
 
 JST = ZoneInfo("Asia/Tokyo")
-
-USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-)
-STEALTH_JS = """
-Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-Object.defineProperty(navigator, 'languages', { get: () => ['ja-JP', 'ja', 'en-US', 'en'] });
-window.chrome = { runtime: {} };
-"""
 
 
 def find_latest_crosspost_dir() -> Path | None:
@@ -60,41 +47,6 @@ def find_latest_crosspost_dir() -> Path | None:
         reverse=True,
     )
     return dirs[0] if dirs else None
-
-
-def extract_x_variant(x_md_path: Path, variant: str = "A") -> str | None:
-    """x-variants.md から指定パターンの本文を抽出。
-    対応構造（いずれもマッチ）:
-      ## パターンA xxx
-      ## A. ストーリー型
-      ## A xxx
-    code fence ``` で囲まれた本文を優先抽出する。
-    """
-    if not x_md_path.exists():
-        return None
-    text = x_md_path.read_text(encoding="utf-8")
-    # 「## A」「## パターンA」「## A.」のいずれにもマッチ
-    patterns = [
-        rf"##\s+パターン{re.escape(variant)}[^\n]*\n+(.+?)(?=\n##\s+パターン|\n##\s+[A-Z]\.|\Z)",
-        rf"##\s+{re.escape(variant)}\.\s[^\n]*\n+(.+?)(?=\n##\s+[A-Z]\.|\n##\s+パターン|\Z)",
-        rf"##\s+{re.escape(variant)}\s[^\n]*\n+(.+?)(?=\n##\s+[A-Z]|\Z)",
-    ]
-    body = None
-    for pat in patterns:
-        m = re.search(pat, text, re.DOTALL)
-        if m:
-            body = m.group(1).strip()
-            break
-    if not body:
-        return None
-    # code fence ``` で囲まれた本文を抽出（あれば優先）
-    fence_m = re.search(r"```(?:\w*)?\n(.+?)\n```", body, re.DOTALL)
-    if fence_m:
-        body = fence_m.group(1).strip()
-    # 末尾のセクション区切りを除去
-    body = re.sub(r"\n+---\s*$", "", body).strip()
-    # 元記事URL plceholder を実URL置換 (https://note.com/... が含まれてれば OK)
-    return body if body else None
 
 
 def get_published_url() -> str | None:
@@ -133,99 +85,6 @@ def mark_promoted(crosspost_id: str, platforms: list[str]):
     ts = datetime.datetime.now(JST).isoformat(timespec="seconds")
     with POSTED_LOG.open("a", encoding="utf-8") as f:
         f.write(f"{crosspost_id}\t{ts}\t{','.join(platforms)}\n")
-
-
-def normalize_cookies(raw_json: str) -> list:
-    """Cookie-Editor JSON → Playwright SetCookieParam形式"""
-    raw = json.loads(raw_json)
-    normalized = []
-    for c in raw:
-        new_c = {"name": c["name"], "value": c["value"]}
-        if c.get("domain"):
-            new_c["domain"] = c["domain"]
-        new_c["path"] = c.get("path", "/")
-        if "expirationDate" in c and not c.get("session"):
-            try:
-                new_c["expires"] = float(c["expirationDate"])
-            except (TypeError, ValueError):
-                pass
-        if "sameSite" in c:
-            ss = str(c["sameSite"]).lower()
-            mapping = {"lax": "Lax", "strict": "Strict", "none": "None",
-                       "no_restriction": "None", "unspecified": "None"}
-            if ss in mapping:
-                new_c["sameSite"] = mapping[ss]
-        if "httpOnly" in c:
-            new_c["httpOnly"] = bool(c["httpOnly"])
-        if "secure" in c:
-            new_c["secure"] = bool(c["secure"])
-        normalized.append(new_c)
-    return normalized
-
-
-def post_to_x(text: str, dry_run: bool = False) -> bool:
-    """X に直接ツイート (post_to_x.py の post_tweet() を流用)"""
-    cookie_json = os.environ.get("X_SESSION_COOKIE")
-    if not cookie_json:
-        print("⚠️ X_SESSION_COOKIE 未設定 → X 投稿スキップ")
-        return False
-
-    if dry_run:
-        print(f"   [dry-run] X 投稿予定: {text[:60]}...")
-        return True
-
-    from playwright.sync_api import sync_playwright
-
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-blink-features=AutomationControlled",
-                  "--disable-dev-shm-usage"],
-        )
-        context = browser.new_context(
-            viewport={"width": 1366, "height": 768},
-            user_agent=USER_AGENT,
-            locale="ja-JP",
-            timezone_id="Asia/Tokyo",
-            extra_http_headers={"Accept-Language": "ja-JP,ja;q=0.9,en;q=0.8"},
-        )
-        context.add_init_script(STEALTH_JS)
-
-        try:
-            cookies = normalize_cookies(cookie_json)
-            context.add_cookies(cookies)
-        except Exception as e:
-            print(f"❌ クッキー解析失敗: {e}")
-            browser.close()
-            return False
-
-        page = context.new_page()
-        try:
-            from playwright_stealth import stealth_sync
-            stealth_sync(page)
-        except Exception:
-            pass
-
-        try:
-            page.goto("https://x.com/home", wait_until="domcontentloaded", timeout=30000)
-            page.wait_for_timeout(3000)
-            if "/login" in page.url or "/flow" in page.url:
-                print("❌ X クッキー認証失敗")
-                browser.close()
-                return False
-
-            # post_to_x.py の動作実績ある post_tweet() に丸ごと委譲
-            ok = x_post_tweet(page, text)
-            browser.close()
-            return ok
-        except Exception as e:
-            print(f"❌ X 投稿エラー: {e}")
-            try:
-                page.screenshot(path="x-promo-error.png")
-            except Exception:
-                pass
-            browser.close()
-            return False
 
 
 def post_to_threads(text: str, dry_run: bool = False) -> bool:
@@ -305,26 +164,14 @@ def main(dry_run: bool = False) -> int:
     if real_url:
         print(f"   公開URL: {real_url}")
 
-    # X 投稿
-    x_text = extract_x_variant(latest / "x-variants.md", "A")
     threads_text = extract_threads_text(latest / "threads.md")
 
-    # URL を実URL で上書き (x_text / threads_text 内の note.com/.../n... を置換)
-    if real_url:
+    # URL を実URL で上書き
+    if real_url and threads_text:
         url_pat = re.compile(r"https?://note\.com/[\w\-]+/n/n[a-z0-9]+(?:\?[^\s]*)?")
-        if x_text:
-            x_text = url_pat.sub(real_url, x_text)
-        if threads_text:
-            threads_text = url_pat.sub(real_url, threads_text)
+        threads_text = url_pat.sub(real_url, threads_text)
 
     posted_platforms = []
-
-    if x_text:
-        print(f"\n🐦 X 投稿: {x_text[:80]}...")
-        if post_to_x(x_text, dry_run=dry_run):
-            posted_platforms.append("X")
-    else:
-        print("⚠️ X-A 本文が抽出できず")
 
     if threads_text:
         print(f"\n🧵 Threads 投稿: {threads_text[:80]}...")
@@ -337,6 +184,7 @@ def main(dry_run: bool = False) -> int:
         mark_promoted(crosspost_id, posted_platforms)
 
     print(f"\n📊 投稿成功: {posted_platforms or 'なし'}")
+    print("ℹ️ X 告知は note の SNS プロモ連携が publish 時に自動投稿済み (本スクリプトでは扱わない)")
     return 0 if posted_platforms or dry_run else 1
 
 
