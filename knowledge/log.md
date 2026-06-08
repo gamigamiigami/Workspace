@@ -4,6 +4,62 @@
 
 ---
 
+### [2026-06-08] rakuda-sensei — 記事003「先取り投資→生活→貯金」の publish 準備完了・ワークフロー投入（セッション97）
+
+**成功した作業：**
+
+- **記事003本文の作成・準備完了**
+  - ファイル：`projects/rakuda-sensei/articles/003-saki-tori-flow.md`
+  - タイトル：「公務員が5年で2,000万貯めた『先取り投資→生活→貯金』の順番」
+  - 分類：柱B（生活→運用ポジション）
+
+- **サムネイル画像の自動生成・配置完了**
+  - ファイル：`projects/rakuda-sensei/assets/thumbnails/003-saki-tori-flow.png`
+  - サイズ：1280×670（推奨フォーマット）
+  - スタイル：緑系（記事テーマに合致）
+
+- **有料添付ファイルの準備**
+  - ファイル：`projects/rakuda-sensei/downloads/saki-tori-money-flow-2026.xlsx`
+  - 内容：既存家計簿テンプレートの流用
+
+- **SNS告知文とメタデータの準備**
+  - Threads 告知文：`projects/rakuda-sensei/sns/cross-posts/2026-06-08-saki-tori-flow/threads.md`
+  - プロモメタ：`projects/rakuda-sensei/sns/cross-posts/2026-06-08-saki-tori-flow/promo-meta.json`
+  - 価格設定：本体¥1,500 / SNSプロモ拡散割引¥500
+  - RT文形式：記事002と同形式（共通設定）
+
+- **publish ワークフロー投入完了**
+  - GitHub Actions：`auto-launch-article.yml` をトリガー
+  - 非同期監視エージェント：`af487ff2d250c1fdc` で background 実行中
+  - note の SNSプロモ連携による X 告知自動投稿を活用
+  - `post-note-promo` ワークフロー（Threads クロスポスト）も連鎖実行
+
+**発見・知見：**
+
+1. **SNS投稿の責務分離が完成**
+   - **X 記事告知**：note のSNSプロモ機能が publish 時に自動実行（人間介入不要）
+   - **Threads クロスポスト**：`post-note-promo` ワークフローが自動実行（X 投稿機能削除済）
+   - セッション95の リファクタ成果が本セッションで実証
+
+2. **バックグラウンドタスク + subagent による非同期監視が有効**
+   - workflow 完了後の自動通知システムが構築完了
+   - セッション終了後も監視継続が可能（次セッション通知待ち）
+
+3. **記事003投稿で月3本定期投稿の継続リズムが確立**
+   - 001：2026-06-07 公開（サイドFIRE達成診断）
+   - 002：2026-06-07 公開（家計簿改善で50万増）
+   - 003：2026-06-08 publish 投入（先取り投資フロー）
+   - 柱ローテーション（A→B→A）が正常稼働中
+
+**次のステップ：**
+
+- workflow 完了通知（背景エージェント）受領待ち
+- X・Threads・note での投稿確認
+- エンゲージメント計測（売上・PV・エンゲージメント）
+- Day 7 リライト投稿スケジュール確認
+
+---
+
 ### [2026-06-07] rakuda-sensei — note 記事001公開完全自動化成功・SNSプロモ有効・クロスポスト機能部分失敗（セッション91）
 
 **成功した作業：**

@@ -6,6 +6,30 @@
 
 ---
 
+### 2026-06-08（セッション97・記事003 publish & workflow監視）
+
+**うまくいったこと**
+- 記事003「先取り投資→生活→貯金」の本文・サムネ・有料添付ファイルの準備完了
+- note publish ワークフロー trigger（auto-launch-article.yml）を GitHub Actions に投入
+- バックグラウンド subagent（id=af487ff2d250c1fdc）を使用した非同期 workflow 監視の実装
+- note 側の自動 SNS プロモ機能（X 告知自動投稿）と post-note-promo ワークフロー（Threads 告知）の連携確認
+
+**うまくいかなかったこと**
+- なし（publish workflow 投入完了）
+
+**発見**
+- note の SNS プロモ連携機能が publish 時に自動発火することで、X 告知投稿を自動化可能
+- post-note-promo ワークフロー から X 投稿機能を削除した結果、Threads のみを責務とする設計が完成
+- GitHub Actions workflow 監視を subagent で非同期実行することで、セッション終了後もワークフロー結果を自動通知可能
+
+**次回への申し送り**
+- 記事003 publish ワークフロー（auto-launch-article.yml）の完了確認
+- note 自動 SNS プロモによる X 告知投稿の確認
+- post-note-promo ワークフローによる Threads 告知の確認
+- workflow 完了後の X・Threads・note での投稿確認
+
+---
+
 ### 2026-06-08（セッション96・セッション終了処理・failures 記録完了）
 
 **うまくいったこと**
