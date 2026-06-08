@@ -4,6 +4,33 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-10（セッション45・note自動投稿ワークフロー完成）
+
+**うまくいったこと**
+- GitHub Actions の post-funnel-articles ワークフロー設定完成
+  - inputs（ファネル選択・Dry run フラグ）の設計で運用性向上
+  - JSONL形式での安全なパラメータ受け渡し（token漏洩防止）
+  - アーティクルIDの自動バリデーション機能追加
+- マルチファネル対応（通知表A→D、サイドFIREA→D の8本一括投稿対応）
+- 失敗時の自動Issue起票、成功時のコミット追跡で可視化実装
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- GitHub Actions の inputs で dropdownオプションを定義すると、Web UI上で選択できる UX が実現できる
+- JSONL を安全な中間形式にすることで、secret token を log に残さず情報伝達できる
+
+**次回への申し送り**
+- 【人間操作】GitHub Actions "Run workflow" ボタンから手動実行（伊神さん）
+  - Branch: claude/admiring-heisenberg-vVJL6
+  - 投稿するファネル: 全部（8本）
+  - Dry run: チェックしない
+- 実行後、通知表→サイドFIREの順で自動投稿開始
+- 失敗時はGitHubのIssueで自動通知
+
+---
+
 ### 2026-06-09（セッション44・通知表ファネル A→D 4記事セット完成）
 
 **うまくいったこと**
