@@ -4,6 +4,33 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-10（セッション46・post-funnel-articles ワークフロー実行ガイダンス＆修正完了）
+
+**うまくいったこと**
+- post-funnel-articles ワークフロー実装の最終修正完了
+  - ジョブIDの英数字化（hyphens を underscores に修正）で YAML 構文エラーを解決
+  - ワークフローの実行準備が完全に整った
+- ユーザー（伊神さん）への実行ガイダンスを明確に提供
+  - 手順簡潔化：GitHub UI で "Run workflow" → Branch 選択 → 投稿範囲選択 → 実行（3分で完了可能）
+  - Dry run フラグの説明で安全性を担保
+
+**うまくいかなかったこと**
+- なし（修正・検証完了）
+
+**発見**
+- GitHub Actions の inputs dropdown は日本語表示でも内部値は英数字を使用する仕様
+- ワークフロー実行は「AIの自動化ではなく人間の手動トリガー」として明確に位置づけるべき（運用責任の線引き明確化）
+
+**次回への申し送り**
+- 【人間操作待機中】GitHub Actions "Run workflow" ボタン実行
+  - Branch: claude/admiring-heisenberg-vVJL6
+  - 投稿するファネル: 全部（8本）
+  - Dry run: チェックしない
+- 実行後、ログで成功/失敗を確認
+- 失敗時は GitHub Issue で自動通知される仕様
+
+---
+
 ### 2026-06-10（セッション45・note自動投稿ワークフロー完成）
 
 **うまくいったこと**
