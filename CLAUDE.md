@@ -50,6 +50,9 @@ Workspace/
 | 副業・販売ツール | `semiretire` |
 | note記事執筆・有料記事制作 | `note-writer` |
 | 外部URL参照 | `defuddle` |
+| ツール・Webアプリを作りたい | `my-tool-maker` |
+| ウェブサイトを作りたい（複数ページ） | `my-website-maker` |
+| ランディングページを作りたい（1枚LP） | `my-lp-maker` |
 
 単発の質問・雑談はスキルをスキップしてよい。
 
