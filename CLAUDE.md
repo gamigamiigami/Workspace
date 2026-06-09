@@ -45,11 +45,20 @@ Workspace/
 
 | タスクの種類 | 使うスキル |
 |---|---|
+| ツール・ボット制作 | `/my-tool-maker` |
+| ウェブサイト制作 | `/my-website-maker` |
+| ランディングページ制作 | `/my-lp-maker` |
 | HTML・コード作成 | `coding-rules` → `patterns` → `failures` |
 | UIパーツが必要 | `ui-components` |
 | 副業・販売ツール | `semiretire` |
 | note記事執筆・有料記事制作 | `note-writer` |
 | 外部URL参照 | `defuddle` |
+
+**カスタムスキルについて**
+- `/my-tool-maker`、`/my-website-maker`、`/my-lp-maker` は自動で読み込まれる
+- 呼び出しは `/ スラッシュコマンド` または自然言語（「ツール作りたい」など）で可能
+- スキルファイルは `.claude/skills/` 配下に保管され、セッション開始時に `~/.claude/skills/` に自動コピーされる
+- **注意**：スキル動作が開始してないの場合は、スキルIDやSKILL.mdの形式を確認する必要がある
 
 単発の質問・雑談はスキルをスキップしてよい。
 
