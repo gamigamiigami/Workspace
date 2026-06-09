@@ -10,6 +10,7 @@ on:
   push:
     branches:
       - main
+      - claude/workspace-knowledge-base-setup-ccVKP
     paths:
       - "projects/rakuda-sensei/dashboard/**"
       - "projects/rough/**"
