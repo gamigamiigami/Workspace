@@ -26,8 +26,9 @@
     "allow": [
       "Write",
       "Edit",
-      "Bash",
-      "Read",
+  "Bash",      
+  "Bash(git *)", ←
+  "Read",
       "Glob",
       "Grep",
       "WebFetch",
