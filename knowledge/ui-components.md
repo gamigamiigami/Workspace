@@ -509,6 +509,177 @@ backBtn.addEventListener('click', () => {
 
 ---
 
+## ゲームカード一覧（検索機能付き）
+
+**用途：** ボードゲーム一覧などで、複数のアイテムをカード形式で表示し、検索フィルタリングを行う。
+
+**HTML例：**
+```html
+<!-- 検索フォーム -->
+<div class="games-search-wrap">
+  <input class="games-search" id="games-search" type="text" placeholder="キーワードで検索…">
+</div>
+
+<!-- ゲームカード一覧 -->
+<div class="games-grid" id="games-grid"></div>
+
+<!-- 表示件数 -->
+<p class="games-count" id="games-count"></p>
+```
+
+**CSS（ダークモード対応）：**
+```css
+.games-search-wrap { margin-bottom: 24px; }
+.games-search {
+  width: 100%;
+  height: 44px;
+  padding: 0 16px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.games-search::placeholder { color: var(--text3); }
+.games-search:focus { border-color: var(--border2); }
+
+/* グリッドレイアウト */
+.games-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+/* 個別カード */
+.game-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: border-color 0.2s;
+}
+.game-card:hover { border-color: var(--border2); }
+
+.game-card-name {
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--white);
+}
+
+.game-card-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.game-tag {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  letter-spacing: 0.04em;
+}
+
+.tag-players {
+  background: rgba(212, 168, 67, 0.12);
+  color: var(--gold);
+  border: 1px solid rgba(212, 168, 67, 0.2);
+}
+
+.tag-time {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text2);
+  border: 1px solid var(--border);
+}
+
+.game-card-desc {
+  font-size: 0.78rem;
+  color: var(--text2);
+  line-height: 1.65;
+}
+
+.games-count {
+  font-size: 0.78rem;
+  color: var(--text3);
+  text-align: right;
+  margin-top: 12px;
+}
+
+/* PC: 3カラム */
+@media (min-width: 769px) {
+  .games-grid { grid-template-columns: repeat(3, 1fr); gap: 12px; }
+}
+```
+
+**JavaScript（リアルタイム検索）：**
+```javascript
+// 1. ゲームデータ配列（オブジェクト形式）
+const games = [
+  {
+    name: 'ito',
+    players: '2〜',
+    explain: 5,
+    play: 5,
+    desc: '教室にある一番小さいものを1、一番大きいものを100とすると、34は？'
+  },
+  {
+    name: 'ペチャリブレ',
+    players: '3〜',
+    explain: 5,
+    play: 5,
+    desc: '失恋直後の魔法使いVS身体が鋼鉄のユーチューバー　どっちが強い？'
+  },
+  // ... 以下続く
+];
+
+// 2. HTML生成＆検索処理
+function renderGames(list) {
+  const grid = document.getElementById('games-grid');
+  const count = document.getElementById('games-count');
+  
+  grid.innerHTML = list.map(g => `
+    <div class="game-card">
+      <div class="game-card-name">${g.name}</div>
+      <div class="game-card-meta">
+        <span class="game-tag tag-players">👥 ${g.players}</span>
+        <span class="game-tag tag-time">⏱ ${g.play}分</span>
+      </div>
+      <div class="game-card-desc">${g.desc}</div>
+    </div>
+  `).join('');
+  
+  count.textContent = `${list.length}件表示`;
+}
+
+// 3. 初期表示
+renderGames(games);
+
+// 4. リアルタイム検索
+document.getElementById('games-search').addEventListener('input', e => {
+  const query = e.target.value.toLowerCase();
+  const filtered = games.filter(g =>
+    g.name.toLowerCase().includes(query) ||
+    g.desc.toLowerCase().includes(query) ||
+    g.players.toLowerCase().includes(query)
+  );
+  renderGames(filtered);
+});
+```
+
+**活用ポイント：**
+- `grid-template-columns` を `1fr 1fr` (スマホ2カラム) と `repeat(3, 1fr)` (PC3カラム) で切り替え
+- `game-tag` は背景色＆ボーダーで視認性UP
+- 検索は配列の `filter()` で `name/desc/players` を部分マッチ検索
+- 表示件数を動的表示することでUXが向上
+
+---
+
 ## 関連リンク
 
 - 成功パターン集 → [patterns.md](./patterns.md)
