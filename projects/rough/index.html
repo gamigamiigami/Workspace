@@ -130,6 +130,34 @@
     .chat-send { width:40px; height:40px; border-radius:8px; background:var(--gold); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:0.9rem; transition:opacity 0.15s; flex-shrink:0; }
     .chat-send:hover { opacity:0.85; }
 
+    /* games */
+    #games { background:var(--surface); }
+    .game-filters { margin-bottom:32px; display:flex; flex-direction:column; gap:12px; }
+    .game-search { width:100%; height:44px; padding:0 16px; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); color:var(--text); font-size:0.92rem; outline:none; font-family:inherit; transition:border-color 0.15s; }
+    .game-search::placeholder { color:var(--text3); }
+    .game-search:focus { border-color:var(--border2); }
+    .filter-row { display:flex; gap:8px; flex-wrap:wrap; }
+    .game-select { height:38px; padding:0 12px; background:var(--bg); border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:0.82rem; outline:none; cursor:pointer; font-family:inherit; transition:border-color 0.15s; flex:1; min-width:120px; }
+    .game-select:focus { border-color:var(--border2); }
+    .game-count { font-size:0.78rem; color:var(--text3); }
+    .game-list { display:flex; flex-direction:column; gap:8px; }
+    .game-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:20px; transition:border-color 0.2s; }
+    .game-card:hover { border-color:var(--border2); }
+    .game-card-top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:8px; }
+    .game-name { font-size:0.98rem; font-weight:700; color:var(--white); }
+    .game-tags { display:flex; gap:6px; flex-wrap:wrap; flex-shrink:0; }
+    .game-tag { font-size:0.68rem; font-weight:600; padding:3px 8px; border-radius:4px; letter-spacing:0.04em; }
+    .tag-genre { background:rgba(212,168,67,0.1); color:var(--gold); border:1px solid rgba(212,168,67,0.2); }
+    .tag-level { background:rgba(255,255,255,0.05); color:var(--text2); border:1px solid var(--border); }
+    .game-meta { display:flex; gap:16px; font-size:0.78rem; color:var(--text3); margin-bottom:8px; }
+    .game-desc { font-size:0.84rem; color:var(--text2); line-height:1.7; }
+    .game-empty { text-align:center; padding:48px 0; color:var(--text3); font-size:0.9rem; }
+    @media (min-width:769px) {
+      .game-list { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+      .filter-row { flex-wrap:nowrap; }
+      .game-select { flex:none; min-width:0; }
+    }
+
     /* footer */
     footer { background:var(--bg); border-top:1px solid var(--border); padding:48px 24px; display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
     .footer-brand { font-size:0.8rem; font-weight:800; letter-spacing:0.15em; color:var(--gold); }
@@ -154,15 +182,15 @@
 
       /* hero: 左テキスト ＋ 右スタッツ */
       #hero { min-height:92vh; padding:100px 48px 80px; }
-      .hero-inner { display:grid; grid-template-columns:1fr 1fr; gap:64px; align-items:center; }
-      .hero-right { display:flex; } /* PC時に表示 */
+      .hero-inner { display:grid; grid-template-columns:3fr 2fr; gap:80px; align-items:center; }
+      .hero-right { display:flex; }
       .hero-left { display:flex; flex-direction:column; }
-      .hero-right { display:flex; flex-direction:column; gap:24px; }
-      h1 { font-size:clamp(2.8rem,4vw,3.8rem); }
+      h1 { font-size:clamp(3rem,4.5vw,4.4rem); }
+      .hero-desc { max-width:none; font-size:1.12rem; }
       .hero-actions { flex-direction:row; max-width:none; }
       .btn-primary, .btn-outline { flex:1; }
-      .hero-stats { margin-top:0; padding-top:0; border-top:none; flex-direction:column; gap:28px; padding:32px; background:var(--surface); border:1px solid var(--border); border-radius:var(--r); }
-      .stat-num { font-size:2rem; }
+      .hero-stats { margin-top:40px; padding-top:32px; flex-direction:row; gap:48px; }
+      .stat-num { font-size:2.2rem; }
 
       /* about: 2×2 grid wider */
       .about-grid { grid-template-columns:repeat(4,1fr); gap:16px; }
@@ -197,7 +225,10 @@
 
 <nav>
   <span class="nav-logo">Rough</span>
-  <a href="#join" class="nav-cta">参加する</a>
+  <div style="display:flex;align-items:center;gap:20px;">
+    <a href="#games" style="font-size:0.82rem;color:var(--text2);text-decoration:none;letter-spacing:0.04em;transition:color 0.15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--text2)'">ゲームリスト</a>
+    <a href="#join" class="nav-cta">参加する</a>
+  </div>
 </nav>
 
 <section id="hero">
@@ -323,6 +354,46 @@
       <img class="wide" src="IMG_1361.jpeg" alt="賑わう会場の様子">
     </div>
     <p class="gallery-note">※ 参加者の許可を得て掲載しています</p>
+  </div>
+</section>
+
+<!-- ★★★ ゲームリスト更新ポイント ★★★ -->
+<section id="games">
+  <div class="wrap">
+    <p class="sec-label">Game List</p>
+    <h2>持参ゲームリスト</h2>
+    <p class="sec-desc">当日遊べるゲームを検索・確認できます。</p>
+
+    <!-- 検索フィルター -->
+    <div class="game-filters">
+      <input class="game-search" id="game-search" type="text" placeholder="ゲーム名・キーワードで検索">
+      <div class="filter-row">
+        <select class="game-select" id="filter-players">
+          <option value="">人数：すべて</option>
+          <option value="2">2人〜</option>
+          <option value="3">3人〜</option>
+          <option value="4">4人〜</option>
+          <option value="6">6人〜</option>
+        </select>
+        <select class="game-select" id="filter-level">
+          <option value="">難易度：すべて</option>
+          <option value="1">★ ライト</option>
+          <option value="2">★★ 普通</option>
+          <option value="3">★★★ ヘビー</option>
+        </select>
+        <select class="game-select" id="filter-genre">
+          <option value="">ジャンル：すべて</option>
+          <option value="カード">カードゲーム</option>
+          <option value="ボード">ボードゲーム</option>
+          <option value="パーティー">パーティー</option>
+          <option value="推理">推理・正体隠匿</option>
+        </select>
+      </div>
+      <div class="game-count" id="game-count"></div>
+    </div>
+
+    <!-- ゲームカード一覧 -->
+    <div class="game-list" id="game-list"></div>
   </div>
 </section>
 
@@ -457,6 +528,110 @@
 
   sendEl.addEventListener('click', send);
   inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+
+  // ===== ゲームリスト =====
+  // ★★★ ゲームを追加・編集するときはここを書き換える ★★★
+  const games = [
+    {
+      name: 'ito',
+      players: [2, 10], time: 20, level: 1, genre: 'パーティー',
+      desc: '1〜100の数字カードを会話しながら小さい順に並べる協力ゲーム。コミュニケーションが楽しい。'
+    },
+    {
+      name: 'ナンジャモンジャ',
+      players: [2, 6], time: 15, level: 1, genre: 'パーティー',
+      desc: 'めちゃくちゃな名前をつけてカードを早取りするパーティーゲーム。爆笑必至。'
+    },
+    {
+      name: 'ドブル',
+      players: [2, 8], time: 15, level: 1, genre: 'カード',
+      desc: '2枚のカードには必ず共通のシンボルが1つ。速く見つけて叫んだ人の勝ち！'
+    },
+    {
+      name: '할리갈리（ハリガリ）',
+      players: [2, 6], time: 20, level: 1, genre: 'カード',
+      desc: '果物が5つそろったらベルを鳴らせ！反射神経が試されるスピードゲーム。'
+    },
+    {
+      name: 'ワードウルフ',
+      players: [3, 10], time: 20, level: 1, genre: '推理',
+      desc: '少数派（ウルフ）を見つけ出す正体隠匿ゲーム。会話の巧みさが勝敗を決める。'
+    },
+    {
+      name: 'コードネーム',
+      players: [4, 8], time: 30, level: 2, genre: 'ボード',
+      desc: 'スパイのコードネームを1単語のヒントで仲間に伝えるチーム対戦ゲーム。論理と発想力が鍵。'
+    },
+    {
+      name: 'カタン',
+      players: [3, 4], time: 75, level: 2, genre: 'ボード',
+      desc: '資源を集めて開拓地を広げる定番ボードゲーム。交渉と戦略が楽しい。'
+    },
+    {
+      name: '宝石の煌めき',
+      players: [2, 4], time: 45, level: 2, genre: 'ボード',
+      desc: '宝石を集めて貴族カードを購入する経済系ボードゲーム。手軽だが奥深い。'
+    },
+    {
+      name: 'ディクシット',
+      players: [3, 6], time: 30, level: 1, genre: 'カード',
+      desc: '美しいイラストカードを使ったイメージ当てゲーム。表現力と共感力が試される。'
+    },
+    {
+      name: 'アグリコラ',
+      players: [1, 5], time: 120, level: 3, genre: 'ボード',
+      desc: '農場を経営するワーカープレイスメントゲーム。重量級だが達成感が大きい。'
+    },
+  ];
+
+  const levelLabel = ['', '★ ライト', '★★ 普通', '★★★ ヘビー'];
+
+  function renderGames() {
+    const keyword = document.getElementById('game-search').value.trim().toLowerCase();
+    const minPlayers = parseInt(document.getElementById('filter-players').value) || 0;
+    const level = parseInt(document.getElementById('filter-level').value) || 0;
+    const genre = document.getElementById('filter-genre').value;
+
+    const filtered = games.filter(g => {
+      if (keyword && !g.name.toLowerCase().includes(keyword) && !g.desc.includes(keyword)) return false;
+      if (minPlayers && g.players[1] < minPlayers) return false;
+      if (level && g.level !== level) return false;
+      if (genre && g.genre !== genre) return false;
+      return true;
+    });
+
+    const listEl = document.getElementById('game-list');
+    const countEl = document.getElementById('game-count');
+    countEl.textContent = filtered.length + ' 件';
+
+    if (filtered.length === 0) {
+      listEl.innerHTML = '<div class="game-empty">該当するゲームが見つかりません</div>';
+      return;
+    }
+
+    listEl.innerHTML = filtered.map(g => `
+      <div class="game-card">
+        <div class="game-card-top">
+          <div class="game-name">${g.name}</div>
+          <div class="game-tags">
+            <span class="game-tag tag-genre">${g.genre}</span>
+            <span class="game-tag tag-level">${levelLabel[g.level]}</span>
+          </div>
+        </div>
+        <div class="game-meta">
+          <span>👥 ${g.players[0]}〜${g.players[1]}人</span>
+          <span>⏱ 約${g.time}分</span>
+        </div>
+        <div class="game-desc">${g.desc}</div>
+      </div>
+    `).join('');
+  }
+
+  renderGames();
+  document.getElementById('game-search').addEventListener('input', renderGames);
+  document.getElementById('filter-players').addEventListener('change', renderGames);
+  document.getElementById('filter-level').addEventListener('change', renderGames);
+  document.getElementById('filter-genre').addEventListener('change', renderGames);
 </script>
 </body>
 </html>
