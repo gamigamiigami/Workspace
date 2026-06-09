@@ -439,6 +439,76 @@ backBtn.addEventListener('click', () => {
 
 ---
 
+---
+
+## PCレスポンシブレイアウト（スマホ縦積み ↔ PC 2カラム）
+
+**用途：** スマートフォン（〜768px）では縦積みレイアウト、PC（769px〜）では横幅1080pxの2カラムレイアウトに自動切り替え。
+
+**HTML例：**
+```html
+<section class="hero">
+  <div class="hero-text">キャッチコピー・ボタン</div>
+  <div class="hero-stats">スタッツカード</div>
+</section>
+```
+
+**CSS：**
+```css
+/* スマホ：デフォルト（縦積み） */
+.hero {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 100%;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+/* PC：769px以上で2カラム対応 */
+@media (min-width: 769px) {
+  body {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 0;
+  }
+  
+  .hero {
+    flex-direction: row;
+    align-items: center;
+    gap: 40px;
+  }
+  
+  .hero-text { flex: 1; }
+  .hero-stats { flex: 1; }
+  
+  /* About セクション：3カラム → 4カラム横並び */
+  .about-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  
+  /* Gallery：3カラム横並び */
+  .gallery {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  /* FAQ & Chat：左右並列 */
+  .faq-chat {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 40px;
+  }
+}
+```
+
+**活用ポイント：**
+- ブレークポイント `769px` でスマホ/PC を明確に分岐
+- 最大幅 `1080px` で大画面での見栄え調整
+- `flex-direction: row/column` の切り替えでシンプルに横並び実装
+- `grid-template-columns` 数の増減で各セクション最適化
+
+---
+
 ## 関連リンク
 
 - 成功パターン集 → [patterns.md](./patterns.md)
