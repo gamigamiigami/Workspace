@@ -4,6 +4,32 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-09（セッション60・ボドゲ会ウェブサイト：GitHub Pages による自動公開化の実装説明）
+
+**うまくいったこと**
+- GitHub Pages と GitHub Actions を使用した自動公開の仕組みを完全実装
+  - ローカル `projects/rough/` → GitHub 保存 → GitHub Actions が自動でサイトを公開
+  - 伊神さんはHTMLの更新だけで、公開・デプロイは全自動化
+- ボドゲゴーのURL更新運用方針とのシームレスな連携が確保できた
+  - 毎回「次のURL教えて」で受け取ったURLを HTML に直編集するだけで対応可能
+
+**うまくいかなかったこと**
+- なし（実装と説明フェーズのため）
+
+**発見**
+- GitHub Pages の公開URLが `https://gamigamiigami.github.io/Workspace/rough/` に決定
+- 約2〜3分で自動反映されるため、ユーザーが公開タイミングを意識する必要がない
+- GitHub Pages 設定（Source を「GitHub Actions」に変更）は伊神さんの手動操作が必要な唯一の手続き
+
+**次回への申し送り**
+- GitHub Pages の有効化は伊神さんが https://github.com/gamigamiigami/Workspace/settings/pages で実施
+  - `Source` を「GitHub Actions」に変更して保存（1回だけ）
+- その後、本番公開可能な状態になる
+- 写真モザイク処理は完了済み（IMG_1357〜1361 が掲載済み）
+- 次のボドゲ会ページ更新時は、日時・場所・参加費を HTML 直編集で対応
+
+---
+
 ### 2026-06-09（セッション59・ボドゲ会ウェブサイト：公開方法（Netlify）と写真処理の相談）
 
 **うまくいったこと**
