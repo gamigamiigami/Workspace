@@ -158,6 +158,26 @@
       .game-select { flex:none; min-width:0; }
     }
 
+    /* games */
+    #games { background:var(--surface); }
+    .games-search-wrap { margin-bottom:24px; }
+    .games-search { width:100%; height:44px; padding:0 16px; background:var(--bg); border:1px solid var(--border); border-radius:var(--r); color:var(--text); font-size:0.9rem; font-family:inherit; outline:none; transition:border-color 0.15s; }
+    .games-search::placeholder { color:var(--text3); }
+    .games-search:focus { border-color:var(--border2); }
+    .games-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .game-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:16px; display:flex; flex-direction:column; gap:8px; transition:border-color 0.2s; }
+    .game-card:hover { border-color:var(--border2); }
+    .game-card-name { font-size:0.92rem; font-weight:700; color:var(--white); }
+    .game-card-meta { display:flex; gap:8px; flex-wrap:wrap; }
+    .game-tag { font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:4px; letter-spacing:0.04em; }
+    .tag-players { background:rgba(212,168,67,0.12); color:var(--gold); border:1px solid rgba(212,168,67,0.2); }
+    .tag-time { background:rgba(255,255,255,0.05); color:var(--text2); border:1px solid var(--border); }
+    .game-card-desc { font-size:0.78rem; color:var(--text2); line-height:1.65; }
+    .games-count { font-size:0.78rem; color:var(--text3); text-align:right; margin-top:12px; }
+    @media (min-width:769px) {
+      .games-grid { grid-template-columns:repeat(3,1fr); gap:12px; }
+    }
+
     /* footer */
     footer { background:var(--bg); border-top:1px solid var(--border); padding:48px 24px; display:flex; flex-direction:column; align-items:center; gap:12px; text-align:center; }
     .footer-brand { font-size:0.8rem; font-weight:800; letter-spacing:0.15em; color:var(--gold); }
@@ -357,6 +377,20 @@
   </div>
 </section>
 
+<!-- ★★★ 更新ポイント：ゲームリスト ★★★ -->
+<section id="games">
+  <div class="wrap">
+    <p class="sec-label">Game List</p>
+    <h2>持参ゲーム一覧</h2>
+    <p class="sec-desc">当日はこれらのゲームが遊べます。キーワードで絞り込めます。</p>
+    <div class="games-search-wrap">
+      <input class="games-search" id="games-search" type="text" placeholder="ゲーム名・人数・キーワードで検索…">
+    </div>
+    <div class="games-grid" id="games-grid"></div>
+    <p class="games-count" id="games-count"></p>
+  </div>
+</section>
+
 <!-- ★★★ ゲームリスト更新ポイント ★★★ -->
 <section id="games">
   <div class="wrap">
@@ -474,6 +508,75 @@
 </footer>
 
 <script>
+  // ===== ゲームリスト =====
+  const games = [
+    { name:'ito',             players:'2〜',    explain:5,  play:5,  desc:'教室にある一番小さいものを1、一番大きいものを100とすると、34は？' },
+    { name:'ペチャリブレ',      players:'3〜',    explain:5,  play:5,  desc:'失恋直後の魔法使いVS身体が鋼鉄のユーチューバー　どっちが強い？' },
+    { name:'キャット＆チョコレート', players:'3〜', explain:5, play:5,  desc:'トイレットペーパーがない！ワインと仏像で解決しよう！' },
+    { name:'ガイスター',        players:'2',      explain:10, play:10, desc:'あのお化けは良いお化け？悪いお化け？心理戦。' },
+    { name:'ジャイプル',        players:'2',      explain:15, play:30, desc:'マハラジャの商人になって、ラクダと資源で取引をしろ！' },
+    { name:'ゴブレットブラザーズ', players:'2',    explain:5,  play:5,  desc:'○×ゲームの進化系。' },
+    { name:'スプレンダー',      players:'2〜4',   explain:20, play:30, desc:'集めた宝石でカードを購入。じっくり考えコンボを決める。' },
+    { name:'六華',             players:'2〜4',   explain:10, play:10, desc:'六枚でやるボドゲ版麻雀。' },
+    { name:'コリドール',        players:'2/4',    explain:5,  play:10, desc:'誰でもできる！進路を妨害しろ！' },
+    { name:'ラミィキューブ',     players:'2〜4',   explain:10, play:20, desc:'手持ちの数字を全部出しきれ！出すためにはグループを作り出せ！' },
+    { name:'ドミニオン',        players:'3〜4',   explain:20, play:20, desc:'遊戯王・デュエマなど、カードゲーム好きなら。' },
+    { name:'カタン',           players:'3〜4',   explain:20, play:30, desc:'素材を集めて都市を開拓しよう。素材管理＆交渉ゲー。' },
+    { name:'あいうえバトル',     players:'2〜5',   explain:5,  play:10, desc:'誰でもできる！相手のお題にあのひらがなは入ってる？' },
+    { name:'ラブレター',        players:'3〜5',   explain:5,  play:10, desc:'2枚のカードから選ぶだけ！' },
+    { name:'ワーリングウィッチクラフト', players:'3〜5', explain:10, play:20, desc:'相手に嫌がらせ！コンボを組んで爽快。' },
+    { name:'スカウト',          players:'3〜5',   explain:10, play:15, desc:'進化系大富豪。他人のカードをスカウト！' },
+    { name:'限界しりとりパーティ', players:'2〜6',  explain:5,  play:10, desc:'特殊ルール付きのしりとり。' },
+    { name:'海底探索',          players:'2〜6',   explain:5,  play:15, desc:'運＋チキンレース。まだ酸素足りる…？' },
+    { name:'音速飯店',          players:'2〜6',   explain:5,  play:5,  desc:'誰でもできる！早いもの勝ちでチャーハン・ラーメンをつくれ！' },
+    { name:'ハリガリ',          players:'2〜6',   explain:5,  play:15, desc:'同じ果物が５つになったらベルを鳴らせ！' },
+    { name:'トリオ',            players:'2〜6',   explain:5,  play:15, desc:'神経衰弱の進化系。' },
+    { name:'ごきぶりポーカー',   players:'2〜6',   explain:10, play:20, desc:'虫を押し付け合う。嘘オッケー！' },
+    { name:'トマトマト',        players:'3〜6',   explain:5,  play:5,  desc:'誰でもできる！早口言葉。' },
+    { name:'スカル',           players:'3〜6',   explain:10, play:20, desc:'お花がいくつあるでしょう。嘘をついているのはだ～れだ。' },
+    { name:'ドブル',           players:'2〜8',   explain:5,  play:10, desc:'誰でもできる！二つのカードに共通するマークは？早押し！' },
+    { name:'ワードスナイパー',   players:'2〜8',   explain:5,  play:5,  desc:'「あ」から始まる丸いものって？' },
+    { name:'ゼッタイギオンカン', players:'3〜8',   explain:5,  play:5,  desc:'「バジョリン」ってなんの擬音？' },
+    { name:'インサイダーゲーム', players:'4〜8',   explain:5,  play:10, desc:'協力型のアキネイター。でも裏切り者が…。' },
+    { name:'カタカナーシ',       players:'2〜9',   explain:5,  play:5,  desc:'誰でもできる！カタカナを使わずに説明しよう。' },
+    { name:'エセ芸術家ニューヨークへ行く', players:'5〜9', explain:5, play:20, desc:'一筆書きリレーでお題を完成させよう！お題を知らないのは誰？' },
+    { name:'バトルライン',       players:'2チーム', explain:5, play:20, desc:'9か所同時ポーカー。' },
+    { name:'コードネーム',       players:'2チーム', explain:10,play:20, desc:'レモン・カボチャ・ケチャップを連想させるけど、リンゴは連想させない言葉って？' },
+    { name:'ニムト男爵',         players:'2〜10',  explain:10, play:20, desc:'自分のカードは何番目に大きいかな？' },
+    { name:'neu（ノイ）',        players:'2〜7',   explain:5,  play:10, desc:'101を超えないようにするには…？' },
+    { name:'ゾン噛まパーティ',   players:'3〜6',   explain:5,  play:5,  desc:'誰かが脱出し出すのを見逃すな！' },
+    { name:'ワードッチ',         players:'3〜8',   explain:10, play:10, desc:'暫定一位は「あんこぎっしりあんぱん」。' },
+  ];
+
+  function renderGames(list) {
+    const grid = document.getElementById('games-grid');
+    const count = document.getElementById('games-count');
+    grid.innerHTML = list.map(g => `
+      <div class="game-card">
+        <div class="game-card-name">${g.name}</div>
+        <div class="game-card-meta">
+          <span class="game-tag tag-players">👥 ${g.players}</span>
+          <span class="game-tag tag-time">⏱ 約${g.play}分</span>
+        </div>
+        <div class="game-card-desc">${g.desc}</div>
+      </div>
+    `).join('');
+    count.textContent = `${list.length} ゲーム`;
+  }
+
+  renderGames(games);
+
+  document.getElementById('games-search').addEventListener('input', function() {
+    const q = this.value.trim().toLowerCase();
+    if (!q) { renderGames(games); return; }
+    renderGames(games.filter(g =>
+      g.name.toLowerCase().includes(q) ||
+      g.players.includes(q) ||
+      g.desc.toLowerCase().includes(q)
+    ));
+  });
+
+  // ===== アコーディオン =====
   document.querySelectorAll('.acc-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const body = btn.nextElementSibling;
