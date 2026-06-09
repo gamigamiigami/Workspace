@@ -8,220 +8,262 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --primary: #FF6B35;
-      --primary-light: #FFF0EB;
-      --secondary: #3D5A80;
-      --accent: #FFD166;
-      --text: #333;
-      --text-light: #666;
-      --bg: #FAFAFA;
-      --white: #fff;
-      --radius: 16px;
+      --ink:     #1a1a2e;
+      --ink2:    #2d2d44;
+      --gold:    #c9a84c;
+      --gold-lt: #e8c97a;
+      --cream:   #f5f0e8;
+      --white:   #ffffff;
+      --gray:    #888;
+      --border:  #e0d8cc;
+      --radius:  12px;
     }
 
+    html { scroll-behavior: smooth; }
     body {
       font-family: system-ui, sans-serif;
       font-size: 16px;
       line-height: 1.7;
-      color: var(--text);
-      background: var(--bg);
+      color: var(--ink);
+      background: var(--white);
     }
 
     /* ===== 共通 ===== */
-    section { padding: 64px 20px; }
+    .container { max-width: 560px; margin: 0 auto; padding: 0 20px; }
+    .section-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 10px;
+    }
     .section-title {
-      font-size: 1.6rem;
-      font-weight: bold;
-      text-align: center;
-      margin-bottom: 8px;
+      font-size: 1.7rem;
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 12px;
     }
     .section-sub {
-      text-align: center;
-      color: var(--text-light);
-      margin-bottom: 40px;
       font-size: 0.95rem;
+      color: var(--gray);
+      margin-bottom: 40px;
     }
-    .tag {
-      display: inline-block;
-      background: var(--accent);
-      color: #333;
-      font-size: 0.75rem;
-      font-weight: bold;
-      padding: 3px 10px;
-      border-radius: 20px;
-      margin-bottom: 8px;
-    }
+    section { padding: 72px 0; }
 
     /* ===== ナビ ===== */
     nav {
       position: sticky;
       top: 0;
-      background: var(--white);
-      border-bottom: 2px solid var(--primary-light);
-      padding: 12px 20px;
+      z-index: 100;
+      background: rgba(26,26,46,0.96);
+      backdrop-filter: blur(8px);
+      padding: 14px 20px;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      z-index: 100;
     }
     .nav-logo {
-      font-weight: bold;
-      font-size: 1rem;
-      color: var(--primary);
+      color: var(--gold);
+      font-weight: 800;
+      font-size: 0.95rem;
+      letter-spacing: 0.03em;
     }
     .nav-btn {
-      background: var(--primary);
-      color: white;
+      background: var(--gold);
+      color: var(--ink);
       border: none;
-      border-radius: 20px;
-      padding: 8px 18px;
-      font-size: 0.9rem;
-      font-weight: bold;
+      border-radius: 6px;
+      padding: 9px 20px;
+      font-size: 0.85rem;
+      font-weight: 700;
       cursor: pointer;
-      min-height: 44px;
       text-decoration: none;
+      min-height: 44px;
       display: inline-flex;
       align-items: center;
     }
 
     /* ===== ヒーロー ===== */
     #hero {
-      background: linear-gradient(135deg, var(--secondary) 0%, #1e3a5f 100%);
-      color: white;
+      background: var(--ink);
+      color: var(--white);
+      padding: 96px 20px 88px;
       text-align: center;
-      padding: 80px 20px 72px;
     }
-    .hero-emoji { font-size: 3rem; margin-bottom: 16px; }
+    .hero-eyebrow {
+      display: inline-block;
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      padding: 5px 14px;
+      border-radius: 4px;
+      margin-bottom: 28px;
+    }
     .hero-title {
-      font-size: 2.2rem;
-      font-weight: bold;
-      line-height: 1.3;
-      margin-bottom: 12px;
+      font-size: 2.4rem;
+      font-weight: 900;
+      line-height: 1.2;
+      margin-bottom: 20px;
     }
-    .hero-title span { color: var(--accent); }
-    .hero-sub {
+    .hero-title em {
+      font-style: normal;
+      color: var(--gold);
+    }
+    .hero-desc {
       font-size: 1rem;
-      opacity: 0.85;
-      margin-bottom: 32px;
-      line-height: 1.8;
+      color: rgba(255,255,255,0.65);
+      max-width: 400px;
+      margin: 0 auto 36px;
+      line-height: 1.9;
     }
     .hero-badges {
       display: flex;
       justify-content: center;
-      gap: 10px;
+      gap: 8px;
       flex-wrap: wrap;
-      margin-bottom: 36px;
+      margin-bottom: 44px;
     }
-    .badge {
-      background: rgba(255,255,255,0.15);
-      border: 1px solid rgba(255,255,255,0.3);
-      color: white;
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 0.85rem;
+    .hero-badge {
+      background: rgba(201,168,76,0.12);
+      border: 1px solid rgba(201,168,76,0.3);
+      color: var(--gold-lt);
+      font-size: 0.8rem;
+      padding: 5px 12px;
+      border-radius: 4px;
     }
     .hero-cta {
       display: inline-block;
-      background: var(--primary);
-      color: white;
-      font-size: 1.1rem;
-      font-weight: bold;
-      padding: 16px 40px;
-      border-radius: 50px;
+      background: var(--gold);
+      color: var(--ink);
+      font-size: 1rem;
+      font-weight: 800;
+      padding: 16px 44px;
+      border-radius: 8px;
       text-decoration: none;
-      box-shadow: 0 4px 16px rgba(255,107,53,0.4);
+      letter-spacing: 0.02em;
     }
 
     /* ===== ボドゲ会とは ===== */
-    #about { background: var(--white); }
-    .about-cards {
+    #about { background: var(--cream); }
+    .about-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 16px;
-      max-width: 600px;
-      margin: 0 auto;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
     }
     .about-card {
-      background: var(--primary-light);
+      background: var(--white);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 24px 16px;
-      text-align: center;
+      padding: 24px 20px;
     }
-    .about-card .icon { font-size: 2rem; margin-bottom: 8px; }
-    .about-card h3 { font-size: 0.95rem; font-weight: bold; margin-bottom: 4px; }
-    .about-card p { font-size: 0.85rem; color: var(--text-light); }
+    .about-card .icon {
+      font-size: 1.6rem;
+      margin-bottom: 10px;
+    }
+    .about-card h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+    .about-card p {
+      font-size: 0.82rem;
+      color: var(--gray);
+      line-height: 1.6;
+    }
 
     /* ===== 開催情報 ===== */
-    #info { background: var(--bg); }
-    .info-box {
-      background: var(--white);
+    #info { background: var(--white); }
+    .info-card {
+      background: var(--ink);
+      color: var(--white);
       border-radius: var(--radius);
-      border: 2px solid var(--primary-light);
-      padding: 28px 24px;
-      max-width: 480px;
-      margin: 0 auto;
+      overflow: hidden;
     }
+    .info-card-head {
+      background: var(--gold);
+      color: var(--ink);
+      padding: 14px 24px;
+      font-weight: 800;
+      font-size: 0.85rem;
+      letter-spacing: 0.08em;
+    }
+    .info-rows { padding: 8px 0; }
     .info-row {
       display: flex;
       gap: 16px;
-      padding: 14px 0;
-      border-bottom: 1px solid #f0f0f0;
+      padding: 14px 24px;
+      border-bottom: 1px solid rgba(255,255,255,0.07);
       align-items: flex-start;
     }
     .info-row:last-child { border-bottom: none; }
     .info-label {
-      font-size: 0.8rem;
-      font-weight: bold;
-      color: var(--primary);
-      min-width: 64px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--gold);
+      min-width: 56px;
+      letter-spacing: 0.05em;
       padding-top: 2px;
     }
-    .info-value { font-size: 0.95rem; }
+    .info-value {
+      font-size: 0.95rem;
+      line-height: 1.6;
+    }
     .info-note {
-      background: #fff8f0;
-      border-left: 3px solid var(--primary);
-      padding: 12px 16px;
-      border-radius: 0 8px 8px 0;
-      margin-top: 20px;
-      font-size: 0.85rem;
-      color: var(--text-light);
+      background: rgba(201,168,76,0.1);
+      border-left: 3px solid var(--gold);
+      margin: 0 24px 20px;
+      padding: 12px 14px;
+      border-radius: 0 6px 6px 0;
+      font-size: 0.82rem;
+      color: rgba(255,255,255,0.7);
+      line-height: 1.8;
     }
 
     /* ===== こんな人に ===== */
-    #target { background: var(--white); }
+    #target { background: var(--cream); }
     .target-list {
       list-style: none;
-      max-width: 480px;
-      margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
     .target-list li {
-      background: var(--primary-light);
-      border-radius: 12px;
-      padding: 14px 20px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--gold);
+      border-radius: 0 var(--radius) var(--radius) 0;
+      padding: 14px 18px;
       font-size: 0.95rem;
       display: flex;
       align-items: center;
       gap: 12px;
     }
-    .target-list li .check { font-size: 1.2rem; }
+    .target-list li .check {
+      color: var(--gold);
+      font-weight: 900;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
 
-    /* ===== 過去の様子 ===== */
-    #gallery { background: var(--bg); }
+    /* ===== ギャラリー ===== */
+    #gallery { background: var(--ink); padding: 72px 0; }
+    #gallery .section-title { color: var(--white); }
+    #gallery .section-sub { color: rgba(255,255,255,0.45); }
     .gallery-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
-      max-width: 480px;
-      margin: 0 auto 24px;
+      gap: 10px;
     }
     .gallery-grid img {
       width: 100%;
       aspect-ratio: 4/3;
       object-fit: cover;
-      border-radius: 12px;
+      border-radius: 8px;
+      display: block;
     }
     .gallery-grid img.wide {
       grid-column: span 2;
@@ -229,20 +271,18 @@
     }
     .gallery-note {
       text-align: center;
-      font-size: 0.85rem;
-      color: var(--text-light);
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.3);
+      margin-top: 16px;
     }
 
     /* ===== 参加方法 ===== */
-    #join { background: var(--secondary); color: white; text-align: center; }
-    #join .section-title { color: white; }
-    #join .section-sub { color: rgba(255,255,255,0.7); }
+    #join { background: var(--cream); text-align: center; }
     .join-buttons {
       display: flex;
       flex-direction: column;
-      gap: 16px;
-      align-items: center;
-      max-width: 320px;
+      gap: 14px;
+      max-width: 340px;
       margin: 0 auto;
     }
     .join-btn {
@@ -252,113 +292,171 @@
       gap: 10px;
       width: 100%;
       padding: 18px 24px;
-      border-radius: 50px;
-      font-size: 1rem;
-      font-weight: bold;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: 700;
       text-decoration: none;
       min-height: 56px;
       border: none;
       cursor: pointer;
+      letter-spacing: 0.02em;
     }
-    .join-btn-line { background: #06C755; color: white; }
-    .join-btn-bodoge { background: var(--accent); color: #333; }
-    .join-desc {
-      font-size: 0.8rem;
-      opacity: 0.7;
-      margin-top: 8px;
+    .join-btn-line {
+      background: #06C755;
+      color: var(--white);
+    }
+    .join-btn-bodoge {
+      background: var(--ink);
+      color: var(--gold);
+      border: 1px solid var(--ink);
+    }
+    .join-note {
+      font-size: 0.82rem;
+      color: var(--gray);
+      margin-top: 16px;
     }
 
-    /* ===== FAQ ボット ===== */
-    #faq { background: var(--white); }
-    .faq-bot {
-      max-width: 480px;
-      margin: 0 auto;
+    /* ===== よくある質問（アコーディオン）===== */
+    #faq-static { background: var(--white); }
+    .accordion {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
     }
-    .bot-message {
+    .accordion-item {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .accordion-btn {
+      width: 100%;
+      background: none;
+      border: none;
+      padding: 18px 20px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      text-align: left;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      color: var(--ink);
+    }
+    .accordion-btn .arrow {
+      font-size: 0.75rem;
+      color: var(--gold);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+    .accordion-btn.open .arrow { transform: rotate(180deg); }
+    .accordion-body {
+      display: none;
+      padding: 0 20px 18px;
+      font-size: 0.9rem;
+      color: #555;
+      line-height: 1.8;
+      border-top: 1px solid var(--border);
+    }
+    .accordion-body.open { display: block; }
+
+    /* ===== チャットボット ===== */
+    #faq-bot { background: var(--cream); }
+    .bot-wrap { max-width: 520px; margin: 0 auto; }
+    .bot-intro {
       display: flex;
       gap: 12px;
       margin-bottom: 20px;
       align-items: flex-start;
     }
-    .bot-avatar {
+    .bot-face {
       width: 40px;
       height: 40px;
-      background: var(--primary);
+      background: var(--ink);
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 1.2rem;
+      font-size: 1.1rem;
       flex-shrink: 0;
+      border: 2px solid var(--gold);
     }
     .bot-bubble {
-      background: var(--primary-light);
-      border-radius: 0 16px 16px 16px;
+      background: var(--white);
+      border: 1px solid var(--border);
+      border-radius: 0 12px 12px 12px;
       padding: 14px 16px;
       font-size: 0.9rem;
-      line-height: 1.7;
-      max-width: 340px;
+      line-height: 1.75;
+      max-width: 360px;
     }
-    .faq-questions {
+    .bot-questions {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       margin-bottom: 20px;
     }
-    .faq-q-btn {
+    .bot-q-btn {
       background: var(--white);
-      border: 2px solid var(--primary);
-      color: var(--primary);
-      border-radius: 24px;
-      padding: 12px 20px;
-      font-size: 0.9rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.88rem;
       cursor: pointer;
       text-align: left;
       min-height: 44px;
-      transition: background 0.2s;
+      color: var(--ink);
+      transition: border-color 0.15s, background 0.15s;
     }
-    .faq-q-btn:hover, .faq-q-btn.selected {
-      background: var(--primary);
-      color: white;
+    .bot-q-btn:hover {
+      border-color: var(--gold);
+      background: #fdf8ee;
     }
-    .user-bubble-wrap {
+    .user-row {
       display: flex;
       justify-content: flex-end;
-      margin-bottom: 16px;
+      margin-bottom: 14px;
     }
     .user-bubble {
-      background: var(--secondary);
-      color: white;
-      border-radius: 16px 0 16px 16px;
+      background: var(--ink);
+      color: var(--white);
+      border-radius: 12px 0 12px 12px;
       padding: 12px 16px;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       max-width: 280px;
+      line-height: 1.6;
     }
-    .faq-answer { display: none; }
-    .faq-back-btn {
-      background: transparent;
+    #bot-chat { margin-bottom: 4px; }
+    .bot-back {
+      background: none;
       border: none;
-      color: var(--primary);
-      font-size: 0.85rem;
+      color: var(--gold);
+      font-size: 0.82rem;
       cursor: pointer;
-      padding: 4px 0;
+      padding: 0;
       display: none;
-      margin-top: 8px;
     }
 
     /* ===== フッター ===== */
     footer {
-      background: #1a1a2e;
-      color: rgba(255,255,255,0.7);
+      background: var(--ink);
+      color: rgba(255,255,255,0.4);
       text-align: center;
-      padding: 40px 20px;
-      font-size: 0.85rem;
+      padding: 48px 20px;
+      font-size: 0.82rem;
+      line-height: 2;
     }
     footer .footer-name {
-      color: white;
-      font-weight: bold;
+      color: var(--gold);
+      font-weight: 700;
       font-size: 1rem;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
+    }
+    .divider {
+      width: 40px;
+      height: 2px;
+      background: var(--gold);
+      margin: 0 auto 40px;
     }
   </style>
 </head>
@@ -366,234 +464,310 @@
 
   <!-- ===== ナビ ===== -->
   <nav>
-    <span class="nav-logo">🎲 名古屋でボドゲin名駅</span>
+    <span class="nav-logo">ROUGH — ボドゲ会</span>
     <a href="#join" class="nav-btn">参加する</a>
   </nav>
 
   <!-- ===== ヒーロー ===== -->
   <section id="hero">
-    <div class="hero-emoji">🎲</div>
+    <span class="hero-eyebrow">NAGOYA BOARD GAME EVENT</span>
     <h1 class="hero-title">
-      名古屋でボドゲ<span>in名駅</span>、<br>一緒にやろう！
+      名古屋でボドゲ、<br><em>in 名駅。</em>
     </h1>
-    <p class="hero-sub">
-      初めてでも大丈夫。<br>
-      ゲームを知らなくても大丈夫。<br>
-      気軽に楽しめるボードゲーム会です。
+    <p class="hero-desc">
+      知識ゼロ、一人参加OK。<br>
+      気の合う仲間と、真剣に、笑いながら。
     </p>
     <div class="hero-badges">
-      <span class="badge">🙌 初心者歓迎</span>
-      <span class="badge">👥 一人参加OK</span>
-      <span class="badge">🎮 ゲーム持込不要</span>
+      <span class="hero-badge">初心者歓迎</span>
+      <span class="hero-badge">一人参加OK</span>
+      <span class="hero-badge">ゲーム持込不要</span>
+      <span class="hero-badge">20代多め</span>
     </div>
     <a href="#join" class="hero-cta">参加してみる →</a>
   </section>
 
   <!-- ===== ボドゲ会とは ===== -->
   <section id="about">
-    <span class="tag">ABOUT</span>
-    <h2 class="section-title">ボードゲーム会って？</h2>
-    <p class="section-sub">みんなでわいわい遊ぶだけです。それだけ！</p>
-    <div class="about-cards">
-      <div class="about-card">
-        <div class="icon">🃏</div>
-        <h3>いろんなゲーム</h3>
-        <p>軽いゲームから本格派まで揃ってます</p>
-      </div>
-      <div class="about-card">
-        <div class="icon">👋</div>
-        <h3>一人でも来れる</h3>
-        <p>一人参加が多数！すぐ仲良くなれます</p>
-      </div>
-      <div class="about-card">
-        <div class="icon">🔰</div>
-        <h3>ルール説明あり</h3>
-        <p>知らないゲームも一緒に覚えましょう</p>
-      </div>
-      <div class="about-card">
-        <div class="icon">😄</div>
-        <h3>アットホーム</h3>
-        <p>わいわい楽しい雰囲気を大切に</p>
+    <div class="container">
+      <span class="section-label">About</span>
+      <h2 class="section-title">ボードゲーム会とは？</h2>
+      <div class="divider" style="margin:0 0 40px;"></div>
+      <div class="about-grid">
+        <div class="about-card">
+          <div class="icon">🃏</div>
+          <h3>多彩なゲーム</h3>
+          <p>軽量〜本格派まで幅広く揃えてます</p>
+        </div>
+        <div class="about-card">
+          <div class="icon">👋</div>
+          <h3>一人でも来れる</h3>
+          <p>一人参加が多数。すぐ打ち解けられます</p>
+        </div>
+        <div class="about-card">
+          <div class="icon">📖</div>
+          <h3>ルール説明あり</h3>
+          <p>知らないゲームも一緒に覚えましょう</p>
+        </div>
+        <div class="about-card">
+          <div class="icon">🍹</div>
+          <h3>飲み放題あり</h3>
+          <p>ソフトドリンク飲み放題で参加費に含まれます</p>
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ===== 開催情報 ===== -->
-  <!-- ★★★ 更新ポイント：日時・場所・参加費・注意事項を変えてください ★★★ -->
+  <!-- ★★★ 更新ポイント ★★★ -->
   <section id="info">
-    <span class="tag">INFO</span>
-    <h2 class="section-title">開催情報</h2>
-    <p class="section-sub">次回の詳細はこちら</p>
-    <div class="info-box">
-      <div class="info-row">
-        <span class="info-label">📅 日時</span>
-        <!-- ↓ 日時を書き換える -->
-        <span class="info-value">2026年6月21日（日）14:00〜18:00</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">📍 会場</span>
-        <!-- ↓ 場所を書き換える -->
-        <span class="info-value">アニメバーネルフ（名古屋・名駅）</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">💰 参加費</span>
-        <!-- ↓ 参加費を書き換える -->
-        <span class="info-value">1,500円（ソフトドリンク飲み放題）</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">👤 定員</span>
-        <span class="info-value">25名（事前予約制・先着順）</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">🔰 対象</span>
-        <span class="info-value">初心者 大大大歓迎！ルール説明・フォローします</span>
-      </div>
-      <!-- ↓ 注意事項を書き換える -->
-      <div class="info-note">
-        ⚠️ <strong>注意事項</strong><br>
-        ・勧誘行為・迷惑行為は厳禁<br>
-        ・飲食物・ボドゲ持込可<br>
-        ・会場の設備や他のゲストへの配慮をすること<br>
-        ・予約内容に変更があれば連絡してください<br>
-        ・ゲームリストや予約申し込み、次回の案内はLINEオープンチャットにあります
+    <div class="container">
+      <span class="section-label">Next Event</span>
+      <h2 class="section-title">開催情報</h2>
+      <div class="divider" style="margin:0 0 40px;"></div>
+      <div class="info-card">
+        <div class="info-card-head">NEXT EVENT DETAILS</div>
+        <div class="info-rows">
+          <div class="info-row">
+            <span class="info-label">日時</span>
+            <!-- ↓ 日時を書き換える -->
+            <span class="info-value">2026年6月21日（日）14:00〜18:00</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">会場</span>
+            <!-- ↓ 場所を書き換える -->
+            <span class="info-value">アニメバーネルフ（名古屋・名駅）</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">参加費</span>
+            <!-- ↓ 参加費を書き換える -->
+            <span class="info-value">1,500円（ソフトドリンク飲み放題）</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">定員</span>
+            <span class="info-value">25名（事前予約制・先着順）</span>
+          </div>
+          <div class="info-row">
+            <span class="info-label">対象</span>
+            <span class="info-value">初心者 大大大歓迎！ルール説明・フォローします</span>
+          </div>
+        </div>
+        <!-- ↓ 注意事項を書き換える -->
+        <div class="info-note">
+          ⚠️ 注意事項<br>
+          ・勧誘行為・迷惑行為は厳禁<br>
+          ・飲食物・ボドゲ持込可<br>
+          ・会場設備や他のゲストへの配慮をすること<br>
+          ・予約内容に変更があれば連絡してください<br>
+          ・ゲームリスト・予約・次回案内はLINEオープンチャットにあります
+        </div>
       </div>
     </div>
   </section>
 
   <!-- ===== こんな人に ===== -->
   <section id="target">
-    <span class="tag">FOR YOU</span>
-    <h2 class="section-title">こんな人、来てください！</h2>
-    <p class="section-sub">当てはまったらぜひ！</p>
-    <ul class="target-list">
-      <li><span class="check">✅</span> ボードゲームを初めてやってみたい</li>
-      <li><span class="check">✅</span> 新しい友達を作りたい</li>
-      <li><span class="check">✅</span> 週末を楽しく過ごしたい</li>
-      <li><span class="check">✅</span> 一人で参加するのが不安…</li>
-      <li><span class="check">✅</span> ゲームは好きだけど機会がない</li>
-    </ul>
+    <div class="container">
+      <span class="section-label">For You</span>
+      <h2 class="section-title">こんな人、来てください</h2>
+      <div class="divider" style="margin:0 0 40px;"></div>
+      <ul class="target-list">
+        <li><span class="check">✓</span> ボードゲームを初めてやってみたい</li>
+        <li><span class="check">✓</span> 新しい友達・知り合いを増やしたい</li>
+        <li><span class="check">✓</span> 一人で行くのが少し不安…</li>
+        <li><span class="check">✓</span> 週末をアクティブに過ごしたい</li>
+        <li><span class="check">✓</span> ゲームは好きだけど機会がない</li>
+      </ul>
+    </div>
   </section>
 
-  <!-- ===== 過去の様子 ===== -->
+  <!-- ===== ギャラリー ===== -->
   <section id="gallery">
-    <span class="tag">GALLERY</span>
-    <h2 class="section-title">こんな感じです！</h2>
-    <p class="section-sub">毎回30人近く集まってます</p>
-    <div class="gallery-grid">
-      <!-- ゲーム・テーブルの様子（人物なし） -->
-      <img src="IMG_1357.jpeg" alt="ゲームが並ぶテーブル">
-      <img src="IMG_1358.jpeg" alt="ゲームの様子">
-      <!-- モザイク処理済み写真 -->
-      <img src="IMG_1359.jpeg" alt="プレイ中の様子">
-      <img src="IMG_1360.jpeg" alt="みんなでプレイ中">
-      <img class="wide" src="IMG_1361.jpeg" alt="賑わう会場の様子">
+    <div class="container">
+      <span class="section-label">Gallery</span>
+      <h2 class="section-title">こんな雰囲気です</h2>
+      <div class="divider" style="margin:0 0 40px;"></div>
+      <div class="gallery-grid">
+        <img src="IMG_1357.jpeg" alt="ゲームが並ぶテーブル">
+        <img src="IMG_1358.jpeg" alt="ゲームの様子">
+        <img src="IMG_1359.jpeg" alt="プレイ中の様子">
+        <img src="IMG_1360.jpeg" alt="みんなでプレイ中">
+        <img class="wide" src="IMG_1361.jpeg" alt="賑わう会場の様子">
+      </div>
+      <p class="gallery-note">※参加者の方の許可を得て掲載しています</p>
     </div>
-    <p class="gallery-note">※参加者の方の許可を得て掲載しています</p>
   </section>
 
   <!-- ===== 参加方法 ===== -->
   <section id="join">
-    <span class="tag">JOIN</span>
-    <h2 class="section-title">参加する！</h2>
-    <p class="section-sub">お好きな方法でどうぞ😊</p>
-    <div class="join-buttons">
-      <!-- ↓ LINE オープンチャットのURL（変わらない） -->
-      <a href="https://line.me/ti/g2/FPP7E9GyOIJRAMH4wzjtOJJdjdUMD1b1sCIjpA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default" class="join-btn join-btn-line" target="_blank" rel="noopener">
-        💬 LINEオープンチャットに参加
-      </a>
-      <!-- ↓ ボドゲゴーのURL（イベントごとに書き換える） -->
-      <a href="https://applinks.bodogego.app/schedule?id=u7bjsqNkc1IidfgW91tX" class="join-btn join-btn-bodoge" target="_blank" rel="noopener">
-        🎲 ボドゲゴーで申し込む
-      </a>
+    <div class="container">
+      <span class="section-label">Join</span>
+      <h2 class="section-title">参加する</h2>
+      <div class="divider" style="margin:0 0 12px;"></div>
+      <p class="section-sub">お好きな方法でどうぞ</p>
+      <div class="join-buttons">
+        <!-- ↓ LINE オープンチャットURL（変わらない） -->
+        <a href="https://line.me/ti/g2/FPP7E9GyOIJRAMH4wzjtOJJdjdUMD1b1sCIjpA?utm_source=invitation&utm_medium=link_copy&utm_campaign=default"
+           class="join-btn join-btn-line" target="_blank" rel="noopener">
+          💬 LINEオープンチャットに参加
+        </a>
+        <!-- ↓ ボドゲゴーURL（イベントごとに書き換える） -->
+        <a href="https://applinks.bodogego.app/schedule?id=u7bjsqNkc1IidfgW91tX"
+           class="join-btn join-btn-bodoge" target="_blank" rel="noopener">
+          🎲 ボドゲゴーで申し込む
+        </a>
+      </div>
+      <p class="join-note">迷ったらLINEへ！次回案内もLINEで受け取れます</p>
     </div>
-    <p class="join-desc">迷ったらLINEへ！次回案内もLINEで受け取れます🔔</p>
   </section>
 
-  <!-- ===== FAQ ボット ===== -->
-  <section id="faq">
-    <span class="tag">FAQ</span>
-    <h2 class="section-title">よくある質問</h2>
-    <p class="section-sub">気になることを選んでね</p>
-    <div class="faq-bot">
+  <!-- ===== よくある質問（アコーディオン）===== -->
+  <section id="faq-static">
+    <div class="container">
+      <span class="section-label">FAQ</span>
+      <h2 class="section-title">よくある質問</h2>
+      <div class="divider" style="margin:0 0 40px;"></div>
+      <div class="accordion">
 
-      <!-- 初期メッセージ -->
-      <div class="bot-message" id="faq-intro">
-        <div class="bot-avatar">🎲</div>
-        <div class="bot-bubble">
-          こんにちは！何か気になることはありますか？<br>
-          下から選んでみてください👇
+        <div class="accordion-item">
+          <button class="accordion-btn">
+            初心者でも大丈夫ですか？
+            <span class="arrow">▼</span>
+          </button>
+          <div class="accordion-body">
+            もちろんです！初心者歓迎がこのイベントの大前提です。ルールは毎回丁寧に説明するので、ゲームを一切知らなくても楽しめます。
+          </div>
         </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">
+            一人で参加しても大丈夫ですか？
+            <span class="arrow">▼</span>
+          </button>
+          <div class="accordion-body">
+            全然OKです！一人参加の方が大多数です。みんなフレンドリーなのでわりとすぐ打ち解けられますよ。
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">
+            ゲームを持参する必要はありますか？
+            <span class="arrow">▼</span>
+          </button>
+          <div class="accordion-body">
+            不要です！いろんなゲームを準備しているので手ぶらで来てください。もちろん持参もOKです。
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">
+            キャンセルはできますか？
+            <span class="arrow">▼</span>
+          </button>
+          <div class="accordion-body">
+            できます。前日までにLINEオープンチャットかボドゲゴーでご連絡ください。急な体調不良などもお気軽に。
+          </div>
+        </div>
+
+        <div class="accordion-item">
+          <button class="accordion-btn">
+            何度でも参加できますか？
+            <span class="arrow">▼</span>
+          </button>
+          <div class="accordion-body">
+            もちろんです！何度でも来てください。リピーターさんもたくさんいます。
+          </div>
+        </div>
+
       </div>
+    </div>
+  </section>
 
-      <!-- 質問ボタン一覧 -->
-      <div class="faq-questions" id="faq-questions">
-        <button class="faq-q-btn" data-faq="beginner">🔰 初心者でも大丈夫？</button>
-        <button class="faq-q-btn" data-faq="alone">👤 一人で行っても大丈夫？</button>
-        <button class="faq-q-btn" data-faq="bring">🎮 ゲームを持っていく必要ある？</button>
-        <button class="faq-q-btn" data-faq="cancel">❌ キャンセルはできる？</button>
-        <button class="faq-q-btn" data-faq="repeat">🔁 リピートで参加してもいい？</button>
+  <!-- ===== チャットボット ===== -->
+  <section id="faq-bot">
+    <div class="container">
+      <span class="section-label">Chat</span>
+      <h2 class="section-title">聞いてみる</h2>
+      <div class="divider" style="margin:0 0 12px;"></div>
+      <p class="section-sub">気になることを選んでください</p>
+      <div class="bot-wrap">
+        <div class="bot-intro">
+          <div class="bot-face">🎲</div>
+          <div class="bot-bubble">
+            こんにちは！何か気になることはありますか？<br>下から選んでみてください👇
+          </div>
+        </div>
+        <div class="bot-questions" id="bot-questions">
+          <button class="bot-q-btn" data-key="fee">💰 参加費に何が含まれますか？</button>
+          <button class="bot-q-btn" data-key="game">🎮 どんなゲームがありますか？</button>
+          <button class="bot-q-btn" data-key="age">👥 参加者の年齢層は？</button>
+          <button class="bot-q-btn" data-key="next">📅 次回以降の予定は？</button>
+        </div>
+        <div id="bot-chat"></div>
+        <button class="bot-back" id="bot-back">← 別の質問を見る</button>
       </div>
-
-      <!-- 会話エリア（選択後に表示） -->
-      <div id="faq-chat"></div>
-      <button class="faq-back-btn" id="faq-back">← 別の質問を見る</button>
-
     </div>
   </section>
 
   <!-- ===== フッター ===== -->
   <footer>
-    <p class="footer-name">🎲 名古屋でボドゲin名駅</p>
+    <p class="footer-name">ROUGH — 名古屋でボドゲin名駅</p>
     <p>主催：Rough　協力：アニメバーネルフ</p>
     <p style="margin-top:8px">お問い合わせはLINEオープンチャットへ</p>
   </footer>
 
   <script>
-    // ===== FAQ ボット =====
-    const faqData = {
-      beginner: {
-        q: '🔰 初心者でも大丈夫？',
-        a: 'もちろん大丈夫です！むしろ初心者歓迎です🎉\nルールは毎回丁寧に説明するので、ゲームを知らなくても楽しめますよ。'
+    // ===== アコーディオン =====
+    document.querySelectorAll('.accordion-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const body = btn.nextElementSibling;
+        const isOpen = body.classList.contains('open');
+        document.querySelectorAll('.accordion-body').forEach(b => b.classList.remove('open'));
+        document.querySelectorAll('.accordion-btn').forEach(b => b.classList.remove('open'));
+        if (!isOpen) {
+          body.classList.add('open');
+          btn.classList.add('open');
+        }
+      });
+    });
+
+    // ===== チャットボット =====
+    const botData = {
+      fee: {
+        q: '💰 参加費に何が含まれますか？',
+        a: '参加費1,500円にはソフトドリンク飲み放題が含まれます。\n会場のアニメバーネルフさんのドリンクが楽しめます🍹'
       },
-      alone: {
-        q: '👤 一人で行っても大丈夫？',
-        a: '全然OKです！一人参加の方が多いくらいです😄\nみんなフレンドリーなのでわりとすぐ打ち解けられますよ。'
+      game: {
+        q: '🎮 どんなゲームがありますか？',
+        a: 'ライトなカードゲームから少し重めのボードゲームまで幅広く揃えています。\n詳しいゲームリストはLINEオープンチャットで確認できます！'
       },
-      bring: {
-        q: '🎮 ゲームを持っていく必要ある？',
-        a: '持ってこなくて大丈夫です！\nいろんなゲームを準備しているので手ぶらでOKです🙆'
+      age: {
+        q: '👥 参加者の年齢層は？',
+        a: '20代が中心ですが、10代〜30代まで幅広く参加しています。\n性別問わず、一人参加の方が多いので気軽に来てください😊'
       },
-      cancel: {
-        q: '❌ キャンセルはできる？',
-        a: 'できます。前日までにLINEグループかボドゲゴーでご連絡ください。\n急な体調不良などもお気軽にご連絡を！'
-      },
-      repeat: {
-        q: '🔁 リピートで参加してもいい？',
-        a: 'もちろんです！何度でも来てください🙌\nリピーターさんもたくさんいます。'
+      next: {
+        q: '📅 次回以降の予定は？',
+        a: '次回以降の案内はLINEオープンチャットで先行告知しています。\nオープンチャットに参加しておくと見逃しません！'
       }
     };
 
-    const questionsEl = document.getElementById('faq-questions');
-    const chatEl = document.getElementById('faq-chat');
-    const backBtn = document.getElementById('faq-back');
+    const questionsEl = document.getElementById('bot-questions');
+    const chatEl = document.getElementById('bot-chat');
+    const backBtn = document.getElementById('bot-back');
 
-    questionsEl.addEventListener('click', (e) => {
-      const btn = e.target.closest('.faq-q-btn');
+    questionsEl.addEventListener('click', e => {
+      const btn = e.target.closest('.bot-q-btn');
       if (!btn) return;
-
-      const key = btn.dataset.faq;
-      const item = faqData[key];
+      const item = botData[btn.dataset.key];
       if (!item) return;
-
       questionsEl.style.display = 'none';
-      backBtn.style.display = 'block';
-
+      backBtn.style.display = 'inline';
       chatEl.innerHTML = `
-        <div class="user-bubble-wrap">
+        <div class="user-row">
           <div class="user-bubble">${item.q}</div>
         </div>
-        <div class="bot-message">
-          <div class="bot-avatar">🎲</div>
+        <div class="bot-intro" style="margin-bottom:0">
+          <div class="bot-face">🎲</div>
           <div class="bot-bubble">${item.a.replace(/\n/g, '<br>')}</div>
         </div>
       `;
@@ -601,7 +775,6 @@
 
     backBtn.addEventListener('click', () => {
       questionsEl.style.display = 'flex';
-      questionsEl.style.flexDirection = 'column';
       backBtn.style.display = 'none';
       chatEl.innerHTML = '';
     });
