@@ -7,6 +7,66 @@
 
 ---
 
+## Webサイト運用・デプロイメント
+
+### [汎用] GitHub Pages 自動デプロイによる「コミット→自動公開」パイプライン
+
+**用途：** 静的サイト（HTML/CSS/JS）を GitHub Pages で運用する際、GitHub Actions による自動デプロイを設定し、ユーザーが「git commit → git push」するだけで自動公開が完了する仕組み
+
+**背景：**
+- Rough（ボドゲ会）プロジェクトでは、プログラミング未経験者がサイト情報を更新する必要がある
+- ホスティング・デプロイメントの手動操作は学習コストが高いため、「編集 → 保存」のシンプルなフローのみをユーザーに提供したい
+- GitHub Actions + GitHub Pages により、手動デプロイ操作を完全に排除可能
+
+**実装パターン：**
+
+```yaml
+# .github/workflows/deploy-dashboard.yml
+name: Deploy to GitHub Pages
+on:
+  push:
+    branches: [ main ]  # または運用ブランチ名
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./projects/rough
+          cname: （オプション：カスタムドメイン）
+```
+
+**運用ルール：**
+
+1. **ユーザー操作：** HTML ファイルを編集 → git add/commit/push のみ
+2. **自動実行：** GitHub Actions が push を検出 → 自動ビルド・デプロイ
+3. **公開時間：** コミット後 1～2分で `https://gamigamiigami.github.io/Workspace/rough/` に反映
+4. **ユーザーへの説明：** 「ファイルを保存して git push したら完了。自動で公開されます」
+
+**成功指標：**
+- ユーザーが「デプロイ」という概念を意識する必要がない
+- サイト更新のフロー：HTML編集 → git push → （自動） → 公開完了
+- 複数セッションにわたって安定稼働（デプロイ失敗がない）
+
+**実装例：**
+- Rough（ボドゲ会ウェブサイト）：セッション 60～66 で確立・継続稼働中
+  - チラシ情報反映（セッション 56）
+  - ダークモードデザイン導入（セッション 62～63）
+  - PC レスポンシブ対応（セッション 65）
+  - ゲームリスト検索機能追加（セッション 66）
+  - すべてのセッションで自動デプロイが正常機能
+
+**ポイント：**
+- GitHub Pages の Source を「GitHub Actions」に設定する（UI 操作は初回のみ）
+- `publish_dir` でデプロイ対象フォルダを指定（`projects/rough` など）
+- ワークフロー失敗時の自動通知（GitHub Actions 画面で確認可能）
+- 「1～2分で反映」という明確なタイミング情報をユーザーに伝えることで、期待値を統一
+
+---
+
 ## API 統合・外部プラットフォーム連携
 
 ### [汎用] 複数ステップの外部認証フローを段階的にガイダンスする「ハンドオフパターン」
