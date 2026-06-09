@@ -223,6 +223,10 @@
       object-fit: cover;
       border-radius: 12px;
     }
+    .gallery-grid img.wide {
+      grid-column: span 2;
+      aspect-ratio: 16/9;
+    }
     .gallery-note {
       text-align: center;
       font-size: 0.85rem;
@@ -476,9 +480,13 @@
     <h2 class="section-title">こんな感じです！</h2>
     <p class="section-sub">毎回30人近く集まってます</p>
     <div class="gallery-grid">
-      <!-- ↓ モザイク処理した写真に差し替えてください -->
-      <img src="IMG_0666.jpeg" alt="ボードゲーム会の様子1">
-      <img src="IMG_0393.jpeg" alt="ボードゲーム会の様子2">
+      <!-- ゲーム・テーブルの様子（人物なし） -->
+      <img src="IMG_1357.jpeg" alt="ゲームが並ぶテーブル">
+      <img src="IMG_1358.jpeg" alt="ゲームの様子">
+      <!-- モザイク処理済み写真 -->
+      <img src="IMG_1359.jpeg" alt="プレイ中の様子">
+      <img src="IMG_1360.jpeg" alt="みんなでプレイ中">
+      <img class="wide" src="IMG_1361.jpeg" alt="賑わう会場の様子">
     </div>
     <p class="gallery-note">※参加者の方の許可を得て掲載しています</p>
   </section>

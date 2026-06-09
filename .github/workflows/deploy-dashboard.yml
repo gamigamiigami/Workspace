@@ -1,15 +1,18 @@
-name: Deploy Dashboard to GitHub Pages
+name: Deploy Sites to GitHub Pages
 
-# dashboard/ 配下が更新されたらGitHub Pagesに自動デプロイ
+# dashboard/ または rough/ が更新されたら自動デプロイ
 # 初回のみ手動セットアップ必要: Settings > Pages > Source: "GitHub Actions"
+# デプロイ先:
+#   ダッシュボード: gamigamiigami.github.io/Workspace/
+#   ボドゲ会サイト: gamigamiigami.github.io/Workspace/rough/
 
 on:
   push:
     branches:
       - main
-      - claude/workspace-knowledge-base-setup-ccVKP
     paths:
       - "projects/rakuda-sensei/dashboard/**"
+      - "projects/rough/**"
       - ".github/workflows/deploy-dashboard.yml"
   workflow_dispatch:
 
@@ -20,7 +23,6 @@ permissions:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
-
 
 concurrency:
   group: "pages"
@@ -35,13 +37,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Build combined site
+        run: |
+          mkdir -p site/rough
+          cp -r projects/rakuda-sensei/dashboard/. site/
+          cp -r projects/rough/. site/rough/
+
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: projects/rakuda-sensei/dashboard
+          path: site
 
       - name: Deploy to GitHub Pages
         id: deployment
