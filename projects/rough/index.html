@@ -165,17 +165,20 @@
     .games-search::placeholder { color:var(--text3); }
     .games-search:focus { border-color:var(--border2); }
     .games-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
-    .game-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:16px; display:flex; flex-direction:column; gap:8px; transition:border-color 0.2s; }
-    .game-card:hover { border-color:var(--border2); }
-    .game-card-name { font-size:0.92rem; font-weight:700; color:var(--white); }
-    .game-card-meta { display:flex; gap:8px; flex-wrap:wrap; }
-    .game-tag { font-size:0.68rem; font-weight:600; padding:2px 8px; border-radius:4px; letter-spacing:0.04em; }
+    .game-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:16px 16px 14px; display:flex; flex-direction:column; gap:0; transition:border-color 0.2s,transform 0.15s; cursor:default; }
+    .game-card:hover { border-color:var(--border2); transform:translateY(-2px); }
+    .game-card-icon { width:44px; height:44px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:1.1rem; font-weight:900; letter-spacing:-0.02em; margin-bottom:12px; flex-shrink:0; }
+    .game-card-name { font-size:0.88rem; font-weight:700; color:var(--white); margin-bottom:8px; line-height:1.3; }
+    .game-card-meta { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+    .game-tag { font-size:0.65rem; font-weight:600; padding:2px 7px; border-radius:4px; letter-spacing:0.04em; }
     .tag-players { background:rgba(212,168,67,0.12); color:var(--gold); border:1px solid rgba(212,168,67,0.2); }
     .tag-time { background:rgba(255,255,255,0.05); color:var(--text2); border:1px solid var(--border); }
-    .game-card-desc { font-size:0.78rem; color:var(--text2); line-height:1.65; }
+    .game-card-desc { font-size:0.75rem; color:var(--text3); line-height:1.65; }
     .games-count { font-size:0.78rem; color:var(--text3); text-align:right; margin-top:12px; }
+    .games-empty { text-align:center; padding:48px 0; color:var(--text3); font-size:0.9rem; grid-column:1/-1; }
     @media (min-width:769px) {
-      .games-grid { grid-template-columns:repeat(3,1fr); gap:12px; }
+      .games-grid { grid-template-columns:repeat(4,1fr); gap:12px; }
+    }
     }
 
     /* footer */
@@ -508,11 +511,37 @@
     { name:'ワードッチ',         players:'3〜8',   explain:10, play:10, desc:'暫定一位は「あんこぎっしりあんぱん」。' },
   ];
 
+  const iconColors = [
+    {bg:'rgba(212,168,67,0.15)',border:'rgba(212,168,67,0.3)',color:'#d4a843'},
+    {bg:'rgba(99,179,237,0.12)',border:'rgba(99,179,237,0.25)',color:'#63b3ed'},
+    {bg:'rgba(154,205,140,0.12)',border:'rgba(154,205,140,0.25)',color:'#9acd8c'},
+    {bg:'rgba(240,130,130,0.12)',border:'rgba(240,130,130,0.25)',color:'#f08282'},
+    {bg:'rgba(180,140,240,0.12)',border:'rgba(180,140,240,0.25)',color:'#b48cf0'},
+    {bg:'rgba(240,190,80,0.12)',border:'rgba(240,190,80,0.25)',color:'#f0be50'},
+  ];
+
+  function gameInitials(name) {
+    const clean = name.replace(/[（(）)【】「」〜～\s]/g,'');
+    const latin = clean.match(/[A-Za-z]/g);
+    if (latin && latin.length >= 2) return (latin[0]+latin[1]).toUpperCase();
+    const chars = [...clean];
+    if (chars.length >= 2) return chars[0]+chars[1];
+    return chars[0] || '?';
+  }
+
   function renderGames(list) {
     const grid = document.getElementById('games-grid');
     const count = document.getElementById('games-count');
-    grid.innerHTML = list.map(g => `
+    if (list.length === 0) {
+      grid.innerHTML = '<div class="games-empty">該当するゲームが見つかりません</div>';
+      count.textContent = '';
+      return;
+    }
+    grid.innerHTML = list.map((g, i) => {
+      const c = iconColors[i % iconColors.length];
+      return `
       <div class="game-card">
+        <div class="game-card-icon" style="background:${c.bg};border:1px solid ${c.border};color:${c.color}">${gameInitials(g.name)}</div>
         <div class="game-card-name">${g.name}</div>
         <div class="game-card-meta">
           <span class="game-tag tag-players">👥 ${g.players}</span>
@@ -520,7 +549,7 @@
         </div>
         <div class="game-card-desc">${g.desc}</div>
       </div>
-    `).join('');
+    `}).join('');
     count.textContent = `${list.length} ゲーム`;
   }
 
