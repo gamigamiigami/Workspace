@@ -117,6 +117,13 @@ OK: 次回からの正しい対応
 
 ---
 
+## Gitコミット前の必須設定
+
+コミット前に必ず以下を実行すること（セッションをまたぐとリセットされる）：
+```bash
+git config user.email noreply@anthropic.com && git config user.name Claude
+```
+
 ## 操作のコツ
 
 | コマンド | タイミング |
