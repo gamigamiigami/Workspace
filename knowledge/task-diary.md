@@ -4,6 +4,27 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-09（セッション73・ボドゲ会ウェブサイト：Git設定確認＆session-end-hook処理）
+
+**うまくいったこと**
+- Git user.emailが正しく設定されていることを確認
+  - `git config user.email` で workspace-editor@gmail.com が設定されていることを検証
+  - セッション終了時に複数回の確認を実施し、設定が維持されていることを確認
+
+**うまくいかなかったこと**
+- session-end-hook実行時に Git config user.email が自動設定されておらず、手動確認が必要だった
+  - ただし既存のプロジェクト設定で値が保持されていたため、実害なし
+
+**発見**
+- セッション開始時に git config user.email が自動設定されるようにhookを設定することで、手動確認が不要になることを提案
+- session-end-hook処理の中で、hook自体が git config 確認をトリガーするメカニズム
+
+**次回への申し送り**
+- 今後のセッション開始時に Git config user.email を自動設定するhookの実装を検討
+- session-start-hookで「git config user.email workspace-editor@gmail.com」を自動実行する設定を推奨
+
+---
+
 ### 2026-06-09（セッション72・ボドゲ会ウェブサイト：ゲームリスト不具合修正＆Excelデータ確認）
 
 **うまくいったこと**
