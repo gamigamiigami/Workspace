@@ -1,8 +1,43 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-08
+最終更新：2026-06-09
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## 環境・ネットワーク制限
+
+### [2026-06-09] Claude Code 実行環境 — 外部サイトアクセスの全面ブロック（WebFetch/WebSearch 非機能）
+
+**状況：** Rough（ボドゲ会ウェブサイト）のゲームカード画像を、BoardGameGeek（BGG）やAmazonから自動取得するため、WebFetch/WebSearchの複数試行を実施
+
+**問題：**
+- WebFetch を使用して `https://www.boardgamegeek.com/xmlapi2/...` にアクセス → HTTP 403 Forbidden
+- Amazon.co.jp の商品ページ取得 → HTTP 403 Forbidden
+- WebSearch の結果も「外部サイト照会用」で、実データ取得には WebFetch が必須だが全面ブロック
+- 実装環境として「WebFetch/WebSearch ツールは定義されているが、実行時のネットワーク設定により全面的に機能しない」
+
+**原因：**
+```
+Claude Code 実行環境（/home/user/Workspace で実行）
+├── ツール定義レベル：WebFetch, WebSearch は Tool として定義済み
+├── 実行時ネットワーク：すべての商用サイト（Amazon, BGG, など）への outbound がファイアウォール/プロキシ設定でブロック
+└── 代替手段がない：CLI curl/wget での直接実行も同じブロック設定に従う
+```
+
+**判断・対応方針：**
+- 完全自動取得は技術的に不可能と判定
+- 代替実装：UIで「BGG画像URL手動入力フロー」を提供（ユーザーがブラウザで BGG を開く → URL コピペ → フォーム入力）
+- 現在のカラーアイコンバッジ実装で十分実用的なため、BGG画像なしで運用継続
+
+**再発防止：**
+- 「自動取得が必要な外部API/データ」について、事前に「Claude Code 環境でアクセス可能か」を実証してから設計開始
+- WebFetch が必須な実装は初期検討段階で環境制限を確認
+
+**関連セッション：** セッション76（初発見）→ セッション77（カラーアイコン代替案実装）→ セッション79（複数手段再試行して完全ブロック確定）
+
+**タグ：** #claude-code #environment #network-restriction #webfetch #automation #fallback #ux-workaround
 
 ---
 
