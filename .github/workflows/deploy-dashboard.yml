@@ -1,11 +1,14 @@
 name: Deploy Sites to GitHub Pages
 
-# dashboard / rough / hinshi-panic が更新されたら自動デプロイ
+# dashboard / rough / hinshi-panic / kaeriten-quest が更新されたら自動デプロイ
 # 初回のみ手動セットアップ必要: Settings > Pages > Source: "GitHub Actions"
+# 注意: Pagesのデプロイは運用ブランチ(claude/workspace-knowledge-base-setup-ccVKP)からのみ許可
+#       (environment保護ルール。詳細は knowledge/failures.md 2026-06-10 参照)
 # デプロイ先:
 #   ダッシュボード: gamigamiigami.github.io/Workspace/
 #   ボドゲ会サイト: gamigamiigami.github.io/Workspace/rough/
 #   品詞パニック: gamigamiigami.github.io/Workspace/hinshi-panic/
+#   返り点クエスト: gamigamiigami.github.io/Workspace/kaeriten-quest/
 
 on:
   push:
@@ -17,6 +20,7 @@ on:
       - "projects/rakuda-sensei/dashboard/**"
       - "projects/rough/**"
       - "projects/hinshi-panic/**"
+      - "projects/kaeriten-quest/**"
       - ".github/workflows/deploy-dashboard.yml"
   workflow_dispatch:
 
@@ -43,10 +47,11 @@ jobs:
 
       - name: Build combined site
         run: |
-          mkdir -p site/rough site/hinshi-panic
+          mkdir -p site/rough site/hinshi-panic site/kaeriten-quest
           cp -r projects/rakuda-sensei/dashboard/. site/
           cp -r projects/rough/. site/rough/
           cp -r projects/hinshi-panic/. site/hinshi-panic/
+          cp -r projects/kaeriten-quest/. site/kaeriten-quest/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
