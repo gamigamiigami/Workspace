@@ -1,8 +1,37 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-09
+最終更新：2026-06-10
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## GitHub Pages デプロイ
+
+### [2026-06-10] hinshi-panic — GitHub Pages は environment 保護ルールで「許可ブランチ以外」からのデプロイが即失敗する
+
+**状況：** 品詞パニックを GitHub Pages に公開するため、開発ブランチ（`claude/educational-game-middle-school-102jqo`）をデプロイワークフローの `on.push.branches` に追加してプッシュした
+
+**問題：**
+- ワークフローは起動したが**3秒で failure**（created 11:10:32 → updated 11:10:35）
+- ジョブのログが存在しない（ログ取得が HTTP 404）＝ジョブの中身が一切実行されていない
+- 公開URLは404のまま
+
+**原因：**
+- `github-pages` environment には**デプロイ許可ブランチの保護ルール**があり、許可外ブランチからの `deploy-pages` は環境チェックの段階で拒否される
+- ワークフローYAMLの `branches:` にブランチを足しても、environment 側の許可リストは別物
+- このリポジトリで Pages デプロイが許可されているのは運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` のみ（rough・dashboard の成功実績はすべてこのブランチ）
+
+**解決策：**
+- 開発ブランチを運用ブランチ（`claude/workspace-knowledge-base-setup-ccVKP`）にマージしてプッシュ → デプロイ成功
+- 公開URL：https://gamigamiigami.github.io/Workspace/hinshi-panic/
+
+**再発防止：**
+- **新プロジェクトを Pages 公開するときは、ワークフロー修正だけでなく「運用ブランチへのマージ」までがデプロイ手順**
+- 「数秒で failure ＋ ジョブログなし」は environment 保護ルール拒否のサイン（コードのバグではない）
+- デプロイ失敗時はまず GitHub Actions の実行一覧で「どのブランチからの実行が成功しているか」を見る
+
+**タグ：** #github-pages #github-actions #environment-protection #deploy #branch
 
 ---
 
