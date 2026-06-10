@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>品詞パニック｜中2文法アクションゲーム</title>
+  <style>
+    /* ===== 基本リセット・全体設定 ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #eaf0ff;
+      background: linear-gradient(180deg, #0c1530 0%, #16234d 55%, #1d1640 100%);
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+    }
+
+    /* ===== 画面切り替え（SPA方式） ===== */
+    .screen { display: none; height: 100%; }
+    .screen.active { display: flex; flex-direction: column; }
+
+    #app { height: 100%; max-width: 768px; margin: 0 auto; }
+
+    button {
+      font-family: inherit;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      color: #fff;
+    }
+    button:active { transform: scale(0.96); }
+
+    /* ===== スタート画面 ===== */
+    #screen-start {
+      align-items: center;
+      justify-content: center;
+      gap: 18px;
+      padding: 24px;
+      text-align: center;
+    }
+    .game-title {
+      font-size: 44px;
+      font-weight: 900;
+      letter-spacing: 4px;
+      background: linear-gradient(180deg, #ffe27a, #ff9d3c);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 4px 24px rgba(255, 160, 60, 0.25);
+    }
+    .game-subtitle { font-size: 15px; color: #9fb0d8; }
+    .best-score-box {
+      background: rgba(255, 255, 255, 0.07);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 10px 26px;
+      font-size: 15px;
+    }
+    .best-score-box strong { color: #ffe27a; font-size: 22px; margin-left: 6px; }
+    .how-to {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-size: 14px;
+      color: #c6d2ef;
+      text-align: left;
+      max-width: 420px;
+    }
+    .how-to li { margin: 4px 0 4px 18px; }
+    .btn-primary {
+      background: linear-gradient(180deg, #ff9d3c, #f4691e);
+      font-size: 20px;
+      font-weight: bold;
+      padding: 14px 56px;
+      box-shadow: 0 6px 18px rgba(244, 105, 30, 0.4);
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      padding: 10px 24px;
+      font-size: 15px;
+    }
+
+    /* ===== ゲーム画面：上部HUD ===== */
+    #screen-game { position: relative; }
+    .hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+      background: rgba(0, 0, 0, 0.25);
+      font-size: 14px;
+    }
+    .hud-level {
+      background: rgba(124, 156, 255, 0.2);
+      border: 1px solid rgba(124, 156, 255, 0.5);
+      border-radius: 8px;
+      padding: 2px 10px;
+      font-weight: bold;
+      color: #aec3ff;
+      white-space: nowrap;
+    }
+    .hud-score { font-size: 20px; font-weight: 900; color: #ffe27a; min-width: 70px; text-align: center; }
+    .hud-combo { color: #7dd9ff; font-weight: bold; min-width: 86px; text-align: center; }
+    .hud-combo.fever { color: #ff7de9; animation: pulse 0.5s infinite alternate; }
+    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.15); } }
+    .hud-lives { font-size: 18px; letter-spacing: 2px; white-space: nowrap; }
+    .btn-pause {
+      background: rgba(255, 255, 255, 0.12);
+      font-size: 18px;
+      width: 44px; height: 44px;
+      padding: 0;
+    }
+
+    /* ===== ゲーム画面：プレイエリア（単語が落ちる場所） ===== */
+    #play-area {
+      position: relative;
+      flex: 1;
+      overflow: hidden;
+    }
+    /* デンジャーライン（ここまで落ちるとミス） */
+    .danger-line {
+      position: absolute;
+      left: 0; right: 0;
+      bottom: 8px;
+      border-bottom: 2px dashed rgba(255, 90, 90, 0.55);
+    }
+    /* 落ちてくる単語 */
+    .word {
+      position: absolute;
+      padding: 8px 16px;
+      font-size: 22px;
+      font-weight: 700;
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+      white-space: nowrap;
+      transition: opacity 0.2s;
+    }
+    /* いま判定対象になっている単語（いちばん下の単語） */
+    .word.target {
+      border-color: #ffe27a;
+      background: rgba(255, 226, 122, 0.18);
+      box-shadow: 0 0 18px rgba(255, 226, 122, 0.45);
+    }
+    .word.popped { animation: pop 0.35s forwards; }
+    @keyframes pop {
+      0%   { transform: scale(1); opacity: 1; }
+      60%  { transform: scale(1.5); opacity: 0.9; }
+      100% { transform: scale(0.2); opacity: 0; }
+    }
+    .word.crashed { animation: crash 0.4s forwards; }
+    @keyframes crash {
+      0%   { transform: translateX(0); }
+      25%  { transform: translateX(-8px); }
+      50%  { transform: translateX(8px); }
+      100% { transform: translateX(0); opacity: 0; }
+    }
+
+    /* 得点ポップ（+10 などの飛び出し表示） */
+    .score-pop {
+      position: absolute;
+      font-size: 20px;
+      font-weight: 900;
+      color: #7dffb0;
+      pointer-events: none;
+      animation: rise 0.7s forwards;
+    }
+    @keyframes rise {
+      from { transform: translateY(0); opacity: 1; }
+      to   { transform: translateY(-50px); opacity: 0; }
+    }
+
+    /* お知らせバナー（レベルアップ・ミス時の解説） */
+    .banner {
+      position: absolute;
+      top: 32%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 88%;
+      max-width: 480px;
+      background: rgba(12, 21, 48, 0.96);
+      border: 2px solid #ffe27a;
+      border-radius: 14px;
+      padding: 16px 18px;
+      text-align: center;
+      z-index: 20;
+      display: none;
+    }
+    .banner.show { display: block; animation: bannerIn 0.25s; }
+    @keyframes bannerIn { from { transform: translateX(-50%) scale(0.85); opacity: 0; } }
+    .banner-title { font-size: 20px; font-weight: 900; color: #ffe27a; margin-bottom: 6px; }
+    .banner-body { font-size: 15px; color: #d9e2f8; }
+    .banner-body .cat-name { font-weight: 900; }
+    .banner.miss { border-color: #ff7d7d; }
+    .banner.miss .banner-title { color: #ff9d9d; }
+
+    /* フィーバー演出（コンボ10以上） */
+    body.fever-mode #play-area {
+      background: linear-gradient(180deg, rgba(255, 125, 233, 0.07), rgba(125, 217, 255, 0.07));
+    }
+
+    /* ===== ゲーム画面：下部の品詞ボタン ===== */
+    #button-panel {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 10px 12px calc(14px + env(safe-area-inset-bottom));
+      background: rgba(0, 0, 0, 0.3);
+    }
+    .cat-btn {
+      min-height: 56px;
+      font-size: 17px;
+      font-weight: 700;
+      border: 2px solid rgba(255, 255, 255, 0.25);
+      text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+    }
+    .cat-btn:disabled { opacity: 0.45; }
+    #button-panel.locked .cat-btn { opacity: 0.5; pointer-events: none; }
+
+    /* ===== 一時停止オーバーレイ ===== */
+    #pause-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(5, 10, 25, 0.88);
+      z-index: 30;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+    }
+    #pause-overlay.show { display: flex; }
+
+    /* ===== 結果画面 ===== */
+    #screen-result {
+      overflow-y: auto;
+      padding: 28px 20px calc(28px + env(safe-area-inset-bottom));
+      align-items: center;
+      gap: 14px;
+    }
+    .result-rank { font-size: 28px; font-weight: 900; color: #ffe27a; }
+    .result-score { font-size: 48px; font-weight: 900; }
+    .result-sub { font-size: 14px; color: #9fb0d8; }
+    .result-newrecord { color: #ff7de9; font-weight: 900; font-size: 18px; }
+    .stat-box, .review-box {
+      width: 100%;
+      max-width: 480px;
+      background: rgba(255, 255, 255, 0.06);
+      border-radius: 12px;
+      padding: 14px 16px;
+    }
+    .stat-box h3, .review-box h3 { font-size: 15px; color: #aec3ff; margin-bottom: 10px; }
+    .stat-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+    .stat-label { width: 64px; font-weight: 700; }
+    .stat-bar-bg {
+      flex: 1; height: 12px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .stat-bar-fill { height: 100%; border-radius: 6px; background: #7dffb0; }
+    .stat-rate { width: 48px; text-align: right; font-size: 13px; color: #c6d2ef; }
+    .review-item {
+      margin: 8px 0;
+      padding: 8px 10px;
+      background: rgba(255, 125, 125, 0.08);
+      border-left: 3px solid #ff7d7d;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    .review-item b { font-size: 16px; }
+    .review-item .review-hint { display: block; font-size: 13px; color: #c6d2ef; margin-top: 2px; }
+    .review-empty { font-size: 14px; color: #7dffb0; }
+
+    /* ===== 品詞早見表モーダル ===== */
+    #modal-rules {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 10, 25, 0.9);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-rules.show { display: flex; }
+    .modal-card {
+      background: #16234d;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 480px;
+      width: 100%;
+      max-height: 80vh;
+      overflow-y: auto;
+    }
+    .modal-card h2 { font-size: 18px; color: #ffe27a; margin-bottom: 12px; text-align: center; }
+    .rule-row { display: flex; gap: 10px; margin: 8px 0; font-size: 14px; align-items: flex-start; }
+    .rule-cat {
+      flex-shrink: 0;
+      width: 78px;
+      text-align: center;
+      font-weight: 900;
+      border-radius: 6px;
+      padding: 3px 0;
+      font-size: 13px;
+    }
+    .rule-text { color: #d9e2f8; }
+    .modal-close { display: block; margin: 16px auto 0; }
+
+    /* iPad縦持ち（768px）より狭い画面への調整 */
+    @media (max-width: 480px) {
+      .game-title { font-size: 34px; }
+      .word { font-size: 18px; padding: 6px 12px; }
+      .cat-btn { font-size: 14px; min-height: 52px; }
+      .hud { font-size: 12px; }
+      .hud-score { font-size: 17px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+
+    <!-- ===== スタート画面 ===== -->
+    <section id="screen-start" class="screen active">
+      <h1 class="game-title">品詞パニック</h1>
+      <p class="game-subtitle">落ちてくることばを 品詞ボタンで撃ち落とせ！</p>
+      <div class="best-score-box">ハイスコア<strong id="best-score-start">0</strong></div>
+      <div class="how-to">
+        <ul>
+          <li>上から<b>ことば</b>が落ちてくる</li>
+          <li><b style="color:#ffe27a">黄色く光っている単語</b>の品詞ボタンをタップ！</li>
+          <li>正解が続くと<b style="color:#7dd9ff">コンボ</b>で得点アップ</li>
+          <li>地面まで落とすとライフが減る（3回でゲームオーバー）</li>
+          <li>レベルが上がると新しい品詞が登場！</li>
+        </ul>
+      </div>
+      <button class="btn-primary" id="btn-start">スタート</button>
+      <button class="btn-secondary" id="btn-rules-start">品詞のみわけかた早見表</button>
+    </section>
+
+    <!-- ===== ゲーム画面 ===== -->
+    <section id="screen-game" class="screen">
+      <!-- 上部HUD：レベル・スコア・コンボ・ライフ・一時停止 -->
+      <div class="hud">
+        <span class="hud-level" id="hud-level">Lv.1</span>
+        <span class="hud-score" id="hud-score">0</span>
+        <span class="hud-combo" id="hud-combo"></span>
+        <span class="hud-lives" id="hud-lives">❤❤❤</span>
+        <button class="btn-pause" id="btn-pause" aria-label="一時停止">⏸</button>
+      </div>
+
+      <!-- 単語が落ちてくるプレイエリア -->
+      <div id="play-area">
+        <div class="danger-line"></div>
+        <!-- レベルアップ・ミス解説用バナー -->
+        <div class="banner" id="banner">
+          <div class="banner-title" id="banner-title"></div>
+          <div class="banner-body" id="banner-body"></div>
+        </div>
+        <!-- 一時停止オーバーレイ -->
+        <div id="pause-overlay">
+          <h2>一時停止中</h2>
+          <button class="btn-primary" id="btn-resume">つづける</button>
+          <button class="btn-secondary" id="btn-rules-pause">品詞のみわけかた早見表</button>
+          <button class="btn-secondary" id="btn-quit">やめてタイトルへ</button>
+        </div>
+      </div>
+
+      <!-- 下部：品詞ボタン（レベルに応じて増える） -->
+      <div id="button-panel"></div>
+    </section>
+
+    <!-- ===== 結果画面 ===== -->
+    <section id="screen-result" class="screen">
+      <div class="result-rank" id="result-rank"></div>
+      <div class="result-score" id="result-score">0</div>
+      <div class="result-sub" id="result-sub"></div>
+      <div class="result-newrecord" id="result-newrecord" style="display:none">🎉 ハイスコア更新！</div>
+
+      <!-- 品詞ごとの正答率 -->
+      <div class="stat-box">
+        <h3>品詞ごとの正答率</h3>
+        <div id="stat-rows"></div>
+      </div>
+
+      <!-- まちがえた単語のふりかえり（ここが学びポイント） -->
+      <div class="review-box">
+        <h3>まちがえた・落とした ことば</h3>
+        <div id="review-list"></div>
+      </div>
+
+      <button class="btn-primary" id="btn-retry">もう一回！</button>
+      <button class="btn-secondary" id="btn-to-title">タイトルへ</button>
+    </section>
+  </main>
+
+  <!-- ===== 品詞早見表モーダル（どの画面からも開ける） ===== -->
+  <div id="modal-rules">
+    <div class="modal-card">
+      <h2>品詞のみわけかた早見表</h2>
+      <div id="rules-list"></div>
+      <button class="btn-secondary modal-close" id="btn-rules-close">とじる</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ===== 品詞の定義（色・みわけかたルール） =====
+    const CATS = {
+      '動詞':     { color: '#3d7bf4', rule: '言い切りの形がウ段の音で終わる（走る・読む）' },
+      '形容詞':   { color: '#e2533d', rule: '言い切りが「〜い」で終わる（速い・楽しい）' },
+      '形容動詞': { color: '#c247c9', rule: '言い切りが「〜だ」で終わる（静かだ・元気だ）' },
+      '名詞':     { color: '#2da06a', rule: '「が・は」を付けると主語になれる（学校が）' },
+      '副詞':     { color: '#d9930f', rule: '活用せず、主に用言（動詞・形容詞など）をくわしくする（とても速い）' },
+      '連体詞':   { color: '#7a52d6', rule: '活用せず、体言（名詞）だけをくわしくする（大きな山）' },
+      '接続詞':   { color: '#1f9bb0', rule: '文と文・語と語をつなぐ（しかし・だから）' },
+      '感動詞':   { color: '#cb4f7d', rule: '感動・呼びかけ・あいさつ・返事。独立して使う（ああ・はい）' },
+    };
+
+    // ===== 単語データ =====
+    // t: 品詞 / h: 個別ヒント（ない場合は品詞のルールを表示）
+    const WORDS = [
+      // --- 動詞（言い切りがウ段） ---
+      { w: '走る', t: '動詞' }, { w: '泳ぐ', t: '動詞' }, { w: '笑う', t: '動詞' },
+      { w: '考える', t: '動詞' }, { w: '食べる', t: '動詞' }, { w: '起きる', t: '動詞' },
+      { w: '来る', t: '動詞' }, { w: '開く', t: '動詞' }, { w: '信じる', t: '動詞' },
+      { w: '学ぶ', t: '動詞' }, { w: '投げる', t: '動詞' }, { w: '読む', t: '動詞' },
+      { w: '待つ', t: '動詞' }, { w: '流れる', t: '動詞' }, { w: '助ける', t: '動詞' },
+      // --- 形容詞（言い切りが「〜い」） ---
+      { w: '美しい', t: '形容詞' }, { w: '速い', t: '形容詞' }, { w: '楽しい', t: '形容詞' },
+      { w: '寒い', t: '形容詞' }, { w: '明るい', t: '形容詞' }, { w: '強い', t: '形容詞' },
+      { w: '優しい', t: '形容詞' }, { w: '珍しい', t: '形容詞' }, { w: '悔しい', t: '形容詞' },
+      { w: '新しい', t: '形容詞' }, { w: '深い', t: '形容詞' }, { w: '眠い', t: '形容詞' },
+      { w: '大きい', t: '形容詞', h: '「大きい」は活用する形容詞。「大きな」（連体詞）と区別！' },
+      { w: '小さい', t: '形容詞', h: '「小さい」は活用する形容詞。「小さな」(連体詞)と区別！' },
+      { w: 'おかしい', t: '形容詞', h: '「おかしい」は形容詞。「おかしな」(連体詞)と区別！' },
+      // --- 形容動詞（言い切りが「〜だ」） ---
+      { w: '静かだ', t: '形容動詞' }, { w: '元気だ', t: '形容動詞' }, { w: '豊かだ', t: '形容動詞' },
+      { w: '親切だ', t: '形容動詞' }, { w: '素直だ', t: '形容動詞' }, { w: '立派だ', t: '形容動詞' },
+      { w: '穏やかだ', t: '形容動詞' }, { w: '確かだ', t: '形容動詞' }, { w: '正直だ', t: '形容動詞' },
+      { w: '不思議だ', t: '形容動詞' }, { w: '大切だ', t: '形容動詞' },
+      { w: 'きれいだ', t: '形容動詞', h: '「きれい」は「い」で終わって見えるが、言い切りは「きれいだ」→形容動詞！' },
+      { w: '嫌いだ', t: '形容動詞', h: '「嫌い」は形容詞ではない！言い切りは「嫌いだ」→形容動詞' },
+      // --- 名詞（主語になれる） ---
+      { w: '学校', t: '名詞' }, { w: '教室', t: '名詞' }, { w: '友情', t: '名詞' },
+      { w: '希望', t: '名詞' }, { w: '音楽', t: '名詞' }, { w: '勇気', t: '名詞' },
+      { w: '山', t: '名詞' }, { w: '海', t: '名詞' }, { w: '朝', t: '名詞' },
+      { w: '物語', t: '名詞' }, { w: '辞書', t: '名詞' }, { w: '図書館', t: '名詞' },
+      { w: '三人', t: '名詞', h: '数を表すことばも名詞（数詞）の仲間' },
+      { w: '私', t: '名詞', h: '「私・あなた」など人を指すことばも名詞（代名詞）' },
+      // --- 副詞（用言を修飾） ---
+      { w: 'とても', t: '副詞' }, { w: 'ゆっくり', t: '副詞' }, { w: 'かなり', t: '副詞' },
+      { w: 'ずっと', t: '副詞' }, { w: 'たぶん', t: '副詞' }, { w: 'ついに', t: '副詞' },
+      { w: 'もっと', t: '副詞' }, { w: 'はっきり', t: '副詞' }, { w: 'そっと', t: '副詞' },
+      { w: 'だんだん', t: '副詞' },
+      { w: 'もし', t: '副詞', h: '「もし〜なら」と決まった言い方を呼ぶ副詞（呼応の副詞）' },
+      { w: 'まるで', t: '副詞', h: '「まるで〜ようだ」と決まった言い方を呼ぶ副詞（呼応の副詞）' },
+      { w: '決して', t: '副詞', h: '「決して〜ない」と決まった言い方を呼ぶ副詞（呼応の副詞）' },
+      // --- 連体詞（体言だけを修飾・活用しない） ---
+      { w: 'この', t: '連体詞' }, { w: 'その', t: '連体詞' }, { w: 'あの', t: '連体詞' },
+      { w: 'あらゆる', t: '連体詞' }, { w: 'いわゆる', t: '連体詞' }, { w: 'たいした', t: '連体詞' },
+      { w: 'ほんの', t: '連体詞' }, { w: 'いろんな', t: '連体詞' },
+      { w: '大きな', t: '連体詞', h: '「大きな」は活用しない連体詞。「大きい」（形容詞）と区別！' },
+      { w: '小さな', t: '連体詞', h: '「小さな」は活用しない連体詞。「小さい」（形容詞）と区別！' },
+      { w: 'おかしな', t: '連体詞', h: '「おかしな」は活用しない連体詞。「おかしい」（形容詞）と区別！' },
+      // --- 接続詞（つなぐ） ---
+      { w: 'しかし', t: '接続詞' }, { w: 'だから', t: '接続詞' }, { w: 'そして', t: '接続詞' },
+      { w: 'つまり', t: '接続詞' }, { w: 'または', t: '接続詞' }, { w: 'ところが', t: '接続詞' },
+      { w: 'さて', t: '接続詞' }, { w: 'なぜなら', t: '接続詞' }, { w: 'それとも', t: '接続詞' },
+      { w: 'すると', t: '接続詞' }, { w: 'ただし', t: '接続詞' },
+      // --- 感動詞（独立して使う） ---
+      { w: 'ああ', t: '感動詞' }, { w: 'おい', t: '感動詞' }, { w: 'はい', t: '感動詞' },
+      { w: 'いいえ', t: '感動詞' }, { w: 'もしもし', t: '感動詞' }, { w: 'えっ', t: '感動詞' },
+      { w: 'おや', t: '感動詞' }, { w: 'まあ', t: '感動詞' }, { w: 'ねえ', t: '感動詞' },
+      { w: 'こんにちは', t: '感動詞', h: 'あいさつのことばは感動詞の仲間' },
+      { w: 'よいしょ', t: '感動詞', h: 'かけ声も感動詞の仲間' },
+    ];
+
+    // ===== レベル設計 =====
+    // cats: 出題する品詞 / goal: 次のレベルに必要な正解数
+    // fall: 落下時間(ms・短いほど速い) / spawn: 出現間隔(ms) / maxWords: 同時出現数
+    const LEVELS = [
+      { cats: ['動詞', '形容詞', '形容動詞'], goal: 10, fall: 9500, spawn: 2800, maxWords: 2 },
+      { cats: ['動詞', '形容詞', '形容動詞', '名詞'], goal: 12, fall: 8500, spawn: 2500, maxWords: 2 },
+      { cats: ['動詞', '形容詞', '形容動詞', '名詞', '副詞', '連体詞'], goal: 14, fall: 7500, spawn: 2300, maxWords: 3 },
+      { cats: ['動詞', '形容詞', '形容動詞', '名詞', '副詞', '連体詞', '接続詞', '感動詞'], goal: 16, fall: 6500, spawn: 2100, maxWords: 3 },
+    ];
+
+    // ランク（スコアに応じた称号）
+    const RANKS = [
+      { min: 2500, name: '👑 品詞マスター' },
+      { min: 1500, name: '🏆 文法の達人' },
+      { min: 800,  name: '⚔️ 品詞ハンター' },
+      { min: 300,  name: '🔥 文法チャレンジャー' },
+      { min: 0,    name: '🌱 文法みならい' },
+    ];
+
+    const STORAGE_KEY = 'hinshi-panic-best';
+
+    // ===== 状態管理 =====
+    let state = null;       // ゲーム中の状態（startGameで初期化）
+    let rafId = null;       // requestAnimationFrame のID
+    let lastTime = 0;       // 前フレームの時刻
+
+    // ===== localStorage（プライベートモード対策でtry-catch必須） =====
+    function saveData(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+    function loadData(key, defaultValue) {
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      } catch (e) { return defaultValue; }
+    }
+
+    // ===== ユーティリティ =====
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+    function $(id) { return document.getElementById(id); }
+
+    // ===== 画面切り替え =====
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    // ===== ゲーム開始 =====
+    function startGame() {
+      state = {
+        level: 0,            // LEVELS のインデックス（4以降はエンドレス）
+        score: 0,
+        combo: 0,
+        maxCombo: 0,
+        lives: 3,
+        correctInLevel: 0,   // 現レベルでの正解数
+        words: [],           // 画面上の単語 [{el, data, y, speed, lane}]
+        deck: [],            // 出題待ちの単語（品詞ごとに偏らないようシャッフル）
+        spawnTimer: 0,
+        frozen: false,       // バナー表示中など、落下を止めるフラグ
+        paused: false,
+        over: false,
+        stats: {},           // 品詞ごとの成績 {正解, ミス}
+        missed: [],          // まちがえた・落とした単語のリスト
+        lastLane: -1,
+      };
+      Object.keys(CATS).forEach(c => { state.stats[c] = { ok: 0, ng: 0 }; });
+      renderButtons();
+      updateHud();
+      showScreen('screen-game');
+      $('pause-overlay').classList.remove('show');
+      document.body.classList.remove('fever-mode');
+      // 最初のレベル紹介バナーを出してからスタート
+      showLevelBanner(() => {});
+      lastTime = performance.now();
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(gameLoop);
+    }
+
+    // 現在のレベル設定を取得（Lv5以降はエンドレスで加速）
+    function getLevelConf() {
+      if (state.level < LEVELS.length) return LEVELS[state.level];
+      const base = LEVELS[LEVELS.length - 1];
+      const extra = state.level - LEVELS.length + 1;
+      return {
+        cats: base.cats,
+        goal: base.goal,
+        fall: Math.max(2800, base.fall * Math.pow(0.9, extra)),
+        spawn: Math.max(1200, base.spawn * Math.pow(0.93, extra)),
+        maxWords: 3,
+      };
+    }
+
+    // ===== 出題デッキ（現レベルの品詞だけで構成） =====
+    function refillDeck() {
+      const conf = getLevelConf();
+      state.deck = shuffle(WORDS.filter(item => conf.cats.includes(item.t)));
+    }
+
+    // ===== 単語の出現 =====
+    function spawnWord() {
+      const conf = getLevelConf();
+      if (state.deck.length === 0) refillDeck();
+      const data = state.deck.pop();
+
+      const el = document.createElement('div');
+      el.className = 'word';
+      el.textContent = data.w;
+      $('play-area').appendChild(el);
+
+      // 3レーンのうち直前と違うレーンに出す（重なり防止）
+      let lane;
+      do { lane = Math.floor(Math.random() * 3); } while (lane === state.lastLane);
+      state.lastLane = lane;
+      const area = $('play-area');
+      const laneWidth = area.clientWidth / 3;
+      const x = lane * laneWidth + (laneWidth - el.offsetWidth) / 2;
+      el.style.left = Math.max(4, x) + 'px';
+      el.style.top = '-50px';
+
+      state.words.push({
+        el, data, lane,
+        y: -50,
+        speed: (area.clientHeight + 50) / conf.fall, // px per ms
+      });
+    }
+
+    // ===== メインループ =====
+    function gameLoop(now) {
+      if (!state || state.over) return;
+      const dt = Math.min(50, now - lastTime); // タブ復帰時の暴走防止
+      lastTime = now;
+
+      if (!state.paused && !state.frozen) {
+        const conf = getLevelConf();
+
+        // 出現タイマー
+        state.spawnTimer += dt;
+        if (state.spawnTimer >= conf.spawn && state.words.length < conf.maxWords) {
+          state.spawnTimer = 0;
+          spawnWord();
+        }
+
+        // 落下処理
+        const area = $('play-area');
+        const dangerY = area.clientHeight - 46; // デンジャーライン位置
+        for (const word of [...state.words]) {
+          word.y += word.speed * dt;
+          word.el.style.top = word.y + 'px';
+          if (word.y >= dangerY) {
+            handleGroundHit(word);
+          }
+        }
+        updateTargetHighlight();
+      }
+      rafId = requestAnimationFrame(gameLoop);
+    }
+
+    // いちばん下にある単語をターゲット（判定対象）として光らせる
+    function updateTargetHighlight() {
+      let lowest = null;
+      for (const word of state.words) {
+        if (!lowest || word.y > lowest.y) lowest = word;
+      }
+      for (const word of state.words) {
+        word.el.classList.toggle('target', word === lowest);
+      }
+    }
+
+    function getTargetWord() {
+      let lowest = null;
+      for (const word of state.words) {
+        if (!lowest || word.y > lowest.y) lowest = word;
+      }
+      return lowest;
+    }
+
+    // ===== 品詞ボタンが押されたとき =====
+    function handleAnswer(cat) {
+      if (!state || state.paused || state.frozen || state.over) return;
+      const target = getTargetWord();
+      if (!target) return;
+
+      if (target.data.t === cat) {
+        // --- 正解 ---
+        state.combo++;
+        state.maxCombo = Math.max(state.maxCombo, state.combo);
+        state.stats[cat].ok++;
+        state.correctInLevel++;
+        const multiplier = Math.min(4, 1 + Math.floor(state.combo / 5));
+        const points = 10 * multiplier;
+        state.score += points;
+        showScorePop(target, '+' + points);
+        removeWord(target, 'popped');
+        updateHud();
+        // レベルアップ判定
+        if (state.correctInLevel >= getLevelConf().goal) {
+          levelUp();
+        }
+      } else {
+        // --- 不正解：コンボが切れて単語にヒントが出る ---
+        state.combo = 0;
+        state.stats[target.data.t].ng++;
+        recordMiss(target.data, 'タップミス');
+        target.el.classList.add('crashed');
+        setTimeout(() => target.el.classList.remove('crashed'), 400);
+        lockButtons(600); // 連打防止のロック
+        updateHud();
+        showMissBanner(target.data, false);
+      }
+    }
+
+    // ===== 単語が地面に落ちたとき =====
+    function handleGroundHit(word) {
+      state.lives--;
+      state.combo = 0;
+      state.stats[word.data.t].ng++;
+      recordMiss(word.data, '落下');
+      removeWord(word, 'crashed');
+      updateHud();
+      if (state.lives <= 0) {
+        endGame();
+      } else {
+        showMissBanner(word.data, true);
+      }
+    }
+
+    function recordMiss(data, reason) {
+      if (!state.missed.some(m => m.w === data.w)) {
+        state.missed.push({ w: data.w, t: data.t, h: data.h || CATS[data.t].rule, reason });
+      }
+    }
+
+    function removeWord(word, animClass) {
+      state.words = state.words.filter(item => item !== word);
+      word.el.classList.add(animClass);
+      setTimeout(() => word.el.remove(), 450);
+    }
+
+    function showScorePop(word, text) {
+      const pop = document.createElement('div');
+      pop.className = 'score-pop';
+      pop.textContent = text;
+      pop.style.left = word.el.style.left;
+      pop.style.top = word.y + 'px';
+      $('play-area').appendChild(pop);
+      setTimeout(() => pop.remove(), 700);
+    }
+
+    // ===== レベルアップ =====
+    function levelUp() {
+      state.level++;
+      state.correctInLevel = 0;
+      // 画面上の単語を消してリセット（理不尽な失点を防ぐ）
+      state.words.forEach(word => word.el.remove());
+      state.words = [];
+      refillDeck();
+      renderButtons();
+      updateHud();
+      showLevelBanner();
+    }
+
+    // レベル開始バナー：新登場の品詞とみわけかたを紹介（学びの足場）
+    function showLevelBanner(callback) {
+      const conf = getLevelConf();
+      const prevCats = state.level === 0 ? [] :
+        (state.level <= LEVELS.length - 1 ? LEVELS[state.level - 1].cats : LEVELS[LEVELS.length - 1].cats);
+      const newCats = conf.cats.filter(c => !prevCats.includes(c));
+
+      let body;
+      if (state.level === 0) {
+        body = conf.cats.map(c =>
+          `<span class="cat-name" style="color:${CATS[c].color}">${c}</span>：${CATS[c].rule}`
+        ).join('<br>');
+      } else if (newCats.length > 0) {
+        body = '新登場！<br>' + newCats.map(c =>
+          `<span class="cat-name" style="color:${CATS[c].color}">${c}</span>：${CATS[c].rule}`
+        ).join('<br>');
+      } else {
+        body = 'スピードアップ！がんばれ！';
+      }
+      $('banner-title').textContent = 'LEVEL ' + (state.level + 1);
+      $('banner-body').innerHTML = body;
+      const banner = $('banner');
+      banner.classList.remove('miss');
+      banner.classList.add('show');
+      freeze(state.level === 0 ? 3000 : 2600, callback);
+    }
+
+    // ミス時バナー：正解とみわけかたヒントを表示（ここで覚える）
+    function showMissBanner(data, lostLife) {
+      $('banner-title').textContent = lostLife ? '💔 落とした！' : '✗ ちがう！';
+      $('banner-body').innerHTML =
+        `「<b>${data.w}</b>」は <span class="cat-name" style="color:${CATS[data.t].color}">${data.t}</span><br>` +
+        `<small>${data.h || CATS[data.t].rule}</small>`;
+      const banner = $('banner');
+      banner.classList.add('miss', 'show');
+      freeze(2000);
+    }
+
+    // 一定時間ゲームを止めてバナーを読ませる
+    // （myState の比較で、リトライ後に古いタイマーが新しいゲームを触らないよう保護）
+    function freeze(ms, callback) {
+      state.frozen = true;
+      const myState = state;
+      setTimeout(() => {
+        if (state !== myState || state.over) return;
+        $('banner').classList.remove('show', 'miss');
+        state.frozen = false;
+        state.spawnTimer = 999999; // すぐ次の単語を出す
+        if (callback) callback();
+      }, ms);
+    }
+
+    function lockButtons(ms) {
+      const panel = $('button-panel');
+      panel.classList.add('locked');
+      setTimeout(() => panel.classList.remove('locked'), ms);
+    }
+
+    // ===== HUD更新 =====
+    function updateHud() {
+      $('hud-level').textContent = 'Lv.' + (state.level + 1);
+      $('hud-score').textContent = state.score;
+      $('hud-lives').textContent = '❤'.repeat(state.lives) + '♡'.repeat(3 - state.lives);
+      const comboEl = $('hud-combo');
+      if (state.combo >= 2) {
+        comboEl.textContent = state.combo + ' COMBO' + (state.combo >= 10 ? '🔥' : '');
+        comboEl.classList.toggle('fever', state.combo >= 10);
+      } else {
+        comboEl.textContent = '';
+        comboEl.classList.remove('fever');
+      }
+      document.body.classList.toggle('fever-mode', state.combo >= 10);
+    }
+
+    // ===== 品詞ボタンの描画（現レベルの品詞のみ） =====
+    function renderButtons() {
+      const conf = getLevelConf();
+      const panel = $('button-panel');
+      panel.innerHTML = '';
+      conf.cats.forEach(cat => {
+        const btn = document.createElement('button');
+        btn.className = 'cat-btn';
+        btn.textContent = cat;
+        btn.style.background = CATS[cat].color;
+        btn.addEventListener('click', () => handleAnswer(cat));
+        panel.appendChild(btn);
+      });
+    }
+
+    // ===== 一時停止 =====
+    function pauseGame() {
+      if (!state || state.over) return;
+      state.paused = true;
+      $('pause-overlay').classList.add('show');
+    }
+    function resumeGame() {
+      if (!state) return;
+      state.paused = false;
+      $('pause-overlay').classList.remove('show');
+      lastTime = performance.now();
+    }
+
+    // ===== ゲームオーバー =====
+    function endGame() {
+      state.over = true;
+      cancelAnimationFrame(rafId);
+      document.body.classList.remove('fever-mode');
+
+      // ハイスコア処理
+      const best = loadData(STORAGE_KEY, 0);
+      const isNewRecord = state.score > best;
+      if (isNewRecord) saveData(STORAGE_KEY, state.score);
+
+      // ランク判定
+      const rank = RANKS.find(r => state.score >= r.min);
+      $('result-rank').textContent = rank.name;
+      $('result-score').textContent = state.score;
+      $('result-sub').textContent =
+        `さいごのレベル：Lv.${state.level + 1} ／ 最大コンボ：${state.maxCombo}`;
+      $('result-newrecord').style.display = isNewRecord ? 'block' : 'none';
+
+      // 品詞ごとの正答率バー（挑戦した品詞のみ）
+      const statRows = $('stat-rows');
+      statRows.innerHTML = '';
+      Object.keys(CATS).forEach(cat => {
+        const s = state.stats[cat];
+        const total = s.ok + s.ng;
+        if (total === 0) return;
+        const rate = Math.round((s.ok / total) * 100);
+        const row = document.createElement('div');
+        row.className = 'stat-row';
+        row.innerHTML =
+          `<span class="stat-label" style="color:${CATS[cat].color}">${cat}</span>` +
+          `<div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${rate}%;` +
+          `background:${rate >= 70 ? '#7dffb0' : rate >= 40 ? '#ffe27a' : '#ff7d7d'}"></div></div>` +
+          `<span class="stat-rate">${rate}%</span>`;
+        statRows.appendChild(row);
+      });
+
+      // まちがえた単語のふりかえりリスト
+      const reviewList = $('review-list');
+      reviewList.innerHTML = '';
+      if (state.missed.length === 0) {
+        reviewList.innerHTML = '<p class="review-empty">パーフェクト！まちがいなし 🎉</p>';
+      } else {
+        state.missed.slice(0, 10).forEach(m => {
+          const item = document.createElement('div');
+          item.className = 'review-item';
+          item.innerHTML =
+            `<b>${m.w}</b> は <b style="color:${CATS[m.t].color}">${m.t}</b>` +
+            `<span class="review-hint">${m.h}</span>`;
+          reviewList.appendChild(item);
+        });
+      }
+
+      showScreen('screen-result');
+    }
+
+    // ===== タイトルに戻る =====
+    function goToTitle() {
+      if (state) {
+        state.over = true;
+        cancelAnimationFrame(rafId);
+        state.words.forEach(word => word.el.remove());
+      }
+      document.body.classList.remove('fever-mode');
+      $('pause-overlay').classList.remove('show');
+      $('banner').classList.remove('show', 'miss');
+      $('best-score-start').textContent = loadData(STORAGE_KEY, 0);
+      showScreen('screen-start');
+    }
+
+    // ===== 品詞早見表モーダル =====
+    function renderRulesList() {
+      const list = $('rules-list');
+      list.innerHTML = '';
+      Object.keys(CATS).forEach(cat => {
+        const row = document.createElement('div');
+        row.className = 'rule-row';
+        row.innerHTML =
+          `<span class="rule-cat" style="background:${CATS[cat].color}">${cat}</span>` +
+          `<span class="rule-text">${CATS[cat].rule}</span>`;
+        list.appendChild(row);
+      });
+    }
+    function openRules() { $('modal-rules').classList.add('show'); }
+    function closeRules() { $('modal-rules').classList.remove('show'); }
+
+    // ===== 初期化 =====
+    function init() {
+      renderRulesList();
+      $('best-score-start').textContent = loadData(STORAGE_KEY, 0);
+
+      $('btn-start').addEventListener('click', startGame);
+      $('btn-retry').addEventListener('click', startGame);
+      $('btn-to-title').addEventListener('click', goToTitle);
+      $('btn-pause').addEventListener('click', pauseGame);
+      $('btn-resume').addEventListener('click', resumeGame);
+      $('btn-quit').addEventListener('click', goToTitle);
+      $('btn-rules-start').addEventListener('click', openRules);
+      $('btn-rules-pause').addEventListener('click', openRules);
+      $('btn-rules-close').addEventListener('click', closeRules);
+
+      // アプリを切り替えたときは自動で一時停止（iPadでの誤ミス防止）
+      document.addEventListener('visibilitychange', () => {
+        if (document.hidden) pauseGame();
+      });
+    }
+
+    init();
+  </script>
+</body>
+</html>
