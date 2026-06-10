@@ -1,0 +1,864 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>返り点クエスト〜漢文の塔〜</title>
+  <style>
+    /* ===== 基本リセット・全体設定 ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #f0e6d2;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(120, 40, 40, 0.25), transparent 60%),
+        linear-gradient(180deg, #1a1410 0%, #241a12 50%, #15100b 100%);
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+      overflow: hidden;
+    }
+    /* 漢文表示用の明朝体（端末内蔵フォントのみ・外部CDN不使用） */
+    .mincho { font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", serif; }
+
+    #app { height: 100%; max-width: 768px; margin: 0 auto; display: flex; flex-direction: column; }
+
+    /* ===== 画面切り替え（SPA方式） ===== */
+    .screen { display: none; flex: 1; min-height: 0; }
+    .screen.active { display: flex; flex-direction: column; }
+
+    button {
+      font-family: inherit;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      color: #fff;
+    }
+    button:active { transform: scale(0.96); }
+    .btn-primary {
+      background: linear-gradient(180deg, #c9a227, #8f6c12);
+      color: #fff8e7;
+      font-size: 19px;
+      font-weight: bold;
+      padding: 14px 48px;
+      box-shadow: 0 4px 16px rgba(201, 162, 39, 0.35);
+      letter-spacing: 2px;
+    }
+    .btn-secondary {
+      background: rgba(240, 230, 210, 0.12);
+      border: 1px solid rgba(240, 230, 210, 0.3);
+      padding: 10px 24px;
+      font-size: 15px;
+    }
+
+    /* ===== タイトル画面 ===== */
+    #screen-start { align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+    .game-title {
+      font-size: 42px;
+      font-weight: 900;
+      letter-spacing: 6px;
+      color: #e8c558;
+      text-shadow: 0 0 30px rgba(232, 197, 88, 0.35), 0 3px 6px rgba(0,0,0,0.6);
+    }
+    .game-subtitle { font-size: 16px; color: #c9b896; letter-spacing: 3px; }
+    .start-desc {
+      background: rgba(240, 230, 210, 0.06);
+      border: 1px solid rgba(240, 230, 210, 0.15);
+      border-radius: 12px;
+      padding: 14px 20px;
+      font-size: 14px;
+      color: #d8cbb0;
+      max-width: 420px;
+      text-align: left;
+    }
+    .start-desc li { margin: 4px 0 4px 18px; }
+    .best-line { font-size: 14px; color: #c9b896; }
+    .best-line strong { color: #e8c558; font-size: 20px; margin: 0 4px; }
+
+    /* ===== 塔（階選択）画面 ===== */
+    #screen-tower { padding: 20px 16px; overflow-y: auto; align-items: center; gap: 10px; }
+    .tower-title { font-size: 22px; font-weight: 900; color: #e8c558; letter-spacing: 4px; margin-bottom: 4px; }
+    .floor-card {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(240,230,210,0.09), rgba(240,230,210,0.04));
+      border: 1px solid rgba(232, 197, 88, 0.35);
+      border-radius: 14px;
+      padding: 12px 16px;
+      cursor: pointer;
+    }
+    .floor-card.locked {
+      opacity: 0.45;
+      border-color: rgba(240, 230, 210, 0.15);
+      cursor: default;
+    }
+    .floor-emoji { font-size: 34px; width: 48px; text-align: center; }
+    .floor-info { flex: 1; text-align: left; }
+    .floor-name { font-size: 17px; font-weight: bold; color: #f0e6d2; }
+    .floor-rule { font-size: 12px; color: #b3a586; }
+    .floor-stars { font-size: 18px; color: #e8c558; letter-spacing: 2px; white-space: nowrap; }
+    .tower-score { font-size: 14px; color: #c9b896; margin-top: 6px; }
+    .tower-score strong { color: #e8c558; }
+
+    /* ===== ゲーム画面 ===== */
+    #screen-game { position: relative; }
+    .hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.35);
+      font-size: 14px;
+    }
+    .hud-floor { font-weight: bold; color: #e8c558; white-space: nowrap; }
+    .hud-hp { font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
+    .hud-game-score { font-weight: 900; color: #e8c558; font-size: 17px; }
+    .btn-small {
+      background: rgba(240, 230, 210, 0.12);
+      font-size: 13px;
+      padding: 6px 12px;
+      min-height: 38px;
+    }
+
+    /* 番人（敵）表示 */
+    .enemy-area {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 8px 16px 0;
+    }
+    .enemy-face { font-size: 44px; transition: transform 0.2s; }
+    .enemy-face.hit { animation: enemyHit 0.5s; }
+    @keyframes enemyHit {
+      0% { transform: scale(1) rotate(0); filter: brightness(2); }
+      30% { transform: scale(1.25) rotate(-8deg); }
+      60% { transform: scale(0.9) rotate(6deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    .enemy-bar-bg {
+      width: 150px; height: 12px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(240,230,210,0.3);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .enemy-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #c0392b, #e74c3c);
+      transition: width 0.4s;
+    }
+    .enemy-label { font-size: 12px; color: #c9b896; }
+
+    /* 漢文パズル盤面 */
+    #puzzle-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 8px 16px;
+      position: relative;
+    }
+    /* 巻物風の縦書きカラム（writing-modeは使わず手動縦組み＝ブラウザ差異回避） */
+    .kanbun-scroll {
+      display: flex;
+      flex-direction: row-reverse; /* 漢文は右の行から読む */
+      gap: 14px;
+      background: linear-gradient(180deg, #f5ecd7, #e8dcc0);
+      border: 3px solid #8f6c12;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0,0,0,0.5), inset 0 0 40px rgba(143, 108, 18, 0.15);
+      padding: 18px 14px;
+      max-height: 100%;
+      overflow-y: auto;
+    }
+    .kanbun-col { display: flex; flex-direction: column; gap: 4px; }
+    .kchar {
+      position: relative;
+      width: 54px;
+      height: 54px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      font-weight: 600;
+      color: #2b2117;
+      background: rgba(255, 255, 255, 0.35);
+      border: 2px solid rgba(143, 108, 18, 0.35);
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    /* 返り点（漢字の左下に小さく表示） */
+    .kchar .kaeri {
+      position: absolute;
+      left: -1px;
+      bottom: -3px;
+      font-size: 14px;
+      font-weight: bold;
+      color: #a33b2e;
+      background: rgba(245, 236, 215, 0.9);
+      border-radius: 4px;
+      padding: 0 2px;
+      line-height: 1.2;
+    }
+    /* 正解済みの字：金色＋読み順番号 */
+    .kchar.done {
+      background: linear-gradient(180deg, #e8c558, #c9a227);
+      border-color: #8f6c12;
+      color: #fff;
+      cursor: default;
+      animation: charDone 0.3s;
+    }
+    @keyframes charDone { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+    .kchar .order-badge {
+      position: absolute;
+      right: -7px;
+      top: -7px;
+      width: 20px; height: 20px;
+      background: #a33b2e;
+      color: #fff;
+      font-size: 12px;
+      font-weight: bold;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, sans-serif;
+    }
+    .kchar.wrong { animation: charWrong 0.4s; }
+    @keyframes charWrong {
+      0%, 100% { transform: translateX(0); background: rgba(255,255,255,0.35); }
+      25% { transform: translateX(-7px); background: #e8a8a0; }
+      75% { transform: translateX(7px); background: #e8a8a0; }
+    }
+
+    /* タイムボーナスバー */
+    .time-bar-bg {
+      width: 10px;
+      height: 220px;
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(240,230,210,0.25);
+      border-radius: 5px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column-reverse;
+    }
+    .time-bar-fill { width: 100%; background: linear-gradient(180deg, #e8c558, #c9a227); }
+    .time-label { font-size: 11px; color: #b3a586; writing-mode: initial; text-align: center; margin-top: 4px; }
+
+    /* ヒント・問題下部 */
+    .bottom-info {
+      min-height: 64px;
+      padding: 8px 16px calc(12px + env(safe-area-inset-bottom));
+      text-align: center;
+    }
+    .hint-text {
+      display: inline-block;
+      font-size: 14px;
+      color: #f0c8b0;
+      background: rgba(163, 59, 46, 0.25);
+      border: 1px solid rgba(163, 59, 46, 0.5);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+    .progress-text { font-size: 13px; color: #b3a586; margin-bottom: 4px; }
+
+    /* ===== 問題クリア・階クリアパネル ===== */
+    .panel-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 7, 4, 0.82);
+      z-index: 20;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .panel-overlay.show { display: flex; }
+    .panel-card {
+      background: linear-gradient(180deg, #2e251a, #241c12);
+      border: 2px solid #c9a227;
+      border-radius: 16px;
+      padding: 22px 24px;
+      max-width: 440px;
+      width: 100%;
+      max-height: 86%;
+      overflow-y: auto;
+      text-align: center;
+      animation: panelIn 0.3s;
+    }
+    @keyframes panelIn { from { transform: scale(0.85); opacity: 0; } }
+    .panel-title { font-size: 22px; font-weight: 900; color: #e8c558; margin-bottom: 10px; letter-spacing: 2px; }
+    .yomi-text { font-size: 20px; color: #f5ecd7; font-weight: bold; margin: 8px 0; }
+    .mean-text { font-size: 14px; color: #c9b896; margin-bottom: 12px; }
+    .bonus-text { font-size: 14px; color: #8fdc9a; font-weight: bold; margin-bottom: 12px; }
+    .stars-big { font-size: 34px; color: #e8c558; letter-spacing: 6px; margin: 8px 0; }
+    .rule-intro { text-align: left; font-size: 14px; color: #d8cbb0; margin: 10px 0; }
+    .rule-intro b { color: #e8c558; }
+    .rule-example {
+      background: rgba(245, 236, 215, 0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      font-size: 14px;
+      color: #d8cbb0;
+    }
+
+    /* ===== 返り点の巻物（ルール早見表）モーダル ===== */
+    #modal-rules {
+      position: fixed; inset: 0;
+      background: rgba(10, 7, 4, 0.9);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-rules.show { display: flex; }
+    .modal-card {
+      background: #2e251a;
+      border: 2px solid #c9a227;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 460px;
+      width: 100%;
+      max-height: 82vh;
+      overflow-y: auto;
+    }
+    .modal-card h2 { font-size: 18px; color: #e8c558; text-align: center; margin-bottom: 12px; letter-spacing: 3px; }
+    .rule-block { margin: 12px 0; padding: 10px 12px; background: rgba(245,236,215,0.06); border-radius: 10px; }
+    .rule-block h3 { font-size: 15px; color: #f0c8b0; margin-bottom: 4px; }
+    .rule-block p { font-size: 13px; color: #d8cbb0; }
+    .modal-close { display: block; margin: 14px auto 0; }
+
+    /* ===== ゲームオーバー画面 ===== */
+    #screen-gameover { align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
+    .gameover-title { font-size: 34px; font-weight: 900; color: #e74c3c; letter-spacing: 4px; }
+
+    @media (max-width: 480px) {
+      .game-title { font-size: 32px; }
+      .kchar { width: 48px; height: 48px; font-size: 27px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+
+    <!-- ===== タイトル画面 ===== -->
+    <section id="screen-start" class="screen active">
+      <h1 class="game-title mincho">返り点クエスト</h1>
+      <p class="game-subtitle mincho">〜 漢文の塔 〜</p>
+      <div class="start-desc">
+        <ul>
+          <li>漢文の塔に番人が住みついた！</li>
+          <li>巻物の漢字を<b style="color:#e8c558">読む順番にタップ</b>して封印を解こう</li>
+          <li>まちがえるとHPが減る（なくなると敗北）</li>
+          <li>速く解くほどボーナス得点</li>
+          <li>全6階・各階で★3つを目指せ！</li>
+        </ul>
+      </div>
+      <p class="best-line">ベストスコア<strong id="best-score">0</strong></p>
+      <button class="btn-primary" id="btn-to-tower">塔にのぼる</button>
+      <button class="btn-secondary" id="btn-rules-start">返り点の巻物（ルール）</button>
+    </section>
+
+    <!-- ===== 塔（階選択）画面 ===== -->
+    <section id="screen-tower" class="screen">
+      <h2 class="tower-title mincho">漢文の塔</h2>
+      <div id="floor-list" style="display:flex;flex-direction:column-reverse;gap:10px;width:100%;align-items:center;"></div>
+      <p class="tower-score">そうごうスコア：<strong id="tower-total">0</strong></p>
+      <button class="btn-secondary" id="btn-tower-to-title" style="margin-top:6px">タイトルへ</button>
+    </section>
+
+    <!-- ===== ゲーム画面 ===== -->
+    <section id="screen-game" class="screen">
+      <!-- 上部HUD -->
+      <div class="hud">
+        <span class="hud-floor" id="hud-floor">1F</span>
+        <span class="hud-hp" id="hud-hp">❤❤❤❤❤</span>
+        <span class="hud-game-score" id="hud-game-score">0</span>
+        <button class="btn-small" id="btn-rules-game">巻物</button>
+        <button class="btn-small" id="btn-game-quit">やめる</button>
+      </div>
+
+      <!-- 階の番人 -->
+      <div class="enemy-area">
+        <span class="enemy-face" id="enemy-face">👹</span>
+        <div>
+          <div class="enemy-label" id="enemy-label">番人のちから</div>
+          <div class="enemy-bar-bg"><div class="enemy-bar-fill" id="enemy-bar" style="width:100%"></div></div>
+        </div>
+      </div>
+
+      <!-- 漢文パズル盤面（縦書き巻物） -->
+      <div id="puzzle-area">
+        <div>
+          <div class="time-bar-bg"><div class="time-bar-fill" id="time-bar" style="height:100%"></div></div>
+          <div class="time-label">速さ</div>
+        </div>
+        <div class="kanbun-scroll mincho" id="kanbun-scroll"></div>
+
+        <!-- 問題クリアパネル（書き下し文＝学びポイント） -->
+        <div class="panel-overlay" id="panel-clear">
+          <div class="panel-card">
+            <div class="panel-title">⚔️ 一撃！</div>
+            <div class="yomi-text mincho" id="clear-yomi"></div>
+            <div class="mean-text" id="clear-mean"></div>
+            <div class="bonus-text" id="clear-bonus"></div>
+            <button class="btn-primary" id="btn-next-problem">つぎへ</button>
+          </div>
+        </div>
+
+        <!-- 階開始（ルール紹介）パネル -->
+        <div class="panel-overlay" id="panel-intro">
+          <div class="panel-card">
+            <div class="panel-title" id="intro-title"></div>
+            <div class="rule-intro" id="intro-body"></div>
+            <button class="btn-primary" id="btn-intro-start">挑戦！</button>
+          </div>
+        </div>
+
+        <!-- 階クリアパネル -->
+        <div class="panel-overlay" id="panel-floorclear">
+          <div class="panel-card">
+            <div class="panel-title">🏆 階クリア！</div>
+            <div class="stars-big" id="floorclear-stars"></div>
+            <div class="mean-text" id="floorclear-detail"></div>
+            <button class="btn-primary" id="btn-floorclear-next">すすむ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 下部：進捗とヒント -->
+      <div class="bottom-info">
+        <div class="progress-text" id="progress-text"></div>
+        <span class="hint-text" id="hint-text" style="visibility:hidden"></span>
+      </div>
+    </section>
+
+    <!-- ===== ゲームオーバー画面 ===== -->
+    <section id="screen-gameover" class="screen">
+      <div class="gameover-title mincho">敗北…</div>
+      <p style="color:#c9b896">番人にやられてしまった。<br>巻物（ルール）を見直して再挑戦だ！</p>
+      <p class="best-line">today score：<strong id="gameover-score">0</strong></p>
+      <button class="btn-primary" id="btn-retry-floor">この階に再挑戦</button>
+      <button class="btn-secondary" id="btn-gameover-tower">塔にもどる</button>
+    </section>
+  </main>
+
+  <!-- ===== 返り点の巻物（ルール早見表） ===== -->
+  <div id="modal-rules">
+    <div class="modal-card">
+      <h2>返り点の巻物</h2>
+      <div class="rule-block">
+        <h3>基本</h3>
+        <p>漢文は上から下へ読む。ただし<b>返り点</b>が付いた字は、読む順番が入れかわる。返り点は漢字の<b>左下</b>に付く。</p>
+      </div>
+      <div class="rule-block">
+        <h3>レ点</h3>
+        <p><b>すぐ下の1字</b>を先に読んでから、レ点の字に返る。<br>例：「読<small>レ</small>書」→ 書→読 →「書を読む」</p>
+      </div>
+      <div class="rule-block">
+        <h3>一・二点</h3>
+        <p><b>2字以上はなれた下</b>から返る。「一」の字まで読んでから「二」の字に返る。<br>例：「思<small>二</small>故郷<small>一</small>」→ 故→郷→思 →「故郷を思ふ」</p>
+      </div>
+      <div class="rule-block">
+        <h3>上・下点</h3>
+        <p><b>一・二点をはさんで</b>さらに返るときに使う。「上」まで読んでから「下」に返る。<br>例：「有<small>下</small>読<small>二</small>漢文<small>一</small>者<small>上</small>」→ 漢→文→読→者→有</p>
+      </div>
+      <div class="rule-block">
+        <h3>順番のコツ</h3>
+        <p>① 返り点のない字を上から順に読む<br>② レ点 → すぐ返る<br>③ 一→二、上→下 の順に返る</p>
+      </div>
+      <button class="btn-secondary modal-close" id="btn-rules-close">とじる</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ===== 問題データ =====
+    // chars: 漢文の字（上から順）。m = 返り点（'' はなし）
+    // order: 読む順番（chars のインデックスを読む順に並べたもの）
+    // yomi: 書き下し文 / mean: 現代語訳
+    const FLOORS = [
+      {
+        name: '一階・そのまま読もう',
+        emoji: '🏮',
+        rule: '返り点なし：上から順に',
+        intro: '<b>漢文は上から下へ</b>読むのが基本。<br>返り点がなければ、そのまま順番にタップ！' +
+          '<div class="rule-example">例：「日出」→ 日→出 →「日出づ」</div>',
+        problems: [
+          { chars: [['日',''],['出','']], order: [0,1], yomi: '日出づ', mean: '太陽がのぼる' },
+          { chars: [['鳥',''],['鳴','']], order: [0,1], yomi: '鳥鳴く', mean: '鳥が鳴く' },
+          { chars: [['春',''],['来','']], order: [0,1], yomi: '春来たる', mean: '春がやって来る' },
+          { chars: [['山',''],['高',''],['水',''],['長','']], order: [0,1,2,3], yomi: '山高く水長し', mean: '山は高くそびえ、川は長く流れる' },
+        ],
+      },
+      {
+        name: '二階・レ点',
+        emoji: '👹',
+        rule: 'レ点：すぐ下の1字から返る',
+        intro: '<b>レ点</b>が付いた字は、<b>すぐ下の1字を先に</b>読んでから返る。' +
+          '<div class="rule-example">例：「読<small>レ</small>書」→ 書→読 →「書を読む」</div>',
+        problems: [
+          { chars: [['読','レ'],['書','']], order: [1,0], yomi: '書を読む', mean: '書物を読む' },
+          { chars: [['登','レ'],['山','']], order: [1,0], yomi: '山に登る', mean: '山に登る' },
+          { chars: [['見','レ'],['月','']], order: [1,0], yomi: '月を見る', mean: '月を見る' },
+          { chars: [['不','レ'],['知','']], order: [1,0], yomi: '知らず', mean: '知らない' },
+          { chars: [['欲','レ'],['学','レ'],['文','']], order: [2,1,0], yomi: '文を学ばんと欲す', mean: '学問を学ぼうと思う（レ点が2つ続くと下から順に返る）' },
+        ],
+      },
+      {
+        name: '三階・一二点',
+        emoji: '🦊',
+        rule: '一・二点：2字以上はなれて返る',
+        intro: '<b>一・二点</b>は2字以上はなれた下から返るときに使う。<br>「<b>一</b>」の字まで読んでから「<b>二</b>」の字に返る。' +
+          '<div class="rule-example">例：「思<small>二</small>故郷<small>一</small>」→ 故→郷→思 →「故郷を思ふ」</div>',
+        problems: [
+          { chars: [['思','二'],['故',''],['郷','一']], order: [1,2,0], yomi: '故郷を思ふ', mean: 'ふるさとを思う' },
+          { chars: [['待','二'],['春',''],['風','一']], order: [1,2,0], yomi: '春風を待つ', mean: '春の風を待つ' },
+          { chars: [['聞','二'],['鳥',''],['声','一']], order: [1,2,0], yomi: '鳥声を聞く', mean: '鳥の声を聞く' },
+          { chars: [['愛','二'],['山',''],['水','一']], order: [1,2,0], yomi: '山水を愛す', mean: '自然の風景を愛する' },
+          { chars: [['読','二'],['聖',''],['人',''],['之',''],['書','一']], order: [1,2,3,4,0], yomi: '聖人の書を読む', mean: 'すぐれた人の書物を読む' },
+        ],
+      },
+      {
+        name: '四階・レ点＋一二点',
+        emoji: '⚔️',
+        rule: 'ミックス：一→二→レの順で返る',
+        intro: 'レ点と一・二点の<b>合わせ技</b>！<br>「一」まで読んで「二」へ返り、さらに<b>レ点で1字上</b>へ返る。' +
+          '<div class="rule-example">例：「不<small>レ</small>読<small>二</small>漢文<small>一</small>」→ 漢→文→読→不 →「漢文を読まず」</div>',
+        problems: [
+          { chars: [['不','レ'],['読','二'],['漢',''],['文','一']], order: [2,3,1,0], yomi: '漢文を読まず', mean: '漢文を読まない' },
+          { chars: [['欲','レ'],['飲','二'],['美',''],['酒','一']], order: [2,3,1,0], yomi: '美酒を飲まんと欲す', mean: 'うまい酒を飲みたいと思う' },
+          { chars: [['不','レ'],['見','二'],['高',''],['山','一']], order: [2,3,1,0], yomi: '高山を見ず', mean: '高い山を見ない' },
+          { chars: [['欲','レ'],['窮','二'],['千',''],['里',''],['目','一']], order: [2,3,4,1,0], yomi: '千里の目を窮めんと欲す', mean: 'はるかかなたまで見わたしたいと思う（王之渙『登鸛鵲楼』）' },
+        ],
+      },
+      {
+        name: '五階・上下点',
+        emoji: '🐯',
+        rule: '上・下点：一二点をはさんで返る',
+        intro: '<b>上・下点</b>は、一・二点をはさんで<b>さらに大きく返る</b>ときに使う。<br>「<b>上</b>」まで読んでから「<b>下</b>」の字に返る。' +
+          '<div class="rule-example">例：「有<small>下</small>読<small>二</small>漢文<small>一</small>者<small>上</small>」→ 漢→文→読→者→有</div>',
+        problems: [
+          { chars: [['有','下'],['読','二'],['漢',''],['文','一'],['者','上']], order: [2,3,1,4,0], yomi: '漢文を読む者有り', mean: '漢文を読む人がいる' },
+          { chars: [['有','下'],['学','二'],['聖',''],['道','一'],['人','上']], order: [2,3,1,4,0], yomi: '聖道を学ぶ人有り', mean: '聖人の道を学ぶ人がいる' },
+          { chars: [['有','下'],['好','二'],['読',''],['書','一'],['者','上']], order: [2,3,1,4,0], yomi: '読書を好む者有り', mean: '読書が好きな人がいる' },
+        ],
+      },
+      {
+        name: '最上階・名句の大龍',
+        emoji: '🐉',
+        rule: 'ボス戦：本物の名句に挑め！',
+        intro: '最上階の番人は<b>大龍</b>。<br>教科書にも出てくる<b>本物の名句</b>を読み解いて倒せ！',
+        problems: [
+          { chars: [['少',''],['年',''],['易','レ'],['老',''],['学',''],['難','レ'],['成','']], order: [0,1,3,2,4,6,5],
+            yomi: '少年老い易く学成り難し', mean: '若い時間はあっという間に過ぎ、学問はなかなか完成しない（朱熹『偶成』）' },
+          { chars: [['百',''],['聞',''],['不','レ'],['如','二'],['一',''],['見','一']], order: [0,1,4,5,3,2],
+            yomi: '百聞は一見に如かず', mean: '百回聞くより一回見るほうが確かだ（『漢書』）' },
+          { chars: [['不','レ'],['入','二'],['虎',''],['穴','一'],['不','レ'],['得','二'],['虎',''],['子','一']], order: [2,3,1,0,6,7,5,4],
+            yomi: '虎穴に入らずんば虎子を得ず', mean: '危険をおかさなければ大きな成果は得られない（『後漢書』）' },
+        ],
+      },
+    ];
+
+    const STORAGE_KEY = 'kaeriten-quest-save';
+    const MAX_HP = 5;
+    const TIME_LIMIT_MS = 30000; // 速さボーナスの基準時間
+
+    // ===== 状態管理 =====
+    let save = { unlocked: 0, stars: [], best: 0 }; // 永続データ
+    let g = null; // プレイ中の状態
+
+    // ===== localStorage（プライベートモード対策でtry-catch必須） =====
+    function saveData(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+    function loadData(key, defaultValue) {
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      } catch (e) { return defaultValue; }
+    }
+    function $(id) { return document.getElementById(id); }
+
+    // ===== 画面切り替え =====
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    // ===== 塔（階選択）画面 =====
+    function renderTower() {
+      const list = $('floor-list');
+      list.innerHTML = '';
+      FLOORS.forEach((floor, i) => {
+        const locked = i > save.unlocked;
+        const card = document.createElement('div');
+        card.className = 'floor-card' + (locked ? ' locked' : '');
+        const stars = save.stars[i] || 0;
+        card.innerHTML =
+          `<span class="floor-emoji">${locked ? '🔒' : floor.emoji}</span>` +
+          `<div class="floor-info">` +
+          `<div class="floor-name">${floor.name}</div>` +
+          `<div class="floor-rule">${floor.rule}</div></div>` +
+          `<span class="floor-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>`;
+        if (!locked) card.addEventListener('click', () => startFloor(i));
+        list.appendChild(card);
+      });
+      $('tower-total').textContent = save.best;
+    }
+
+    // ===== 階の開始 =====
+    function startFloor(floorIndex) {
+      g = {
+        floor: floorIndex,
+        problemIndex: 0,
+        hp: MAX_HP,
+        score: 0,
+        mistakes: 0,        // この階でのミス合計（★判定用）
+        step: 0,            // 現在の問題で何文字目まで正解したか
+        problemMistakes: 0, // 現在の問題のミス（得点計算用）
+        startTime: 0,
+        timerId: null,
+        locked: true,       // パネル表示中は盤面タップ不可
+      };
+      updateHud();
+      showScreen('screen-game');
+      const floor = FLOORS[floorIndex];
+      $('enemy-face').textContent = floor.emoji;
+      $('enemy-label').textContent = floor.name;
+      $('enemy-bar').style.width = '100%';
+      // 階開始パネル（ルール紹介＝学びの足場）
+      $('intro-title').textContent = floor.name;
+      $('intro-body').innerHTML = floor.intro;
+      $('panel-intro').classList.add('show');
+    }
+
+    function beginProblem() {
+      const floor = FLOORS[g.floor];
+      const problem = floor.problems[g.problemIndex];
+      g.step = 0;
+      g.problemMistakes = 0;
+      g.locked = false;
+      hideHint();
+      renderKanbun(problem);
+      $('progress-text').textContent =
+        `${floor.name}　巻物 ${g.problemIndex + 1} / ${floor.problems.length}`;
+      // 速さボーナスのタイマー開始
+      g.startTime = Date.now();
+      clearInterval(g.timerId);
+      g.timerId = setInterval(updateTimeBar, 200);
+      updateTimeBar();
+    }
+
+    // ===== 漢文の縦書き描画 =====
+    // writing-mode は使わず flex 縦並びで手動縦組み（ブラウザ差異・iPad表示崩れを回避）
+    function renderKanbun(problem) {
+      const scroll = $('kanbun-scroll');
+      scroll.innerHTML = '';
+      const col = document.createElement('div');
+      col.className = 'kanbun-col';
+      problem.chars.forEach(([kanji, mark], i) => {
+        const cell = document.createElement('div');
+        cell.className = 'kchar';
+        cell.dataset.index = i;
+        cell.innerHTML = `<span>${kanji}</span>` + (mark ? `<span class="kaeri">${mark}</span>` : '');
+        cell.addEventListener('click', () => handleTap(i, cell));
+        col.appendChild(cell);
+      });
+      scroll.appendChild(col);
+    }
+
+    function updateTimeBar() {
+      const elapsed = Date.now() - g.startTime;
+      const remain = Math.max(0, 1 - elapsed / TIME_LIMIT_MS);
+      $('time-bar').style.height = (remain * 100) + '%';
+    }
+
+    // ===== 字をタップしたとき =====
+    function handleTap(index, cell) {
+      if (!g || g.locked || cell.classList.contains('done')) return;
+      const floor = FLOORS[g.floor];
+      const problem = floor.problems[g.problemIndex];
+      const correctIndex = problem.order[g.step];
+
+      if (index === correctIndex) {
+        // --- 正解：金色に光って読み順番号が付く ---
+        g.step++;
+        cell.classList.add('done');
+        cell.insertAdjacentHTML('beforeend', `<span class="order-badge">${g.step}</span>`);
+        hideHint();
+        if (g.step >= problem.order.length) {
+          clearProblem(problem);
+        }
+      } else {
+        // --- 不正解：HPが減ってヒント表示（ここで覚える） ---
+        g.hp--;
+        g.mistakes++;
+        g.problemMistakes++;
+        cell.classList.add('wrong');
+        setTimeout(() => cell.classList.remove('wrong'), 400);
+        showHint(problem, index);
+        updateHud();
+        if (g.hp <= 0) {
+          gameOver();
+        }
+      }
+    }
+
+    // 間違えた字の返り点に応じたヒントを出す
+    function showHint(problem, tappedIndex) {
+      const mark = problem.chars[tappedIndex][1];
+      const kanji = problem.chars[tappedIndex][0];
+      let msg;
+      if (mark === 'レ') {
+        msg = `「${kanji}」にはレ点！ すぐ下の字を先に読もう`;
+      } else if (mark === '二') {
+        msg = `「${kanji}」には二点！ 先に「一」の字まで読もう`;
+      } else if (mark === '三') {
+        msg = `「${kanji}」には三点！ 一→二のあとに読むよ`;
+      } else if (mark === '下') {
+        msg = `「${kanji}」には下点！ 先に「上」の字まで読もう`;
+      } else if (mark === '上') {
+        msg = `「${kanji}」には上点！ まず一・二点の部分を読み終えよう`;
+      } else if (mark === '中') {
+        msg = `「${kanji}」には中点！ 「上」を読んでから返るよ`;
+      } else {
+        msg = `「${kanji}」はまだ早い！ 上から順に、返り点に注意して読もう`;
+      }
+      const hint = $('hint-text');
+      hint.textContent = '💥 ' + msg;
+      hint.style.visibility = 'visible';
+    }
+    function hideHint() { $('hint-text').style.visibility = 'hidden'; }
+
+    // ===== 問題クリア =====
+    function clearProblem(problem) {
+      g.locked = true;
+      clearInterval(g.timerId);
+      // 得点：基本100 − ミス×20 ＋ 速さボーナス（最大50）
+      const elapsed = Date.now() - g.startTime;
+      const speedBonus = Math.round(Math.max(0, 1 - elapsed / TIME_LIMIT_MS) * 50);
+      const points = Math.max(10, 100 - g.problemMistakes * 20) + speedBonus;
+      g.score += points;
+      updateHud();
+
+      // 番人にダメージ演出
+      const floor = FLOORS[g.floor];
+      const remainRatio = 1 - (g.problemIndex + 1) / floor.problems.length;
+      $('enemy-bar').style.width = (remainRatio * 100) + '%';
+      const face = $('enemy-face');
+      face.classList.remove('hit');
+      void face.offsetWidth; // アニメーション再発火用
+      face.classList.add('hit');
+
+      // 書き下し文＋現代語訳の表示（学びの確認）
+      $('clear-yomi').textContent = problem.yomi;
+      $('clear-mean').textContent = problem.mean;
+      $('clear-bonus').textContent = `+${points} 点（速さボーナス +${speedBonus}）`;
+      $('panel-clear').classList.add('show');
+    }
+
+    function nextProblem() {
+      $('panel-clear').classList.remove('show');
+      const floor = FLOORS[g.floor];
+      g.problemIndex++;
+      if (g.problemIndex >= floor.problems.length) {
+        clearFloor();
+      } else {
+        beginProblem();
+      }
+    }
+
+    // ===== 階クリア =====
+    function clearFloor() {
+      // ★判定：ノーミス=3 / ミス2以下=2 / クリア=1
+      const stars = g.mistakes === 0 ? 3 : (g.mistakes <= 2 ? 2 : 1);
+      save.stars[g.floor] = Math.max(save.stars[g.floor] || 0, stars);
+      save.unlocked = Math.max(save.unlocked, Math.min(g.floor + 1, FLOORS.length - 1));
+      save.best = Math.max(save.best, g.score);
+      saveData(STORAGE_KEY, save);
+
+      $('floorclear-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+      $('floorclear-detail').textContent =
+        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点` +
+        (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
+      $('btn-floorclear-next').textContent =
+        g.floor >= FLOORS.length - 1 ? '塔を制覇した！' : 'すすむ';
+      $('panel-floorclear').classList.add('show');
+    }
+
+    function afterFloorClear() {
+      $('panel-floorclear').classList.remove('show');
+      renderTower();
+      showScreen('screen-tower');
+    }
+
+    // ===== ゲームオーバー =====
+    function gameOver() {
+      g.locked = true;
+      clearInterval(g.timerId);
+      save.best = Math.max(save.best, g.score);
+      saveData(STORAGE_KEY, save);
+      $('gameover-score').textContent = g.score;
+      showScreen('screen-gameover');
+    }
+
+    // ===== HUD更新 =====
+    function updateHud() {
+      $('hud-floor').textContent = (g.floor + 1) + 'F';
+      $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(MAX_HP - g.hp);
+      $('hud-game-score').textContent = g.score;
+    }
+
+    // ===== モーダル =====
+    function openRules() { $('modal-rules').classList.add('show'); }
+    function closeRules() { $('modal-rules').classList.remove('show'); }
+
+    // ===== 初期化 =====
+    function init() {
+      save = loadData(STORAGE_KEY, { unlocked: 0, stars: [], best: 0 });
+      $('best-score').textContent = save.best;
+
+      $('btn-to-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
+      $('btn-tower-to-title').addEventListener('click', () => {
+        $('best-score').textContent = save.best;
+        showScreen('screen-start');
+      });
+      $('btn-intro-start').addEventListener('click', () => {
+        $('panel-intro').classList.remove('show');
+        beginProblem();
+      });
+      $('btn-next-problem').addEventListener('click', nextProblem);
+      $('btn-floorclear-next').addEventListener('click', afterFloorClear);
+      $('btn-retry-floor').addEventListener('click', () => startFloor(g.floor));
+      $('btn-gameover-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
+      $('btn-game-quit').addEventListener('click', () => {
+        if (g) clearInterval(g.timerId);
+        renderTower();
+        showScreen('screen-tower');
+      });
+      $('btn-rules-start').addEventListener('click', openRules);
+      $('btn-rules-game').addEventListener('click', openRules);
+      $('btn-rules-close').addEventListener('click', closeRules);
+    }
+
+    init();
+  </script>
+</body>
+</html>
