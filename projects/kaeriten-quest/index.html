@@ -193,6 +193,13 @@
       overflow-y: auto;
     }
     .kanbun-col { display: flex; flex-direction: column; gap: 9px; }
+    /* 長文（10字以上）用：セルを小さくして2列表示でも収まるように */
+    .kanbun-scroll.compact { padding: 12px 16px 12px 12px; gap: 10px; }
+    .kanbun-scroll.compact .kanbun-col { gap: 6px; }
+    .kanbun-scroll.compact .kchar { width: 52px; height: 45px; font-size: 25px; }
+    .kanbun-scroll.compact .kchar .okuri { top: 19px; font-size: 10px; }
+    .kanbun-scroll.compact .kchar .yomi { font-size: 11px; }
+    .kanbun-scroll.compact .kchar .kaeri { font-size: 12px; }
     .kchar {
       position: relative;
       width: 60px;
@@ -664,6 +671,26 @@
       },
     ];
 
+    // ===== 長文の試練（連続モードで25問ごとに出題・10字以上の名句） =====
+    // cols: 縦書きの列の字数（右の列から読む。[5,5]なら右列5字＋左列5字）
+    const LONG_PROBLEMS = [
+      { chars: [['春','',''],['眠','',''],['不','レ','','ず'],['覚','レ','エ'],['暁','','ヲ'],
+                ['処','',''],['処','',''],['聞','二','ク'],['啼','',''],['鳥','一','ヲ']],
+        order: [0,1,4,3,2,5,6,8,9,7], cols: [5,5],
+        yomi: '春眠暁を覚えず、処処啼鳥を聞く',
+        mean: '春の眠りは心地よく夜明けにも気づかない。あちこちで鳥の声が聞こえる（孟浩然『春暁』）' },
+      { chars: [['有','レ','リ'],['朋','',''],['自','二','','より'],['遠','',''],['方','一',''],['来','','タル'],
+                ['不','二','','ず'],['亦','','タ'],['楽','一','シカラ'],['乎','','','や']],
+        order: [1,0,3,4,2,5,7,8,6,9], cols: [6,4],
+        yomi: '朋有り遠方より来たる、亦た楽しからずや',
+        mean: '友が遠くから訪ねて来る、なんとうれしいことではないか（『論語』）' },
+      { chars: [['少','',''],['年','',''],['易','レ','ク'],['老','','イ'],['学','',''],['難','レ','シ'],['成','','リ'],
+                ['一','',''],['寸','','ノ'],['光','',''],['陰','',''],['不','レ','','ず'],['可','レ','','べから'],['軽','','ンズ']],
+        order: [0,1,3,2,4,6,5,7,8,9,10,13,12,11], cols: [7,7],
+        yomi: '少年老い易く学成り難し、一寸の光陰軽んずべからず',
+        mean: '若い時は過ぎやすく学問は完成しにくい。わずかな時間も軽んじてはいけない（朱熹『偶成』全文）' },
+    ];
+
     // ===== 称号（実績で昇格） =====
     // cond は save を受け取って判定。上から順に最後に満たしたものが現在の称号
     const TITLES = [
@@ -882,7 +909,7 @@
         `何問<b>連続</b>で読み解けるかの真剣勝負。<br>` +
         `・制限時間内に解けないのもアウト<br>` +
         `・クリアするたび制限時間が<b>少しずつ短くなる</b><br>` +
-        `最後は一瞬で判断するしかない…！<br>` +
+        `・<b>25問ごと</b>に🐲<b>長文の試練</b>（10字超えの名句）が出現！<br>` +
         `自己ベスト：<b>${save.chain.best}問連続</b>`);
     }
 
@@ -914,10 +941,14 @@
         $('progress-text').textContent = `修行モード　${g.clearedCount} 問撃破中`;
       } else {
         // 連続モード：この問題の制限時間（字数×1字あたり時間）をセット
-        g.problemLimit = problem.chars.length * g.perCharMs;
+        const isLong = problem.chars.length >= 10;
+        // 長文の試練は時間を25%増しにして理不尽さを回避
+        g.problemLimit = Math.round(problem.chars.length * g.perCharMs * (isLong ? 1.25 : 1));
         g.problemRemain = g.problemLimit;
-        $('progress-text').textContent =
-          `⚡ ${g.chain} 問連続中　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`;
+        $('enemy-face').textContent = isLong ? '🐲' : '⚡';
+        $('progress-text').textContent = isLong
+          ? `🐲 長文の試練！（${g.chain + 1}問目）　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`
+          : `⚡ ${g.chain} 問連続中　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`;
       }
       g.startTime = Date.now();
       g.lastTick = Date.now();
@@ -967,21 +998,29 @@
     function renderKanbun(problem) {
       const scroll = $('kanbun-scroll');
       scroll.innerHTML = '';
-      const col = document.createElement('div');
-      col.className = 'kanbun-col';
-      problem.chars.forEach(([kanji, mark, okuri, yomiKana], i) => {
-        const cell = document.createElement('div');
-        cell.className = 'kchar';
-        cell.dataset.index = i;
-        let html = `<span>${kanji}</span>`;
-        if (mark) html += `<span class="kaeri">${mark}</span>`;
-        if (okuri) html += `<span class="okuri">${okuri.split('').join('<br>')}</span>`;
-        if (yomiKana) html += `<span class="yomi">${yomiKana.split('').join('<br>')}</span>`;
-        cell.innerHTML = html;
-        cell.addEventListener('click', () => handleTap(i, cell));
-        col.appendChild(cell);
+      // 長文（10字以上）はセルを小さく＆複数列（右の列から読む）
+      scroll.classList.toggle('compact', problem.chars.length >= 10);
+      const colSizes = problem.cols || [problem.chars.length];
+      let idx = 0;
+      colSizes.forEach(size => {
+        const col = document.createElement('div');
+        col.className = 'kanbun-col';
+        for (let k = 0; k < size && idx < problem.chars.length; k++, idx++) {
+          const i = idx;
+          const [kanji, mark, okuri, yomiKana] = problem.chars[i];
+          const cell = document.createElement('div');
+          cell.className = 'kchar';
+          cell.dataset.index = i;
+          let html = `<span>${kanji}</span>`;
+          if (mark) html += `<span class="kaeri">${mark}</span>`;
+          if (okuri) html += `<span class="okuri">${okuri.split('').join('<br>')}</span>`;
+          if (yomiKana) html += `<span class="yomi">${yomiKana.split('').join('<br>')}</span>`;
+          cell.innerHTML = html;
+          cell.addEventListener('click', () => handleTap(i, cell));
+          col.appendChild(cell);
+        }
+        scroll.appendChild(col); // flex row-reverse なので先頭の列が右に来る
       });
-      scroll.appendChild(col);
     }
 
     // ===== 字をタップしたとき =====
@@ -1088,6 +1127,11 @@
           g.problemIndex++;
           if (g.problemIndex >= g.problems.length) {
             g.problems = g.problems.concat(shuffle(allProblems()).map(item => item.p));
+          }
+          // 25問ごと（25・50・75…問目）は長文の試練を割り込ませる
+          if ((g.chain + 1) % 25 === 0) {
+            const long = LONG_PROBLEMS[Math.floor(Math.random() * LONG_PROBLEMS.length)];
+            g.problems.splice(g.problemIndex, 0, long);
           }
           beginProblem();
         }, 900);
