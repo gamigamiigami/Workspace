@@ -44,12 +44,27 @@
     .btn-primary {
       background: linear-gradient(180deg, #c9a227, #8f6c12);
       color: #fff8e7;
-      font-size: 19px;
+      font-size: 18px;
       font-weight: bold;
-      padding: 14px 48px;
+      padding: 13px 40px;
       box-shadow: 0 4px 16px rgba(201, 162, 39, 0.35);
       letter-spacing: 2px;
     }
+    .btn-mode {
+      width: 100%;
+      max-width: 340px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-align: left;
+      background: linear-gradient(180deg, rgba(240,230,210,0.1), rgba(240,230,210,0.04));
+      border: 1px solid rgba(232, 197, 88, 0.4);
+      border-radius: 14px;
+      padding: 10px 16px;
+    }
+    .btn-mode .mode-emoji { font-size: 30px; }
+    .btn-mode .mode-name { font-size: 17px; font-weight: bold; color: #f0e6d2; }
+    .btn-mode .mode-desc { font-size: 12px; color: #b3a586; }
     .btn-secondary {
       background: rgba(240, 230, 210, 0.12);
       border: 1px solid rgba(240, 230, 210, 0.3);
@@ -58,28 +73,42 @@
     }
 
     /* ===== タイトル画面 ===== */
-    #screen-start { align-items: center; justify-content: center; gap: 18px; padding: 24px; text-align: center; }
+    #screen-start { align-items: center; justify-content: center; gap: 12px; padding: 20px; text-align: center; overflow-y: auto; }
     .game-title {
-      font-size: 42px;
+      font-size: 40px;
       font-weight: 900;
       letter-spacing: 6px;
       color: #e8c558;
       text-shadow: 0 0 30px rgba(232, 197, 88, 0.35), 0 3px 6px rgba(0,0,0,0.6);
     }
-    .game-subtitle { font-size: 16px; color: #c9b896; letter-spacing: 3px; }
-    .start-desc {
-      background: rgba(240, 230, 210, 0.06);
-      border: 1px solid rgba(240, 230, 210, 0.15);
-      border-radius: 12px;
-      padding: 14px 20px;
-      font-size: 14px;
-      color: #d8cbb0;
-      max-width: 420px;
-      text-align: left;
+    .game-subtitle { font-size: 15px; color: #c9b896; letter-spacing: 3px; }
+    /* 称号バッジ */
+    .title-badge {
+      background: linear-gradient(180deg, rgba(163,59,46,0.4), rgba(163,59,46,0.2));
+      border: 1px solid #a33b2e;
+      border-radius: 999px;
+      padding: 6px 22px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #f0c8b0;
+      letter-spacing: 2px;
     }
-    .start-desc li { margin: 4px 0 4px 18px; }
-    .best-line { font-size: 14px; color: #c9b896; }
-    .best-line strong { color: #e8c558; font-size: 20px; margin: 0 4px; }
+    .next-title-hint { font-size: 12px; color: #b3a586; }
+    .stats-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .stat-chip {
+      background: rgba(240, 230, 210, 0.07);
+      border: 1px solid rgba(240, 230, 210, 0.18);
+      border-radius: 10px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: #c9b896;
+    }
+    .stat-chip strong { color: #e8c558; font-size: 17px; margin-left: 4px; }
 
     /* ===== 塔（階選択）画面 ===== */
     #screen-tower { padding: 20px 16px; overflow-y: auto; align-items: center; gap: 10px; }
@@ -96,18 +125,12 @@
       padding: 12px 16px;
       cursor: pointer;
     }
-    .floor-card.locked {
-      opacity: 0.45;
-      border-color: rgba(240, 230, 210, 0.15);
-      cursor: default;
-    }
+    .floor-card.locked { opacity: 0.45; border-color: rgba(240, 230, 210, 0.15); cursor: default; }
     .floor-emoji { font-size: 34px; width: 48px; text-align: center; }
     .floor-info { flex: 1; text-align: left; }
     .floor-name { font-size: 17px; font-weight: bold; color: #f0e6d2; }
     .floor-rule { font-size: 12px; color: #b3a586; }
     .floor-stars { font-size: 18px; color: #e8c558; letter-spacing: 2px; white-space: nowrap; }
-    .tower-score { font-size: 14px; color: #c9b896; margin-top: 6px; }
-    .tower-score strong { color: #e8c558; }
 
     /* ===== ゲーム画面 ===== */
     #screen-game { position: relative; }
@@ -123,21 +146,10 @@
     .hud-floor { font-weight: bold; color: #e8c558; white-space: nowrap; }
     .hud-hp { font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
     .hud-game-score { font-weight: 900; color: #e8c558; font-size: 17px; }
-    .btn-small {
-      background: rgba(240, 230, 210, 0.12);
-      font-size: 13px;
-      padding: 6px 12px;
-      min-height: 38px;
-    }
+    .btn-small { background: rgba(240, 230, 210, 0.12); font-size: 13px; padding: 6px 12px; min-height: 38px; }
 
     /* 番人（敵）表示 */
-    .enemy-area {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      padding: 8px 16px 0;
-    }
+    .enemy-area { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px 16px 0; }
     .enemy-face { font-size: 44px; transition: transform 0.2s; }
     .enemy-face.hit { animation: enemyHit 0.5s; }
     @keyframes enemyHit {
@@ -153,11 +165,7 @@
       border-radius: 6px;
       overflow: hidden;
     }
-    .enemy-bar-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #c0392b, #e74c3c);
-      transition: width 0.4s;
-    }
+    .enemy-bar-fill { height: 100%; background: linear-gradient(90deg, #c0392b, #e74c3c); transition: width 0.4s; }
     .enemy-label { font-size: 12px; color: #c9b896; }
 
     /* 漢文パズル盤面 */
@@ -167,7 +175,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 20px;
+      gap: 18px;
       padding: 8px 16px;
       position: relative;
     }
@@ -180,19 +188,19 @@
       border: 3px solid #8f6c12;
       border-radius: 10px;
       box-shadow: 0 8px 30px rgba(0,0,0,0.5), inset 0 0 40px rgba(143, 108, 18, 0.15);
-      padding: 18px 14px;
+      padding: 18px 20px 18px 16px;
       max-height: 100%;
       overflow-y: auto;
     }
-    .kanbun-col { display: flex; flex-direction: column; gap: 4px; }
+    .kanbun-col { display: flex; flex-direction: column; gap: 9px; }
     .kchar {
       position: relative;
-      width: 54px;
-      height: 54px;
+      width: 60px;
+      height: 52px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 32px;
+      font-size: 31px;
       font-weight: 600;
       color: #2b2117;
       background: rgba(255, 255, 255, 0.35);
@@ -200,18 +208,32 @@
       border-radius: 8px;
       cursor: pointer;
     }
-    /* 返り点（漢字の左下に小さく表示） */
+    /* 返り点（漢字の左下に小さく・赤色） */
     .kchar .kaeri {
       position: absolute;
       left: -1px;
-      bottom: -3px;
+      bottom: -4px;
       font-size: 14px;
       font-weight: bold;
       color: #a33b2e;
-      background: rgba(245, 236, 215, 0.9);
+      background: rgba(245, 236, 215, 0.92);
       border-radius: 4px;
       padding: 0 2px;
       line-height: 1.2;
+    }
+    /* 送り仮名・助詞（漢字の右側に小さくカタカナで縦に） */
+    .kchar .okuri {
+      position: absolute;
+      right: 1px;
+      top: 24px;
+      font-size: 11px;
+      font-weight: bold;
+      line-height: 1.1;
+      color: #5b4a32;
+      text-align: center;
+      width: 12px;
+      word-break: break-all;
+      z-index: 1;
     }
     /* 正解済みの字：金色＋読み順番号 */
     .kchar.done {
@@ -221,11 +243,12 @@
       cursor: default;
       animation: charDone 0.3s;
     }
+    .kchar.done .okuri { color: #7a5c0e; }
     @keyframes charDone { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
     .kchar .order-badge {
       position: absolute;
-      right: -7px;
-      top: -7px;
+      left: -8px;
+      top: -8px;
       width: 20px; height: 20px;
       background: #a33b2e;
       color: #fff;
@@ -236,6 +259,7 @@
       align-items: center;
       justify-content: center;
       font-family: system-ui, sans-serif;
+      z-index: 2;
     }
     .kchar.wrong { animation: charWrong 0.4s; }
     @keyframes charWrong {
@@ -244,7 +268,7 @@
       75% { transform: translateX(7px); background: #e8a8a0; }
     }
 
-    /* タイムボーナスバー */
+    /* タイムバー（修行モードでは残り時間／塔では速さボーナス） */
     .time-bar-bg {
       width: 10px;
       height: 220px;
@@ -256,14 +280,31 @@
       flex-direction: column-reverse;
     }
     .time-bar-fill { width: 100%; background: linear-gradient(180deg, #e8c558, #c9a227); }
-    .time-label { font-size: 11px; color: #b3a586; writing-mode: initial; text-align: center; margin-top: 4px; }
+    .time-bar-fill.danger { background: linear-gradient(180deg, #e74c3c, #c0392b); }
+    .time-label { font-size: 11px; color: #b3a586; text-align: center; margin-top: 4px; }
+
+    /* 修行モードの瞬間表示トースト（書き下し文） */
+    .quick-toast {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(46, 37, 26, 0.95);
+      border: 1px solid #c9a227;
+      border-radius: 10px;
+      padding: 8px 18px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #f5ecd7;
+      white-space: nowrap;
+      z-index: 15;
+      display: none;
+    }
+    .quick-toast.show { display: block; animation: toastIn 0.2s; }
+    @keyframes toastIn { from { transform: translateX(-50%) translateY(-12px); opacity: 0; } }
 
     /* ヒント・問題下部 */
-    .bottom-info {
-      min-height: 64px;
-      padding: 8px 16px calc(12px + env(safe-area-inset-bottom));
-      text-align: center;
-    }
+    .bottom-info { min-height: 64px; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; }
     .hint-text {
       display: inline-block;
       font-size: 14px;
@@ -275,7 +316,7 @@
     }
     .progress-text { font-size: 13px; color: #b3a586; margin-bottom: 4px; }
 
-    /* ===== 問題クリア・階クリアパネル ===== */
+    /* ===== パネル（オーバーレイ） ===== */
     .panel-overlay {
       position: absolute;
       inset: 0;
@@ -305,6 +346,7 @@
     .mean-text { font-size: 14px; color: #c9b896; margin-bottom: 12px; }
     .bonus-text { font-size: 14px; color: #8fdc9a; font-weight: bold; margin-bottom: 12px; }
     .stars-big { font-size: 34px; color: #e8c558; letter-spacing: 6px; margin: 8px 0; }
+    .new-record { color: #f0c8b0; font-weight: 900; font-size: 16px; margin-bottom: 8px; }
     .rule-intro { text-align: left; font-size: 14px; color: #d8cbb0; margin: 10px 0; }
     .rule-intro b { color: #e8c558; }
     .rule-example {
@@ -315,6 +357,7 @@
       font-size: 14px;
       color: #d8cbb0;
     }
+    .streak-big { font-size: 26px; font-weight: 900; color: #f0c8b0; margin: 6px 0; }
 
     /* ===== 返り点の巻物（ルール早見表）モーダル ===== */
     #modal-rules {
@@ -348,8 +391,8 @@
     .gameover-title { font-size: 34px; font-weight: 900; color: #e74c3c; letter-spacing: 4px; }
 
     @media (max-width: 480px) {
-      .game-title { font-size: 32px; }
-      .kchar { width: 48px; height: 48px; font-size: 27px; }
+      .game-title { font-size: 30px; }
+      .kchar { width: 54px; height: 48px; font-size: 27px; }
     }
   </style>
 </head>
@@ -360,17 +403,31 @@
     <section id="screen-start" class="screen active">
       <h1 class="game-title mincho">返り点クエスト</h1>
       <p class="game-subtitle mincho">〜 漢文の塔 〜</p>
-      <div class="start-desc">
-        <ul>
-          <li>漢文の塔に番人が住みついた！</li>
-          <li>巻物の漢字を<b style="color:#e8c558">読む順番にタップ</b>して封印を解こう</li>
-          <li>まちがえるとHPが減る（なくなると敗北）</li>
-          <li>速く解くほどボーナス得点</li>
-          <li>全6階・各階で★3つを目指せ！</li>
-        </ul>
+
+      <!-- 称号（プレイ実績で昇格していく） -->
+      <div class="title-badge mincho" id="player-title">見習い書生</div>
+      <p class="next-title-hint" id="next-title-hint"></p>
+
+      <!-- 実績サマリー -->
+      <div class="stats-row">
+        <span class="stat-chip">★合計<strong id="stat-stars">0</strong></span>
+        <span class="stat-chip">連続修行<strong id="stat-streak">0</strong>日🔥</span>
+        <span class="stat-chip">修行ベスト<strong id="stat-training">0</strong>問</span>
       </div>
-      <p class="best-line">ベストスコア<strong id="best-score">0</strong></p>
-      <button class="btn-primary" id="btn-to-tower">塔にのぼる</button>
+
+      <!-- モード選択 -->
+      <button class="btn-mode" id="btn-mode-tower">
+        <span class="mode-emoji">🗼</span>
+        <span><span class="mode-name">漢文の塔</span><br><span class="mode-desc">全6階を攻略。各階★3を集めよう</span></span>
+      </button>
+      <button class="btn-mode" id="btn-mode-daily">
+        <span class="mode-emoji">📅</span>
+        <span><span class="mode-name">今日の試練</span><br><span class="mode-desc" id="daily-desc">日替わり5問。連続クリアで記録更新！</span></span>
+      </button>
+      <button class="btn-mode" id="btn-mode-training">
+        <span class="mode-emoji">🥋</span>
+        <span><span class="mode-name">修行モード</span><br><span class="mode-desc">時間が切れるまで何問倒せるか！</span></span>
+      </button>
       <button class="btn-secondary" id="btn-rules-start">返り点の巻物（ルール）</button>
     </section>
 
@@ -378,11 +435,10 @@
     <section id="screen-tower" class="screen">
       <h2 class="tower-title mincho">漢文の塔</h2>
       <div id="floor-list" style="display:flex;flex-direction:column-reverse;gap:10px;width:100%;align-items:center;"></div>
-      <p class="tower-score">そうごうスコア：<strong id="tower-total">0</strong></p>
-      <button class="btn-secondary" id="btn-tower-to-title" style="margin-top:6px">タイトルへ</button>
+      <button class="btn-secondary" id="btn-tower-to-title" style="margin-top:10px">タイトルへ</button>
     </section>
 
-    <!-- ===== ゲーム画面 ===== -->
+    <!-- ===== ゲーム画面（全モード共用） ===== -->
     <section id="screen-game" class="screen">
       <!-- 上部HUD -->
       <div class="hud">
@@ -406,9 +462,12 @@
       <div id="puzzle-area">
         <div>
           <div class="time-bar-bg"><div class="time-bar-fill" id="time-bar" style="height:100%"></div></div>
-          <div class="time-label">速さ</div>
+          <div class="time-label" id="time-label">速さ</div>
         </div>
         <div class="kanbun-scroll mincho" id="kanbun-scroll"></div>
+
+        <!-- 修行モード用：書き下し文の瞬間表示 -->
+        <div class="quick-toast mincho" id="quick-toast"></div>
 
         <!-- 問題クリアパネル（書き下し文＝学びポイント） -->
         <div class="panel-overlay" id="panel-clear">
@@ -421,7 +480,7 @@
           </div>
         </div>
 
-        <!-- 階開始（ルール紹介）パネル -->
+        <!-- 階・モード開始（ルール紹介）パネル -->
         <div class="panel-overlay" id="panel-intro">
           <div class="panel-card">
             <div class="panel-title" id="intro-title"></div>
@@ -430,13 +489,15 @@
           </div>
         </div>
 
-        <!-- 階クリアパネル -->
-        <div class="panel-overlay" id="panel-floorclear">
+        <!-- 階クリア・モード結果パネル -->
+        <div class="panel-overlay" id="panel-result">
           <div class="panel-card">
-            <div class="panel-title">🏆 階クリア！</div>
-            <div class="stars-big" id="floorclear-stars"></div>
-            <div class="mean-text" id="floorclear-detail"></div>
-            <button class="btn-primary" id="btn-floorclear-next">すすむ</button>
+            <div class="panel-title" id="result-title">🏆 階クリア！</div>
+            <div class="stars-big" id="result-stars"></div>
+            <div class="streak-big" id="result-streak" style="display:none"></div>
+            <div class="new-record" id="result-record" style="display:none">🎉 自己ベスト更新！</div>
+            <div class="mean-text" id="result-detail"></div>
+            <button class="btn-primary" id="btn-result-next">すすむ</button>
           </div>
         </div>
       </div>
@@ -452,9 +513,9 @@
     <section id="screen-gameover" class="screen">
       <div class="gameover-title mincho">敗北…</div>
       <p style="color:#c9b896">番人にやられてしまった。<br>巻物（ルール）を見直して再挑戦だ！</p>
-      <p class="best-line">today score：<strong id="gameover-score">0</strong></p>
-      <button class="btn-primary" id="btn-retry-floor">この階に再挑戦</button>
-      <button class="btn-secondary" id="btn-gameover-tower">塔にもどる</button>
+      <p style="color:#c9b896">スコア：<strong style="color:#e8c558;font-size:22px" id="gameover-score">0</strong></p>
+      <button class="btn-primary" id="btn-retry">再挑戦</button>
+      <button class="btn-secondary" id="btn-gameover-title">タイトルへ</button>
     </section>
   </main>
 
@@ -463,8 +524,8 @@
     <div class="modal-card">
       <h2>返り点の巻物</h2>
       <div class="rule-block">
-        <h3>基本</h3>
-        <p>漢文は上から下へ読む。ただし<b>返り点</b>が付いた字は、読む順番が入れかわる。返り点は漢字の<b>左下</b>に付く。</p>
+        <h3>訓読文の読み方</h3>
+        <p>漢文は上から下へ読む。漢字の<b>左下の記号＝返り点</b>（読む順番の指示）、<b>右側のカタカナ＝送り仮名・助詞</b>（日本語として読むための補い）。</p>
       </div>
       <div class="rule-block">
         <h3>レ点</h3>
@@ -480,7 +541,7 @@
       </div>
       <div class="rule-block">
         <h3>順番のコツ</h3>
-        <p>① 返り点のない字を上から順に読む<br>② レ点 → すぐ返る<br>③ 一→二、上→下 の順に返る</p>
+        <p>① 返り点のない字を上から順に読む<br>② レ点 → すぐ返る<br>③ 一→二、上→下 の順に返る<br>④ 送り仮名をつなげると書き下し文になる</p>
       </div>
       <button class="btn-secondary modal-close" id="btn-rules-close">とじる</button>
     </div>
@@ -490,7 +551,7 @@
     'use strict';
 
     // ===== 問題データ =====
-    // chars: 漢文の字（上から順）。m = 返り点（'' はなし）
+    // chars: [漢字, 返り点, 送り仮名(カタカナ)] を上から順に
     // order: 読む順番（chars のインデックスを読む順に並べたもの）
     // yomi: 書き下し文 / mean: 現代語訳
     const FLOORS = [
@@ -498,13 +559,13 @@
         name: '一階・そのまま読もう',
         emoji: '🏮',
         rule: '返り点なし：上から順に',
-        intro: '<b>漢文は上から下へ</b>読むのが基本。<br>返り点がなければ、そのまま順番にタップ！' +
-          '<div class="rule-example">例：「日出」→ 日→出 →「日出づ」</div>',
+        intro: '<b>漢文は上から下へ</b>読むのが基本。<br>右側のカタカナは<b>送り仮名</b>。つなげて読むと書き下し文になる。' +
+          '<div class="rule-example">例：「日 出<small>ヅ</small>」→ 日→出 →「日出づ」</div>',
         problems: [
-          { chars: [['日',''],['出','']], order: [0,1], yomi: '日出づ', mean: '太陽がのぼる' },
-          { chars: [['鳥',''],['鳴','']], order: [0,1], yomi: '鳥鳴く', mean: '鳥が鳴く' },
-          { chars: [['春',''],['来','']], order: [0,1], yomi: '春来たる', mean: '春がやって来る' },
-          { chars: [['山',''],['高',''],['水',''],['長','']], order: [0,1,2,3], yomi: '山高く水長し', mean: '山は高くそびえ、川は長く流れる' },
+          { chars: [['日','',''],['出','','ヅ']], order: [0,1], yomi: '日出づ', mean: '太陽がのぼる' },
+          { chars: [['鳥','',''],['鳴','','ク']], order: [0,1], yomi: '鳥鳴く', mean: '鳥が鳴く' },
+          { chars: [['春','',''],['来','','タル']], order: [0,1], yomi: '春来たる', mean: '春がやって来る' },
+          { chars: [['山','',''],['高','','ク'],['水','',''],['長','','シ']], order: [0,1,2,3], yomi: '山高く水長し', mean: '山は高くそびえ、川は長く流れる' },
         ],
       },
       {
@@ -512,13 +573,13 @@
         emoji: '👹',
         rule: 'レ点：すぐ下の1字から返る',
         intro: '<b>レ点</b>が付いた字は、<b>すぐ下の1字を先に</b>読んでから返る。' +
-          '<div class="rule-example">例：「読<small>レ</small>書」→ 書→読 →「書を読む」</div>',
+          '<div class="rule-example">例：「読<small>レム</small> 書<small>ヲ</small>」→ 書→読 →「書を読む」</div>',
         problems: [
-          { chars: [['読','レ'],['書','']], order: [1,0], yomi: '書を読む', mean: '書物を読む' },
-          { chars: [['登','レ'],['山','']], order: [1,0], yomi: '山に登る', mean: '山に登る' },
-          { chars: [['見','レ'],['月','']], order: [1,0], yomi: '月を見る', mean: '月を見る' },
-          { chars: [['不','レ'],['知','']], order: [1,0], yomi: '知らず', mean: '知らない' },
-          { chars: [['欲','レ'],['学','レ'],['文','']], order: [2,1,0], yomi: '文を学ばんと欲す', mean: '学問を学ぼうと思う（レ点が2つ続くと下から順に返る）' },
+          { chars: [['読','レ','ム'],['書','','ヲ']], order: [1,0], yomi: '書を読む', mean: '書物を読む' },
+          { chars: [['登','レ','ル'],['山','','ニ']], order: [1,0], yomi: '山に登る', mean: '山に登る' },
+          { chars: [['見','レ','ル'],['月','','ヲ']], order: [1,0], yomi: '月を見る', mean: '月を見る' },
+          { chars: [['不','レ','ズ'],['知','','ラ']], order: [1,0], yomi: '知らず', mean: '知らない（「不」は「ず」と読む）' },
+          { chars: [['欲','レ','ス'],['学','レ','バント'],['文','','ヲ']], order: [2,1,0], yomi: '文を学ばんと欲す', mean: '学問を学ぼうと思う（レ点が2つ続くと下から順に返る）' },
         ],
       },
       {
@@ -526,13 +587,13 @@
         emoji: '🦊',
         rule: '一・二点：2字以上はなれて返る',
         intro: '<b>一・二点</b>は2字以上はなれた下から返るときに使う。<br>「<b>一</b>」の字まで読んでから「<b>二</b>」の字に返る。' +
-          '<div class="rule-example">例：「思<small>二</small>故郷<small>一</small>」→ 故→郷→思 →「故郷を思ふ」</div>',
+          '<div class="rule-example">例：「思<small>二フ</small> 故 郷<small>一ヲ</small>」→ 故→郷→思 →「故郷を思ふ」</div>',
         problems: [
-          { chars: [['思','二'],['故',''],['郷','一']], order: [1,2,0], yomi: '故郷を思ふ', mean: 'ふるさとを思う' },
-          { chars: [['待','二'],['春',''],['風','一']], order: [1,2,0], yomi: '春風を待つ', mean: '春の風を待つ' },
-          { chars: [['聞','二'],['鳥',''],['声','一']], order: [1,2,0], yomi: '鳥声を聞く', mean: '鳥の声を聞く' },
-          { chars: [['愛','二'],['山',''],['水','一']], order: [1,2,0], yomi: '山水を愛す', mean: '自然の風景を愛する' },
-          { chars: [['読','二'],['聖',''],['人',''],['之',''],['書','一']], order: [1,2,3,4,0], yomi: '聖人の書を読む', mean: 'すぐれた人の書物を読む' },
+          { chars: [['思','二','フ'],['故','',''],['郷','一','ヲ']], order: [1,2,0], yomi: '故郷を思ふ', mean: 'ふるさとを思う' },
+          { chars: [['待','二','ツ'],['春','',''],['風','一','ヲ']], order: [1,2,0], yomi: '春風を待つ', mean: '春の風を待つ' },
+          { chars: [['聞','二','ク'],['鳥','',''],['声','一','ヲ']], order: [1,2,0], yomi: '鳥声を聞く', mean: '鳥の声を聞く' },
+          { chars: [['愛','二','ス'],['山','',''],['水','一','ヲ']], order: [1,2,0], yomi: '山水を愛す', mean: '自然の風景を愛する' },
+          { chars: [['読','二','ム'],['聖','',''],['人','',''],['之','','ノ'],['書','一','ヲ']], order: [1,2,3,4,0], yomi: '聖人の書を読む', mean: 'すぐれた人の書物を読む' },
         ],
       },
       {
@@ -540,12 +601,12 @@
         emoji: '⚔️',
         rule: 'ミックス：一→二→レの順で返る',
         intro: 'レ点と一・二点の<b>合わせ技</b>！<br>「一」まで読んで「二」へ返り、さらに<b>レ点で1字上</b>へ返る。' +
-          '<div class="rule-example">例：「不<small>レ</small>読<small>二</small>漢文<small>一</small>」→ 漢→文→読→不 →「漢文を読まず」</div>',
+          '<div class="rule-example">例：「不<small>レズ</small> 読<small>二マ</small> 漢 文<small>一ヲ</small>」→ 漢→文→読→不 →「漢文を読まず」</div>',
         problems: [
-          { chars: [['不','レ'],['読','二'],['漢',''],['文','一']], order: [2,3,1,0], yomi: '漢文を読まず', mean: '漢文を読まない' },
-          { chars: [['欲','レ'],['飲','二'],['美',''],['酒','一']], order: [2,3,1,0], yomi: '美酒を飲まんと欲す', mean: 'うまい酒を飲みたいと思う' },
-          { chars: [['不','レ'],['見','二'],['高',''],['山','一']], order: [2,3,1,0], yomi: '高山を見ず', mean: '高い山を見ない' },
-          { chars: [['欲','レ'],['窮','二'],['千',''],['里',''],['目','一']], order: [2,3,4,1,0], yomi: '千里の目を窮めんと欲す', mean: 'はるかかなたまで見わたしたいと思う（王之渙『登鸛鵲楼』）' },
+          { chars: [['不','レ','ズ'],['読','二','マ'],['漢','',''],['文','一','ヲ']], order: [2,3,1,0], yomi: '漢文を読まず', mean: '漢文を読まない' },
+          { chars: [['欲','レ','ス'],['飲','二','マント'],['美','',''],['酒','一','ヲ']], order: [2,3,1,0], yomi: '美酒を飲まんと欲す', mean: 'うまい酒を飲みたいと思う' },
+          { chars: [['不','レ','ズ'],['見','二',''],['高','',''],['山','一','ヲ']], order: [2,3,1,0], yomi: '高山を見ず', mean: '高い山を見ない' },
+          { chars: [['欲','レ','ス'],['窮','二','メント'],['千','',''],['里','','ノ'],['目','一','ヲ']], order: [2,3,4,1,0], yomi: '千里の目を窮めんと欲す', mean: 'はるかかなたまで見わたしたいと思う（王之渙『登鸛鵲楼』）' },
         ],
       },
       {
@@ -553,11 +614,11 @@
         emoji: '🐯',
         rule: '上・下点：一二点をはさんで返る',
         intro: '<b>上・下点</b>は、一・二点をはさんで<b>さらに大きく返る</b>ときに使う。<br>「<b>上</b>」まで読んでから「<b>下</b>」の字に返る。' +
-          '<div class="rule-example">例：「有<small>下</small>読<small>二</small>漢文<small>一</small>者<small>上</small>」→ 漢→文→読→者→有</div>',
+          '<div class="rule-example">例：「有<small>下リ</small> 読<small>二ム</small> 漢 文<small>一ヲ</small> 者<small>上</small>」→ 漢→文→読→者→有</div>',
         problems: [
-          { chars: [['有','下'],['読','二'],['漢',''],['文','一'],['者','上']], order: [2,3,1,4,0], yomi: '漢文を読む者有り', mean: '漢文を読む人がいる' },
-          { chars: [['有','下'],['学','二'],['聖',''],['道','一'],['人','上']], order: [2,3,1,4,0], yomi: '聖道を学ぶ人有り', mean: '聖人の道を学ぶ人がいる' },
-          { chars: [['有','下'],['好','二'],['読',''],['書','一'],['者','上']], order: [2,3,1,4,0], yomi: '読書を好む者有り', mean: '読書が好きな人がいる' },
+          { chars: [['有','下','リ'],['読','二','ム'],['漢','',''],['文','一','ヲ'],['者','上','']], order: [2,3,1,4,0], yomi: '漢文を読む者有り', mean: '漢文を読む人がいる' },
+          { chars: [['有','下','リ'],['学','二','ブ'],['聖','',''],['道','一','ヲ'],['人','上','']], order: [2,3,1,4,0], yomi: '聖道を学ぶ人有り', mean: '聖人の道を学ぶ人がいる' },
+          { chars: [['有','下','リ'],['好','二','ム'],['読','',''],['書','一','ヲ'],['者','上','']], order: [2,3,1,4,0], yomi: '読書を好む者有り', mean: '読書が好きな人がいる' },
         ],
       },
       {
@@ -566,23 +627,39 @@
         rule: 'ボス戦：本物の名句に挑め！',
         intro: '最上階の番人は<b>大龍</b>。<br>教科書にも出てくる<b>本物の名句</b>を読み解いて倒せ！',
         problems: [
-          { chars: [['少',''],['年',''],['易','レ'],['老',''],['学',''],['難','レ'],['成','']], order: [0,1,3,2,4,6,5],
+          { chars: [['少','',''],['年','',''],['易','レ','ク'],['老','','イ'],['学','',''],['難','レ','シ'],['成','','リ']], order: [0,1,3,2,4,6,5],
             yomi: '少年老い易く学成り難し', mean: '若い時間はあっという間に過ぎ、学問はなかなか完成しない（朱熹『偶成』）' },
-          { chars: [['百',''],['聞',''],['不','レ'],['如','二'],['一',''],['見','一']], order: [0,1,4,5,3,2],
+          { chars: [['百','',''],['聞','','ハ'],['不','レ','ズ'],['如','二','カ'],['一','',''],['見','一','ニ']], order: [0,1,4,5,3,2],
             yomi: '百聞は一見に如かず', mean: '百回聞くより一回見るほうが確かだ（『漢書』）' },
-          { chars: [['不','レ'],['入','二'],['虎',''],['穴','一'],['不','レ'],['得','二'],['虎',''],['子','一']], order: [2,3,1,0,6,7,5,4],
+          { chars: [['不','レ','ズンバ'],['入','二','ラ'],['虎','',''],['穴','一','ニ'],['不','レ','ズ'],['得','二',''],['虎','',''],['子','一','ヲ']], order: [2,3,1,0,6,7,5,4],
             yomi: '虎穴に入らずんば虎子を得ず', mean: '危険をおかさなければ大きな成果は得られない（『後漢書』）' },
         ],
       },
     ];
 
+    // ===== 称号（実績で昇格） =====
+    // cond は save を受け取って判定。上から順に最後に満たしたものが現在の称号
+    const TITLES = [
+      { name: '見習い書生', need: 'まずは塔に挑戦しよう', cond: () => true },
+      { name: '書生',       need: '★を4つ集める', cond: s => totalStars(s) >= 4 },
+      { name: '訓読士',     need: '★を9つ集める', cond: s => totalStars(s) >= 9 },
+      { name: '返り点マスター', need: '★を14個集める', cond: s => totalStars(s) >= 14 },
+      { name: '訓読の達人', need: '全階で★3（合計18個）', cond: s => totalStars(s) >= 18 },
+      { name: '漢文王',     need: '★18個＋修行15問＋連続修行3日', cond: s => totalStars(s) >= 18 && s.training.best >= 15 && s.daily.streak >= 3 },
+    ];
+
     const STORAGE_KEY = 'kaeriten-quest-save';
     const MAX_HP = 5;
-    const TIME_LIMIT_MS = 30000; // 速さボーナスの基準時間
+    const DAILY_HP = 3;
+    const SPEED_LIMIT_MS = 30000;     // 塔・試練：速さボーナスの基準時間
+    const TRAINING_START_MS = 40000;  // 修行：開始時の持ち時間
+    const TRAINING_BONUS_MS = 8000;   // 修行：1問クリアで延長
+    const TRAINING_PENALTY_MS = 5000; // 修行：ミスで減少
+    const TRAINING_MAX_MS = 60000;    // 修行：持ち時間の上限
 
     // ===== 状態管理 =====
-    let save = { unlocked: 0, stars: [], best: 0 }; // 永続データ
-    let g = null; // プレイ中の状態
+    let save = null; // 永続データ
+    let g = null;    // プレイ中の状態
 
     // ===== localStorage（プライベートモード対策でtry-catch必須） =====
     function saveData(key, value) {
@@ -594,12 +671,96 @@
         return item ? JSON.parse(item) : defaultValue;
       } catch (e) { return defaultValue; }
     }
+    function defaultSave() {
+      return {
+        unlocked: 0, stars: [], best: 0,
+        daily: { lastClear: '', streak: 0, best: 0 },
+        training: { best: 0, bestScore: 0 },
+      };
+    }
+    function loadSave() {
+      // 旧バージョンのセーブデータにも新フィールドを補う
+      const d = defaultSave();
+      const s = loadData(STORAGE_KEY, d);
+      s.daily = Object.assign(d.daily, s.daily || {});
+      s.training = Object.assign(d.training, s.training || {});
+      s.stars = s.stars || [];
+      return s;
+    }
+    function totalStars(s) { return s.stars.reduce((sum, v) => sum + (v || 0), 0); }
     function $(id) { return document.getElementById(id); }
+
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    // 日付シードの乱数（今日の試練：全員・毎回同じ問題になる）
+    function seededRandom(seedStr) {
+      let h = 1779033703;
+      for (let i = 0; i < seedStr.length; i++) {
+        h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+        h = (h << 13) | (h >>> 19);
+      }
+      return function () {
+        h = Math.imul(h ^ (h >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967296;
+      };
+    }
+    function todayStr() {
+      const d = new Date();
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    function yesterdayStr() {
+      const d = new Date(Date.now() - 86400000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    // 全問題を平坦化（floor番号付き）
+    function allProblems() {
+      const list = [];
+      FLOORS.forEach((floor, fi) => floor.problems.forEach(p => list.push({ p, fi })));
+      return list;
+    }
+    // 今日の試練：日付シードで5問選ぶ（やさしい順に並べる）
+    function pickDailyProblems() {
+      const rnd = seededRandom('kaeriten-' + todayStr());
+      const pool = allProblems();
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+      return pool.slice(0, 5).sort((a, b) => a.fi - b.fi).map(item => item.p);
+    }
 
     // ===== 画面切り替え =====
     function showScreen(id) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       $(id).classList.add('active');
+    }
+
+    // ===== タイトル画面の表示更新 =====
+    function renderStart() {
+      // 称号判定（条件を満たす最後のもの）
+      let current = TITLES[0], next = null;
+      for (const t of TITLES) {
+        if (t.cond(save)) current = t;
+        else { next = t; break; }
+      }
+      $('player-title').textContent = current.name;
+      $('next-title-hint').textContent = next ? `次の称号「${next.name}」：${next.need}` : '最高位に到達！';
+      $('stat-stars').textContent = totalStars(save);
+      $('stat-streak').textContent = save.daily.streak;
+      $('stat-training').textContent = save.training.best;
+      $('daily-desc').textContent = save.daily.lastClear === todayStr()
+        ? '本日クリア済み！スコア更新に再挑戦できる'
+        : '日替わり5問。連続クリアで記録更新！';
     }
 
     // ===== 塔（階選択）画面 =====
@@ -617,84 +778,145 @@
           `<div class="floor-name">${floor.name}</div>` +
           `<div class="floor-rule">${floor.rule}</div></div>` +
           `<span class="floor-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>`;
-        if (!locked) card.addEventListener('click', () => startFloor(i));
+        if (!locked) card.addEventListener('click', () => startTowerFloor(i));
         list.appendChild(card);
       });
-      $('tower-total').textContent = save.best;
     }
 
-    // ===== 階の開始 =====
-    function startFloor(floorIndex) {
-      g = {
-        floor: floorIndex,
+    // ===== モード開始 =====
+    function baseState(mode) {
+      return {
+        mode,
         problemIndex: 0,
         hp: MAX_HP,
         score: 0,
-        mistakes: 0,        // この階でのミス合計（★判定用）
-        step: 0,            // 現在の問題で何文字目まで正解したか
-        problemMistakes: 0, // 現在の問題のミス（得点計算用）
+        mistakes: 0,
+        clearedCount: 0,
+        step: 0,
+        problemMistakes: 0,
         startTime: 0,
         timerId: null,
-        locked: true,       // パネル表示中は盤面タップ不可
+        trainingRemain: 0,
+        locked: true,
+        problems: [],
+        floor: 0,
       };
+    }
+
+    function startTowerFloor(floorIndex) {
+      g = baseState('tower');
+      g.floor = floorIndex;
+      g.problems = FLOORS[floorIndex].problems;
+      const floor = FLOORS[floorIndex];
+      setupGameScreen(floor.emoji, floor.name, floor.name, floor.intro);
+    }
+
+    function startDaily() {
+      g = baseState('daily');
+      g.hp = DAILY_HP;
+      g.problems = pickDailyProblems();
+      setupGameScreen('📅', '今日の試練', '📅 今日の試練',
+        `日替わりの<b>5問</b>に挑戦！（HPは${DAILY_HP}）<br>` +
+        `クリアすると<b>連続修行記録🔥</b>がのびる。<br>現在の連続記録：<b>${save.daily.streak}日</b>` +
+        '<div class="rule-example">毎日ちがう問題が出るよ。明日もまた挑戦！</div>');
+    }
+
+    function startTraining() {
+      g = baseState('training');
+      g.hp = 0; // 修行はHPなし・時間制
+      g.problems = shuffle(allProblems()).map(item => item.p);
+      g.trainingRemain = TRAINING_START_MS;
+      setupGameScreen('🥋', '修行モード', '🥋 修行モード',
+        `時間が切れるまで<b>何問倒せるか</b>の勝負！<br>` +
+        `・1問クリアで <b>+${TRAINING_BONUS_MS / 1000}秒</b><br>` +
+        `・ミスすると <b>−${TRAINING_PENALTY_MS / 1000}秒</b><br>` +
+        `自己ベスト：<b>${save.training.best}問</b>`);
+    }
+
+    function setupGameScreen(emoji, label, introTitle, introBody) {
       updateHud();
       showScreen('screen-game');
-      const floor = FLOORS[floorIndex];
-      $('enemy-face').textContent = floor.emoji;
-      $('enemy-label').textContent = floor.name;
+      $('enemy-face').textContent = emoji;
+      $('enemy-label').textContent = label;
       $('enemy-bar').style.width = '100%';
-      // 階開始パネル（ルール紹介＝学びの足場）
-      $('intro-title').textContent = floor.name;
-      $('intro-body').innerHTML = floor.intro;
+      $('time-label').textContent = g.mode === 'training' ? '残り' : '速さ';
+      $('intro-title').textContent = introTitle;
+      $('intro-body').innerHTML = introBody;
       $('panel-intro').classList.add('show');
     }
 
+    // ===== 問題の開始 =====
     function beginProblem() {
-      const floor = FLOORS[g.floor];
-      const problem = floor.problems[g.problemIndex];
+      const problem = g.problems[g.problemIndex];
       g.step = 0;
       g.problemMistakes = 0;
       g.locked = false;
       hideHint();
       renderKanbun(problem);
-      $('progress-text').textContent =
-        `${floor.name}　巻物 ${g.problemIndex + 1} / ${floor.problems.length}`;
-      // 速さボーナスのタイマー開始
+      if (g.mode === 'tower') {
+        $('progress-text').textContent = `${FLOORS[g.floor].name}　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
+      } else if (g.mode === 'daily') {
+        $('progress-text').textContent = `今日の試練　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
+      } else {
+        $('progress-text').textContent = `修行モード　${g.clearedCount} 問撃破中`;
+      }
       g.startTime = Date.now();
+      g.lastTick = Date.now();
       clearInterval(g.timerId);
-      g.timerId = setInterval(updateTimeBar, 200);
-      updateTimeBar();
+      g.timerId = setInterval(tick, 200);
+      tick();
+    }
+
+    // タイマー更新（塔・試練＝速さボーナス表示／修行＝残り時間）
+    function tick() {
+      if (!g) return;
+      const now = Date.now();
+      if (g.mode === 'training') {
+        if (!g.locked) {
+          // タブ復帰などで一気に時間が飛ばないよう1回の減少は最大1秒
+          const dt = Math.min(1000, now - g.lastTick);
+          g.trainingRemain -= dt;
+        }
+        g.lastTick = now;
+        const ratio = Math.max(0, g.trainingRemain / TRAINING_MAX_MS);
+        const bar = $('time-bar');
+        bar.style.height = (ratio * 100) + '%';
+        bar.classList.toggle('danger', g.trainingRemain < 10000);
+        if (g.trainingRemain <= 0) endTraining();
+      } else {
+        const elapsed = now - g.startTime;
+        const remain = Math.max(0, 1 - elapsed / SPEED_LIMIT_MS);
+        $('time-bar').style.height = (remain * 100) + '%';
+        $('time-bar').classList.remove('danger');
+      }
     }
 
     // ===== 漢文の縦書き描画 =====
     // writing-mode は使わず flex 縦並びで手動縦組み（ブラウザ差異・iPad表示崩れを回避）
+    // 返り点＝左下（赤）／送り仮名＝右側（カタカナ縦書き）
     function renderKanbun(problem) {
       const scroll = $('kanbun-scroll');
       scroll.innerHTML = '';
       const col = document.createElement('div');
       col.className = 'kanbun-col';
-      problem.chars.forEach(([kanji, mark], i) => {
+      problem.chars.forEach(([kanji, mark, okuri], i) => {
         const cell = document.createElement('div');
         cell.className = 'kchar';
         cell.dataset.index = i;
-        cell.innerHTML = `<span>${kanji}</span>` + (mark ? `<span class="kaeri">${mark}</span>` : '');
+        let html = `<span>${kanji}</span>`;
+        if (mark) html += `<span class="kaeri">${mark}</span>`;
+        if (okuri) html += `<span class="okuri">${okuri.split('').join('<br>')}</span>`;
+        cell.innerHTML = html;
         cell.addEventListener('click', () => handleTap(i, cell));
         col.appendChild(cell);
       });
       scroll.appendChild(col);
     }
 
-    function updateTimeBar() {
-      const elapsed = Date.now() - g.startTime;
-      const remain = Math.max(0, 1 - elapsed / TIME_LIMIT_MS);
-      $('time-bar').style.height = (remain * 100) + '%';
-    }
-
     // ===== 字をタップしたとき =====
     function handleTap(index, cell) {
       if (!g || g.locked || cell.classList.contains('done')) return;
-      const floor = FLOORS[g.floor];
-      const problem = floor.problems[g.problemIndex];
+      const problem = g.problems[g.problemIndex];
       const correctIndex = problem.order[g.step];
 
       if (index === correctIndex) {
@@ -703,21 +925,23 @@
         cell.classList.add('done');
         cell.insertAdjacentHTML('beforeend', `<span class="order-badge">${g.step}</span>`);
         hideHint();
-        if (g.step >= problem.order.length) {
-          clearProblem(problem);
-        }
+        if (g.step >= problem.order.length) clearProblem(problem);
       } else {
-        // --- 不正解：HPが減ってヒント表示（ここで覚える） ---
-        g.hp--;
+        // --- 不正解：ペナルティ＋返り点別ヒント（ここで覚える） ---
         g.mistakes++;
         g.problemMistakes++;
         cell.classList.add('wrong');
         setTimeout(() => cell.classList.remove('wrong'), 400);
         showHint(problem, index);
-        updateHud();
-        if (g.hp <= 0) {
-          gameOver();
+        if (g.mode === 'training') {
+          g.trainingRemain -= TRAINING_PENALTY_MS;
+          if (g.trainingRemain <= 0) { endTraining(); return; }
+        } else {
+          g.hp--;
+          updateHud();
+          if (g.hp <= 0) { gameOver(); return; }
         }
+        updateHud();
       }
     }
 
@@ -726,21 +950,13 @@
       const mark = problem.chars[tappedIndex][1];
       const kanji = problem.chars[tappedIndex][0];
       let msg;
-      if (mark === 'レ') {
-        msg = `「${kanji}」にはレ点！ すぐ下の字を先に読もう`;
-      } else if (mark === '二') {
-        msg = `「${kanji}」には二点！ 先に「一」の字まで読もう`;
-      } else if (mark === '三') {
-        msg = `「${kanji}」には三点！ 一→二のあとに読むよ`;
-      } else if (mark === '下') {
-        msg = `「${kanji}」には下点！ 先に「上」の字まで読もう`;
-      } else if (mark === '上') {
-        msg = `「${kanji}」には上点！ まず一・二点の部分を読み終えよう`;
-      } else if (mark === '中') {
-        msg = `「${kanji}」には中点！ 「上」を読んでから返るよ`;
-      } else {
-        msg = `「${kanji}」はまだ早い！ 上から順に、返り点に注意して読もう`;
-      }
+      if (mark === 'レ') msg = `「${kanji}」にはレ点！ すぐ下の字を先に読もう`;
+      else if (mark === '二') msg = `「${kanji}」には二点！ 先に「一」の字まで読もう`;
+      else if (mark === '三') msg = `「${kanji}」には三点！ 一→二のあとに読むよ`;
+      else if (mark === '下') msg = `「${kanji}」には下点！ 先に「上」の字まで読もう`;
+      else if (mark === '上') msg = `「${kanji}」には上点！ まず一・二点の部分を読み終えよう`;
+      else if (mark === '中') msg = `「${kanji}」には中点！ 「上」を読んでから返るよ`;
+      else msg = `「${kanji}」はまだ早い！ 上から順に、返り点に注意して読もう`;
       const hint = $('hint-text');
       hint.textContent = '💥 ' + msg;
       hint.style.visibility = 'visible';
@@ -750,66 +966,126 @@
     // ===== 問題クリア =====
     function clearProblem(problem) {
       g.locked = true;
-      clearInterval(g.timerId);
+      g.clearedCount++;
       // 得点：基本100 − ミス×20 ＋ 速さボーナス（最大50）
       const elapsed = Date.now() - g.startTime;
-      const speedBonus = Math.round(Math.max(0, 1 - elapsed / TIME_LIMIT_MS) * 50);
+      const speedBonus = Math.round(Math.max(0, 1 - elapsed / SPEED_LIMIT_MS) * 50);
       const points = Math.max(10, 100 - g.problemMistakes * 20) + speedBonus;
       g.score += points;
       updateHud();
 
       // 番人にダメージ演出
-      const floor = FLOORS[g.floor];
-      const remainRatio = 1 - (g.problemIndex + 1) / floor.problems.length;
-      $('enemy-bar').style.width = (remainRatio * 100) + '%';
+      const total = g.mode === 'training' ? 0 : g.problems.length;
+      if (total > 0) {
+        $('enemy-bar').style.width = ((1 - g.problemIndex / total - 1 / total) * 100) + '%';
+      }
       const face = $('enemy-face');
       face.classList.remove('hit');
       void face.offsetWidth; // アニメーション再発火用
       face.classList.add('hit');
 
-      // 書き下し文＋現代語訳の表示（学びの確認）
-      $('clear-yomi').textContent = problem.yomi;
-      $('clear-mean').textContent = problem.mean;
-      $('clear-bonus').textContent = `+${points} 点（速さボーナス +${speedBonus}）`;
-      $('panel-clear').classList.add('show');
+      if (g.mode === 'training') {
+        // 修行：時間延長してテンポよく次へ（書き下しはトーストで瞬間表示）
+        g.trainingRemain = Math.min(TRAINING_MAX_MS, g.trainingRemain + TRAINING_BONUS_MS);
+        const toast = $('quick-toast');
+        toast.textContent = `✅ ${problem.yomi}（+${TRAINING_BONUS_MS / 1000}秒）`;
+        toast.classList.add('show');
+        setTimeout(() => {
+          toast.classList.remove('show');
+          if (!g || g.mode !== 'training') return;
+          g.problemIndex++;
+          if (g.problemIndex >= g.problems.length) {
+            g.problems = g.problems.concat(shuffle(allProblems()).map(item => item.p));
+          }
+          beginProblem();
+        }, 1100);
+      } else {
+        // 塔・試練：書き下し文＋現代語訳パネル（学びの確認）
+        clearInterval(g.timerId);
+        $('clear-yomi').textContent = problem.yomi;
+        $('clear-mean').textContent = problem.mean;
+        $('clear-bonus').textContent = `+${points} 点（速さボーナス +${speedBonus}）`;
+        $('panel-clear').classList.add('show');
+      }
     }
 
     function nextProblem() {
       $('panel-clear').classList.remove('show');
-      const floor = FLOORS[g.floor];
       g.problemIndex++;
-      if (g.problemIndex >= floor.problems.length) {
-        clearFloor();
+      if (g.problemIndex >= g.problems.length) {
+        if (g.mode === 'tower') clearTowerFloor();
+        else clearDaily();
       } else {
         beginProblem();
       }
     }
 
-    // ===== 階クリア =====
-    function clearFloor() {
-      // ★判定：ノーミス=3 / ミス2以下=2 / クリア=1
+    // ===== 塔：階クリア =====
+    function clearTowerFloor() {
       const stars = g.mistakes === 0 ? 3 : (g.mistakes <= 2 ? 2 : 1);
       save.stars[g.floor] = Math.max(save.stars[g.floor] || 0, stars);
       save.unlocked = Math.max(save.unlocked, Math.min(g.floor + 1, FLOORS.length - 1));
+      const newBest = g.score > save.best;
       save.best = Math.max(save.best, g.score);
       saveData(STORAGE_KEY, save);
 
-      $('floorclear-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
-      $('floorclear-detail').textContent =
-        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点` +
-        (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
-      $('btn-floorclear-next').textContent =
-        g.floor >= FLOORS.length - 1 ? '塔を制覇した！' : 'すすむ';
-      $('panel-floorclear').classList.add('show');
+      $('result-title').textContent = '🏆 階クリア！';
+      $('result-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+      $('result-streak').style.display = 'none';
+      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-detail').textContent =
+        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点` + (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
+      $('btn-result-next').textContent = g.floor >= FLOORS.length - 1 ? '塔を制覇した！' : 'すすむ';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => { renderTower(); showScreen('screen-tower'); };
     }
 
-    function afterFloorClear() {
-      $('panel-floorclear').classList.remove('show');
-      renderTower();
-      showScreen('screen-tower');
+    // ===== 今日の試練：クリア（連続記録の更新） =====
+    function clearDaily() {
+      const today = todayStr();
+      let streakMsg;
+      if (save.daily.lastClear === today) {
+        streakMsg = `連続修行 ${save.daily.streak} 日目🔥（本日クリア済み）`;
+      } else {
+        save.daily.streak = save.daily.lastClear === yesterdayStr() ? save.daily.streak + 1 : 1;
+        save.daily.lastClear = today;
+        streakMsg = `連続修行 ${save.daily.streak} 日目🔥`;
+      }
+      const newBest = g.score > save.daily.best;
+      save.daily.best = Math.max(save.daily.best, g.score);
+      saveData(STORAGE_KEY, save);
+
+      $('result-title').textContent = '📅 試練クリア！';
+      $('result-stars').textContent = '';
+      $('result-streak').textContent = streakMsg;
+      $('result-streak').style.display = 'block';
+      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-detail').textContent = `スコア ${g.score} 点（試練ベスト ${save.daily.best} 点）　明日も新しい5問が待っている！`;
+      $('btn-result-next').textContent = 'タイトルへ';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
     }
 
-    // ===== ゲームオーバー =====
+    // ===== 修行：時間切れ＝結果発表 =====
+    function endTraining() {
+      g.locked = true;
+      clearInterval(g.timerId);
+      const newBest = g.clearedCount > save.training.best;
+      save.training.best = Math.max(save.training.best, g.clearedCount);
+      save.training.bestScore = Math.max(save.training.bestScore, g.score);
+      saveData(STORAGE_KEY, save);
+
+      $('result-title').textContent = '🥋 修行終了！';
+      $('result-stars').textContent = `${g.clearedCount} 問撃破`;
+      $('result-streak').style.display = 'none';
+      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-detail').textContent = `スコア ${g.score} 点 ／ 自己ベスト ${save.training.best} 問`;
+      $('btn-result-next').textContent = 'タイトルへ';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
+    }
+
+    // ===== ゲームオーバー（塔・試練でHP切れ） =====
     function gameOver() {
       g.locked = true;
       clearInterval(g.timerId);
@@ -821,8 +1097,16 @@
 
     // ===== HUD更新 =====
     function updateHud() {
-      $('hud-floor').textContent = (g.floor + 1) + 'F';
-      $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(MAX_HP - g.hp);
+      if (g.mode === 'tower') {
+        $('hud-floor').textContent = (g.floor + 1) + 'F';
+        $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(MAX_HP - g.hp);
+      } else if (g.mode === 'daily') {
+        $('hud-floor').textContent = '📅';
+        $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(DAILY_HP - g.hp);
+      } else {
+        $('hud-floor').textContent = '🥋';
+        $('hud-hp').textContent = `${g.clearedCount} 問撃破`;
+      }
       $('hud-game-score').textContent = g.score;
     }
 
@@ -832,26 +1116,33 @@
 
     // ===== 初期化 =====
     function init() {
-      save = loadData(STORAGE_KEY, { unlocked: 0, stars: [], best: 0 });
-      $('best-score').textContent = save.best;
+      save = loadSave();
+      renderStart();
 
-      $('btn-to-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
-      $('btn-tower-to-title').addEventListener('click', () => {
-        $('best-score').textContent = save.best;
-        showScreen('screen-start');
-      });
+      $('btn-mode-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
+      $('btn-mode-daily').addEventListener('click', startDaily);
+      $('btn-mode-training').addEventListener('click', startTraining);
+      $('btn-tower-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
+
       $('btn-intro-start').addEventListener('click', () => {
         $('panel-intro').classList.remove('show');
         beginProblem();
       });
       $('btn-next-problem').addEventListener('click', nextProblem);
-      $('btn-floorclear-next').addEventListener('click', afterFloorClear);
-      $('btn-retry-floor').addEventListener('click', () => startFloor(g.floor));
-      $('btn-gameover-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
+      $('btn-result-next').addEventListener('click', () => {
+        $('panel-result').classList.remove('show');
+        if (g && g.afterResult) g.afterResult();
+      });
+      $('btn-retry').addEventListener('click', () => {
+        if (g.mode === 'tower') startTowerFloor(g.floor);
+        else if (g.mode === 'daily') startDaily();
+        else startTraining();
+      });
+      $('btn-gameover-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
       $('btn-game-quit').addEventListener('click', () => {
         if (g) clearInterval(g.timerId);
-        renderTower();
-        showScreen('screen-tower');
+        renderStart();
+        showScreen('screen-start');
       });
       $('btn-rules-start').addEventListener('click', openRules);
       $('btn-rules-game').addEventListener('click', openRules);
