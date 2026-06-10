@@ -429,6 +429,7 @@
         <span class="stat-chip">★合計<strong id="stat-stars">0</strong></span>
         <span class="stat-chip">連続修行<strong id="stat-streak">0</strong>日🔥</span>
         <span class="stat-chip">修行ベスト<strong id="stat-training">0</strong>問</span>
+        <span class="stat-chip">連続記録<strong id="stat-chain">0</strong>問⚡</span>
       </div>
 
       <!-- モード選択 -->
@@ -443,6 +444,10 @@
       <button class="btn-mode" id="btn-mode-training">
         <span class="mode-emoji">🥋</span>
         <span><span class="mode-name">修行モード</span><br><span class="mode-desc">時間が切れるまで何問倒せるか！</span></span>
+      </button>
+      <button class="btn-mode" id="btn-mode-streak">
+        <span class="mode-emoji">⚡</span>
+        <span><span class="mode-name">連続モード</span><br><span class="mode-desc">1ミスで即終了！時間もどんどん短くなる</span></span>
       </button>
       <button class="btn-secondary" id="btn-rules-start">返り点の巻物（ルール）</button>
     </section>
@@ -678,6 +683,10 @@
     const TRAINING_BONUS_MS = 8000;   // 修行：1問クリアで延長
     const TRAINING_PENALTY_MS = 5000; // 修行：ミスで減少
     const TRAINING_MAX_MS = 60000;    // 修行：持ち時間の上限
+    // 連続モード：制限時間は「1字あたりの秒数 × 字数」で計算（長い名句が不利にならない）
+    const STREAK_PER_CHAR_START = 4000; // 開始時：1字4秒
+    const STREAK_PER_CHAR_MIN = 1200;   // 下限：1字1.2秒（瞬間判断ゾーン）
+    const STREAK_DECAY = 0.93;          // 1問クリアごとに7%短縮
 
     // ===== 状態管理 =====
     let save = null; // 永続データ
@@ -698,6 +707,7 @@
         unlocked: 0, stars: [], best: 0,
         daily: { lastClear: '', streak: 0, best: 0 },
         training: { best: 0, bestScore: 0 },
+        chain: { best: 0 },
       };
     }
     function loadSave() {
@@ -706,6 +716,7 @@
       const s = loadData(STORAGE_KEY, d);
       s.daily = Object.assign(d.daily, s.daily || {});
       s.training = Object.assign(d.training, s.training || {});
+      s.chain = Object.assign(d.chain, s.chain || {});
       s.stars = s.stars || [];
       return s;
     }
@@ -780,6 +791,7 @@
       $('stat-stars').textContent = totalStars(save);
       $('stat-streak').textContent = save.daily.streak;
       $('stat-training').textContent = save.training.best;
+      $('stat-chain').textContent = save.chain.best;
       $('daily-desc').textContent = save.daily.lastClear === todayStr()
         ? '本日クリア済み！スコア更新に再挑戦できる'
         : '日替わり5問。連続クリアで記録更新！';
@@ -819,6 +831,10 @@
         startTime: 0,
         timerId: null,
         trainingRemain: 0,
+        chain: 0,          // 連続モード：連続正解数
+        perCharMs: 0,      // 連続モード：1字あたりの制限時間
+        problemLimit: 0,   // 連続モード：現在の問題の制限時間
+        problemRemain: 0,  // 連続モード：残り時間
         locked: true,
         problems: [],
         floor: 0,
@@ -855,13 +871,28 @@
         `自己ベスト：<b>${save.training.best}問</b>`);
     }
 
+    function startStreak() {
+      g = baseState('streak');
+      g.hp = 0; // 連続モードはHPなし・1ミス即終了
+      g.problems = shuffle(allProblems()).map(item => item.p);
+      g.chain = 0;
+      g.perCharMs = STREAK_PER_CHAR_START;
+      setupGameScreen('⚡', '連続モード', '⚡ 連続モード',
+        `<b>1回でもまちがえたら即終了！</b><br>` +
+        `何問<b>連続</b>で読み解けるかの真剣勝負。<br>` +
+        `・制限時間内に解けないのもアウト<br>` +
+        `・クリアするたび制限時間が<b>少しずつ短くなる</b><br>` +
+        `最後は一瞬で判断するしかない…！<br>` +
+        `自己ベスト：<b>${save.chain.best}問連続</b>`);
+    }
+
     function setupGameScreen(emoji, label, introTitle, introBody) {
       updateHud();
       showScreen('screen-game');
       $('enemy-face').textContent = emoji;
       $('enemy-label').textContent = label;
       $('enemy-bar').style.width = '100%';
-      $('time-label').textContent = g.mode === 'training' ? '残り' : '速さ';
+      $('time-label').textContent = (g.mode === 'training' || g.mode === 'streak') ? '残り' : '速さ';
       $('intro-title').textContent = introTitle;
       $('intro-body').innerHTML = introBody;
       $('panel-intro').classList.add('show');
@@ -879,8 +910,14 @@
         $('progress-text').textContent = `${FLOORS[g.floor].name}　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
       } else if (g.mode === 'daily') {
         $('progress-text').textContent = `今日の試練　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
-      } else {
+      } else if (g.mode === 'training') {
         $('progress-text').textContent = `修行モード　${g.clearedCount} 問撃破中`;
+      } else {
+        // 連続モード：この問題の制限時間（字数×1字あたり時間）をセット
+        g.problemLimit = problem.chars.length * g.perCharMs;
+        g.problemRemain = g.problemLimit;
+        $('progress-text').textContent =
+          `⚡ ${g.chain} 問連続中　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`;
       }
       g.startTime = Date.now();
       g.lastTick = Date.now();
@@ -889,7 +926,7 @@
       tick();
     }
 
-    // タイマー更新（塔・試練＝速さボーナス表示／修行＝残り時間）
+    // タイマー更新（塔・試練＝速さボーナス表示／修行＝持ち時間／連続＝問題ごとの制限時間）
     function tick() {
       if (!g) return;
       const now = Date.now();
@@ -905,6 +942,17 @@
         bar.style.height = (ratio * 100) + '%';
         bar.classList.toggle('danger', g.trainingRemain < 10000);
         if (g.trainingRemain <= 0) endTraining();
+      } else if (g.mode === 'streak') {
+        if (!g.locked) {
+          const dt = Math.min(1000, now - g.lastTick);
+          g.problemRemain -= dt;
+        }
+        g.lastTick = now;
+        const ratio = Math.max(0, g.problemRemain / g.problemLimit);
+        const bar = $('time-bar');
+        bar.style.height = (ratio * 100) + '%';
+        bar.classList.toggle('danger', ratio < 0.34);
+        if (g.problemRemain <= 0) endStreak('⏰ 時間切れ！', g.problems[g.problemIndex]);
       } else {
         const elapsed = now - g.startTime;
         const remain = Math.max(0, 1 - elapsed / SPEED_LIMIT_MS);
@@ -956,7 +1004,11 @@
         cell.classList.add('wrong');
         setTimeout(() => cell.classList.remove('wrong'), 400);
         showHint(problem, index);
-        if (g.mode === 'training') {
+        if (g.mode === 'streak') {
+          // 連続モードは1ミスで即終了（サドンデス）
+          endStreak('💥 タップミス！', problem);
+          return;
+        } else if (g.mode === 'training') {
           g.trainingRemain -= TRAINING_PENALTY_MS;
           if (g.trainingRemain <= 0) { endTraining(); return; }
         } else {
@@ -1022,6 +1074,23 @@
           }
           beginProblem();
         }, 1100);
+      } else if (g.mode === 'streak') {
+        // 連続：記録を伸ばして制限時間を短縮、テンポよく次へ
+        g.chain++;
+        g.perCharMs = Math.max(STREAK_PER_CHAR_MIN, g.perCharMs * STREAK_DECAY);
+        updateHud();
+        const toast = $('quick-toast');
+        toast.textContent = `⚡ ${g.chain} 連続！ ${problem.yomi}`;
+        toast.classList.add('show');
+        setTimeout(() => {
+          toast.classList.remove('show');
+          if (!g || g.mode !== 'streak') return;
+          g.problemIndex++;
+          if (g.problemIndex >= g.problems.length) {
+            g.problems = g.problems.concat(shuffle(allProblems()).map(item => item.p));
+          }
+          beginProblem();
+        }, 900);
       } else {
         // 塔・試練：書き下し文＋現代語訳パネル（学びの確認）
         clearInterval(g.timerId);
@@ -1089,6 +1158,25 @@
       g.afterResult = () => { renderStart(); showScreen('screen-start'); };
     }
 
+    // ===== 連続：1ミスまたは時間切れ＝即終了 =====
+    function endStreak(reason, problem) {
+      g.locked = true;
+      clearInterval(g.timerId);
+      const newBest = g.chain > save.chain.best;
+      save.chain.best = Math.max(save.chain.best, g.chain);
+      saveData(STORAGE_KEY, save);
+
+      $('result-title').textContent = '⚡ 連続終了！';
+      $('result-stars').textContent = `${g.chain} 問連続`;
+      $('result-streak').style.display = 'none';
+      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-detail').textContent =
+        `${reason}　正解は「${problem.yomi}」　自己ベスト ${save.chain.best} 問連続`;
+      $('btn-result-next').textContent = 'タイトルへ';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
+    }
+
     // ===== 修行：時間切れ＝結果発表 =====
     function endTraining() {
       g.locked = true;
@@ -1126,9 +1214,12 @@
       } else if (g.mode === 'daily') {
         $('hud-floor').textContent = '📅';
         $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(DAILY_HP - g.hp);
-      } else {
+      } else if (g.mode === 'training') {
         $('hud-floor').textContent = '🥋';
         $('hud-hp').textContent = `${g.clearedCount} 問撃破`;
+      } else {
+        $('hud-floor').textContent = '⚡';
+        $('hud-hp').textContent = `${g.chain} 問連続`;
       }
       $('hud-game-score').textContent = g.score;
     }
@@ -1145,6 +1236,7 @@
       $('btn-mode-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
       $('btn-mode-daily').addEventListener('click', startDaily);
       $('btn-mode-training').addEventListener('click', startTraining);
+      $('btn-mode-streak').addEventListener('click', startStreak);
       $('btn-tower-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
 
       $('btn-intro-start').addEventListener('click', () => {
@@ -1159,6 +1251,7 @@
       $('btn-retry').addEventListener('click', () => {
         if (g.mode === 'tower') startTowerFloor(g.floor);
         else if (g.mode === 'daily') startDaily();
+        else if (g.mode === 'streak') startStreak();
         else startTraining();
       });
       $('btn-gameover-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
