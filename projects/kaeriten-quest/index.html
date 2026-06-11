@@ -406,6 +406,18 @@
       overflow-y: auto;
     }
     .dojo-progress { font-size: 13px; color: #b3a586; }
+    /* 真剣勝負用：残り時間バー（横型） */
+    .dojo-time-bg {
+      width: 90%;
+      max-width: 320px;
+      height: 10px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(240, 230, 210, 0.25);
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .dojo-time-fill { height: 100%; background: linear-gradient(90deg, #c9a227, #e8c558); }
+    .dojo-time-fill.danger { background: linear-gradient(90deg, #c0392b, #e74c3c); }
     .dojo-task { font-size: 15px; color: #e8c558; font-weight: bold; text-align: center; }
     .dojo-sentence {
       background: linear-gradient(180deg, #f5ecd7, #e8dcc0);
@@ -586,7 +598,7 @@
 
       <div class="stats-row">
         <span class="stat-chip">総合戦闘力<strong id="stat-power">0</strong></span>
-        <span class="stat-chip">🛡忍耐力<strong id="stat-nintai">0</strong></span>
+        <span class="stat-chip">🛡防御力<strong id="stat-nintai">0</strong></span>
         <span class="stat-chip">連続修行<strong id="stat-days">0</strong>日🔥</span>
       </div>
       <button class="btn-secondary" id="btn-to-status">📊 ステータスを見る</button>
@@ -658,6 +670,8 @@
       </div>
       <div class="dojo-area">
         <div class="dojo-progress" id="dojo-progress"></div>
+        <!-- 真剣勝負用：残り時間バー -->
+        <div class="dojo-time-bg" id="dojo-time-bg" style="display:none"><div class="dojo-time-fill" id="dojo-time-fill" style="width:100%"></div></div>
         <div class="dojo-task" id="dojo-task"></div>
         <div class="dojo-sentence mincho" id="dojo-sentence"></div>
         <!-- 書き下しの間：道具パレット／仮名遣いの間：3択ボタン -->
@@ -675,7 +689,7 @@
           <div class="status-type" id="status-type"></div>
           <div class="status-power">総合戦闘力 <strong id="status-power">0</strong></div>
           <div id="status-rows"></div>
-          <p class="status-note">修行の★＋真剣勝負の記録＝能力値。試練クリアで忍耐力+1！</p>
+          <p class="status-note">修行の★＋真剣勝負の記録＝能力値。試練クリアで防御力+1！</p>
         </div>
         <button class="btn-secondary" id="btn-status-to-title">ダンジョン入口へ</button>
       </div>
@@ -909,8 +923,8 @@
     const TOWERS = {
       yomi:  { emoji: '📖', name: '読みの塔',     desc: '返り点の順に読む',           statIcon: '⚔️', statName: '攻撃力', color: '#e2533d',
                type: '攻撃型｜漢文を斬る剣士' },
-      stamp: { emoji: '⛩', name: '返り点の塔',   desc: '書き下し文を見て返り点を打つ', statIcon: '🖋', statName: '筆力',   color: '#7a52d6',
-               type: '筆力型｜返り点を操る書家' },
+      stamp: { emoji: '⛩', name: '返り点の塔',   desc: '書き下し文を見て返り点を打つ', statIcon: '🎯', statName: '器用さ', color: '#7a52d6',
+               type: 'テクニカル型｜返り点を操る匠' },
       kaki:  { emoji: '📜', name: '書き下しの間', desc: 'ひらがな・置き字を見分ける',   statIcon: '📖', statName: '知力',   color: '#1f9bb0',
                type: '知力型｜書き下しの賢者' },
       kana:  { emoji: '🖌', name: '仮名遣いの間', desc: '現代仮名遣いに直す',          statIcon: '🔮', statName: '魔力',   color: '#cb4f7d',
@@ -923,9 +937,13 @@
     };
     const SHUGYO_FULL = 30;   // 修行全★クリアで能力値30
     const RUN_HP = 5;         // 修行・試練のHP
-    // 読みの塔・真剣勝負の制限時間
-    const SHINKEN_PER_CHAR_START = 4000;
-    const SHINKEN_PER_CHAR_MIN = 1200;
+    // 真剣勝負の制限時間（全塔共通で時間制。unit＝字数 or トークン数）
+    const SHINKEN_TIME = {
+      yomi:  { start: 4000, min: 1200 },  // ×字数
+      stamp: { start: 6000, min: 2500 },  // ×字数（スタンプ操作があるため長め）
+      kaki:  { start: 2200, min: 900 },   // ×トークン数
+      kana:  { start: 2600, min: 1200 },  // ×トークン数（入力式は打つ時間を考慮して×3）
+    };
     const SHINKEN_DECAY = 0.93;
     const SPEED_LIMIT_MS = 30000; // 速さボーナス基準
 
@@ -1001,7 +1019,7 @@
           kaki:  { stars: [], streakBest: 0 },
           kana:  { stars: [], streakBest: 0 },
         },
-        dailyCount: 0,                 // 忍耐力＝試練クリア累計（塔ごと1日1回）
+        dailyCount: 0,                 // 防御力＝試練クリア累計（塔ごと1日1回）
         dailyDone: {},                 // {towerKey: 'YYYY-MM-DD'}
         lastDailyDay: '', dayStreak: 0, // 連続修行日数
       };
@@ -1118,7 +1136,7 @@
       return { stars, fromStars, fromStreak: t.streakBest, value: fromStars + t.streakBest };
     }
     function totalPower() {
-      let total = save.dailyCount; // 忍耐力
+      let total = save.dailyCount; // 防御力
       Object.keys(TOWERS).forEach(k => { total += towerStat(k).value; });
       return total;
     }
@@ -1187,7 +1205,7 @@
       shiren.className = 'mode-row';
       shiren.innerHTML =
         `<span class="m-emoji">📅</span><span><span class="m-name">今日の試練</span><br>` +
-        `<span class="m-desc">${doneToday ? '本日クリア済み！（何度でも再挑戦OK）' : '日替わり5問。クリアで🛡忍耐力+1！'}</span></span>`;
+        `<span class="m-desc">${doneToday ? '本日クリア済み！（何度でも再挑戦OK）' : '日替わり5問。クリアで🛡防御力+1！'}</span></span>`;
       shiren.addEventListener('click', () => startRun(towerKey, 'shiren'));
       modes.appendChild(shiren);
 
@@ -1239,7 +1257,7 @@
         chain: 0,
         locked: true,
         timerId: null, startTime: 0, lastTick: 0,
-        perCharMs: SHINKEN_PER_CHAR_START, problemLimit: 0, problemRemain: 0,
+        perUnitMs: SHINKEN_TIME[towerKey].start, problemLimit: 0, problemRemain: 0,
         placed: [], selectedMark: 'レ', selectedTool: 'hira',
         pendingIndex: -1, foundCount: 0, targetCount: 0,
         afterResult: null,
@@ -1253,13 +1271,14 @@
         $('enemy-face').textContent = stage ? stage.emoji : t.emoji;
         $('enemy-label').textContent = introTitle;
         $('enemy-bar').style.width = '100%';
-        $('time-label').textContent = (towerKey === 'yomi' && mode === 'shinken') ? '残り' : '速さ';
+        $('time-label').textContent = mode === 'shinken' ? '残り' : '速さ';
         $('stamp-palette').style.display = towerKey === 'stamp' ? 'block' : 'none';
         $('stamp-goal').style.display = towerKey === 'stamp' ? 'block' : 'none';
         if (towerKey === 'stamp') renderStampPalette();
       } else {
         showScreen('screen-dojo');
         $('dojo-icon').textContent = t.emoji;
+        $('dojo-time-bg').style.display = mode === 'shinken' ? 'block' : 'none';
         $('dojo-task').textContent = towerKey === 'kaki'
           ? '道具を選んで、ひらがなに直す字・置き字を処理しよう！'
           : '直す字をタップ →「何に直す？」に答えよう！';
@@ -1277,10 +1296,11 @@
       if (stage && stage.intro) body = stage.intro;
       else if (stage) body = `<b>${stage.rule}</b>`;
       if (mode === 'shiren') {
-        body = `日替わりの<b>5問</b>に挑戦！<br>クリアすると<b>🛡忍耐力が+1</b>（どの塔でも1日1回ずつ）。<br>現在の忍耐力：<b>${save.dailyCount}</b>／連続修行：<b>${save.dayStreak}日</b>🔥`;
+        body = `日替わりの<b>5問</b>に挑戦！<br>クリアすると<b>🛡防御力が+1</b>（どの塔でも1日1回ずつ）。<br>現在の防御力：<b>${save.dailyCount}</b>／連続修行：<b>${save.dayStreak}日</b>🔥`;
       } else if (mode === 'shinken') {
         body = `<b>1回でもまちがえたら即終了！</b><br>何問連続で勝てるかの真剣勝負。<br>` +
-          (towerKey === 'yomi' ? `制限時間がどんどん短くなり、<b>25問ごとに🐲長文の試練</b>！<br>` : '') +
+          `<b>制限時間</b>つき。時間切れもアウトで、クリアするたび<b>少しずつ短くなる</b>！<br>` +
+          (towerKey === 'yomi' ? `さらに<b>25問ごとに🐲長文の試練</b>！<br>` : '') +
           `最高記録がそのまま<b>${t.statIcon}${t.statName}に加算</b>される。<br>自己ベスト：<b>${tSave.streakBest}問</b>`;
       } else {
         body += `<div class="rule-example">ノーミスで★3！　★を集めると${t.statIcon}${t.statName}が上がる（全★で${SHUGYO_FULL}）</div>`;
@@ -1305,15 +1325,31 @@
       return false;
     }
 
+    // 真剣勝負の制限時間の単位数（字数／トークン数。入力式は打つ時間を考慮して×3）
+    function shinkenUnits(towerKey, p) {
+      if (towerKey === 'yomi' || towerKey === 'stamp') return p.chars.length;
+      if (p.input) return p.word.length * 3;
+      return p.tokens.length;
+    }
+
     function beginProblem() {
       const p = g.list[g.idx];
       g.problemMistakes = 0;
       g.locked = false;
       hideHints();
       const t = TOWERS[g.tower];
-      const progress = g.mode === 'shinken'
-        ? `🗡 ${g.chain} 問連続中`
-        : `${MODES[g.mode].name}　${g.idx + 1} / ${g.list.length}`;
+      const isShinken = g.mode === 'shinken';
+      // 真剣勝負は全塔で制限時間あり
+      let limitText = '';
+      if (isShinken) {
+        const isLong = g.tower === 'yomi' && p.chars.length >= 10;
+        g.problemLimit = Math.round(shinkenUnits(g.tower, p) * g.perUnitMs * (isLong ? 1.25 : 1));
+        g.problemRemain = g.problemLimit;
+        limitText = `　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒` + (isLong ? '　🐲長文の試練！' : '');
+        if (g.tower === 'yomi') $('enemy-face').textContent = isLong ? '🐲' : t.emoji;
+      }
+      const progress = (isShinken ? `🗡 ${g.chain} 問連続中` : `${MODES[g.mode].name}　${g.idx + 1} / ${g.list.length}`) + limitText;
+
       if (g.tower === 'yomi' || g.tower === 'stamp') {
         if (g.tower === 'stamp') {
           g.placed = new Array(p.chars.length).fill('');
@@ -1322,40 +1358,41 @@
           g.step = 0;
         }
         renderKanbun(p);
-        let extra = '';
-        if (g.tower === 'yomi' && g.mode === 'shinken') {
-          const isLong = p.chars.length >= 10;
-          g.problemLimit = Math.round(p.chars.length * g.perCharMs * (isLong ? 1.25 : 1));
-          g.problemRemain = g.problemLimit;
-          $('enemy-face').textContent = isLong ? '🐲' : t.emoji;
-          extra = `　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒` + (isLong ? '　🐲長文の試練！' : '');
-        }
-        $('progress-text').textContent = progress + extra;
-        g.startTime = Date.now();
-        g.lastTick = Date.now();
-        clearInterval(g.timerId);
-        g.timerId = setInterval(tick, 200);
-        tick();
+        $('progress-text').textContent = progress;
       } else {
         beginDojoItem(p, progress);
+      }
+      // タイマー：縦書き盤面は常時（速さボーナス表示）、道場は真剣勝負のみ
+      g.startTime = Date.now();
+      g.lastTick = Date.now();
+      clearInterval(g.timerId);
+      if (g.tower === 'yomi' || g.tower === 'stamp' || isShinken) {
+        g.timerId = setInterval(tick, 200);
+        tick();
       }
     }
 
     function tick() {
       if (!g) return;
       const now = Date.now();
-      if (g.tower === 'yomi' && g.mode === 'shinken') {
+      if (g.mode === 'shinken') {
         if (!g.locked) {
           const dt = Math.min(1000, now - g.lastTick); // タブ復帰時の暴走防止
           g.problemRemain -= dt;
         }
         g.lastTick = now;
         const ratio = Math.max(0, g.problemRemain / g.problemLimit);
-        const bar = $('time-bar');
-        bar.style.height = (ratio * 100) + '%';
-        bar.classList.toggle('danger', ratio < 0.34);
+        if (g.tower === 'yomi' || g.tower === 'stamp') {
+          const bar = $('time-bar');
+          bar.style.height = (ratio * 100) + '%';
+          bar.classList.toggle('danger', ratio < 0.34);
+        } else {
+          const bar = $('dojo-time-fill');
+          bar.style.width = (ratio * 100) + '%';
+          bar.classList.toggle('danger', ratio < 0.34);
+        }
         if (g.problemRemain <= 0) endShinken('⏰ 時間切れ！');
-      } else {
+      } else if (g.tower === 'yomi' || g.tower === 'stamp') {
         const elapsed = now - g.startTime;
         const remain = Math.max(0, 1 - elapsed / SPEED_LIMIT_MS);
         $('time-bar').style.height = (remain * 100) + '%';
@@ -1684,7 +1721,7 @@
 
       if (g.mode === 'shinken') {
         // 真剣勝負：トーストでテンポよく次へ
-        if (g.tower === 'yomi') g.perCharMs = Math.max(SHINKEN_PER_CHAR_MIN, g.perCharMs * SHINKEN_DECAY);
+        g.perUnitMs = Math.max(SHINKEN_TIME[g.tower].min, g.perUnitMs * SHINKEN_DECAY);
         const toast = $('quick-toast');
         const label = problem.yomi || problem.answer;
         if (g.tower === 'yomi' || g.tower === 'stamp') {
@@ -1744,7 +1781,7 @@
       g.afterResult = () => renderTowerMenu(g.tower);
     }
 
-    // 試練クリア：忍耐力+1（塔ごと1日1回）＋連続修行日数
+    // 試練クリア：防御力+1（塔ごと1日1回）＋連続修行日数
     function endShiren() {
       const today = dateStr();
       let gained = false;
@@ -1760,7 +1797,7 @@
       saveData(STORAGE_KEY, save);
       $('result-title').textContent = '📅 試練クリア！';
       $('result-stars').textContent = '';
-      $('result-streak').textContent = gained ? `🛡 忍耐力 +1 → ${save.dailyCount}` : `本日クリア済み（忍耐力 ${save.dailyCount}）`;
+      $('result-streak').textContent = gained ? `🛡 防御力 +1 → ${save.dailyCount}` : `本日クリア済み（防御力 ${save.dailyCount}）`;
       $('result-streak').style.display = 'block';
       $('result-record').style.display = 'none';
       $('result-detail').textContent = `スコア ${g.score} 点　連続修行 ${save.dayStreak}日🔥　明日も新しい5問が待っている！`;
@@ -1824,10 +1861,10 @@
       rows.innerHTML = '';
       let topStat = null;
 
-      // 忍耐力（試練クリア累計）
+      // 防御力（試練クリア累計）＋4つの塔の固有能力値
       const allStats = [
-        { icon: '🛡', name: '忍耐力', color: '#2da06a', value: save.dailyCount,
-          src: `今日の試練クリア累計 ${save.dailyCount}回（+1/クリア）`, type: '忍耐型｜毎日つづける求道者' },
+        { icon: '🛡', name: '防御力', color: '#2da06a', value: save.dailyCount,
+          src: `今日の試練クリア累計 ${save.dailyCount}回（+1/クリア）`, type: '防御型｜毎日きたえる鉄壁の求道者' },
       ];
       Object.keys(TOWERS).forEach(key => {
         const t = TOWERS[key];
@@ -1842,22 +1879,55 @@
       allStats.forEach(stat => {
         total += stat.value;
         if (stat.value > 0 && (!topStat || stat.value > topStat.value)) topStat = stat;
-        const row = document.createElement('div');
-        row.className = 'status-row';
-        row.innerHTML =
-          `<span class="status-icon">${stat.icon}</span>` +
-          `<span class="status-name">${stat.name}</span>` +
-          `<div class="status-bar-bg"><div class="status-bar-fill" style="width:0%;background:${stat.color}"></div></div>` +
-          `<span class="status-value">${stat.value}</span>`;
-        rows.appendChild(row);
+      });
+
+      // ===== レーダーチャート（SVG自前描画・5角形） =====
+      // 軸の最大値：40を下限に、最高能力値に合わせて伸びる（形の比較がしやすい）
+      const axisMax = Math.max(40, ...allStats.map(s => s.value));
+      const cx = 160, cy = 145, R = 92;
+      const N = allStats.length;
+      const angleOf = i => -Math.PI / 2 + (i * 2 * Math.PI) / N;
+      const ptOf = (i, r) => [cx + r * Math.cos(angleOf(i)), cy + r * Math.sin(angleOf(i))];
+      let svg = `<svg viewBox="0 0 320 300" style="width:100%;max-width:340px" role="img" aria-label="能力レーダーチャート">`;
+      // 目盛りの多角形（25%・50%・75%・100%）
+      [0.25, 0.5, 0.75, 1].forEach(level => {
+        const pts = allStats.map((s, i) => ptOf(i, R * level).map(v => v.toFixed(1)).join(',')).join(' ');
+        svg += `<polygon points="${pts}" fill="none" stroke="rgba(240,230,210,${level === 1 ? 0.4 : 0.15})" stroke-width="1"/>`;
+      });
+      // 軸線
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R);
+        svg += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(240,230,210,0.15)" stroke-width="1"/>`;
+      });
+      // 能力値の多角形
+      const valuePts = allStats.map((s, i) => ptOf(i, R * Math.min(1, s.value / axisMax)).map(v => v.toFixed(1)).join(',')).join(' ');
+      svg += `<polygon points="${valuePts}" fill="rgba(232,197,88,0.35)" stroke="#e8c558" stroke-width="2.5" stroke-linejoin="round"/>`;
+      // 頂点マーカー
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R * Math.min(1, s.value / axisMax));
+        svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${s.color}" stroke="#fff8e7" stroke-width="1.5"/>`;
+      });
+      // ラベル（アイコン＋能力名＋数値）
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R + 24);
+        svg += `<text x="${x.toFixed(1)}" y="${(y - 2).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="bold" fill="#f0e6d2">${s.icon}${s.name}</text>` +
+          `<text x="${x.toFixed(1)}" y="${(y + 14).toFixed(1)}" text-anchor="middle" font-size="15" font-weight="900" fill="#e8c558">${s.value}</text>`;
+      });
+      svg += '</svg>';
+
+      const chart = document.createElement('div');
+      chart.style.textAlign = 'center';
+      chart.innerHTML = svg;
+      rows.appendChild(chart);
+
+      // チャートの下に内訳（どの記録から来ているか）
+      allStats.forEach(stat => {
         const src = document.createElement('div');
         src.className = 'status-src';
-        src.textContent = stat.src;
+        src.textContent = `${stat.icon} ${stat.name} ${stat.value}　＝ ${stat.src}`;
         rows.appendChild(src);
-        requestAnimationFrame(() => {
-          row.querySelector('.status-bar-fill').style.width = Math.min(100, stat.value / 0.6) + '%';
-        });
       });
+
       $('status-power').textContent = total;
       $('status-type').textContent = topStat ? `あなたは【${topStat.type}】` : 'まだ無属性…修行を始めよう！';
       showScreen('screen-status');
