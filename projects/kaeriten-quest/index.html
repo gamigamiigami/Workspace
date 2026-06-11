@@ -866,8 +866,10 @@
         rule: '「而」は置き字（読まない）。「之」はここでは代名詞「これ」なので漢字のまま（『論語』）' },
     ];
 
-    // 仮名遣いの間：tokens: [文字, 直した後(不要ならnull)]
-    // stage: 修行の段（0=ハ行 1=ゐゑをぢづ 2=拗音） / stageなし＝試練・真剣勝負のみ
+    // 仮名遣いの間：
+    //  タップ式: tokens: [文字, 直した後(不要ならnull)] → 3択で答える
+    //  入力式(拗音などの音変化): input:true, word, answer → 入力欄で答える
+    // stage: 修行の段（0=ハ行 1=ゐゑをぢづ 2=音のへんしん） / stageなし＝試練・真剣勝負のみ
     const KANAZUKAI = [
       { tokens: [['い',null],['ふ','う']], answer: 'いう', stage: 0, rule: '語頭以外のハ行（は・ひ・ふ・へ・ほ）は「わ・い・う・え・お」に直す' },
       { tokens: [['あ',null],['は','わ'],['れ',null]], answer: 'あわれ', stage: 0, rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（あはれ＝しみじみとした趣）' },
@@ -879,11 +881,17 @@
       { tokens: [['こ',null],['ゑ','え']], answer: 'こえ', stage: 1, rule: '「ゐ・ゑ」は「い・え」に直す（声）' },
       { tokens: [['な',null],['ん',null],['ぢ','じ']], answer: 'なんじ', stage: 1, rule: '「ぢ・づ」は「じ・ず」に直す（汝＝おまえ）' },
       { tokens: [['は',null],['づ','ず'],['か',null],['し',null]], answer: 'はずかし', stage: 1, rule: '「ぢ・づ」は「じ・ず」に直す（語頭の「は」はそのまま！）' },
-      { tokens: [['け','きょ'],['ふ','う']], answer: 'きょう', stage: 2, rule: '「けふ」のようなエ段＋ふは「〜ょう」の音に直す（今日）' },
-      { tokens: [['て','ちょ'],['ふ','う'],['て','ちょ'],['ふ','う']], answer: 'ちょうちょう', stage: 2, rule: '「てふ」→「ちょう」（蝶）。エ段＋ふは「〜ょう」の音に' },
-      { tokens: [['や','よ'],['う',null],['や','よ'],['う',null]], answer: 'ようよう', stage: 2, rule: '「あう・やう」などア段＋うは「おう・よう」の音に直す（枕草子「やうやう白くなりゆく」）' },
-      { tokens: [['あ','お'],['ふ','う'],['ぎ',null]], answer: 'おうぎ', stage: 2, rule: '「あふ」→「おう」（扇）。ア段＋うの音に直す' },
-      { tokens: [['あ',null],['ぢ','じ'],['さ',null],['ゐ','い']], answer: 'あじさい', stage: 2, rule: '「ぢ→じ」「ゐ→い」の2か所を直す（紫陽花）' },
+      { tokens: [['あ',null],['ぢ','じ'],['さ',null],['ゐ','い']], answer: 'あじさい', stage: 1, rule: '「ぢ→じ」「ゐ→い」の2か所を直す（紫陽花）' },
+      // ===== 音のへんしん（拗音化など）＝入力式 =====
+      { input: true, word: 'けふ', answer: 'きょう', stage: 2, rule: '「けふ」のようなエ段＋ふは「〜ょう」の音に直す（今日）' },
+      { input: true, word: 'てふてふ', answer: 'ちょうちょう', stage: 2, rule: '「てふ」→「ちょう」（蝶）。エ段＋ふは「〜ょう」の音に' },
+      { input: true, word: 'やうやう', answer: 'ようよう', stage: 2, rule: '「やう」のようなア段＋うは「〜おう・〜よう」の音に直す（枕草子「やうやう白くなりゆく」）' },
+      { input: true, word: 'あふぎ', answer: 'おうぎ', stage: 2, rule: '「あふ」→「おう」（扇）。まず「ふ→う」、つぎに「あう→おう」の2段がまえ' },
+      { input: true, word: 'うつくしう', answer: 'うつくしゅう', stage: 2, rule: '「しう」のようなイ段＋うは「〜ゅう」の音に直す（枕草子「うつくしうて」）' },
+      { input: true, word: 'れうり', answer: 'りょうり', stage: 2, rule: '「れう」のようなエ段＋うは「〜ょう」の音に直す（料理）' },
+      { input: true, word: 'あやしう', answer: 'あやしゅう', rule: '「しう」のようなイ段＋うは「〜ゅう」の音に直す（徒然草「あやしうこそものぐるほしけれ」）' },
+      { input: true, word: 'さうらふ', answer: 'そうろう', rule: '「ふ→う」で「さうらう」、さらに「さう→そう」「らう→ろう」（ア段＋う）。候ふ＝あります・です' },
+      // ===== 試練・真剣勝負のみ（タップ式） =====
       { tokens: [['ま',null],['ゐ','い'],['る',null]], answer: 'まいる', rule: '「ゐ・ゑ」は「い・え」に直す（参る）' },
       { tokens: [['い',null],['と',null],['ほ','お'],['し',null]], answer: 'いとおし', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（いとほし＝気の毒だ・かわいい）' },
       { tokens: [['も',null],['の',null],['ぐ',null],['る',null],['ほ','お'],['し',null]], answer: 'ものぐるおし', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（徒然草）' },
@@ -1476,10 +1484,28 @@
     function beginDojoItem(item, progress) {
       g.foundCount = 0;
       g.pendingIndex = -1;
-      g.targetCount = item.tokens.filter(tk => tk[1] || tk[2] === 'oki').length;
       $('dojo-progress').textContent = progress;
       const box = $('dojo-sentence');
       box.innerHTML = '';
+
+      if (item.input) {
+        // 入力式（音のへんしん）：単語を表示して入力欄で答える
+        g.targetCount = 1;
+        $('dojo-task').textContent = 'この古語を現代仮名遣いに直すと？（ひらがなで入力）';
+        const span = document.createElement('span');
+        span.className = 'dtoken';
+        span.style.cursor = 'default';
+        span.style.fontSize = '36px';
+        span.textContent = item.word;
+        box.appendChild(span);
+        renderKanaInput(item);
+        return;
+      }
+
+      g.targetCount = item.tokens.filter(tk => tk[1] || tk[2] === 'oki').length;
+      $('dojo-task').textContent = g.tower === 'kaki'
+        ? '道具を選んで、ひらがなに直す字・置き字を処理しよう！'
+        : '直す字をタップ →「何に直す？」に答えよう！';
       item.tokens.forEach((tk, i) => {
         const span = document.createElement('span');
         span.className = 'dtoken';
@@ -1488,6 +1514,48 @@
         box.appendChild(span);
       });
       renderDojoPalette();
+    }
+
+    // 入力式：入力欄＋決定ボタン（Enterでも判定）
+    function renderKanaInput(item) {
+      const box = $('dojo-palette');
+      box.innerHTML = '';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'kana-input';
+      input.autocomplete = 'off';
+      input.placeholder = 'ひらがなで入力';
+      input.style.cssText =
+        'font-size:18px;padding:10px 14px;border-radius:10px;border:2px solid #c9a227;' +
+        'background:#f5ecd7;color:#2b2117;width:200px;max-width:60%;text-align:center;font-family:inherit;';
+      const btn = document.createElement('button');
+      btn.className = 'btn-primary';
+      btn.textContent = '決定！';
+      btn.style.cssText = 'margin-left:8px;padding:10px 22px;font-size:16px;';
+      const submit = () => checkKanaInput(item, input);
+      btn.addEventListener('click', submit);
+      input.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); });
+      box.appendChild(input);
+      box.appendChild(btn);
+    }
+
+    function checkKanaInput(item, input) {
+      if (!g || g.locked) return;
+      // カタカナ・空白ゆれを吸収して判定
+      const value = kataToHira((input.value || '').trim().replace(/[\s　]/g, ''));
+      if (!value) return;
+      if (value === item.answer) {
+        const span = $('dojo-sentence').querySelector('.dtoken');
+        span.textContent = item.answer;
+        span.classList.add('fixed');
+        $('dojo-palette').innerHTML = '';
+        hideHints();
+        clearProblem(item);
+      } else {
+        showBoardHint(`「${value}」ではないぞ…ヒント：${item.rule}`);
+        input.select();
+        registerMiss();
+      }
     }
 
     // 書き下しの間＝道具パレット／仮名遣いの間＝（タップ後に）3択
