@@ -165,6 +165,56 @@
     }
     .kchar.judged-wrong { animation: charWrong 0.5s; box-shadow: 0 0 0 3px #e74c3c; }
 
+    /* ===== ステータス画面 ===== */
+    #screen-status { overflow-y: auto; }
+    .status-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+    }
+    .status-card {
+      width: 100%;
+      max-width: 480px;
+      background: linear-gradient(180deg, rgba(240,230,210,0.09), rgba(240,230,210,0.04));
+      border: 2px solid #c9a227;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-type { font-size: 15px; font-weight: bold; color: #7dd9ff; }
+    .status-power { font-size: 15px; color: #c9b896; margin-bottom: 6px; }
+    .status-power strong { font-size: 28px; color: #e8c558; margin-left: 6px; }
+    #status-rows { width: 100%; }
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 7px 0 0;
+    }
+    .status-icon { width: 26px; text-align: center; font-size: 18px; }
+    .status-name { width: 64px; font-size: 14px; font-weight: bold; color: #f0e6d2; }
+    .status-bar-bg {
+      flex: 1;
+      height: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(240, 230, 210, 0.2);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .status-bar-fill {
+      height: 100%;
+      border-radius: 7px;
+      transition: width 0.6s ease;
+    }
+    .status-value { width: 44px; text-align: right; font-size: 17px; font-weight: 900; color: #e8c558; }
+    .status-src { margin: 0 0 2px 34px; font-size: 11px; color: #b3a586; }
+    .status-note { font-size: 12px; color: #b3a586; margin-top: 10px; text-align: center; }
+
     /* ===== 道場画面（書き下しの間・仮名遣いの間） ===== */
     .dojo-area {
       flex: 1;
@@ -529,6 +579,9 @@
       <div class="title-badge mincho" id="player-title">見習い書生</div>
       <p class="next-title-hint" id="next-title-hint"></p>
 
+      <!-- ステータス（全モードの記録＝能力値） -->
+      <button class="btn-secondary" id="btn-to-status">📊 ステータスを見る</button>
+
       <!-- 実績サマリー -->
       <div class="stats-row">
         <span class="stat-chip">★合計<strong id="stat-stars">0</strong></span>
@@ -629,6 +682,21 @@
       <div class="bottom-info">
         <div class="progress-text" id="progress-text"></div>
         <span class="hint-text" id="hint-text" style="visibility:hidden"></span>
+      </div>
+    </section>
+
+    <!-- ===== ステータス画面（各モードの記録＝RPG能力値） ===== -->
+    <section id="screen-status" class="screen">
+      <h2 class="tower-title mincho" style="text-align:center;margin-top:18px">📊 ステータス</h2>
+      <div class="status-wrap">
+        <div class="status-card">
+          <div class="title-badge mincho" id="status-badge">見習い書生</div>
+          <div class="status-type" id="status-type"></div>
+          <div class="status-power">総合戦闘力 <strong id="status-power">0</strong></div>
+          <div id="status-rows"></div>
+          <p class="status-note">記録を伸ばすと能力値が上がる！友だちと見せ合って勝負しよう</p>
+        </div>
+        <button class="btn-secondary" id="btn-status-to-title">タイトルへ</button>
       </div>
     </section>
 
@@ -1034,6 +1102,63 @@
       $('stamp-desc').textContent = `書き下し文を見て返り点を打つ！　ベスト${save.stamp.best}点`;
       $('kaki-desc').textContent = `ひらがなに直す字を見つけ出せ！　ベスト${save.kaki.best}点`;
       $('kana-desc').textContent = `歴史的仮名遣いを現代仮名遣いに！　ベスト${save.kana.best}点`;
+    }
+
+    // ===== 📊 ステータス（各モードの記録＝RPG能力値） =====
+    // value: 記録から能力値への変換式（数字が見やすい大きさになるよう係数を調整）
+    const STATS = [
+      { icon: '⚔️', name: '攻撃力', color: '#e2533d', type: '攻撃型｜塔を制する剣士',
+        src: s => `漢文の塔 ★${totalStars(s)}/18`,        value: s => totalStars(s) * 5 },
+      { icon: '🛡', name: '忍耐力', color: '#2da06a', type: '忍耐型｜毎日つづける求道者',
+        src: s => `今日の試練 連続${s.daily.streak}日`,    value: s => s.daily.streak * 8 },
+      { icon: '💪', name: '体力',   color: '#d9930f', type: '体力型｜無尽蔵のスタミナ僧兵',
+        src: s => `修行モード ${s.training.best}問撃破`,   value: s => s.training.best * 3 },
+      { icon: '⚡', name: '瞬発力', color: '#7dd9ff', type: '瞬発型｜一瞬で見抜く居合の達人',
+        src: s => `連続モード ${s.chain.best}問連続`,      value: s => s.chain.best * 4 },
+      { icon: '🖋', name: '筆力',   color: '#7a52d6', type: '筆力型｜返り点を操る書家',
+        src: s => `逆打ちの間 ${s.stamp.best}点`,          value: s => Math.round(s.stamp.best / 10) },
+      { icon: '📖', name: '知力',   color: '#1f9bb0', type: '知力型｜書き下しの賢者',
+        src: s => `書き下しの間 ${s.kaki.best}点`,         value: s => Math.round(s.kaki.best / 10) },
+      { icon: '🔮', name: '魔力',   color: '#cb4f7d', type: '魔導型｜文字を変える魔法使い',
+        src: s => `仮名遣いの間 ${s.kana.best}点`,         value: s => Math.round(s.kana.best / 10) },
+    ];
+
+    function renderStatus() {
+      // 称号は現在のものを表示
+      let current = TITLES[0];
+      for (const t of TITLES) { if (t.cond(save)) current = t; }
+      $('status-badge').textContent = current.name;
+
+      const rows = $('status-rows');
+      rows.innerHTML = '';
+      let total = 0;
+      let topStat = null;
+      STATS.forEach(stat => {
+        const value = stat.value(save);
+        total += value;
+        if (value > 0 && (!topStat || value > topStat.value)) topStat = { value, stat };
+        const row = document.createElement('div');
+        row.className = 'status-row';
+        row.innerHTML =
+          `<span class="status-icon">${stat.icon}</span>` +
+          `<span class="status-name">${stat.name}</span>` +
+          `<div class="status-bar-bg"><div class="status-bar-fill" style="width:0%;background:${stat.color}"></div></div>` +
+          `<span class="status-value">${value}</span>`;
+        rows.appendChild(row);
+        const src = document.createElement('div');
+        src.className = 'status-src';
+        src.textContent = stat.src(save);
+        rows.appendChild(src);
+        // バーは表示後にアニメーションで伸ばす（最大表示=120）
+        requestAnimationFrame(() => {
+          row.querySelector('.status-bar-fill').style.width = Math.min(100, value / 1.2) + '%';
+        });
+      });
+      $('status-power').textContent = total;
+      $('status-type').textContent = topStat
+        ? `あなたは【${topStat.stat.type}】`
+        : 'まだ無属性…修行を始めよう！';
+      showScreen('screen-status');
     }
 
     // ===== 塔（階選択）画面 =====
@@ -1747,6 +1872,8 @@
       $('btn-mode-kaki').addEventListener('click', () => startDojo('kaki'));
       $('btn-mode-kana').addEventListener('click', () => startDojo('kana'));
       $('btn-tower-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
+      $('btn-to-status').addEventListener('click', renderStatus);
+      $('btn-status-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
 
       $('btn-intro-start').addEventListener('click', () => {
         $('panel-intro').classList.remove('show');
