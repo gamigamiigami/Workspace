@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>古典クエスト〜漢文と古文の修行場〜</title>
+  <title>古典クエスト〜古典ダンジョン〜</title>
   <style>
     /* ===== 基本リセット・全体設定 ===== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -21,7 +21,7 @@
       touch-action: manipulation;
       overflow: hidden;
     }
-    /* 漢文表示用の明朝体（端末内蔵フォントのみ・外部CDN不使用） */
+    /* 漢文・古文表示用の明朝体（端末内蔵フォントのみ・外部CDN不使用） */
     .mincho { font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", serif; }
 
     #app { height: 100%; max-width: 768px; margin: 0 auto; display: flex; flex-direction: column; }
@@ -50,39 +50,24 @@
       box-shadow: 0 4px 16px rgba(201, 162, 39, 0.35);
       letter-spacing: 2px;
     }
-    .btn-mode {
-      width: 100%;
-      max-width: 340px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      text-align: left;
-      background: linear-gradient(180deg, rgba(240,230,210,0.1), rgba(240,230,210,0.04));
-      border: 1px solid rgba(232, 197, 88, 0.4);
-      border-radius: 14px;
-      padding: 10px 16px;
-    }
-    .btn-mode .mode-emoji { font-size: 30px; }
-    .btn-mode .mode-name { font-size: 17px; font-weight: bold; color: #f0e6d2; }
-    .btn-mode .mode-desc { font-size: 12px; color: #b3a586; }
     .btn-secondary {
       background: rgba(240, 230, 210, 0.12);
       border: 1px solid rgba(240, 230, 210, 0.3);
       padding: 10px 24px;
       font-size: 15px;
     }
+    .btn-small { background: rgba(240, 230, 210, 0.12); font-size: 13px; padding: 6px 12px; min-height: 38px; }
 
     /* ===== タイトル画面 ===== */
-    #screen-start { align-items: center; justify-content: center; gap: 12px; padding: 20px; text-align: center; overflow-y: auto; }
+    #screen-start { align-items: center; justify-content: flex-start; gap: 12px; padding: 24px 16px; text-align: center; overflow-y: auto; }
     .game-title {
-      font-size: 40px;
+      font-size: 38px;
       font-weight: 900;
       letter-spacing: 6px;
       color: #e8c558;
       text-shadow: 0 0 30px rgba(232, 197, 88, 0.35), 0 3px 6px rgba(0,0,0,0.6);
     }
     .game-subtitle { font-size: 15px; color: #c9b896; letter-spacing: 3px; }
-    /* 称号バッジ */
     .title-badge {
       background: linear-gradient(180deg, rgba(163,59,46,0.4), rgba(163,59,46,0.2));
       border: 1px solid #a33b2e;
@@ -94,12 +79,7 @@
       letter-spacing: 2px;
     }
     .next-title-hint { font-size: 12px; color: #b3a586; }
-    .stats-row {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      justify-content: center;
-    }
+    .stats-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
     .stat-chip {
       background: rgba(240, 230, 210, 0.07);
       border: 1px solid rgba(240, 230, 210, 0.18);
@@ -109,161 +89,12 @@
       color: #c9b896;
     }
     .stat-chip strong { color: #e8c558; font-size: 17px; margin-left: 4px; }
-    /* モード選択のグループ見出しとグリッド */
-    .group-label {
-      font-size: 14px;
-      font-weight: bold;
-      color: #e8c558;
-      letter-spacing: 2px;
-      margin-top: 6px;
-    }
-    .mode-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 8px;
-      width: 100%;
-      max-width: 700px;
-    }
-    .mode-grid .btn-mode { max-width: none; }
 
-    /* ===== 逆打ちの間（返り点スタンプ） ===== */
-    .stamp-goal {
-      display: none;
-      position: absolute;
-      top: 6px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(46, 37, 26, 0.95);
-      border: 1px solid #c9a227;
-      border-radius: 10px;
-      padding: 6px 16px;
-      font-size: 16px;
-      font-weight: bold;
-      color: #f5ecd7;
-      z-index: 5;
-      max-width: 95%;
-      text-align: center;
-    }
-    #stamp-palette { display: none; padding: 6px 12px 0; text-align: center; }
-    #stamp-palette .mark-btn {
-      min-width: 48px;
-      min-height: 46px;
-      margin: 3px;
-      font-size: 18px;
-      font-weight: bold;
-      background: rgba(240, 230, 210, 0.12);
-      border: 2px solid rgba(240, 230, 210, 0.3);
-      color: #f0e6d2;
-    }
-    #stamp-palette .mark-btn.selected { background: #a33b2e; border-color: #e8c558; }
-    #stamp-palette .judge-btn { margin: 4px 0 0 10px; padding: 8px 22px; font-size: 16px; }
-    /* スタンプ可能なマス：返り点の位置がわかるよう左下に枠を出す */
-    .kchar.stampable .kaeri.empty {
-      color: rgba(163, 59, 46, 0.35);
-      border: 1px dashed rgba(163, 59, 46, 0.4);
-      background: transparent;
-    }
-    .kchar.judged-wrong { animation: charWrong 0.5s; box-shadow: 0 0 0 3px #e74c3c; }
-
-    /* ===== ステータス画面 ===== */
-    #screen-status { overflow-y: auto; }
-    .status-wrap {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 14px;
-      padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
-    }
-    .status-card {
+    /* ダンジョン（塔・間）カード */
+    .group-label { font-size: 14px; font-weight: bold; color: #e8c558; letter-spacing: 2px; margin-top: 6px; }
+    .tower-card {
       width: 100%;
       max-width: 480px;
-      background: linear-gradient(180deg, rgba(240,230,210,0.09), rgba(240,230,210,0.04));
-      border: 2px solid #c9a227;
-      border-radius: 16px;
-      padding: 18px 20px;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 8px;
-    }
-    .status-type { font-size: 15px; font-weight: bold; color: #7dd9ff; }
-    .status-power { font-size: 15px; color: #c9b896; margin-bottom: 6px; }
-    .status-power strong { font-size: 28px; color: #e8c558; margin-left: 6px; }
-    #status-rows { width: 100%; }
-    .status-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin: 7px 0 0;
-    }
-    .status-icon { width: 26px; text-align: center; font-size: 18px; }
-    .status-name { width: 64px; font-size: 14px; font-weight: bold; color: #f0e6d2; }
-    .status-bar-bg {
-      flex: 1;
-      height: 14px;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(240, 230, 210, 0.2);
-      border-radius: 7px;
-      overflow: hidden;
-    }
-    .status-bar-fill {
-      height: 100%;
-      border-radius: 7px;
-      transition: width 0.6s ease;
-    }
-    .status-value { width: 44px; text-align: right; font-size: 17px; font-weight: 900; color: #e8c558; }
-    .status-src { margin: 0 0 2px 34px; font-size: 11px; color: #b3a586; }
-    .status-note { font-size: 12px; color: #b3a586; margin-top: 10px; text-align: center; }
-
-    /* ===== 道場画面（書き下しの間・仮名遣いの間） ===== */
-    .dojo-area {
-      flex: 1;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 16px;
-      padding: 16px;
-    }
-    .dojo-progress { font-size: 13px; color: #b3a586; }
-    .dojo-task { font-size: 15px; color: #e8c558; font-weight: bold; text-align: center; }
-    .dojo-sentence {
-      background: linear-gradient(180deg, #f5ecd7, #e8dcc0);
-      border: 3px solid #8f6c12;
-      border-radius: 10px;
-      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(143, 108, 18, 0.15);
-      padding: 18px 16px;
-      max-width: 94%;
-      text-align: center;
-      line-height: 1.7;
-    }
-    .dtoken {
-      display: inline-block;
-      font-size: 30px;
-      font-weight: 600;
-      color: #2b2117;
-      min-width: 44px;
-      min-height: 44px;
-      padding: 4px 2px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .dtoken.fixed { color: #1e7d46; font-weight: 900; animation: charDone 0.3s; cursor: default; }
-    .dtoken.wrong { animation: dtokenWrong 0.4s; }
-    @keyframes dtokenWrong {
-      0%, 100% { transform: translateX(0); }
-      25% { transform: translateX(-6px); background: #e8a8a0; }
-      75% { transform: translateX(6px); background: #e8a8a0; }
-    }
-    .dojo-hint { min-height: 48px; text-align: center; }
-
-    /* ===== 塔（階選択）画面 ===== */
-    #screen-tower { padding: 20px 16px; overflow-y: auto; align-items: center; gap: 10px; }
-    .tower-title { font-size: 22px; font-weight: 900; color: #e8c558; letter-spacing: 4px; margin-bottom: 4px; }
-    .floor-card {
-      width: 100%;
-      max-width: 460px;
       display: flex;
       align-items: center;
       gap: 14px;
@@ -272,15 +103,58 @@
       border-radius: 14px;
       padding: 12px 16px;
       cursor: pointer;
+      text-align: left;
+      color: #f0e6d2;
     }
-    .floor-card.locked { opacity: 0.45; border-color: rgba(240, 230, 210, 0.15); cursor: default; }
-    .floor-emoji { font-size: 34px; width: 48px; text-align: center; }
-    .floor-info { flex: 1; text-align: left; }
-    .floor-name { font-size: 17px; font-weight: bold; color: #f0e6d2; }
-    .floor-rule { font-size: 12px; color: #b3a586; }
-    .floor-stars { font-size: 18px; color: #e8c558; letter-spacing: 2px; white-space: nowrap; }
+    .tower-emoji { font-size: 34px; width: 48px; text-align: center; }
+    .tower-info { flex: 1; }
+    .tower-name { font-size: 17px; font-weight: bold; }
+    .tower-desc { font-size: 12px; color: #b3a586; }
+    .tower-stat { font-size: 13px; color: #e8c558; font-weight: bold; white-space: nowrap; text-align: right; }
+    .tower-stat small { display: block; color: #b3a586; font-weight: normal; }
 
-    /* ===== ゲーム画面 ===== */
+    /* ===== 塔メニュー画面（修行・試練・真剣勝負） ===== */
+    #screen-tower { padding: 20px 16px; overflow-y: auto; align-items: center; gap: 10px; }
+    .tower-title { font-size: 22px; font-weight: 900; color: #e8c558; letter-spacing: 4px; margin-bottom: 2px; text-align: center; }
+    .tower-sub { font-size: 13px; color: #b3a586; text-align: center; margin-bottom: 6px; }
+    .mode-row {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(240,230,210,0.1), rgba(240,230,210,0.04));
+      border: 1px solid rgba(232, 197, 88, 0.4);
+      border-radius: 14px;
+      padding: 10px 16px;
+      cursor: pointer;
+      text-align: left;
+      color: #f0e6d2;
+    }
+    .mode-row .m-emoji { font-size: 26px; width: 36px; text-align: center; }
+    .mode-row .m-name { font-size: 16px; font-weight: bold; }
+    .mode-row .m-desc { font-size: 12px; color: #b3a586; }
+    .stage-label { font-size: 13px; color: #e8c558; font-weight: bold; margin-top: 8px; letter-spacing: 2px; }
+    .floor-card {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(240,230,210,0.07), rgba(240,230,210,0.03));
+      border: 1px solid rgba(232, 197, 88, 0.3);
+      border-radius: 14px;
+      padding: 10px 16px;
+      cursor: pointer;
+    }
+    .floor-card.locked { opacity: 0.45; cursor: default; }
+    .floor-emoji { font-size: 28px; width: 40px; text-align: center; }
+    .floor-info { flex: 1; text-align: left; }
+    .floor-name { font-size: 15px; font-weight: bold; color: #f0e6d2; }
+    .floor-rule { font-size: 11px; color: #b3a586; }
+    .floor-stars { font-size: 16px; color: #e8c558; letter-spacing: 2px; white-space: nowrap; }
+
+    /* ===== ゲーム画面（縦書き盤面：読みの塔・返り点の塔） ===== */
     #screen-game { position: relative; }
     .hud {
       display: flex;
@@ -294,9 +168,7 @@
     .hud-floor { font-weight: bold; color: #e8c558; white-space: nowrap; }
     .hud-hp { font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
     .hud-game-score { font-weight: 900; color: #e8c558; font-size: 17px; }
-    .btn-small { background: rgba(240, 230, 210, 0.12); font-size: 13px; padding: 6px 12px; min-height: 38px; }
 
-    /* 番人（敵）表示 */
     .enemy-area { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 8px 16px 0; }
     .enemy-face { font-size: 44px; transition: transform 0.2s; }
     .enemy-face.hit { animation: enemyHit 0.5s; }
@@ -316,7 +188,6 @@
     .enemy-bar-fill { height: 100%; background: linear-gradient(90deg, #c0392b, #e74c3c); transition: width 0.4s; }
     .enemy-label { font-size: 12px; color: #c9b896; }
 
-    /* 漢文パズル盤面 */
     #puzzle-area {
       flex: 1;
       min-height: 0;
@@ -406,7 +277,6 @@
       z-index: 1;
     }
     .kchar.done .yomi { color: #1f3f63; }
-    /* 正解済みの字：金色＋読み順番号 */
     .kchar.done {
       background: linear-gradient(180deg, #e8c558, #c9a227);
       border-color: #8f6c12;
@@ -414,7 +284,6 @@
       cursor: default;
       animation: charDone 0.3s;
     }
-    .kchar.done .okuri { color: #7a5c0e; }
     @keyframes charDone { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
     .kchar .order-badge {
       position: absolute;
@@ -438,8 +307,15 @@
       25% { transform: translateX(-7px); background: #e8a8a0; }
       75% { transform: translateX(7px); background: #e8a8a0; }
     }
+    /* 返り点の塔：スタンプ枠と判定ハズレ表示 */
+    .kchar.stampable .kaeri.empty {
+      color: rgba(163, 59, 46, 0.35);
+      border: 1px dashed rgba(163, 59, 46, 0.4);
+      background: transparent;
+    }
+    .kchar.judged-wrong { animation: charWrong 0.5s; box-shadow: 0 0 0 3px #e74c3c; }
 
-    /* タイムバー（修行モードでは残り時間／塔では速さボーナス） */
+    /* タイムバー（真剣勝負＝残り時間／その他＝速さボーナス） */
     .time-bar-bg {
       width: 10px;
       height: 220px;
@@ -454,7 +330,6 @@
     .time-bar-fill.danger { background: linear-gradient(180deg, #e74c3c, #c0392b); }
     .time-label { font-size: 11px; color: #b3a586; text-align: center; margin-top: 4px; }
 
-    /* 修行モードの瞬間表示トースト（書き下し文） */
     .quick-toast {
       position: absolute;
       top: 10px;
@@ -474,7 +349,38 @@
     .quick-toast.show { display: block; animation: toastIn 0.2s; }
     @keyframes toastIn { from { transform: translateX(-50%) translateY(-12px); opacity: 0; } }
 
-    /* ヒント・問題下部 */
+    /* 返り点の塔：目標の書き下し文 */
+    .stamp-goal {
+      display: none;
+      position: absolute;
+      top: 6px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(46, 37, 26, 0.95);
+      border: 1px solid #c9a227;
+      border-radius: 10px;
+      padding: 6px 16px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #f5ecd7;
+      z-index: 5;
+      max-width: 95%;
+      text-align: center;
+    }
+    #stamp-palette { display: none; padding: 6px 12px 0; text-align: center; }
+    .mark-btn {
+      min-width: 48px;
+      min-height: 46px;
+      margin: 3px;
+      font-size: 17px;
+      font-weight: bold;
+      background: rgba(240, 230, 210, 0.12);
+      border: 2px solid rgba(240, 230, 210, 0.3);
+      color: #f0e6d2;
+    }
+    .mark-btn.selected { background: #a33b2e; border-color: #e8c558; }
+    #stamp-palette .judge-btn { margin: 4px 0 0 10px; padding: 8px 22px; font-size: 16px; }
+
     .bottom-info { min-height: 64px; padding: 8px 16px calc(12px + env(safe-area-inset-bottom)); text-align: center; }
     .hint-text {
       display: inline-block;
@@ -487,9 +393,108 @@
     }
     .progress-text { font-size: 13px; color: #b3a586; margin-bottom: 4px; }
 
-    /* ===== パネル（オーバーレイ） ===== */
+    /* ===== 道場画面（書き下しの間・仮名遣いの間） ===== */
+    .dojo-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 14px;
+      padding: 12px 16px;
+      overflow-y: auto;
+    }
+    .dojo-progress { font-size: 13px; color: #b3a586; }
+    .dojo-task { font-size: 15px; color: #e8c558; font-weight: bold; text-align: center; }
+    .dojo-sentence {
+      background: linear-gradient(180deg, #f5ecd7, #e8dcc0);
+      border: 3px solid #8f6c12;
+      border-radius: 10px;
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5), inset 0 0 40px rgba(143, 108, 18, 0.15);
+      padding: 18px 16px;
+      max-width: 94%;
+      text-align: center;
+      line-height: 1.7;
+    }
+    .dtoken {
+      display: inline-block;
+      font-size: 30px;
+      font-weight: 600;
+      color: #2b2117;
+      min-width: 44px;
+      min-height: 44px;
+      padding: 4px 2px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .dtoken.fixed { color: #1e7d46; font-weight: 900; animation: charDone 0.3s; cursor: default; }
+    /* 置き字として処理済み：取り消し線で「読まない」を表現 */
+    .dtoken.oki-done {
+      color: #8a8a8a;
+      text-decoration: line-through;
+      text-decoration-color: #a33b2e;
+      text-decoration-thickness: 3px;
+      opacity: 0.55;
+      cursor: default;
+      animation: charDone 0.3s;
+    }
+    /* 仮名遣い：選択中の字 */
+    .dtoken.selecting { background: rgba(232, 197, 88, 0.55); box-shadow: 0 0 0 2px #c9a227; }
+    .dtoken.wrong { animation: dtokenWrong 0.4s; }
+    @keyframes dtokenWrong {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-6px); background: #e8a8a0; }
+      75% { transform: translateX(6px); background: #e8a8a0; }
+    }
+    /* 書き下しの間：道具パレット／仮名遣いの間：3択 */
+    .dojo-palette { text-align: center; min-height: 54px; }
+    .dojo-hint { min-height: 48px; text-align: center; }
+
+    /* ===== ステータス画面 ===== */
+    #screen-status { overflow-y: auto; }
+    .status-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+      padding: 12px 16px calc(20px + env(safe-area-inset-bottom));
+    }
+    .status-card {
+      width: 100%;
+      max-width: 480px;
+      background: linear-gradient(180deg, rgba(240,230,210,0.09), rgba(240,230,210,0.04));
+      border: 2px solid #c9a227;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-type { font-size: 15px; font-weight: bold; color: #7dd9ff; }
+    .status-power { font-size: 15px; color: #c9b896; margin-bottom: 6px; }
+    .status-power strong { font-size: 28px; color: #e8c558; margin-left: 6px; }
+    #status-rows { width: 100%; }
+    .status-row { display: flex; align-items: center; gap: 8px; margin: 7px 0 0; }
+    .status-icon { width: 26px; text-align: center; font-size: 18px; }
+    .status-name { width: 64px; font-size: 14px; font-weight: bold; color: #f0e6d2; }
+    .status-bar-bg {
+      flex: 1;
+      height: 14px;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(240, 230, 210, 0.2);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+    .status-bar-fill { height: 100%; border-radius: 7px; transition: width 0.6s ease; }
+    .status-value { width: 44px; text-align: right; font-size: 17px; font-weight: 900; color: #e8c558; }
+    .status-src { margin: 0 0 2px 34px; font-size: 11px; color: #b3a586; }
+    .status-note { font-size: 12px; color: #b3a586; margin-top: 10px; text-align: center; }
+
+    /* ===== パネル（全画面共有） ===== */
     .panel-overlay {
-      position: fixed; /* 全画面共有（漢文パズル・道場どちらからも使う） */
+      position: fixed;
       inset: 0;
       background: rgba(10, 7, 4, 0.82);
       z-index: 40;
@@ -530,7 +535,7 @@
     }
     .streak-big { font-size: 26px; font-weight: 900; color: #f0c8b0; margin: 6px 0; }
 
-    /* ===== 返り点の巻物（ルール早見表）モーダル ===== */
+    /* ===== 巻物（ルール早見表）モーダル ===== */
     #modal-rules {
       position: fixed; inset: 0;
       background: rgba(10, 7, 4, 0.9);
@@ -564,91 +569,54 @@
     @media (max-width: 480px) {
       .game-title { font-size: 30px; }
       .kchar { width: 54px; height: 48px; font-size: 27px; }
+      .dtoken { font-size: 26px; }
     }
   </style>
 </head>
 <body>
   <main id="app">
 
-    <!-- ===== タイトル画面 ===== -->
+    <!-- ===== タイトル画面（古典ダンジョン入口） ===== -->
     <section id="screen-start" class="screen active">
       <h1 class="game-title mincho">古典クエスト</h1>
-      <p class="game-subtitle mincho">〜 漢文と古文の修行場 〜</p>
+      <p class="game-subtitle mincho">〜 古典ダンジョン 〜</p>
 
-      <!-- 称号（プレイ実績で昇格していく） -->
       <div class="title-badge mincho" id="player-title">見習い書生</div>
       <p class="next-title-hint" id="next-title-hint"></p>
 
-      <!-- ステータス（全モードの記録＝能力値） -->
+      <div class="stats-row">
+        <span class="stat-chip">総合戦闘力<strong id="stat-power">0</strong></span>
+        <span class="stat-chip">🛡忍耐力<strong id="stat-nintai">0</strong></span>
+        <span class="stat-chip">連続修行<strong id="stat-days">0</strong>日🔥</span>
+      </div>
       <button class="btn-secondary" id="btn-to-status">📊 ステータスを見る</button>
 
-      <!-- 実績サマリー -->
-      <div class="stats-row">
-        <span class="stat-chip">★合計<strong id="stat-stars">0</strong></span>
-        <span class="stat-chip">連続修行<strong id="stat-streak">0</strong>日🔥</span>
-        <span class="stat-chip">修行ベスト<strong id="stat-training">0</strong>問</span>
-        <span class="stat-chip">連続記録<strong id="stat-chain">0</strong>問⚡</span>
-      </div>
+      <p class="group-label">⚔️ 挑む塔・間をえらべ</p>
+      <div id="tower-list" style="display:flex;flex-direction:column;gap:10px;width:100%;align-items:center;"></div>
 
-      <!-- モード選択：漢文の塔（読む修行） -->
-      <p class="group-label">🗼 漢文の塔 〜読む修行〜</p>
-      <div class="mode-grid">
-        <button class="btn-mode" id="btn-mode-tower">
-          <span class="mode-emoji">🗼</span>
-          <span><span class="mode-name">漢文の塔</span><br><span class="mode-desc" id="tower-desc">全6階を攻略。各階★3を集めよう</span></span>
-        </button>
-        <button class="btn-mode" id="btn-mode-daily">
-          <span class="mode-emoji">📅</span>
-          <span><span class="mode-name">今日の試練</span><br><span class="mode-desc" id="daily-desc">日替わり5問。連続クリアで記録更新！</span></span>
-        </button>
-        <button class="btn-mode" id="btn-mode-training">
-          <span class="mode-emoji">🥋</span>
-          <span><span class="mode-name">修行モード</span><br><span class="mode-desc" id="training-desc">時間が切れるまで何問倒せるか！</span></span>
-        </button>
-        <button class="btn-mode" id="btn-mode-streak">
-          <span class="mode-emoji">⚡</span>
-          <span><span class="mode-name">連続モード</span><br><span class="mode-desc" id="streak-desc">1ミスで即終了！時間もどんどん短くなる</span></span>
-        </button>
-      </div>
-
-      <!-- モード選択：古典道場（書く・直す修行） -->
-      <p class="group-label">⛩ 古典道場 〜書く・直す修行〜</p>
-      <div class="mode-grid">
-        <button class="btn-mode" id="btn-mode-stamp">
-          <span class="mode-emoji">⛩</span>
-          <span><span class="mode-name">逆打ちの間</span><br><span class="mode-desc" id="stamp-desc">書き下し文を見て返り点を自分で打つ！</span></span>
-        </button>
-        <button class="btn-mode" id="btn-mode-kaki">
-          <span class="mode-emoji">📜</span>
-          <span><span class="mode-name">書き下しの間</span><br><span class="mode-desc" id="kaki-desc">ひらがなに直す字を見つけ出せ！</span></span>
-        </button>
-        <button class="btn-mode" id="btn-mode-kana">
-          <span class="mode-emoji">🖌</span>
-          <span><span class="mode-name">仮名遣いの間</span><br><span class="mode-desc" id="kana-desc">歴史的仮名遣いを現代仮名遣いに！</span></span>
-        </button>
-      </div>
-      <button class="btn-secondary" id="btn-rules-start">古典の巻物（ルール）</button>
+      <button class="btn-secondary" id="btn-rules-start" style="margin-top:6px">古典の巻物（ルール）</button>
     </section>
 
-    <!-- ===== 塔（階選択）画面 ===== -->
+    <!-- ===== 塔メニュー画面（試練・真剣勝負・修行の段） ===== -->
     <section id="screen-tower" class="screen">
-      <h2 class="tower-title mincho">漢文の塔</h2>
-      <div id="floor-list" style="display:flex;flex-direction:column-reverse;gap:10px;width:100%;align-items:center;"></div>
-      <button class="btn-secondary" id="btn-tower-to-title" style="margin-top:10px">タイトルへ</button>
+      <h2 class="tower-title mincho" id="tower-title"></h2>
+      <p class="tower-sub" id="tower-sub"></p>
+      <div id="tower-modes" style="display:flex;flex-direction:column;gap:10px;width:100%;align-items:center;"></div>
+      <p class="stage-label">🏯 修行（段位をクリアして★を集めよ）</p>
+      <div id="stage-list" style="display:flex;flex-direction:column;gap:8px;width:100%;align-items:center;"></div>
+      <button class="btn-secondary" id="btn-tower-back" style="margin:12px 0 20px">ダンジョン入口へ</button>
     </section>
 
-    <!-- ===== ゲーム画面（全モード共用） ===== -->
+    <!-- ===== ゲーム画面（縦書き盤面：読みの塔・返り点の塔） ===== -->
     <section id="screen-game" class="screen">
-      <!-- 上部HUD -->
       <div class="hud">
-        <span class="hud-floor" id="hud-floor">1F</span>
+        <span class="hud-floor" id="hud-floor">📖</span>
         <span class="hud-hp" id="hud-hp">❤❤❤❤❤</span>
         <span class="hud-game-score" id="hud-game-score">0</span>
         <button class="btn-small" id="btn-rules-game">巻物</button>
         <button class="btn-small" id="btn-game-quit">やめる</button>
       </div>
 
-      <!-- 階の番人 -->
       <div class="enemy-area">
         <span class="enemy-face" id="enemy-face">👹</span>
         <div>
@@ -657,46 +625,25 @@
         </div>
       </div>
 
-      <!-- 漢文パズル盤面（縦書き巻物） -->
       <div id="puzzle-area">
         <div>
           <div class="time-bar-bg"><div class="time-bar-fill" id="time-bar" style="height:100%"></div></div>
           <div class="time-label" id="time-label">速さ</div>
         </div>
         <div class="kanbun-scroll mincho" id="kanbun-scroll"></div>
-
-        <!-- 修行モード用：書き下し文の瞬間表示 -->
         <div class="quick-toast mincho" id="quick-toast"></div>
-
-        <!-- 逆打ちの間：目標の書き下し文 -->
         <div class="stamp-goal mincho" id="stamp-goal"></div>
       </div>
 
-      <!-- 逆打ちの間：返り点スタンプパレット -->
+      <!-- 返り点の塔：スタンプパレット -->
       <div id="stamp-palette">
         <div id="stamp-marks"></div>
         <button class="judge-btn btn-primary" id="btn-stamp-judge">⚖️ これで読む！</button>
       </div>
 
-      <!-- 下部：進捗とヒント -->
       <div class="bottom-info">
         <div class="progress-text" id="progress-text"></div>
         <span class="hint-text" id="hint-text" style="visibility:hidden"></span>
-      </div>
-    </section>
-
-    <!-- ===== ステータス画面（各モードの記録＝RPG能力値） ===== -->
-    <section id="screen-status" class="screen">
-      <h2 class="tower-title mincho" style="text-align:center;margin-top:18px">📊 ステータス</h2>
-      <div class="status-wrap">
-        <div class="status-card">
-          <div class="title-badge mincho" id="status-badge">見習い書生</div>
-          <div class="status-type" id="status-type"></div>
-          <div class="status-power">総合戦闘力 <strong id="status-power">0</strong></div>
-          <div id="status-rows"></div>
-          <p class="status-note">記録を伸ばすと能力値が上がる！友だちと見せ合って勝負しよう</p>
-        </div>
-        <button class="btn-secondary" id="btn-status-to-title">タイトルへ</button>
       </div>
     </section>
 
@@ -704,7 +651,7 @@
     <section id="screen-dojo" class="screen">
       <div class="hud">
         <span class="hud-floor" id="dojo-icon">📜</span>
-        <span class="hud-hp" id="dojo-hp">❤❤❤</span>
+        <span class="hud-hp" id="dojo-hp">❤❤❤❤❤</span>
         <span class="hud-game-score" id="dojo-score">0</span>
         <button class="btn-small" id="btn-rules-dojo">巻物</button>
         <button class="btn-small" id="btn-dojo-quit">やめる</button>
@@ -713,7 +660,24 @@
         <div class="dojo-progress" id="dojo-progress"></div>
         <div class="dojo-task" id="dojo-task"></div>
         <div class="dojo-sentence mincho" id="dojo-sentence"></div>
+        <!-- 書き下しの間：道具パレット／仮名遣いの間：3択ボタン -->
+        <div class="dojo-palette" id="dojo-palette"></div>
         <div class="dojo-hint"><span class="hint-text" id="dojo-hint" style="visibility:hidden"></span></div>
+      </div>
+    </section>
+
+    <!-- ===== ステータス画面（記録＝RPG能力値） ===== -->
+    <section id="screen-status" class="screen">
+      <h2 class="tower-title mincho" style="margin-top:18px">📊 ステータス</h2>
+      <div class="status-wrap">
+        <div class="status-card">
+          <div class="title-badge mincho" id="status-badge">見習い書生</div>
+          <div class="status-type" id="status-type"></div>
+          <div class="status-power">総合戦闘力 <strong id="status-power">0</strong></div>
+          <div id="status-rows"></div>
+          <p class="status-note">修行の★＋真剣勝負の記録＝能力値。試練クリアで忍耐力+1！</p>
+        </div>
+        <button class="btn-secondary" id="btn-status-to-title">ダンジョン入口へ</button>
       </div>
     </section>
 
@@ -723,12 +687,11 @@
       <p style="color:#c9b896">番人にやられてしまった。<br>巻物（ルール）を見直して再挑戦だ！</p>
       <p style="color:#c9b896">スコア：<strong style="color:#e8c558;font-size:22px" id="gameover-score">0</strong></p>
       <button class="btn-primary" id="btn-retry">再挑戦</button>
-      <button class="btn-secondary" id="btn-gameover-title">タイトルへ</button>
+      <button class="btn-secondary" id="btn-gameover-title">ダンジョン入口へ</button>
     </section>
   </main>
 
-  <!-- ===== 共有パネル（全モードで使う） ===== -->
-  <!-- 問題クリアパネル（書き下し文・解説＝学びポイント） -->
+  <!-- ===== 共有パネル ===== -->
   <div class="panel-overlay" id="panel-clear">
     <div class="panel-card">
       <div class="panel-title" id="clear-title">⚔️ 一撃！</div>
@@ -738,8 +701,6 @@
       <button class="btn-primary" id="btn-next-problem">つぎへ</button>
     </div>
   </div>
-
-  <!-- 階・モード開始（ルール紹介）パネル -->
   <div class="panel-overlay" id="panel-intro">
     <div class="panel-card">
       <div class="panel-title" id="intro-title"></div>
@@ -747,11 +708,9 @@
       <button class="btn-primary" id="btn-intro-start">挑戦！</button>
     </div>
   </div>
-
-  <!-- 階クリア・モード結果パネル -->
   <div class="panel-overlay" id="panel-result">
     <div class="panel-card">
-      <div class="panel-title" id="result-title">🏆 階クリア！</div>
+      <div class="panel-title" id="result-title"></div>
       <div class="stars-big" id="result-stars"></div>
       <div class="streak-big" id="result-streak" style="display:none"></div>
       <div class="new-record" id="result-record" style="display:none">🎉 自己ベスト更新！</div>
@@ -760,17 +719,13 @@
     </div>
   </div>
 
-  <!-- ===== 返り点の巻物（ルール早見表） ===== -->
+  <!-- ===== 古典の巻物（ルール早見表） ===== -->
   <div id="modal-rules">
     <div class="modal-card">
-      <h2>返り点の巻物</h2>
+      <h2>古典の巻物</h2>
       <div class="rule-block">
         <h3>訓読文の読み方</h3>
-        <p>漢文は上から下へ読む。漢字の<b>左下の記号＝返り点</b>（読む順番の指示）、<b>右下のカタカナ＝送り仮名・助詞</b>（日本語として読むための補い）。</p>
-      </div>
-      <div class="rule-block">
-        <h3>ひらがなの読み（真横）</h3>
-        <p>「不＝ず」「之＝の」のように<b>助動詞・助詞として読む字</b>は、ひらがなで真横に示してある。<b>書き下し文でもひらがなで書く</b>のがルール（テスト頻出！）。</p>
+        <p>漢文は上から下へ読む。漢字の<b>左下の記号＝返り点</b>（読む順番の指示）、<b>右下のカタカナ＝送り仮名・助詞</b>、<b>真横のひらがな＝助動詞・助詞として読む字の読み</b>。</p>
       </div>
       <div class="rule-block">
         <h3>レ点</h3>
@@ -785,8 +740,8 @@
         <p><b>一・二点をはさんで</b>さらに返るときに使う。「上」まで読んでから「下」に返る。<br>例：「有<small>下</small>読<small>二</small>漢文<small>一</small>者<small>上</small>」→ 漢→文→読→者→有</p>
       </div>
       <div class="rule-block">
-        <h3>順番のコツ</h3>
-        <p>① 返り点のない字を上から順に読む<br>② レ点 → すぐ返る<br>③ 一→二、上→下 の順に返る<br>④ 送り仮名をつなげると書き下し文になる</p>
+        <h3>書き下し文のルール</h3>
+        <p>①<b>助動詞・助詞として読む字</b>（不＝ず、之＝の、乎＝や、可＝べし）は<b>ひらがな</b>に直す<br>②<b>置き字</b>（而・於・于・焉など）は<b>読まない</b>＝書き下し文に書かない<br>③送り仮名はひらがなに直してつなげる</p>
       </div>
       <div class="rule-block">
         <h3>現代仮名遣いへの直し方（古文）</h3>
@@ -803,17 +758,15 @@
   <script>
     'use strict';
 
-    // ===== 問題データ =====
-    // chars: [漢字, 返り点, 送り仮名(カタカナ・右下), ひらがな読み(真横)] を上から順に
-    //   - 送り仮名・助詞は3番目（カタカナ）
-    //   - 助動詞・助詞として読む字（不＝ず、之＝の）は4番目（ひらがな・真横表示）
-    // order: 読む順番（chars のインデックスを読む順に並べたもの）
-    // yomi: 書き下し文 / mean: 現代語訳
+    // ============================================================
+    // データ
+    // ============================================================
+    // chars: [漢字, 返り点, 送り仮名(カタカナ・右下), ひらがな読み(真横)]
+    //   ※「ずんば」の「ンバ」、「べから」の「カラ」は送り仮名なので3番目に置く
+    // order: 読む順番（chars のインデックス）/ yomi: 書き下し文 / mean: 現代語訳
     const FLOORS = [
       {
-        name: '一階・そのまま読もう',
-        emoji: '🏮',
-        rule: '返り点なし：上から順に',
+        name: '一階・そのまま読もう', emoji: '🏮', rule: '返り点なし：上から順に',
         intro: '<b>漢文は上から下へ</b>読むのが基本。<br>右側のカタカナは<b>送り仮名</b>。つなげて読むと書き下し文になる。' +
           '<div class="rule-example">例：「日 出<small>ヅ</small>」→ 日→出 →「日出づ」</div>',
         problems: [
@@ -824,9 +777,7 @@
         ],
       },
       {
-        name: '二階・レ点',
-        emoji: '👹',
-        rule: 'レ点：すぐ下の1字から返る',
+        name: '二階・レ点', emoji: '👹', rule: 'レ点：すぐ下の1字から返る',
         intro: '<b>レ点</b>が付いた字は、<b>すぐ下の1字を先に</b>読んでから返る。' +
           '<div class="rule-example">例：「読<small>レム</small> 書<small>ヲ</small>」→ 書→読 →「書を読む」</div>',
         problems: [
@@ -838,9 +789,7 @@
         ],
       },
       {
-        name: '三階・一二点',
-        emoji: '🦊',
-        rule: '一・二点：2字以上はなれて返る',
+        name: '三階・一二点', emoji: '🦊', rule: '一・二点：2字以上はなれて返る',
         intro: '<b>一・二点</b>は2字以上はなれた下から返るときに使う。<br>「<b>一</b>」の字まで読んでから「<b>二</b>」の字に返る。' +
           '<div class="rule-example">例：「思<small>二フ</small> 故 郷<small>一ヲ</small>」→ 故→郷→思 →「故郷を思ふ」</div>',
         problems: [
@@ -852,9 +801,7 @@
         ],
       },
       {
-        name: '四階・レ点＋一二点',
-        emoji: '⚔️',
-        rule: 'ミックス：一→二→レの順で返る',
+        name: '四階・レ点＋一二点', emoji: '⚔️', rule: 'ミックス：一→二→レの順で返る',
         intro: 'レ点と一・二点の<b>合わせ技</b>！<br>「一」まで読んで「二」へ返り、さらに<b>レ点で1字上</b>へ返る。' +
           '<div class="rule-example">例：「不<small>レ・ず</small> 読<small>二マ</small> 漢 文<small>一ヲ</small>」→ 漢→文→読→不 →「漢文を読まず」<br>※「不」は助動詞「ず」と読むのでひらがなが真横に付く</div>',
         problems: [
@@ -865,9 +812,7 @@
         ],
       },
       {
-        name: '五階・上下点',
-        emoji: '🐯',
-        rule: '上・下点：一二点をはさんで返る',
+        name: '五階・上下点', emoji: '🐯', rule: '上・下点：一二点をはさんで返る',
         intro: '<b>上・下点</b>は、一・二点をはさんで<b>さらに大きく返る</b>ときに使う。<br>「<b>上</b>」まで読んでから「<b>下</b>」の字に返る。' +
           '<div class="rule-example">例：「有<small>下リ</small> 読<small>二ム</small> 漢 文<small>一ヲ</small> 者<small>上</small>」→ 漢→文→読→者→有</div>',
         problems: [
@@ -877,23 +822,20 @@
         ],
       },
       {
-        name: '最上階・名句の大龍',
-        emoji: '🐉',
-        rule: 'ボス戦：本物の名句に挑め！',
+        name: '最上階・名句の大龍', emoji: '🐉', rule: 'ボス戦：本物の名句に挑め！',
         intro: '最上階の番人は<b>大龍</b>。<br>教科書にも出てくる<b>本物の名句</b>を読み解いて倒せ！',
         problems: [
           { chars: [['少','',''],['年','',''],['易','レ','ク'],['老','','イ'],['学','',''],['難','レ','シ'],['成','','リ']], order: [0,1,3,2,4,6,5],
             yomi: '少年老い易く学成り難し', mean: '若い時間はあっという間に過ぎ、学問はなかなか完成しない（朱熹『偶成』）' },
           { chars: [['百','',''],['聞','','ハ'],['不','レ','','ず'],['如','二','カ'],['一','',''],['見','一','ニ']], order: [0,1,4,5,3,2],
             yomi: '百聞は一見に如かず', mean: '百回聞くより一回見るほうが確かだ（『漢書』）' },
-          { chars: [['不','レ','','ずんば'],['入','二','ラ'],['虎','',''],['穴','一','ニ'],['不','レ','','ず'],['得','二',''],['虎','',''],['子','一','ヲ']], order: [2,3,1,0,6,7,5,4],
+          { chars: [['不','レ','ンバ','ず'],['入','二','ラ'],['虎','',''],['穴','一','ニ'],['不','レ','','ず'],['得','二',''],['虎','',''],['子','一','ヲ']], order: [2,3,1,0,6,7,5,4],
             yomi: '虎穴に入らずんば虎子を得ず', mean: '危険をおかさなければ大きな成果は得られない（『後漢書』）' },
         ],
       },
     ];
 
-    // ===== 長文の試練（連続モードで25問ごとに出題・10字以上の名句） =====
-    // cols: 縦書きの列の字数（右の列から読む。[5,5]なら右列5字＋左列5字）
+    // 長文の試練（読みの塔・真剣勝負で25問ごとに出題）
     const LONG_PROBLEMS = [
       { chars: [['春','',''],['眠','',''],['不','レ','','ず'],['覚','レ','エ'],['暁','','ヲ'],
                 ['処','',''],['処','',''],['聞','二','ク'],['啼','',''],['鳥','一','ヲ']],
@@ -906,90 +848,95 @@
         yomi: '朋有り遠方より来たる、亦た楽しからずや',
         mean: '友が遠くから訪ねて来る、なんとうれしいことではないか（『論語』）' },
       { chars: [['少','',''],['年','',''],['易','レ','ク'],['老','','イ'],['学','',''],['難','レ','シ'],['成','','リ'],
-                ['一','',''],['寸','','ノ'],['光','',''],['陰','',''],['不','レ','','ず'],['可','レ','','べから'],['軽','','ンズ']],
+                ['一','',''],['寸','','ノ'],['光','',''],['陰','',''],['不','レ','','ず'],['可','レ','カラ','べ'],['軽','','ンズ']],
         order: [0,1,3,2,4,6,5,7,8,9,10,13,12,11], cols: [7,7],
         yomi: '少年老い易く学成り難し、一寸の光陰軽んずべからず',
         mean: '若い時は過ぎやすく学問は完成しにくい。わずかな時間も軽んじてはいけない（朱熹『偶成』全文）' },
     ];
 
-    // ===== 仮名遣いの間：歴史的仮名遣い→現代仮名遣い =====
-    // tokens: [文字, 直した後の文字(直す必要がなければ null)]
-    // rule: クリア時に表示するみわけかたルール
+    // 書き下しの間：置き字を含む特別問題
+    // tokens: [文字, ひらがな変換(なければnull), 種別('oki'=置き字), 個別ヒント]
+    const OKIJI_ITEMS = [
+      { tokens: [['故',null],['きを',null],['温',null],['めて',null],['而',null,'oki'],['新',null],['しきを',null],['知',null],['る',null]],
+        answer: '故きを温めて新しきを知る（温故知新）',
+        rule: '「而」は置き字！読まないので書き下し文には書かない（順接「て」の働き）（『論語』）' },
+      { tokens: [['学',null],['びて',null],['而',null,'oki'],['時',null],['に',null],
+                 ['之',null,null,'この「之」は代名詞「これ」。漢字のままでOK！'],['を',null],['習',null],['ふ',null]],
+        answer: '学びて時に之を習ふ',
+        rule: '「而」は置き字（読まない）。「之」はここでは代名詞「これ」なので漢字のまま（『論語』）' },
+    ];
+
+    // 仮名遣いの間：tokens: [文字, 直した後(不要ならnull)]
+    // stage: 修行の段（0=ハ行 1=ゐゑをぢづ 2=拗音） / stageなし＝試練・真剣勝負のみ
     const KANAZUKAI = [
-      { tokens: [['を','お'],['か',null],['し',null]], answer: 'おかし', rule: '「を」は助詞以外では「お」に直す（をかし＝趣がある）' },
-      { tokens: [['い',null],['ふ','う']], answer: 'いう', rule: '語頭以外のハ行（は・ひ・ふ・へ・ほ）は「わ・い・う・え・お」に直す' },
-      { tokens: [['あ',null],['は','わ'],['れ',null]], answer: 'あわれ', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（あはれ＝しみじみとした趣）' },
-      { tokens: [['思',null],['ふ','う']], answer: '思う', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す' },
-      { tokens: [['に',null],['ほ','お'],['ひ','い']], answer: 'におい', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（2か所！）' },
-      { tokens: [['ゐ','い'],['な',null],['か',null]], answer: 'いなか', rule: '「ゐ・ゑ」は「い・え」に直す' },
-      { tokens: [['こ',null],['ゑ','え']], answer: 'こえ', rule: '「ゐ・ゑ」は「い・え」に直す（声）' },
+      { tokens: [['い',null],['ふ','う']], answer: 'いう', stage: 0, rule: '語頭以外のハ行（は・ひ・ふ・へ・ほ）は「わ・い・う・え・お」に直す' },
+      { tokens: [['あ',null],['は','わ'],['れ',null]], answer: 'あわれ', stage: 0, rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（あはれ＝しみじみとした趣）' },
+      { tokens: [['思',null],['ふ','う']], answer: '思う', stage: 0, rule: '語頭以外のハ行は「わ・い・う・え・お」に直す' },
+      { tokens: [['に',null],['ほ','お'],['ひ','い']], answer: 'におい', stage: 0, rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（2か所！）' },
+      { tokens: [['き',null],['の',null],['ふ','う']], answer: 'きのう', stage: 0, rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（昨日）' },
+      { tokens: [['を','お'],['か',null],['し',null]], answer: 'おかし', stage: 1, rule: '「を」は助詞以外では「お」に直す（をかし＝趣がある）' },
+      { tokens: [['ゐ','い'],['な',null],['か',null]], answer: 'いなか', stage: 1, rule: '「ゐ・ゑ」は「い・え」に直す' },
+      { tokens: [['こ',null],['ゑ','え']], answer: 'こえ', stage: 1, rule: '「ゐ・ゑ」は「い・え」に直す（声）' },
+      { tokens: [['な',null],['ん',null],['ぢ','じ']], answer: 'なんじ', stage: 1, rule: '「ぢ・づ」は「じ・ず」に直す（汝＝おまえ）' },
+      { tokens: [['は',null],['づ','ず'],['か',null],['し',null]], answer: 'はずかし', stage: 1, rule: '「ぢ・づ」は「じ・ず」に直す（語頭の「は」はそのまま！）' },
+      { tokens: [['け','きょ'],['ふ','う']], answer: 'きょう', stage: 2, rule: '「けふ」のようなエ段＋ふは「〜ょう」の音に直す（今日）' },
+      { tokens: [['て','ちょ'],['ふ','う'],['て','ちょ'],['ふ','う']], answer: 'ちょうちょう', stage: 2, rule: '「てふ」→「ちょう」（蝶）。エ段＋ふは「〜ょう」の音に' },
+      { tokens: [['や','よ'],['う',null],['や','よ'],['う',null]], answer: 'ようよう', stage: 2, rule: '「あう・やう」などア段＋うは「おう・よう」の音に直す（枕草子「やうやう白くなりゆく」）' },
+      { tokens: [['あ','お'],['ふ','う'],['ぎ',null]], answer: 'おうぎ', stage: 2, rule: '「あふ」→「おう」（扇）。ア段＋うの音に直す' },
+      { tokens: [['あ',null],['ぢ','じ'],['さ',null],['ゐ','い']], answer: 'あじさい', stage: 2, rule: '「ぢ→じ」「ゐ→い」の2か所を直す（紫陽花）' },
       { tokens: [['ま',null],['ゐ','い'],['る',null]], answer: 'まいる', rule: '「ゐ・ゑ」は「い・え」に直す（参る）' },
-      { tokens: [['な',null],['ん',null],['ぢ','じ']], answer: 'なんじ', rule: '「ぢ・づ」は「じ・ず」に直す（汝＝おまえ）' },
-      { tokens: [['は',null],['づ','ず'],['か',null],['し',null]], answer: 'はずかし', rule: '「ぢ・づ」は「じ・ず」に直す（語頭の「は」はそのまま！）' },
-      { tokens: [['け','きょ'],['ふ','う']], answer: 'きょう', rule: '「けふ」のようなエ段＋ふは「〜ょう」の音に直す（今日）' },
-      { tokens: [['て','ちょ'],['ふ','う'],['て','ちょ'],['ふ','う']], answer: 'ちょうちょう', rule: '「てふ」→「ちょう」（蝶）。エ段＋ふは「〜ょう」の音に' },
-      { tokens: [['や','よ'],['う',null],['や','よ'],['う',null]], answer: 'ようよう', rule: '「あう・やう」などア段＋うは「おう・よう」の音に直す（枕草子「やうやう白くなりゆく」）' },
-      { tokens: [['も',null],['の',null],['ぐ',null],['る',null],['ほ','お'],['し',null]], answer: 'ものぐるおし', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（徒然草「あやしうこそものぐるほしけれ」）' },
-      { tokens: [['あ',null],['ぢ','じ'],['さ',null],['ゐ','い']], answer: 'あじさい', rule: '「ぢ→じ」「ゐ→い」の2か所を直す（紫陽花）' },
       { tokens: [['い',null],['と',null],['ほ','お'],['し',null]], answer: 'いとおし', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（いとほし＝気の毒だ・かわいい）' },
+      { tokens: [['も',null],['の',null],['ぐ',null],['る',null],['ほ','お'],['し',null]], answer: 'ものぐるおし', rule: '語頭以外のハ行は「わ・い・う・え・お」に直す（徒然草）' },
     ];
+    // 仮名遣い3択のまぎらわし選択肢（元の字→ありがちな誤答）
+    const KANA_DISTRACTOR = {
+      'は': 'ば', 'ひ': 'び', 'ふ': 'ぶ', 'へ': 'べ', 'ほ': 'ぼ',
+      'ゐ': 'ゆ', 'ゑ': 'い', 'を': 'う', 'ぢ': 'ち', 'づ': 'つ',
+      'け': 'こ', 'て': 'と', 'や': 'ゆ', 'あ': 'や',
+    };
 
-    // カタカナ→ひらがな変換（送り仮名を書き下し文用に変換）
-    function kataToHira(str) {
-      return str.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
-    }
-
-    // ===== 書き下しの間：既存の漢文データから自動生成 =====
-    // ひらがなに直すべき字（不・之・乎・可など c[3] があるもの）を含む問題だけを使う
-    function buildKakiItems() {
-      const items = [];
-      const pool = allProblems().map(x => x.p).concat(LONG_PROBLEMS);
-      pool.forEach(p => {
-        if (!p.chars.some(c => c[3])) return;
-        const tokens = [];
-        p.order.forEach(i => {
-          const [kanji, , okuri, yomiKana] = p.chars[i];
-          tokens.push([kanji, yomiKana || null]); // 漢字（直す対象なら変換先あり）
-          if (okuri) tokens.push([kataToHira(okuri), null]); // 送り仮名はすでにひらがな
-        });
-        items.push({
-          tokens,
-          answer: p.yomi,
-          rule: '助動詞・助詞にあたる字（不・之・乎・可など）は、書き下し文ではひらがなに直す',
-        });
-      });
-      return items;
-    }
-
-    // ===== 称号（実績で昇格） =====
-    // cond は save を受け取って判定。上から順に最後に満たしたものが現在の称号
-    const TITLES = [
-      { name: '見習い書生', need: 'まずは塔に挑戦しよう', cond: () => true },
-      { name: '書生',       need: '★を4つ集める', cond: s => totalStars(s) >= 4 },
-      { name: '訓読士',     need: '★を9つ集める', cond: s => totalStars(s) >= 9 },
-      { name: '返り点マスター', need: '★を14個集める', cond: s => totalStars(s) >= 14 },
-      { name: '訓読の達人', need: '全階で★3（合計18個）', cond: s => totalStars(s) >= 18 },
-      { name: '漢文王',     need: '★18個＋修行15問＋連続修行3日', cond: s => totalStars(s) >= 18 && s.training.best >= 15 && s.daily.streak >= 3 },
-    ];
+    // ============================================================
+    // 塔・間の定義（specialStat = 修行★＋真剣勝負の記録で決まる固有能力値）
+    // ============================================================
+    const TOWERS = {
+      yomi:  { emoji: '📖', name: '読みの塔',     desc: '返り点の順に読む',           statIcon: '⚔️', statName: '攻撃力', color: '#e2533d',
+               type: '攻撃型｜漢文を斬る剣士' },
+      stamp: { emoji: '⛩', name: '返り点の塔',   desc: '書き下し文を見て返り点を打つ', statIcon: '🖋', statName: '筆力',   color: '#7a52d6',
+               type: '筆力型｜返り点を操る書家' },
+      kaki:  { emoji: '📜', name: '書き下しの間', desc: 'ひらがな・置き字を見分ける',   statIcon: '📖', statName: '知力',   color: '#1f9bb0',
+               type: '知力型｜書き下しの賢者' },
+      kana:  { emoji: '🖌', name: '仮名遣いの間', desc: '現代仮名遣いに直す',          statIcon: '🔮', statName: '魔力',   color: '#cb4f7d',
+               type: '魔導型｜文字を変える魔法使い' },
+    };
+    const MODES = {
+      shugyo:  { emoji: '🏯', name: '修行' },
+      shiren:  { emoji: '📅', name: '今日の試練' },
+      shinken: { emoji: '🗡', name: '真剣勝負' },
+    };
+    const SHUGYO_FULL = 30;   // 修行全★クリアで能力値30
+    const RUN_HP = 5;         // 修行・試練のHP
+    // 読みの塔・真剣勝負の制限時間
+    const SHINKEN_PER_CHAR_START = 4000;
+    const SHINKEN_PER_CHAR_MIN = 1200;
+    const SHINKEN_DECAY = 0.93;
+    const SPEED_LIMIT_MS = 30000; // 速さボーナス基準
 
     const STORAGE_KEY = 'kaeriten-quest-save';
-    const MAX_HP = 5;
-    const DAILY_HP = 3;
-    const SPEED_LIMIT_MS = 30000;     // 塔・試練：速さボーナスの基準時間
-    const TRAINING_START_MS = 40000;  // 修行：開始時の持ち時間
-    const TRAINING_BONUS_MS = 8000;   // 修行：1問クリアで延長
-    const TRAINING_PENALTY_MS = 5000; // 修行：ミスで減少
-    const TRAINING_MAX_MS = 60000;    // 修行：持ち時間の上限
-    // 連続モード：制限時間は「1字あたりの秒数 × 字数」で計算（長い名句が不利にならない）
-    const STREAK_PER_CHAR_START = 4000; // 開始時：1字4秒
-    const STREAK_PER_CHAR_MIN = 1200;   // 下限：1字1.2秒（瞬間判断ゾーン）
-    const STREAK_DECAY = 0.93;          // 1問クリアごとに7%短縮
 
-    // ===== 状態管理 =====
-    let save = null; // 永続データ
-    let g = null;    // プレイ中の状態
+    // 称号（総合戦闘力で昇格）
+    const TITLES = [
+      { power: 0,   name: '見習い書生' },
+      { power: 40,  name: '書生' },
+      { power: 90,  name: '訓読士' },
+      { power: 150, name: '返り点マスター' },
+      { power: 220, name: '訓読の達人' },
+      { power: 300, name: '漢文王' },
+    ];
 
-    // ===== localStorage（プライベートモード対策でtry-catch必須） =====
+    // ============================================================
+    // ユーティリティ・セーブ
+    // ============================================================
+    function $(id) { return document.getElementById(id); }
     function saveData(key, value) {
       try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
     }
@@ -999,30 +946,6 @@
         return item ? JSON.parse(item) : defaultValue;
       } catch (e) { return defaultValue; }
     }
-    function defaultSave() {
-      return {
-        unlocked: 0, stars: [], best: 0,
-        daily: { lastClear: '', streak: 0, best: 0 },
-        training: { best: 0, bestScore: 0 },
-        chain: { best: 0 },
-        stamp: { best: 0 },
-        kaki: { best: 0 },
-        kana: { best: 0 },
-      };
-    }
-    function loadSave() {
-      // 旧バージョンのセーブデータにも新フィールドを補う
-      const d = defaultSave();
-      const s = loadData(STORAGE_KEY, d);
-      ['daily', 'training', 'chain', 'stamp', 'kaki', 'kana'].forEach(key => {
-        s[key] = Object.assign(d[key], s[key] || {});
-      });
-      s.stars = s.stars || [];
-      return s;
-    }
-    function totalStars(s) { return s.stars.reduce((sum, v) => sum + (v || 0), 0); }
-    function $(id) { return document.getElementById(id); }
-
     function shuffle(array) {
       const arr = [...array];
       for (let i = arr.length - 1; i > 0; i--) {
@@ -1031,8 +954,6 @@
       }
       return arr;
     }
-
-    // 日付シードの乱数（今日の試練：全員・毎回同じ問題になる）
     function seededRandom(seedStr) {
       let h = 1779033703;
       for (let i = 0; i < seedStr.length; i++) {
@@ -1046,371 +967,378 @@
         return (h >>> 0) / 4294967296;
       };
     }
-    function todayStr() {
-      const d = new Date();
+    function seededPick(pool, n, seed) {
+      const rnd = seededRandom(seed);
+      const arr = [...pool];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(rnd() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr.slice(0, n);
+    }
+    function dateStr(offsetDays) {
+      const d = new Date(Date.now() + (offsetDays || 0) * 86400000);
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
-    function yesterdayStr() {
-      const d = new Date(Date.now() - 86400000);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    function kataToHira(str) {
+      return str.replace(/[ァ-ヶ]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0x60));
     }
 
-    // 全問題を平坦化（floor番号付き）
-    function allProblems() {
+    function defaultSave() {
+      return {
+        v: 2,
+        towers: {
+          yomi:  { stars: [], streakBest: 0 },
+          stamp: { stars: [], streakBest: 0 },
+          kaki:  { stars: [], streakBest: 0 },
+          kana:  { stars: [], streakBest: 0 },
+        },
+        dailyCount: 0,                 // 忍耐力＝試練クリア累計（塔ごと1日1回）
+        dailyDone: {},                 // {towerKey: 'YYYY-MM-DD'}
+        lastDailyDay: '', dayStreak: 0, // 連続修行日数
+      };
+    }
+    function loadSave() {
+      const old = loadData(STORAGE_KEY, null);
+      const s = defaultSave();
+      if (old && old.v === 2) {
+        Object.keys(s.towers).forEach(k => {
+          s.towers[k] = Object.assign(s.towers[k], (old.towers || {})[k] || {});
+        });
+        s.dailyCount = old.dailyCount || 0;
+        s.dailyDone = old.dailyDone || {};
+        s.lastDailyDay = old.lastDailyDay || '';
+        s.dayStreak = old.dayStreak || 0;
+      } else if (old) {
+        // 旧バージョン（v1）からの引き継ぎ：読みの塔の★・真剣記録・連続日数
+        if (old.stars) s.towers.yomi.stars = old.stars;
+        if (old.chain && old.chain.best) s.towers.yomi.streakBest = old.chain.best;
+        if (old.daily) {
+          s.dayStreak = old.daily.streak || 0;
+          s.dailyCount = old.daily.streak || 0;
+        }
+      }
+      return s;
+    }
+    let save = null;
+    let g = null;       // プレイ中の状態
+    let rafTimer = null;
+
+    // ============================================================
+    // 問題プール（塔ごと）
+    // ============================================================
+    function yomiAllProblems() {
       const list = [];
-      FLOORS.forEach((floor, fi) => floor.problems.forEach(p => list.push({ p, fi })));
+      FLOORS.forEach(f => f.problems.forEach(p => list.push(p)));
       return list;
     }
-    // 今日の試練：日付シードで5問選ぶ（やさしい順に並べる）
-    function pickDailyProblems() {
-      const rnd = seededRandom('kaeriten-' + todayStr());
-      const pool = allProblems();
-      for (let i = pool.length - 1; i > 0; i--) {
-        const j = Math.floor(rnd() * (i + 1));
-        [pool[i], pool[j]] = [pool[j], pool[i]];
+    function stampAllProblems() {
+      return yomiAllProblems().filter(p => p.chars.some(c => c[1]));
+    }
+    // 漢文データから書き下し問題を自動生成（助動詞・助詞のひらがな化）
+    function buildKakiItems() {
+      const items = [];
+      yomiAllProblems().concat(LONG_PROBLEMS).forEach(p => {
+        if (!p.chars.some(c => c[3])) return;
+        const tokens = [];
+        p.order.forEach(i => {
+          const [kanji, , okuri, yomiKana] = p.chars[i];
+          tokens.push([kanji, yomiKana || null]);
+          if (okuri) tokens.push([kataToHira(okuri), null]);
+        });
+        items.push({
+          key: p.yomi,
+          tokens,
+          answer: p.yomi,
+          rule: '助動詞・助詞にあたる字（不・之・乎・可など）は、書き下し文ではひらがなに直す',
+        });
+      });
+      return items;
+    }
+    function kakiAllItems() { return buildKakiItems().concat(OKIJI_ITEMS); }
+    function kanaAllItems() { return KANAZUKAI; }
+
+    // 修行の段の定義（塔ごと）
+    function getStages(towerKey) {
+      if (towerKey === 'yomi') {
+        return FLOORS.map(f => ({ name: f.name, rule: f.rule, emoji: f.emoji, intro: f.intro, problems: f.problems }));
       }
-      return pool.slice(0, 5).sort((a, b) => a.fi - b.fi).map(item => item.p);
+      if (towerKey === 'stamp') {
+        return [
+          { name: '一の段・レ点を打つ', rule: 'レ点を正しい字に打とう', emoji: '👹', problems: FLOORS[1].problems },
+          { name: '二の段・一二点を打つ', rule: '一・二点のペアを打とう', emoji: '🦊', problems: FLOORS[2].problems },
+          { name: '三の段・ミックス', rule: 'レ点＋一二点の合わせ技', emoji: '⚔️', problems: FLOORS[3].problems },
+          { name: '四の段・上下点と名句', rule: '上下点と本物の名句に挑戦', emoji: '🐉', problems: FLOORS[4].problems.concat([FLOORS[5].problems[0], FLOORS[5].problems[1]]) },
+        ];
+      }
+      if (towerKey === 'kaki') {
+        const all = buildKakiItems();
+        const byKey = keys => keys.map(k => all.find(item => item.key === k)).filter(Boolean);
+        return [
+          { name: '一の段・基本のひらがな化', rule: '不＝ず、之＝の', emoji: '👹',
+            problems: byKey(['知らず', '聖人の書を読む', '漢文を読まず', '高山を見ず']) },
+          { name: '二の段・名句に挑む', rule: '乎＝や、可＝べし も登場', emoji: '🐯',
+            problems: byKey(['百聞は一見に如かず', '朋有り遠方より来たる、亦た楽しからずや', '虎穴に入らずんば虎子を得ず', '少年老い易く学成り難し、一寸の光陰軽んずべからず']) },
+          { name: '三の段・置き字を見ぬけ', rule: '而は読まない！道具の使い分け', emoji: '🐉',
+            problems: OKIJI_ITEMS.concat(byKey(['虎穴に入らずんば虎子を得ず'])) },
+        ];
+      }
+      // kana
+      const byStage = n => KANAZUKAI.filter(item => item.stage === n);
+      return [
+        { name: '一の段・ハ行のへんしん', rule: 'は・ひ・ふ・へ・ほ→わ・い・う・え・お', emoji: '👹', problems: byStage(0) },
+        { name: '二の段・消えた仮名たち', rule: 'ゐ・ゑ・を／ぢ・づ', emoji: '🦊', problems: byStage(1) },
+        { name: '三の段・音のへんしん', rule: 'けふ→きょう などの拗音', emoji: '🐉', problems: byStage(2) },
+      ];
+    }
+    function getPool(towerKey) {
+      if (towerKey === 'yomi') return yomiAllProblems();
+      if (towerKey === 'stamp') return stampAllProblems();
+      if (towerKey === 'kaki') return kakiAllItems();
+      return kanaAllItems();
+    }
+    function maxStarsOf(towerKey) { return getStages(towerKey).length * 3; }
+
+    // ============================================================
+    // ステータス計算
+    // ============================================================
+    // 固有能力値 = 修行★換算（全★=30）＋ 真剣勝負の最高記録
+    function towerStat(towerKey) {
+      const t = save.towers[towerKey];
+      const stars = t.stars.reduce((sum, v) => sum + (v || 0), 0);
+      const fromStars = Math.round(stars * SHUGYO_FULL / maxStarsOf(towerKey));
+      return { stars, fromStars, fromStreak: t.streakBest, value: fromStars + t.streakBest };
+    }
+    function totalPower() {
+      let total = save.dailyCount; // 忍耐力
+      Object.keys(TOWERS).forEach(k => { total += towerStat(k).value; });
+      return total;
+    }
+    function currentTitle() {
+      const power = totalPower();
+      let cur = TITLES[0], next = null;
+      for (const t of TITLES) {
+        if (power >= t.power) cur = t;
+        else { next = t; break; }
+      }
+      return { cur, next, power };
     }
 
-    // ===== 画面切り替え =====
+    // ============================================================
+    // 画面切り替え・タイトル画面
+    // ============================================================
     function showScreen(id) {
       document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
       $(id).classList.add('active');
     }
 
-    // ===== タイトル画面の表示更新 =====
     function renderStart() {
-      // 称号判定（条件を満たす最後のもの）
-      let current = TITLES[0], next = null;
-      for (const t of TITLES) {
-        if (t.cond(save)) current = t;
-        else { next = t; break; }
-      }
-      $('player-title').textContent = current.name;
-      $('next-title-hint').textContent = next ? `次の称号「${next.name}」：${next.need}` : '最高位に到達！';
-      $('stat-stars').textContent = totalStars(save);
-      $('stat-streak').textContent = save.daily.streak;
-      $('stat-training').textContent = save.training.best;
-      $('stat-chain').textContent = save.chain.best;
-      $('daily-desc').textContent = save.daily.lastClear === todayStr()
-        ? '本日クリア済み！スコア更新に再挑戦できる'
-        : '日替わり5問。連続クリアで記録更新！';
-      // 各モードのベスト記録をボタンに表示
-      $('tower-desc').textContent = `全6階を攻略　★${totalStars(save)}/18`;
-      $('training-desc').textContent = `時間が切れるまで何問倒せるか！　ベスト${save.training.best}問`;
-      $('streak-desc').textContent = `1ミスで即終了！　連続記録${save.chain.best}問`;
-      $('stamp-desc').textContent = `書き下し文を見て返り点を打つ！　ベスト${save.stamp.best}点`;
-      $('kaki-desc').textContent = `ひらがなに直す字を見つけ出せ！　ベスト${save.kaki.best}点`;
-      $('kana-desc').textContent = `歴史的仮名遣いを現代仮名遣いに！　ベスト${save.kana.best}点`;
-    }
+      const { cur, next, power } = currentTitle();
+      $('player-title').textContent = cur.name;
+      $('next-title-hint').textContent = next
+        ? `次の称号「${next.name}」まで 戦闘力あと${next.power - power}`
+        : '最高位に到達！';
+      $('stat-power').textContent = power;
+      $('stat-nintai').textContent = save.dailyCount;
+      $('stat-days').textContent = save.dayStreak;
 
-    // ===== 📊 ステータス（各モードの記録＝RPG能力値） =====
-    // value: 記録から能力値への変換式（数字が見やすい大きさになるよう係数を調整）
-    const STATS = [
-      { icon: '⚔️', name: '攻撃力', color: '#e2533d', type: '攻撃型｜塔を制する剣士',
-        src: s => `漢文の塔 ★${totalStars(s)}/18`,        value: s => totalStars(s) * 5 },
-      { icon: '🛡', name: '忍耐力', color: '#2da06a', type: '忍耐型｜毎日つづける求道者',
-        src: s => `今日の試練 連続${s.daily.streak}日`,    value: s => s.daily.streak * 8 },
-      { icon: '💪', name: '体力',   color: '#d9930f', type: '体力型｜無尽蔵のスタミナ僧兵',
-        src: s => `修行モード ${s.training.best}問撃破`,   value: s => s.training.best * 3 },
-      { icon: '⚡', name: '瞬発力', color: '#7dd9ff', type: '瞬発型｜一瞬で見抜く居合の達人',
-        src: s => `連続モード ${s.chain.best}問連続`,      value: s => s.chain.best * 4 },
-      { icon: '🖋', name: '筆力',   color: '#7a52d6', type: '筆力型｜返り点を操る書家',
-        src: s => `逆打ちの間 ${s.stamp.best}点`,          value: s => Math.round(s.stamp.best / 10) },
-      { icon: '📖', name: '知力',   color: '#1f9bb0', type: '知力型｜書き下しの賢者',
-        src: s => `書き下しの間 ${s.kaki.best}点`,         value: s => Math.round(s.kaki.best / 10) },
-      { icon: '🔮', name: '魔力',   color: '#cb4f7d', type: '魔導型｜文字を変える魔法使い',
-        src: s => `仮名遣いの間 ${s.kana.best}点`,         value: s => Math.round(s.kana.best / 10) },
-    ];
-
-    function renderStatus() {
-      // 称号は現在のものを表示
-      let current = TITLES[0];
-      for (const t of TITLES) { if (t.cond(save)) current = t; }
-      $('status-badge').textContent = current.name;
-
-      const rows = $('status-rows');
-      rows.innerHTML = '';
-      let total = 0;
-      let topStat = null;
-      STATS.forEach(stat => {
-        const value = stat.value(save);
-        total += value;
-        if (value > 0 && (!topStat || value > topStat.value)) topStat = { value, stat };
-        const row = document.createElement('div');
-        row.className = 'status-row';
-        row.innerHTML =
-          `<span class="status-icon">${stat.icon}</span>` +
-          `<span class="status-name">${stat.name}</span>` +
-          `<div class="status-bar-bg"><div class="status-bar-fill" style="width:0%;background:${stat.color}"></div></div>` +
-          `<span class="status-value">${value}</span>`;
-        rows.appendChild(row);
-        const src = document.createElement('div');
-        src.className = 'status-src';
-        src.textContent = stat.src(save);
-        rows.appendChild(src);
-        // バーは表示後にアニメーションで伸ばす（最大表示=120）
-        requestAnimationFrame(() => {
-          row.querySelector('.status-bar-fill').style.width = Math.min(100, value / 1.2) + '%';
-        });
-      });
-      $('status-power').textContent = total;
-      $('status-type').textContent = topStat
-        ? `あなたは【${topStat.stat.type}】`
-        : 'まだ無属性…修行を始めよう！';
-      showScreen('screen-status');
-    }
-
-    // ===== 塔（階選択）画面 =====
-    function renderTower() {
-      const list = $('floor-list');
+      const list = $('tower-list');
       list.innerHTML = '';
-      FLOORS.forEach((floor, i) => {
-        const locked = i > save.unlocked;
-        const card = document.createElement('div');
-        card.className = 'floor-card' + (locked ? ' locked' : '');
-        const stars = save.stars[i] || 0;
+      Object.keys(TOWERS).forEach(key => {
+        const t = TOWERS[key];
+        const st = towerStat(key);
+        const doneToday = save.dailyDone[key] === dateStr();
+        const card = document.createElement('button');
+        card.className = 'tower-card';
         card.innerHTML =
-          `<span class="floor-emoji">${locked ? '🔒' : floor.emoji}</span>` +
-          `<div class="floor-info">` +
-          `<div class="floor-name">${floor.name}</div>` +
-          `<div class="floor-rule">${floor.rule}</div></div>` +
-          `<span class="floor-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>`;
-        if (!locked) card.addEventListener('click', () => startTowerFloor(i));
+          `<span class="tower-emoji">${t.emoji}</span>` +
+          `<span class="tower-info"><span class="tower-name">${t.name}</span><br>` +
+          `<span class="tower-desc">${t.desc}　${doneToday ? '📅済' : ''}</span></span>` +
+          `<span class="tower-stat">${t.statIcon}${t.statName} ${st.value}<small>★${st.stars}/${maxStarsOf(key)}・🗡${st.fromStreak}</small></span>`;
+        card.addEventListener('click', () => renderTowerMenu(key));
         list.appendChild(card);
       });
+      showScreen('screen-start');
     }
 
-    // ===== モード開始 =====
-    function baseState(mode) {
-      return {
-        mode,
-        problemIndex: 0,
-        hp: MAX_HP,
-        score: 0,
-        mistakes: 0,
-        clearedCount: 0,
-        step: 0,
-        problemMistakes: 0,
-        startTime: 0,
-        timerId: null,
-        trainingRemain: 0,
-        chain: 0,          // 連続モード：連続正解数
-        perCharMs: 0,      // 連続モード：1字あたりの制限時間
-        problemLimit: 0,   // 連続モード：現在の問題の制限時間
-        problemRemain: 0,  // 連続モード：残り時間
+    // ============================================================
+    // 塔メニュー（試練・真剣勝負・修行の段）
+    // ============================================================
+    let currentTower = 'yomi';
+    function renderTowerMenu(towerKey) {
+      currentTower = towerKey;
+      const t = TOWERS[towerKey];
+      const tSave = save.towers[towerKey];
+      $('tower-title').textContent = `${t.emoji} ${t.name}`;
+      $('tower-sub').textContent = `${t.desc}　｜　${t.statIcon}${t.statName} ${towerStat(towerKey).value}`;
+
+      const modes = $('tower-modes');
+      modes.innerHTML = '';
+      const doneToday = save.dailyDone[towerKey] === dateStr();
+      const shiren = document.createElement('button');
+      shiren.className = 'mode-row';
+      shiren.innerHTML =
+        `<span class="m-emoji">📅</span><span><span class="m-name">今日の試練</span><br>` +
+        `<span class="m-desc">${doneToday ? '本日クリア済み！（何度でも再挑戦OK）' : '日替わり5問。クリアで🛡忍耐力+1！'}</span></span>`;
+      shiren.addEventListener('click', () => startRun(towerKey, 'shiren'));
+      modes.appendChild(shiren);
+
+      const shinken = document.createElement('button');
+      shinken.className = 'mode-row';
+      shinken.innerHTML =
+        `<span class="m-emoji">🗡</span><span><span class="m-name">真剣勝負</span><br>` +
+        `<span class="m-desc">1ミスで終わり。最高記録 ${tSave.streakBest} がそのまま${t.statName}に加算！</span></span>`;
+      shinken.addEventListener('click', () => startRun(towerKey, 'shinken'));
+      modes.appendChild(shinken);
+
+      const stages = getStages(towerKey);
+      const listEl = $('stage-list');
+      listEl.innerHTML = '';
+      stages.forEach((stage, i) => {
+        const locked = i > 0 && !(tSave.stars[i - 1] > 0);
+        const stars = tSave.stars[i] || 0;
+        const card = document.createElement('div');
+        card.className = 'floor-card' + (locked ? ' locked' : '');
+        card.innerHTML =
+          `<span class="floor-emoji">${locked ? '🔒' : stage.emoji}</span>` +
+          `<div class="floor-info"><div class="floor-name">${stage.name}</div>` +
+          `<div class="floor-rule">${stage.rule}</div></div>` +
+          `<span class="floor-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>`;
+        if (!locked) card.addEventListener('click', () => startRun(towerKey, 'shugyo', i));
+        listEl.appendChild(card);
+      });
+      showScreen('screen-tower');
+    }
+
+    // ============================================================
+    // ラン制御（全塔・全モード共通）
+    // ============================================================
+    function startRun(towerKey, mode, stageIdx) {
+      const t = TOWERS[towerKey];
+      let list;
+      if (mode === 'shugyo') {
+        list = getStages(towerKey)[stageIdx].problems.slice();
+      } else if (mode === 'shiren') {
+        list = seededPick(getPool(towerKey), 5, `kq-${towerKey}-${dateStr()}`);
+      } else {
+        list = shuffle(getPool(towerKey));
+      }
+      g = {
+        tower: towerKey, mode, stageIdx: stageIdx || 0,
+        list, idx: 0,
+        hp: mode === 'shinken' ? 1 : RUN_HP,
+        score: 0, mistakes: 0, problemMistakes: 0,
+        chain: 0,
         locked: true,
-        problems: [],
-        floor: 0,
+        timerId: null, startTime: 0, lastTick: 0,
+        perCharMs: SHINKEN_PER_CHAR_START, problemLimit: 0, problemRemain: 0,
+        placed: [], selectedMark: 'レ', selectedTool: 'hira',
+        pendingIndex: -1, foundCount: 0, targetCount: 0,
+        afterResult: null,
       };
-    }
-
-    function startTowerFloor(floorIndex) {
-      g = baseState('tower');
-      g.floor = floorIndex;
-      g.problems = FLOORS[floorIndex].problems;
-      const floor = FLOORS[floorIndex];
-      setupGameScreen(floor.emoji, floor.name, floor.name, floor.intro);
-    }
-
-    function startDaily() {
-      g = baseState('daily');
-      g.hp = DAILY_HP;
-      g.problems = pickDailyProblems();
-      setupGameScreen('📅', '今日の試練', '📅 今日の試練',
-        `日替わりの<b>5問</b>に挑戦！（HPは${DAILY_HP}）<br>` +
-        `クリアすると<b>連続修行記録🔥</b>がのびる。<br>現在の連続記録：<b>${save.daily.streak}日</b>` +
-        '<div class="rule-example">毎日ちがう問題が出るよ。明日もまた挑戦！</div>');
-    }
-
-    function startTraining() {
-      g = baseState('training');
-      g.hp = 0; // 修行はHPなし・時間制
-      g.problems = shuffle(allProblems()).map(item => item.p);
-      g.trainingRemain = TRAINING_START_MS;
-      setupGameScreen('🥋', '修行モード', '🥋 修行モード',
-        `時間が切れるまで<b>何問倒せるか</b>の勝負！<br>` +
-        `・1問クリアで <b>+${TRAINING_BONUS_MS / 1000}秒</b><br>` +
-        `・ミスすると <b>−${TRAINING_PENALTY_MS / 1000}秒</b><br>` +
-        `自己ベスト：<b>${save.training.best}問</b>`);
-    }
-
-    function startStreak() {
-      g = baseState('streak');
-      g.hp = 0; // 連続モードはHPなし・1ミス即終了
-      g.problems = shuffle(allProblems()).map(item => item.p);
-      g.chain = 0;
-      g.perCharMs = STREAK_PER_CHAR_START;
-      setupGameScreen('⚡', '連続モード', '⚡ 連続モード',
-        `<b>1回でもまちがえたら即終了！</b><br>` +
-        `何問<b>連続</b>で読み解けるかの真剣勝負。<br>` +
-        `・制限時間内に解けないのもアウト<br>` +
-        `・クリアするたび制限時間が<b>少しずつ短くなる</b><br>` +
-        `・<b>25問ごと</b>に🐲<b>長文の試練</b>（10字超えの名句）が出現！<br>` +
-        `自己ベスト：<b>${save.chain.best}問連続</b>`);
-    }
-
-    function setupGameScreen(emoji, label, introTitle, introBody) {
+      // 画面とイントロ
+      const stage = mode === 'shugyo' ? getStages(towerKey)[stageIdx] : null;
+      const introTitle = stage ? stage.name : `${MODES[mode].emoji} ${t.name}・${MODES[mode].name}`;
+      const introBody = buildIntro(towerKey, mode, stage);
+      if (towerKey === 'yomi' || towerKey === 'stamp') {
+        showScreen('screen-game');
+        $('enemy-face').textContent = stage ? stage.emoji : t.emoji;
+        $('enemy-label').textContent = introTitle;
+        $('enemy-bar').style.width = '100%';
+        $('time-label').textContent = (towerKey === 'yomi' && mode === 'shinken') ? '残り' : '速さ';
+        $('stamp-palette').style.display = towerKey === 'stamp' ? 'block' : 'none';
+        $('stamp-goal').style.display = towerKey === 'stamp' ? 'block' : 'none';
+        if (towerKey === 'stamp') renderStampPalette();
+      } else {
+        showScreen('screen-dojo');
+        $('dojo-icon').textContent = t.emoji;
+        $('dojo-task').textContent = towerKey === 'kaki'
+          ? '道具を選んで、ひらがなに直す字・置き字を処理しよう！'
+          : '直す字をタップ →「何に直す？」に答えよう！';
+      }
       updateHud();
-      showScreen('screen-game');
-      $('enemy-face').textContent = emoji;
-      $('enemy-label').textContent = label;
-      $('enemy-bar').style.width = '100%';
-      $('time-label').textContent = (g.mode === 'training' || g.mode === 'streak') ? '残り' : '速さ';
-      // 逆打ちの間だけスタンプUIを表示
-      $('stamp-palette').style.display = g.mode === 'stamp' ? 'block' : 'none';
-      $('stamp-goal').style.display = g.mode === 'stamp' ? 'block' : 'none';
       $('intro-title').textContent = introTitle;
       $('intro-body').innerHTML = introBody;
       $('panel-intro').classList.add('show');
     }
 
-    // ===== ⛩ 逆打ちの間（書き下し文を見て返り点を打つ） =====
-    const STAMP_HP = 3;
-    const STAMP_MARKS = ['レ', '一', '二', '三', '上', '中', '下', '消す'];
-
-    function startStamp() {
-      g = baseState('stamp');
-      g.hp = STAMP_HP;
-      // 返り点が1つ以上ある問題だけを使う（1階の「返り点なし」は除外）
-      const pool = allProblems().map(x => x.p).filter(p => p.chars.some(c => c[1]));
-      g.problems = shuffle(pool).slice(0, 8);
-      g.selectedMark = 'レ';
-      renderStampPalette();
-      setupGameScreen('⛩', '逆打ちの間', '⛩ 逆打ちの間',
-        `今度は逆！<b>書き下し文を見て、白文に返り点を打て！</b><br>` +
-        `① 下のパレットで返り点を選ぶ<br>` +
-        `② 漢字をタップして左下にスタンプ<br>` +
-        `③「⚖️ これで読む！」で判定（まちがいはHP−1）<br>` +
-        `全8問・HP${STAMP_HP}。ベスト：<b>${save.stamp.best}点</b>`);
-    }
-
-    function renderStampPalette() {
-      const box = $('stamp-marks');
-      box.innerHTML = '';
-      STAMP_MARKS.forEach(mark => {
-        const btn = document.createElement('button');
-        btn.className = 'mark-btn' + (mark === g.selectedMark ? ' selected' : '');
-        btn.textContent = mark;
-        btn.addEventListener('click', () => {
-          g.selectedMark = mark;
-          renderStampPalette();
-        });
-        box.appendChild(btn);
-      });
-    }
-
-    // 漢字タップで選択中の返り点をスタンプ（消す＝外す）
-    function handleStampTap(index, cell) {
-      if (g.locked) return;
-      g.placed[index] = g.selectedMark === '消す' ? '' : g.selectedMark;
-      const old = cell.querySelector('.kaeri');
-      if (old) old.remove();
-      const mark = g.placed[index];
-      cell.insertAdjacentHTML('beforeend',
-        `<span class="kaeri ${mark ? '' : 'empty'}">${mark || '・'}</span>`);
-    }
-
-    // ⚖️ 判定：置いた返り点が正解と完全一致ならクリア
-    function judgeStamp() {
-      if (!g || g.mode !== 'stamp' || g.locked) return;
-      const problem = g.problems[g.problemIndex];
-      const wrongIndexes = [];
-      problem.chars.forEach((c, i) => {
-        if ((g.placed[i] || '') !== (c[1] || '')) wrongIndexes.push(i);
-      });
-      if (wrongIndexes.length === 0) {
-        clearProblem(problem);
-        return;
+    function buildIntro(towerKey, mode, stage) {
+      const t = TOWERS[towerKey];
+      const tSave = save.towers[towerKey];
+      let body = '';
+      if (stage && stage.intro) body = stage.intro;
+      else if (stage) body = `<b>${stage.rule}</b>`;
+      if (mode === 'shiren') {
+        body = `日替わりの<b>5問</b>に挑戦！<br>クリアすると<b>🛡忍耐力が+1</b>（どの塔でも1日1回ずつ）。<br>現在の忍耐力：<b>${save.dailyCount}</b>／連続修行：<b>${save.dayStreak}日</b>🔥`;
+      } else if (mode === 'shinken') {
+        body = `<b>1回でもまちがえたら即終了！</b><br>何問連続で勝てるかの真剣勝負。<br>` +
+          (towerKey === 'yomi' ? `制限時間がどんどん短くなり、<b>25問ごとに🐲長文の試練</b>！<br>` : '') +
+          `最高記録がそのまま<b>${t.statIcon}${t.statName}に加算</b>される。<br>自己ベスト：<b>${tSave.streakBest}問</b>`;
+      } else {
+        body += `<div class="rule-example">ノーミスで★3！　★を集めると${t.statIcon}${t.statName}が上がる（全★で${SHUGYO_FULL}）</div>`;
       }
-      // 不一致：HP−1して、ちがう字を光らせる（学びの足場）
-      g.hp--;
+      if (towerKey === 'stamp' && mode !== 'shiren' && mode !== 'shinken') {
+        body += `<div class="rule-example">①パレットで返り点を選ぶ ②漢字をタップしてスタンプ ③「⚖️これで読む！」で判定</div>`;
+      }
+      if (towerKey === 'kaki') {
+        body += `<div class="rule-example">🖌ひらがな筆＝助動詞・助詞をひらがなに／✂️置き字バサミ＝読まない字を消す</div>`;
+      }
+      return body;
+    }
+
+    // ミス共通処理。true＝ランが終了した
+    function registerMiss() {
       g.mistakes++;
       g.problemMistakes++;
+      if (g.mode === 'shinken') { endShinken(); return true; }
+      g.hp--;
       updateHud();
-      document.querySelectorAll('#kanbun-scroll .kchar').forEach(cell => {
-        const i = Number(cell.dataset.index);
-        if (wrongIndexes.includes(i)) {
-          cell.classList.add('judged-wrong');
-          setTimeout(() => cell.classList.remove('judged-wrong'), 600);
-        }
-      });
-      const hint = $('hint-text');
-      hint.textContent = `💥 赤く光った ${wrongIndexes.length} 文字の返り点を見直そう！`;
-      hint.style.visibility = 'visible';
-      if (g.hp <= 0) gameOver();
+      if (g.hp <= 0) { gameOver(); return true; }
+      return false;
     }
 
-    function endStampRun() {
-      const newBest = g.score > save.stamp.best;
-      save.stamp.best = Math.max(save.stamp.best, g.score);
-      saveData(STORAGE_KEY, save);
-      $('result-title').textContent = '⛩ 修行成就！';
-      $('result-stars').textContent = `${g.score} 点`;
-      $('result-streak').style.display = 'none';
-      $('result-record').style.display = newBest ? 'block' : 'none';
-      $('result-detail').textContent = `まちがい ${g.mistakes} 回 ／ ベスト ${save.stamp.best} 点`;
-      $('btn-result-next').textContent = 'タイトルへ';
-      $('panel-result').classList.add('show');
-      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
-    }
-
-    // ===== 問題の開始 =====
     function beginProblem() {
-      const problem = g.problems[g.problemIndex];
-      g.step = 0;
+      const p = g.list[g.idx];
       g.problemMistakes = 0;
       g.locked = false;
-      hideHint();
-      renderKanbun(problem);
-      if (g.mode === 'tower') {
-        $('progress-text').textContent = `${FLOORS[g.floor].name}　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
-      } else if (g.mode === 'daily') {
-        $('progress-text').textContent = `今日の試練　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
-      } else if (g.mode === 'stamp') {
-        // 逆打ち：返り点なしで描画し、目標の書き下し文を表示
-        g.placed = new Array(problem.chars.length).fill('');
-        $('stamp-goal').textContent = '目標：' + problem.yomi;
-        $('progress-text').textContent = `逆打ちの間　巻物 ${g.problemIndex + 1} / ${g.problems.length}`;
-      } else if (g.mode === 'training') {
-        $('progress-text').textContent = `修行モード　${g.clearedCount} 問撃破中`;
+      hideHints();
+      const t = TOWERS[g.tower];
+      const progress = g.mode === 'shinken'
+        ? `🗡 ${g.chain} 問連続中`
+        : `${MODES[g.mode].name}　${g.idx + 1} / ${g.list.length}`;
+      if (g.tower === 'yomi' || g.tower === 'stamp') {
+        if (g.tower === 'stamp') {
+          g.placed = new Array(p.chars.length).fill('');
+          $('stamp-goal').textContent = '目標：' + p.yomi;
+        } else {
+          g.step = 0;
+        }
+        renderKanbun(p);
+        let extra = '';
+        if (g.tower === 'yomi' && g.mode === 'shinken') {
+          const isLong = p.chars.length >= 10;
+          g.problemLimit = Math.round(p.chars.length * g.perCharMs * (isLong ? 1.25 : 1));
+          g.problemRemain = g.problemLimit;
+          $('enemy-face').textContent = isLong ? '🐲' : t.emoji;
+          extra = `　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒` + (isLong ? '　🐲長文の試練！' : '');
+        }
+        $('progress-text').textContent = progress + extra;
+        g.startTime = Date.now();
+        g.lastTick = Date.now();
+        clearInterval(g.timerId);
+        g.timerId = setInterval(tick, 200);
+        tick();
       } else {
-        // 連続モード：この問題の制限時間（字数×1字あたり時間）をセット
-        const isLong = problem.chars.length >= 10;
-        // 長文の試練は時間を25%増しにして理不尽さを回避
-        g.problemLimit = Math.round(problem.chars.length * g.perCharMs * (isLong ? 1.25 : 1));
-        g.problemRemain = g.problemLimit;
-        $('enemy-face').textContent = isLong ? '🐲' : '⚡';
-        $('progress-text').textContent = isLong
-          ? `🐲 長文の試練！（${g.chain + 1}問目）　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`
-          : `⚡ ${g.chain} 問連続中　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`;
+        beginDojoItem(p, progress);
       }
-      g.startTime = Date.now();
-      g.lastTick = Date.now();
-      clearInterval(g.timerId);
-      g.timerId = setInterval(tick, 200);
-      tick();
     }
 
-    // タイマー更新（塔・試練＝速さボーナス表示／修行＝持ち時間／連続＝問題ごとの制限時間）
     function tick() {
       if (!g) return;
       const now = Date.now();
-      if (g.mode === 'training') {
+      if (g.tower === 'yomi' && g.mode === 'shinken') {
         if (!g.locked) {
-          // タブ復帰などで一気に時間が飛ばないよう1回の減少は最大1秒
-          const dt = Math.min(1000, now - g.lastTick);
-          g.trainingRemain -= dt;
-        }
-        g.lastTick = now;
-        const ratio = Math.max(0, g.trainingRemain / TRAINING_MAX_MS);
-        const bar = $('time-bar');
-        bar.style.height = (ratio * 100) + '%';
-        bar.classList.toggle('danger', g.trainingRemain < 10000);
-        if (g.trainingRemain <= 0) endTraining();
-      } else if (g.mode === 'streak') {
-        if (!g.locked) {
-          const dt = Math.min(1000, now - g.lastTick);
+          const dt = Math.min(1000, now - g.lastTick); // タブ復帰時の暴走防止
           g.problemRemain -= dt;
         }
         g.lastTick = now;
@@ -1418,7 +1346,7 @@
         const bar = $('time-bar');
         bar.style.height = (ratio * 100) + '%';
         bar.classList.toggle('danger', ratio < 0.34);
-        if (g.problemRemain <= 0) endStreak('⏰ 時間切れ！', g.problems[g.problemIndex]);
+        if (g.problemRemain <= 0) endShinken('⏰ 時間切れ！');
       } else {
         const elapsed = now - g.startTime;
         const remain = Math.max(0, 1 - elapsed / SPEED_LIMIT_MS);
@@ -1427,16 +1355,25 @@
       }
     }
 
-    // ===== 漢文の縦書き描画 =====
-    // writing-mode は使わず flex 縦並びで手動縦組み（ブラウザ差異・iPad表示崩れを回避）
-    // 返り点＝左下（赤）／送り仮名・助詞＝右下（カタカナ）／助動詞等の読み＝真横（ひらがな・青）
+    function hideHints() {
+      $('hint-text').style.visibility = 'hidden';
+      $('dojo-hint').style.visibility = 'hidden';
+    }
+    function showBoardHint(msg) {
+      const el = (g.tower === 'yomi' || g.tower === 'stamp') ? $('hint-text') : $('dojo-hint');
+      el.textContent = '💥 ' + msg;
+      el.style.visibility = 'visible';
+    }
+
+    // ============================================================
+    // 縦書き盤面（読みの塔・返り点の塔）
+    // ============================================================
     function renderKanbun(problem) {
       const scroll = $('kanbun-scroll');
       scroll.innerHTML = '';
-      // 長文（10字以上）はセルを小さく＆複数列（右の列から読む）
       scroll.classList.toggle('compact', problem.chars.length >= 10);
       const colSizes = problem.cols || [problem.chars.length];
-      const isStamp = g && g.mode === 'stamp';
+      const isStamp = g.tower === 'stamp';
       let idx = 0;
       colSizes.forEach(size => {
         const col = document.createElement('div');
@@ -1448,437 +1385,440 @@
           cell.className = 'kchar' + (isStamp ? ' stampable' : '');
           cell.dataset.index = i;
           let html = `<span>${kanji}</span>`;
-          if (isStamp) {
-            // 逆打ち：返り点は隠して、スタンプ枠（・）だけ出す
-            html += `<span class="kaeri empty">・</span>`;
-          } else if (mark) {
-            html += `<span class="kaeri">${mark}</span>`;
-          }
+          if (isStamp) html += `<span class="kaeri empty">・</span>`;
+          else if (mark) html += `<span class="kaeri">${mark}</span>`;
           if (okuri) html += `<span class="okuri">${okuri.split('').join('<br>')}</span>`;
           if (yomiKana) html += `<span class="yomi">${yomiKana.split('').join('<br>')}</span>`;
           cell.innerHTML = html;
-          cell.addEventListener('click', () => handleTap(i, cell));
+          cell.addEventListener('click', () => handleKanbunTap(i, cell));
           col.appendChild(cell);
         }
         scroll.appendChild(col); // flex row-reverse なので先頭の列が右に来る
       });
     }
 
-    // ===== 字をタップしたとき =====
-    function handleTap(index, cell) {
+    function handleKanbunTap(index, cell) {
       if (!g || g.locked || cell.classList.contains('done')) return;
-      if (g.mode === 'stamp') { handleStampTap(index, cell); return; }
-      const problem = g.problems[g.problemIndex];
+      const problem = g.list[g.idx];
+      if (g.tower === 'stamp') {
+        // スタンプ：選択中の返り点を置く（消す＝外す）
+        g.placed[index] = g.selectedMark === '消す' ? '' : g.selectedMark;
+        const old = cell.querySelector('.kaeri');
+        if (old) old.remove();
+        const mark = g.placed[index];
+        cell.insertAdjacentHTML('beforeend', `<span class="kaeri ${mark ? '' : 'empty'}">${mark || '・'}</span>`);
+        return;
+      }
+      // 読みの塔：読む順番にタップ
       const correctIndex = problem.order[g.step];
-
       if (index === correctIndex) {
-        // --- 正解：金色に光って読み順番号が付く ---
         g.step++;
         cell.classList.add('done');
         cell.insertAdjacentHTML('beforeend', `<span class="order-badge">${g.step}</span>`);
-        hideHint();
+        hideHints();
         if (g.step >= problem.order.length) clearProblem(problem);
       } else {
-        // --- 不正解：ペナルティ＋返り点別ヒント（ここで覚える） ---
-        g.mistakes++;
-        g.problemMistakes++;
+        showBoardHint(yomiHint(problem, index));
         cell.classList.add('wrong');
         setTimeout(() => cell.classList.remove('wrong'), 400);
-        showHint(problem, index);
-        if (g.mode === 'streak') {
-          // 連続モードは1ミスで即終了（サドンデス）
-          endStreak('💥 タップミス！', problem);
-          return;
-        } else if (g.mode === 'training') {
-          g.trainingRemain -= TRAINING_PENALTY_MS;
-          if (g.trainingRemain <= 0) { endTraining(); return; }
-        } else {
-          g.hp--;
-          updateHud();
-          if (g.hp <= 0) { gameOver(); return; }
-        }
-        updateHud();
+        registerMiss();
       }
     }
 
-    // 間違えた字の返り点に応じたヒントを出す
-    function showHint(problem, tappedIndex) {
+    function yomiHint(problem, tappedIndex) {
       const mark = problem.chars[tappedIndex][1];
       const kanji = problem.chars[tappedIndex][0];
-      let msg;
-      if (mark === 'レ') msg = `「${kanji}」にはレ点！ すぐ下の字を先に読もう`;
-      else if (mark === '二') msg = `「${kanji}」には二点！ 先に「一」の字まで読もう`;
-      else if (mark === '三') msg = `「${kanji}」には三点！ 一→二のあとに読むよ`;
-      else if (mark === '下') msg = `「${kanji}」には下点！ 先に「上」の字まで読もう`;
-      else if (mark === '上') msg = `「${kanji}」には上点！ まず一・二点の部分を読み終えよう`;
-      else if (mark === '中') msg = `「${kanji}」には中点！ 「上」を読んでから返るよ`;
-      else msg = `「${kanji}」はまだ早い！ 上から順に、返り点に注意して読もう`;
-      const hint = $('hint-text');
-      hint.textContent = '💥 ' + msg;
-      hint.style.visibility = 'visible';
+      if (mark === 'レ') return `「${kanji}」にはレ点！ すぐ下の字を先に読もう`;
+      if (mark === '二') return `「${kanji}」には二点！ 先に「一」の字まで読もう`;
+      if (mark === '三') return `「${kanji}」には三点！ 一→二のあとに読むよ`;
+      if (mark === '下') return `「${kanji}」には下点！ 先に「上」の字まで読もう`;
+      if (mark === '上') return `「${kanji}」には上点！ まず一・二点の部分を読み終えよう`;
+      if (mark === '中') return `「${kanji}」には中点！ 「上」を読んでから返るよ`;
+      return `「${kanji}」はまだ早い！ 上から順に、返り点に注意して読もう`;
     }
-    function hideHint() { $('hint-text').style.visibility = 'hidden'; }
 
-    // ===== 問題クリア =====
+    // 返り点パレット
+    const STAMP_MARKS = ['レ', '一', '二', '三', '上', '中', '下', '消す'];
+    function renderStampPalette() {
+      const box = $('stamp-marks');
+      box.innerHTML = '';
+      STAMP_MARKS.forEach(mark => {
+        const btn = document.createElement('button');
+        btn.className = 'mark-btn' + (mark === g.selectedMark ? ' selected' : '');
+        btn.textContent = mark;
+        btn.addEventListener('click', () => { g.selectedMark = mark; renderStampPalette(); });
+        box.appendChild(btn);
+      });
+    }
+    function judgeStamp() {
+      if (!g || g.tower !== 'stamp' || g.locked) return;
+      const problem = g.list[g.idx];
+      const wrongIndexes = [];
+      problem.chars.forEach((c, i) => {
+        if ((g.placed[i] || '') !== (c[1] || '')) wrongIndexes.push(i);
+      });
+      if (wrongIndexes.length === 0) { clearProblem(problem); return; }
+      if (g.mode !== 'shinken') {
+        document.querySelectorAll('#kanbun-scroll .kchar').forEach(cell => {
+          if (wrongIndexes.includes(Number(cell.dataset.index))) {
+            cell.classList.add('judged-wrong');
+            setTimeout(() => cell.classList.remove('judged-wrong'), 600);
+          }
+        });
+        showBoardHint(`赤く光った ${wrongIndexes.length} 文字の返り点を見直そう！`);
+      }
+      registerMiss();
+    }
+
+    // ============================================================
+    // 道場盤面（書き下しの間・仮名遣いの間）
+    // ============================================================
+    function beginDojoItem(item, progress) {
+      g.foundCount = 0;
+      g.pendingIndex = -1;
+      g.targetCount = item.tokens.filter(tk => tk[1] || tk[2] === 'oki').length;
+      $('dojo-progress').textContent = progress;
+      const box = $('dojo-sentence');
+      box.innerHTML = '';
+      item.tokens.forEach((tk, i) => {
+        const span = document.createElement('span');
+        span.className = 'dtoken';
+        span.textContent = tk[0];
+        span.addEventListener('click', () => handleDojoTap(i, span));
+        box.appendChild(span);
+      });
+      renderDojoPalette();
+    }
+
+    // 書き下しの間＝道具パレット／仮名遣いの間＝（タップ後に）3択
+    function renderDojoPalette() {
+      const box = $('dojo-palette');
+      box.innerHTML = '';
+      if (g.tower === 'kaki') {
+        [['hira', '🖌 ひらがな筆'], ['oki', '✂️ 置き字バサミ']].forEach(([tool, label]) => {
+          const btn = document.createElement('button');
+          btn.className = 'mark-btn' + (g.selectedTool === tool ? ' selected' : '');
+          btn.textContent = label;
+          btn.style.fontSize = '15px';
+          btn.addEventListener('click', () => { g.selectedTool = tool; renderDojoPalette(); });
+          box.appendChild(btn);
+        });
+      }
+      // kana の3択はタップ後に showKanaChoices で出す
+    }
+
+    function handleDojoTap(index, span) {
+      if (!g || g.locked || span.classList.contains('fixed') || span.classList.contains('oki-done')) return;
+      const item = g.list[g.idx];
+      const [text, conv, type, hint] = item.tokens[index];
+
+      if (g.tower === 'kana') {
+        if (conv) {
+          // 直す字：選択して「何に直す？」の3択へ
+          document.querySelectorAll('.dtoken.selecting').forEach(el => el.classList.remove('selecting'));
+          span.classList.add('selecting');
+          g.pendingIndex = index;
+          showKanaChoices(text, conv, span);
+        } else {
+          dojoMiss(span, `「${text}」はそのままでOK！`);
+        }
+        return;
+      }
+
+      // 書き下しの間：道具の使い分け
+      if (type === 'oki') {
+        if (g.selectedTool === 'oki') {
+          span.classList.add('oki-done');
+          g.foundCount++;
+          hideHints();
+          if (g.foundCount >= g.targetCount) clearProblem(item);
+        } else {
+          dojoMiss(span, `「${text}」は置き字！✂️置き字バサミで処理しよう`);
+        }
+      } else if (conv) {
+        if (g.selectedTool === 'hira') {
+          span.textContent = conv;
+          span.classList.add('fixed');
+          g.foundCount++;
+          hideHints();
+          if (g.foundCount >= g.targetCount) clearProblem(item);
+        } else {
+          dojoMiss(span, `「${text}」は読む字！🖌ひらがな筆で直そう`);
+        }
+      } else {
+        const isKana = /^[ぁ-んー]+$/.test(text);
+        dojoMiss(span, hint || (isKana ? `「${text}」はもうひらがな！` : `「${text}」は漢字のままでOK！`));
+      }
+    }
+
+    function dojoMiss(span, msg) {
+      span.classList.add('wrong');
+      setTimeout(() => span.classList.remove('wrong'), 400);
+      showBoardHint(msg);
+      registerMiss();
+    }
+
+    // 仮名遣い：「何に直す？」の3択
+    function showKanaChoices(orig, conv, span) {
+      const box = $('dojo-palette');
+      box.innerHTML = `<span style="font-size:14px;color:#e8c558;font-weight:bold;margin-right:6px">「${orig}」を何に直す？</span>`;
+      const distractor = KANA_DISTRACTOR[orig] && KANA_DISTRACTOR[orig] !== conv ? KANA_DISTRACTOR[orig] : 'っ';
+      const options = shuffle([conv, orig, distractor]);
+      options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'mark-btn mincho';
+        btn.textContent = opt;
+        btn.addEventListener('click', () => {
+          if (g.locked) return;
+          if (opt === conv) {
+            span.textContent = conv;
+            span.classList.remove('selecting');
+            span.classList.add('fixed');
+            g.foundCount++;
+            g.pendingIndex = -1;
+            hideHints();
+            box.innerHTML = '';
+            if (g.foundCount >= g.targetCount) clearProblem(g.list[g.idx]);
+          } else {
+            showBoardHint(`「${opt}」ではないぞ…巻物のルールを思い出そう！`);
+            registerMiss();
+          }
+        });
+        box.appendChild(btn);
+      });
+    }
+
+    // ============================================================
+    // 問題クリア・ラン終了
+    // ============================================================
     function clearProblem(problem) {
       g.locked = true;
-      g.clearedCount++;
-      // 得点：基本100 − ミス×20 ＋ 速さボーナス（最大50）
-      const elapsed = Date.now() - g.startTime;
-      const speedBonus = Math.round(Math.max(0, 1 - elapsed / SPEED_LIMIT_MS) * 50);
+      clearInterval(g.timerId);
+      // 得点：基本100 − ミス×20 ＋ 速さボーナス（縦書き盤面のみ・最大50）
+      let speedBonus = 0;
+      if (g.tower === 'yomi' || g.tower === 'stamp') {
+        const elapsed = Date.now() - g.startTime;
+        speedBonus = Math.round(Math.max(0, 1 - elapsed / SPEED_LIMIT_MS) * 50);
+      }
       const points = Math.max(10, 100 - g.problemMistakes * 20) + speedBonus;
       g.score += points;
+      if (g.mode === 'shinken') g.chain++;
       updateHud();
 
-      // 番人にダメージ演出
-      const total = g.mode === 'training' ? 0 : g.problems.length;
-      if (total > 0) {
-        $('enemy-bar').style.width = ((1 - g.problemIndex / total - 1 / total) * 100) + '%';
+      // 番人ダメージ演出
+      if (g.mode !== 'shinken' && (g.tower === 'yomi' || g.tower === 'stamp')) {
+        $('enemy-bar').style.width = ((1 - (g.idx + 1) / g.list.length) * 100) + '%';
+        const face = $('enemy-face');
+        face.classList.remove('hit');
+        void face.offsetWidth;
+        face.classList.add('hit');
       }
-      const face = $('enemy-face');
-      face.classList.remove('hit');
-      void face.offsetWidth; // アニメーション再発火用
-      face.classList.add('hit');
 
-      if (g.mode === 'training') {
-        // 修行：時間延長してテンポよく次へ（書き下しはトーストで瞬間表示）
-        g.trainingRemain = Math.min(TRAINING_MAX_MS, g.trainingRemain + TRAINING_BONUS_MS);
+      if (g.mode === 'shinken') {
+        // 真剣勝負：トーストでテンポよく次へ
+        if (g.tower === 'yomi') g.perCharMs = Math.max(SHINKEN_PER_CHAR_MIN, g.perCharMs * SHINKEN_DECAY);
         const toast = $('quick-toast');
-        toast.textContent = `✅ ${problem.yomi}（+${TRAINING_BONUS_MS / 1000}秒）`;
-        toast.classList.add('show');
+        const label = problem.yomi || problem.answer;
+        if (g.tower === 'yomi' || g.tower === 'stamp') {
+          toast.textContent = `🗡 ${g.chain} 連続！ ${label}`;
+          toast.classList.add('show');
+        } else {
+          showBoardHint(''); hideHints();
+          $('dojo-progress').textContent = `🗡 ${g.chain} 連続！ ${label}`;
+        }
         setTimeout(() => {
           toast.classList.remove('show');
-          if (!g || g.mode !== 'training') return;
-          g.problemIndex++;
-          if (g.problemIndex >= g.problems.length) {
-            g.problems = g.problems.concat(shuffle(allProblems()).map(item => item.p));
+          if (!g || g.mode !== 'shinken') return;
+          g.idx++;
+          if (g.idx >= g.list.length) g.list = g.list.concat(shuffle(getPool(g.tower)));
+          // 読みの塔：25問ごとに長文の試練
+          if (g.tower === 'yomi' && (g.chain + 1) % 25 === 0) {
+            g.list.splice(g.idx, 0, LONG_PROBLEMS[Math.floor(Math.random() * LONG_PROBLEMS.length)]);
           }
           beginProblem();
-        }, 1100);
-      } else if (g.mode === 'streak') {
-        // 連続：記録を伸ばして制限時間を短縮、テンポよく次へ
-        g.chain++;
-        g.perCharMs = Math.max(STREAK_PER_CHAR_MIN, g.perCharMs * STREAK_DECAY);
-        updateHud();
-        const toast = $('quick-toast');
-        toast.textContent = `⚡ ${g.chain} 連続！ ${problem.yomi}`;
-        toast.classList.add('show');
-        setTimeout(() => {
-          toast.classList.remove('show');
-          if (!g || g.mode !== 'streak') return;
-          g.problemIndex++;
-          if (g.problemIndex >= g.problems.length) {
-            g.problems = g.problems.concat(shuffle(allProblems()).map(item => item.p));
-          }
-          // 25問ごと（25・50・75…問目）は長文の試練を割り込ませる
-          if ((g.chain + 1) % 25 === 0) {
-            const long = LONG_PROBLEMS[Math.floor(Math.random() * LONG_PROBLEMS.length)];
-            g.problems.splice(g.problemIndex, 0, long);
-          }
-          beginProblem();
-        }, 900);
+        }, 950);
       } else {
-        // 塔・試練・逆打ち：書き下し文＋現代語訳パネル（学びの確認）
-        clearInterval(g.timerId);
-        $('clear-title').textContent = g.mode === 'stamp' ? '⚖️ 完璧な返り点！' : '⚔️ 一撃！';
-        $('clear-yomi').textContent = problem.yomi;
-        $('clear-mean').textContent = problem.mean;
-        $('clear-bonus').textContent = `+${points} 点（速さボーナス +${speedBonus}）`;
+        $('clear-title').textContent = g.tower === 'stamp' ? '⚖️ 完璧な返り点！' : (g.tower === 'yomi' ? '⚔️ 一撃！' : '✨ お見事！');
+        $('clear-yomi').textContent = problem.yomi || problem.answer;
+        $('clear-mean').textContent = problem.mean || problem.rule || '';
+        $('clear-bonus').textContent = `+${points} 点` + (speedBonus ? `（速さボーナス +${speedBonus}）` : '');
         $('panel-clear').classList.add('show');
       }
     }
 
     function nextProblem() {
       $('panel-clear').classList.remove('show');
-      if (g.mode === 'dojo') { nextDojoItem(); return; }
-      g.problemIndex++;
-      if (g.problemIndex >= g.problems.length) {
-        if (g.mode === 'tower') clearTowerFloor();
-        else if (g.mode === 'stamp') endStampRun();
-        else clearDaily();
+      g.idx++;
+      if (g.idx >= g.list.length) {
+        if (g.mode === 'shugyo') endShugyo();
+        else endShiren();
       } else {
         beginProblem();
       }
     }
 
-    // ===== 塔：階クリア =====
-    function clearTowerFloor() {
+    // 修行クリア：★獲得 → 能力値へ
+    function endShugyo() {
       const stars = g.mistakes === 0 ? 3 : (g.mistakes <= 2 ? 2 : 1);
-      save.stars[g.floor] = Math.max(save.stars[g.floor] || 0, stars);
-      save.unlocked = Math.max(save.unlocked, Math.min(g.floor + 1, FLOORS.length - 1));
-      const newBest = g.score > save.best;
-      save.best = Math.max(save.best, g.score);
+      const tSave = save.towers[g.tower];
+      tSave.stars[g.stageIdx] = Math.max(tSave.stars[g.stageIdx] || 0, stars);
       saveData(STORAGE_KEY, save);
-
-      $('result-title').textContent = '🏆 階クリア！';
+      const t = TOWERS[g.tower];
+      $('result-title').textContent = '🏯 修行成就！';
       $('result-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
       $('result-streak').style.display = 'none';
-      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-record').style.display = 'none';
       $('result-detail').textContent =
-        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点` + (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
-      $('btn-result-next').textContent = g.floor >= FLOORS.length - 1 ? '塔を制覇した！' : 'すすむ';
+        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点　→ ${t.statIcon}${t.statName} ${towerStat(g.tower).value}` +
+        (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
+      $('btn-result-next').textContent = 'すすむ';
       $('panel-result').classList.add('show');
-      g.afterResult = () => { renderTower(); showScreen('screen-tower'); };
+      g.afterResult = () => renderTowerMenu(g.tower);
     }
 
-    // ===== 今日の試練：クリア（連続記録の更新） =====
-    function clearDaily() {
-      const today = todayStr();
-      let streakMsg;
-      if (save.daily.lastClear === today) {
-        streakMsg = `連続修行 ${save.daily.streak} 日目🔥（本日クリア済み）`;
-      } else {
-        save.daily.streak = save.daily.lastClear === yesterdayStr() ? save.daily.streak + 1 : 1;
-        save.daily.lastClear = today;
-        streakMsg = `連続修行 ${save.daily.streak} 日目🔥`;
+    // 試練クリア：忍耐力+1（塔ごと1日1回）＋連続修行日数
+    function endShiren() {
+      const today = dateStr();
+      let gained = false;
+      if (save.dailyDone[g.tower] !== today) {
+        save.dailyDone[g.tower] = today;
+        save.dailyCount++;
+        gained = true;
+        if (save.lastDailyDay !== today) {
+          save.dayStreak = save.lastDailyDay === dateStr(-1) ? save.dayStreak + 1 : 1;
+          save.lastDailyDay = today;
+        }
       }
-      const newBest = g.score > save.daily.best;
-      save.daily.best = Math.max(save.daily.best, g.score);
       saveData(STORAGE_KEY, save);
-
       $('result-title').textContent = '📅 試練クリア！';
       $('result-stars').textContent = '';
-      $('result-streak').textContent = streakMsg;
+      $('result-streak').textContent = gained ? `🛡 忍耐力 +1 → ${save.dailyCount}` : `本日クリア済み（忍耐力 ${save.dailyCount}）`;
       $('result-streak').style.display = 'block';
-      $('result-record').style.display = newBest ? 'block' : 'none';
-      $('result-detail').textContent = `スコア ${g.score} 点（試練ベスト ${save.daily.best} 点）　明日も新しい5問が待っている！`;
-      $('btn-result-next').textContent = 'タイトルへ';
+      $('result-record').style.display = 'none';
+      $('result-detail').textContent = `スコア ${g.score} 点　連続修行 ${save.dayStreak}日🔥　明日も新しい5問が待っている！`;
+      $('btn-result-next').textContent = 'もどる';
       $('panel-result').classList.add('show');
-      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
+      g.afterResult = () => renderTowerMenu(g.tower);
     }
 
-    // ===== 連続：1ミスまたは時間切れ＝即終了 =====
-    function endStreak(reason, problem) {
+    // 真剣勝負終了：最高記録が能力値に直結
+    function endShinken(reason) {
       g.locked = true;
       clearInterval(g.timerId);
-      const newBest = g.chain > save.chain.best;
-      save.chain.best = Math.max(save.chain.best, g.chain);
+      const tSave = save.towers[g.tower];
+      const newBest = g.chain > tSave.streakBest;
+      tSave.streakBest = Math.max(tSave.streakBest, g.chain);
       saveData(STORAGE_KEY, save);
-
-      $('result-title').textContent = '⚡ 連続終了！';
+      const t = TOWERS[g.tower];
+      const p = g.list[g.idx];
+      $('result-title').textContent = '🗡 真剣勝負・終了！';
       $('result-stars').textContent = `${g.chain} 問連続`;
       $('result-streak').style.display = 'none';
       $('result-record').style.display = newBest ? 'block' : 'none';
       $('result-detail').textContent =
-        `${reason}　正解は「${problem.yomi}」　自己ベスト ${save.chain.best} 問連続`;
-      $('btn-result-next').textContent = 'タイトルへ';
+        `${reason || '💥 一太刀あびた！'}　正解は「${p.yomi || p.answer}」　` +
+        `最高記録 ${tSave.streakBest} → ${t.statIcon}${t.statName}に加算（現在 ${towerStat(g.tower).value}）`;
+      $('btn-result-next').textContent = 'もどる';
       $('panel-result').classList.add('show');
-      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
+      g.afterResult = () => renderTowerMenu(g.tower);
     }
 
-    // ===== 修行：時間切れ＝結果発表 =====
-    function endTraining() {
-      g.locked = true;
-      clearInterval(g.timerId);
-      const newBest = g.clearedCount > save.training.best;
-      save.training.best = Math.max(save.training.best, g.clearedCount);
-      save.training.bestScore = Math.max(save.training.bestScore, g.score);
-      saveData(STORAGE_KEY, save);
-
-      $('result-title').textContent = '🥋 修行終了！';
-      $('result-stars').textContent = `${g.clearedCount} 問撃破`;
-      $('result-streak').style.display = 'none';
-      $('result-record').style.display = newBest ? 'block' : 'none';
-      $('result-detail').textContent = `スコア ${g.score} 点 ／ 自己ベスト ${save.training.best} 問`;
-      $('btn-result-next').textContent = 'タイトルへ';
-      $('panel-result').classList.add('show');
-      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
-    }
-
-    // ===== 📜🖌 道場（書き下しの間・仮名遣いの間） =====
-    const DOJO_HP = 3;
-    const DOJO_CONF = {
-      kaki: {
-        emoji: '📜', name: '書き下しの間', saveKey: 'kaki', count: 6,
-        task: 'ひらがなに直す字をすべてタップ！',
-        getItems: () => buildKakiItems(),
-        intro: `書き下し文の中に<b>漢字のまま残っている字</b>がある！<br>` +
-          `<b>助動詞・助詞にあたる字</b>（不・之・乎・可など）を見つけてタップし、ひらがなに直そう。<br>` +
-          `ちがう字をタップするとHP−1。`,
-        hintTarget: 'その字は漢字のままでOK！直すのは助動詞・助詞にあたる字',
-        hintKana: 'それはもうひらがな！漢字の中からさがそう',
-      },
-      kana: {
-        emoji: '🖌', name: '仮名遣いの間', saveKey: 'kana', count: 10,
-        task: '歴史的仮名遣いの字をすべてタップして現代仮名遣いに！',
-        getItems: () => KANAZUKAI.map(item => ({ tokens: item.tokens, answer: item.answer, rule: item.rule })),
-        intro: `古文のことばは<b>歴史的仮名遣い</b>で書かれている。<br>` +
-          `「ゐ→い」「は→わ」「けふ→きょう」のように、<b>現代仮名遣いに直す字</b>をタップしよう。<br>` +
-          `直さなくていい字をタップするとHP−1。`,
-        hintTarget: 'その字はそのままでOK！',
-        hintKana: 'その字はそのままでOK！',
-      },
-    };
-
-    function startDojo(type) {
-      const conf = DOJO_CONF[type];
-      g = {
-        mode: 'dojo', dojoType: type,
-        items: shuffle(conf.getItems()).slice(0, conf.count),
-        itemIndex: 0,
-        hp: DOJO_HP,
-        score: 0,
-        mistakes: 0,
-        itemMisses: 0,
-        foundCount: 0,
-        targetCount: 0,
-        locked: true,
-        timerId: null,
-        afterResult: null,
-      };
-      showScreen('screen-dojo');
-      $('dojo-icon').textContent = conf.emoji;
-      updateDojoHud();
-      $('dojo-task').textContent = conf.task;
-      $('intro-title').textContent = `${conf.emoji} ${conf.name}`;
-      $('intro-body').innerHTML = conf.intro +
-        `<div class="rule-example">全${g.items.length}問・HP${DOJO_HP}。ベスト：${save[conf.saveKey].best}点</div>`;
-      $('panel-intro').classList.add('show');
-    }
-
-    function beginDojoItem() {
-      const item = g.items[g.itemIndex];
-      g.itemMisses = 0;
-      g.foundCount = 0;
-      g.targetCount = item.tokens.filter(t => t[1]).length;
-      g.locked = false;
-      $('dojo-hint').style.visibility = 'hidden';
-      $('dojo-progress').textContent =
-        `${DOJO_CONF[g.dojoType].name}　${g.itemIndex + 1} / ${g.items.length}`;
-      const box = $('dojo-sentence');
-      box.innerHTML = '';
-      item.tokens.forEach(([text, conv], i) => {
-        const span = document.createElement('span');
-        span.className = 'dtoken';
-        span.textContent = text;
-        span.addEventListener('click', () => handleDojoTap(i, span));
-        box.appendChild(span);
-      });
-    }
-
-    function handleDojoTap(index, span) {
-      if (!g || g.locked || span.classList.contains('fixed')) return;
-      const item = g.items[g.itemIndex];
-      const [text, conv] = item.tokens[index];
-      if (conv) {
-        // 正解：その場でひらがな・現代仮名遣いに変身
-        span.textContent = conv;
-        span.classList.add('fixed');
-        g.foundCount++;
-        $('dojo-hint').style.visibility = 'hidden';
-        if (g.foundCount >= g.targetCount) clearDojoItem(item);
-      } else {
-        // 不正解：HP−1＋ヒント
-        g.hp--;
-        g.mistakes++;
-        g.itemMisses++;
-        span.classList.add('wrong');
-        setTimeout(() => span.classList.remove('wrong'), 400);
-        const conf = DOJO_CONF[g.dojoType];
-        const isKana = /^[ぁ-んー]+$/.test(text);
-        const hint = $('dojo-hint');
-        hint.textContent = `💥 「${text}」${isKana ? conf.hintKana : conf.hintTarget}`;
-        hint.style.visibility = 'visible';
-        updateDojoHud();
-        if (g.hp <= 0) gameOver();
-      }
-    }
-
-    function clearDojoItem(item) {
-      g.locked = true;
-      const points = Math.max(10, 100 - g.itemMisses * 20);
-      g.score += points;
-      updateDojoHud();
-      $('clear-title').textContent = '✨ お見事！';
-      $('clear-yomi').textContent = item.answer;
-      $('clear-mean').textContent = item.rule;
-      $('clear-bonus').textContent = `+${points} 点`;
-      $('panel-clear').classList.add('show');
-    }
-
-    function nextDojoItem() {
-      g.itemIndex++;
-      if (g.itemIndex >= g.items.length) endDojoRun();
-      else beginDojoItem();
-    }
-
-    function endDojoRun() {
-      const conf = DOJO_CONF[g.dojoType];
-      const newBest = g.score > save[conf.saveKey].best;
-      save[conf.saveKey].best = Math.max(save[conf.saveKey].best, g.score);
-      saveData(STORAGE_KEY, save);
-      $('result-title').textContent = `${conf.emoji} 修行成就！`;
-      $('result-stars').textContent = `${g.score} 点`;
-      $('result-streak').style.display = 'none';
-      $('result-record').style.display = newBest ? 'block' : 'none';
-      $('result-detail').textContent = `まちがい ${g.mistakes} 回 ／ ベスト ${save[conf.saveKey].best} 点`;
-      $('btn-result-next').textContent = 'タイトルへ';
-      $('panel-result').classList.add('show');
-      g.afterResult = () => { renderStart(); showScreen('screen-start'); };
-    }
-
-    function updateDojoHud() {
-      $('dojo-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(DOJO_HP - g.hp);
-      $('dojo-score').textContent = g.score;
-    }
-
-    // ===== ゲームオーバー（HP切れ：塔・試練・逆打ち・道場） =====
     function gameOver() {
       g.locked = true;
       clearInterval(g.timerId);
-      if (g.mode === 'tower' || g.mode === 'daily') {
-        save.best = Math.max(save.best, g.score);
-        saveData(STORAGE_KEY, save);
-      }
       $('gameover-score').textContent = g.score;
       showScreen('screen-gameover');
     }
 
-    // ===== HUD更新 =====
+    // ============================================================
+    // HUD・ステータス画面
+    // ============================================================
     function updateHud() {
-      if (g.mode === 'tower') {
-        $('hud-floor').textContent = (g.floor + 1) + 'F';
-        $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(MAX_HP - g.hp);
-      } else if (g.mode === 'daily') {
-        $('hud-floor').textContent = '📅';
-        $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(DAILY_HP - g.hp);
-      } else if (g.mode === 'stamp') {
-        $('hud-floor').textContent = '⛩';
-        $('hud-hp').textContent = '❤'.repeat(g.hp) + '♡'.repeat(STAMP_HP - g.hp);
-      } else if (g.mode === 'training') {
-        $('hud-floor').textContent = '🥋';
-        $('hud-hp').textContent = `${g.clearedCount} 問撃破`;
+      const t = TOWERS[g.tower];
+      const hpText = g.mode === 'shinken'
+        ? `🗡 ${g.chain} 問連続`
+        : '❤'.repeat(g.hp) + '♡'.repeat(RUN_HP - g.hp);
+      if (g.tower === 'yomi' || g.tower === 'stamp') {
+        $('hud-floor').textContent = t.emoji;
+        $('hud-hp').textContent = hpText;
+        $('hud-game-score').textContent = g.score;
       } else {
-        $('hud-floor').textContent = '⚡';
-        $('hud-hp').textContent = `${g.chain} 問連続`;
+        $('dojo-icon').textContent = t.emoji;
+        $('dojo-hp').textContent = hpText;
+        $('dojo-score').textContent = g.score;
       }
-      $('hud-game-score').textContent = g.score;
     }
 
-    // ===== モーダル =====
+    function renderStatus() {
+      const { cur } = currentTitle();
+      $('status-badge').textContent = cur.name;
+      const rows = $('status-rows');
+      rows.innerHTML = '';
+      let topStat = null;
+
+      // 忍耐力（試練クリア累計）
+      const allStats = [
+        { icon: '🛡', name: '忍耐力', color: '#2da06a', value: save.dailyCount,
+          src: `今日の試練クリア累計 ${save.dailyCount}回（+1/クリア）`, type: '忍耐型｜毎日つづける求道者' },
+      ];
+      Object.keys(TOWERS).forEach(key => {
+        const t = TOWERS[key];
+        const st = towerStat(key);
+        allStats.push({
+          icon: t.statIcon, name: t.statName, color: t.color, value: st.value,
+          src: `${t.name}　修行★${st.stars}/${maxStarsOf(key)}（=${st.fromStars}）＋真剣勝負 ${st.fromStreak}`,
+          type: t.type,
+        });
+      });
+      let total = 0;
+      allStats.forEach(stat => {
+        total += stat.value;
+        if (stat.value > 0 && (!topStat || stat.value > topStat.value)) topStat = stat;
+        const row = document.createElement('div');
+        row.className = 'status-row';
+        row.innerHTML =
+          `<span class="status-icon">${stat.icon}</span>` +
+          `<span class="status-name">${stat.name}</span>` +
+          `<div class="status-bar-bg"><div class="status-bar-fill" style="width:0%;background:${stat.color}"></div></div>` +
+          `<span class="status-value">${stat.value}</span>`;
+        rows.appendChild(row);
+        const src = document.createElement('div');
+        src.className = 'status-src';
+        src.textContent = stat.src;
+        rows.appendChild(src);
+        requestAnimationFrame(() => {
+          row.querySelector('.status-bar-fill').style.width = Math.min(100, stat.value / 0.6) + '%';
+        });
+      });
+      $('status-power').textContent = total;
+      $('status-type').textContent = topStat ? `あなたは【${topStat.type}】` : 'まだ無属性…修行を始めよう！';
+      showScreen('screen-status');
+    }
+
+    // ============================================================
+    // モーダル・初期化
+    // ============================================================
     function openRules() { $('modal-rules').classList.add('show'); }
     function closeRules() { $('modal-rules').classList.remove('show'); }
 
-    // ===== 初期化 =====
+    function quitToTower() {
+      if (g) clearInterval(g.timerId);
+      $('panel-clear').classList.remove('show');
+      renderTowerMenu(g ? g.tower : currentTower);
+    }
+
     function init() {
       save = loadSave();
+      saveData(STORAGE_KEY, save); // v2形式で保存し直す
       renderStart();
 
-      $('btn-mode-tower').addEventListener('click', () => { renderTower(); showScreen('screen-tower'); });
-      $('btn-mode-daily').addEventListener('click', startDaily);
-      $('btn-mode-training').addEventListener('click', startTraining);
-      $('btn-mode-streak').addEventListener('click', startStreak);
-      $('btn-mode-stamp').addEventListener('click', startStamp);
-      $('btn-mode-kaki').addEventListener('click', () => startDojo('kaki'));
-      $('btn-mode-kana').addEventListener('click', () => startDojo('kana'));
-      $('btn-tower-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
       $('btn-to-status').addEventListener('click', renderStatus);
-      $('btn-status-to-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
+      $('btn-status-to-title').addEventListener('click', renderStart);
+      $('btn-tower-back').addEventListener('click', renderStart);
 
       $('btn-intro-start').addEventListener('click', () => {
         $('panel-intro').classList.remove('show');
-        if (g.mode === 'dojo') beginDojoItem();
-        else beginProblem();
+        beginProblem();
       });
       $('btn-next-problem').addEventListener('click', nextProblem);
       $('btn-stamp-judge').addEventListener('click', judgeStamp);
@@ -1886,24 +1826,10 @@
         $('panel-result').classList.remove('show');
         if (g && g.afterResult) g.afterResult();
       });
-      $('btn-retry').addEventListener('click', () => {
-        if (g.mode === 'tower') startTowerFloor(g.floor);
-        else if (g.mode === 'daily') startDaily();
-        else if (g.mode === 'streak') startStreak();
-        else if (g.mode === 'stamp') startStamp();
-        else if (g.mode === 'dojo') startDojo(g.dojoType);
-        else startTraining();
-      });
-      $('btn-gameover-title').addEventListener('click', () => { renderStart(); showScreen('screen-start'); });
-      $('btn-game-quit').addEventListener('click', () => {
-        if (g) clearInterval(g.timerId);
-        renderStart();
-        showScreen('screen-start');
-      });
-      $('btn-dojo-quit').addEventListener('click', () => {
-        renderStart();
-        showScreen('screen-start');
-      });
+      $('btn-retry').addEventListener('click', () => startRun(g.tower, g.mode, g.stageIdx));
+      $('btn-gameover-title').addEventListener('click', renderStart);
+      $('btn-game-quit').addEventListener('click', quitToTower);
+      $('btn-dojo-quit').addEventListener('click', quitToTower);
       $('btn-rules-start').addEventListener('click', openRules);
       $('btn-rules-game').addEventListener('click', openRules);
       $('btn-rules-dojo').addEventListener('click', openRules);
