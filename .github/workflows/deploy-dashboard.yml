@@ -8,7 +8,8 @@ name: Deploy Sites to GitHub Pages
 #   ダッシュボード: gamigamiigami.github.io/Workspace/
 #   ボドゲ会サイト: gamigamiigami.github.io/Workspace/rough/
 #   品詞パニック: gamigamiigami.github.io/Workspace/hinshi-panic/
-#   返り点クエスト: gamigamiigami.github.io/Workspace/kaeriten-quest/
+#   古典クエスト: gamigamiigami.github.io/Workspace/kaeriten-quest/
+#   計算クエスト: gamigamiigami.github.io/Workspace/keisan-quest/
 
 on:
   push:
@@ -21,6 +22,7 @@ on:
       - "projects/rough/**"
       - "projects/hinshi-panic/**"
       - "projects/kaeriten-quest/**"
+      - "projects/keisan-quest/**"
       - ".github/workflows/deploy-dashboard.yml"
   workflow_dispatch:
 
@@ -47,11 +49,12 @@ jobs:
 
       - name: Build combined site
         run: |
-          mkdir -p site/rough site/hinshi-panic site/kaeriten-quest
+          mkdir -p site/rough site/hinshi-panic site/kaeriten-quest site/keisan-quest
           cp -r projects/rakuda-sensei/dashboard/. site/
           cp -r projects/rough/. site/rough/
           cp -r projects/hinshi-panic/. site/hinshi-panic/
           cp -r projects/kaeriten-quest/. site/kaeriten-quest/
+          cp -r projects/keisan-quest/. site/keisan-quest/
 
       - name: Setup Pages
         uses: actions/configure-pages@v4

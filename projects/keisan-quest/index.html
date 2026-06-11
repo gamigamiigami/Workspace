@@ -1,0 +1,1662 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>計算クエスト〜数のダンジョン〜</title>
+  <style>
+    /* ===== 基本リセット・全体設定 ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      color: #e8f0f8;
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(40, 80, 140, 0.3), transparent 60%),
+        linear-gradient(180deg, #0c1424 0%, #122038 50%, #0a1020 100%);
+      -webkit-user-select: none;
+      user-select: none;
+      touch-action: manipulation;
+      overflow: hidden;
+    }
+    #app { height: 100%; max-width: 768px; margin: 0 auto; display: flex; flex-direction: column; }
+
+    .screen { display: none; flex: 1; min-height: 0; }
+    .screen.active { display: flex; flex-direction: column; }
+
+    button {
+      font-family: inherit;
+      font-size: 16px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      min-width: 44px;
+      min-height: 44px;
+      color: #fff;
+    }
+    button:active { transform: scale(0.96); }
+    .btn-primary {
+      background: linear-gradient(180deg, #3d8bf4, #1d5fc4);
+      color: #f0f6ff;
+      font-size: 18px;
+      font-weight: bold;
+      padding: 13px 40px;
+      box-shadow: 0 4px 16px rgba(61, 139, 244, 0.35);
+      letter-spacing: 2px;
+    }
+    .btn-secondary {
+      background: rgba(232, 240, 248, 0.12);
+      border: 1px solid rgba(232, 240, 248, 0.3);
+      padding: 10px 24px;
+      font-size: 15px;
+    }
+    .btn-small { background: rgba(232, 240, 248, 0.12); font-size: 13px; padding: 6px 12px; min-height: 38px; }
+
+    /* ===== タイトル画面 ===== */
+    #screen-start { align-items: center; justify-content: flex-start; gap: 12px; padding: 24px 16px; text-align: center; overflow-y: auto; }
+    .game-title {
+      font-size: 38px;
+      font-weight: 900;
+      letter-spacing: 5px;
+      color: #6ec1ff;
+      text-shadow: 0 0 30px rgba(110, 193, 255, 0.4), 0 3px 6px rgba(0,0,0,0.6);
+    }
+    .game-subtitle { font-size: 15px; color: #9ab4d0; letter-spacing: 3px; }
+    .title-badge {
+      background: linear-gradient(180deg, rgba(29,95,196,0.45), rgba(29,95,196,0.2));
+      border: 1px solid #3d8bf4;
+      border-radius: 999px;
+      padding: 6px 22px;
+      font-size: 16px;
+      font-weight: bold;
+      color: #bfe0ff;
+      letter-spacing: 2px;
+    }
+    .next-title-hint { font-size: 12px; color: #9ab4d0; }
+    .stats-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .stat-chip {
+      background: rgba(232, 240, 248, 0.07);
+      border: 1px solid rgba(232, 240, 248, 0.18);
+      border-radius: 10px;
+      padding: 6px 14px;
+      font-size: 13px;
+      color: #9ab4d0;
+    }
+    .stat-chip strong { color: #6ec1ff; font-size: 17px; margin-left: 4px; }
+    .group-label { font-size: 14px; font-weight: bold; color: #6ec1ff; letter-spacing: 2px; margin-top: 6px; }
+    .tower-card {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(232,240,248,0.09), rgba(232,240,248,0.04));
+      border: 1px solid rgba(110, 193, 255, 0.35);
+      border-radius: 14px;
+      padding: 12px 16px;
+      cursor: pointer;
+      text-align: left;
+      color: #e8f0f8;
+    }
+    .tower-emoji { font-size: 34px; width: 48px; text-align: center; }
+    .tower-info { flex: 1; }
+    .tower-name { font-size: 17px; font-weight: bold; }
+    .tower-desc { font-size: 12px; color: #9ab4d0; }
+    .tower-stat { font-size: 13px; color: #6ec1ff; font-weight: bold; white-space: nowrap; text-align: right; }
+    .tower-stat small { display: block; color: #9ab4d0; font-weight: normal; }
+
+    /* ===== 塔メニュー ===== */
+    #screen-tower { padding: 20px 16px; overflow-y: auto; align-items: center; gap: 10px; }
+    .tower-title { font-size: 22px; font-weight: 900; color: #6ec1ff; letter-spacing: 4px; margin-bottom: 2px; text-align: center; }
+    .tower-sub { font-size: 13px; color: #9ab4d0; text-align: center; margin-bottom: 6px; }
+    .mode-row {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, rgba(232,240,248,0.1), rgba(232,240,248,0.04));
+      border: 1px solid rgba(110, 193, 255, 0.4);
+      border-radius: 14px;
+      padding: 10px 16px;
+      cursor: pointer;
+      text-align: left;
+      color: #e8f0f8;
+    }
+    .mode-row .m-emoji { font-size: 26px; width: 36px; text-align: center; }
+    .mode-row .m-name { font-size: 16px; font-weight: bold; }
+    .mode-row .m-desc { font-size: 12px; color: #9ab4d0; }
+    .stage-label { font-size: 13px; color: #6ec1ff; font-weight: bold; margin-top: 8px; letter-spacing: 2px; }
+    .floor-card {
+      width: 100%;
+      max-width: 460px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: linear-gradient(180deg, rgba(232,240,248,0.07), rgba(232,240,248,0.03));
+      border: 1px solid rgba(110, 193, 255, 0.3);
+      border-radius: 14px;
+      padding: 10px 16px;
+      cursor: pointer;
+    }
+    .floor-card.locked { opacity: 0.45; cursor: default; }
+    .floor-emoji { font-size: 28px; width: 40px; text-align: center; }
+    .floor-info { flex: 1; text-align: left; }
+    .floor-name { font-size: 15px; font-weight: bold; color: #e8f0f8; }
+    .floor-rule { font-size: 11px; color: #9ab4d0; }
+    .floor-stars { font-size: 16px; color: #ffd86e; letter-spacing: 2px; white-space: nowrap; }
+
+    /* ===== プレイ画面（全塔共通） ===== */
+    #screen-calc { position: relative; }
+    .hud {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(0, 0, 0, 0.35);
+      font-size: 14px;
+    }
+    .hud-floor { font-weight: bold; color: #6ec1ff; white-space: nowrap; }
+    .hud-hp { font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
+    .hud-score { font-weight: 900; color: #ffd86e; font-size: 17px; }
+
+    .enemy-area { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 6px 16px 0; }
+    .enemy-face { font-size: 40px; transition: transform 0.2s; }
+    .enemy-face.hit { animation: enemyHit 0.5s; }
+    @keyframes enemyHit {
+      0% { transform: scale(1) rotate(0); filter: brightness(2); }
+      30% { transform: scale(1.25) rotate(-8deg); }
+      60% { transform: scale(0.9) rotate(6deg); }
+      100% { transform: scale(1) rotate(0); }
+    }
+    .enemy-bar-bg {
+      width: 150px; height: 12px;
+      background: rgba(0,0,0,0.5);
+      border: 1px solid rgba(232,240,248,0.3);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .enemy-bar-fill { height: 100%; background: linear-gradient(90deg, #c0392b, #e74c3c); transition: width 0.4s; }
+    .enemy-label { font-size: 12px; color: #9ab4d0; }
+
+    /* 真剣勝負の残り時間バー */
+    .calc-time-bg {
+      width: 90%;
+      max-width: 360px;
+      height: 10px;
+      margin: 6px auto 0;
+      background: rgba(0, 0, 0, 0.4);
+      border: 1px solid rgba(232, 240, 248, 0.25);
+      border-radius: 5px;
+      overflow: hidden;
+      display: none;
+    }
+    .calc-time-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #1d5fc4, #6ec1ff); }
+    .calc-time-fill.danger { background: linear-gradient(90deg, #c0392b, #e74c3c); }
+
+    .calc-area {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 8px 16px;
+      overflow-y: auto;
+    }
+    .calc-progress { font-size: 13px; color: #9ab4d0; }
+    /* 問題表示（数式は大きく・等幅寄り） */
+    .calc-problem {
+      font-size: 32px;
+      font-weight: 700;
+      color: #f0f6ff;
+      background: rgba(232, 240, 248, 0.07);
+      border: 2px solid rgba(110, 193, 255, 0.4);
+      border-radius: 14px;
+      padding: 14px 22px;
+      text-align: center;
+      max-width: 96%;
+      line-height: 1.4;
+    }
+    .calc-problem small { font-size: 16px; color: #9ab4d0; display: block; }
+    .calc-hint { min-height: 44px; text-align: center; }
+    .hint-text {
+      display: inline-block;
+      font-size: 14px;
+      color: #ffc4b0;
+      background: rgba(196, 70, 46, 0.25);
+      border: 1px solid rgba(196, 70, 46, 0.5);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    /* --- テンキー --- */
+    .key-display {
+      font-size: 30px;
+      font-weight: 900;
+      color: #ffd86e;
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px solid rgba(255, 216, 110, 0.5);
+      border-radius: 10px;
+      min-width: 140px;
+      min-height: 52px;
+      padding: 4px 18px;
+      text-align: center;
+    }
+    .tenkey {
+      display: grid;
+      grid-template-columns: repeat(4, 64px);
+      gap: 7px;
+    }
+    .tenkey button {
+      height: 52px;
+      font-size: 22px;
+      font-weight: bold;
+      background: rgba(232, 240, 248, 0.12);
+      border: 1px solid rgba(232, 240, 248, 0.25);
+    }
+    .tenkey .key-ok { background: linear-gradient(180deg, #3d8bf4, #1d5fc4); grid-row: span 2; height: auto; }
+    .tenkey .key-zero { grid-column: span 2; }
+
+    /* --- 数直線 --- */
+    .nline-wrap { width: 96%; max-width: 520px; padding: 26px 10px 30px; }
+    .nline {
+      position: relative;
+      height: 6px;
+      background: #6ec1ff;
+      border-radius: 3px;
+      cursor: pointer;
+    }
+    .nline .ntick {
+      position: absolute;
+      top: -7px;
+      width: 2px;
+      height: 20px;
+      background: rgba(232, 240, 248, 0.7);
+      transform: translateX(-1px);
+    }
+    .nline .nlabel {
+      position: absolute;
+      top: 18px;
+      transform: translateX(-50%);
+      font-size: 13px;
+      color: #9ab4d0;
+    }
+    .nline .nmark {
+      position: absolute;
+      top: -34px;
+      transform: translateX(-50%);
+      font-size: 26px;
+      pointer-events: none;
+    }
+    .nline-note { text-align: center; font-size: 13px; color: #9ab4d0; margin-top: 34px; }
+
+    /* --- 大小比較 --- */
+    .cmp-row { display: flex; gap: 14px; }
+    .cmp-btn {
+      font-size: 28px;
+      font-weight: 900;
+      padding: 18px 30px;
+      background: rgba(232, 240, 248, 0.1);
+      border: 2px solid rgba(110, 193, 255, 0.5);
+      color: #f0f6ff;
+      min-width: 130px;
+    }
+
+    /* --- 途中式カード --- */
+    .step-list { display: flex; flex-direction: column; gap: 8px; width: 96%; max-width: 440px; }
+    .step-card {
+      position: relative;
+      font-size: 22px;
+      font-weight: 700;
+      padding: 10px 16px;
+      background: rgba(232, 240, 248, 0.1);
+      border: 2px solid rgba(110, 193, 255, 0.45);
+      border-radius: 10px;
+      color: #f0f6ff;
+      text-align: center;
+      cursor: pointer;
+    }
+    .step-card.done {
+      background: linear-gradient(180deg, rgba(61,139,244,0.5), rgba(29,95,196,0.4));
+      border-color: #6ec1ff;
+      cursor: default;
+      animation: cardDone 0.3s;
+    }
+    @keyframes cardDone { 0% { transform: scale(1.06); } 100% { transform: scale(1); } }
+    .step-card .order-badge {
+      position: absolute;
+      left: -9px;
+      top: -9px;
+      width: 22px; height: 22px;
+      background: #e67e22;
+      color: #fff;
+      font-size: 13px;
+      font-weight: bold;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-card.wrong { animation: cardWrong 0.4s; }
+    @keyframes cardWrong {
+      0%, 100% { transform: translateX(0); }
+      25% { transform: translateX(-7px); border-color: #e74c3c; }
+      75% { transform: translateX(7px); border-color: #e74c3c; }
+    }
+    .step-card.found-err {
+      background: rgba(196, 70, 46, 0.35);
+      border-color: #e74c3c;
+      text-decoration: line-through;
+      cursor: default;
+    }
+
+    /* ===== ステータス画面 ===== */
+    #screen-status { overflow-y: auto; }
+    .status-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 12px 16px 20px; }
+    .status-card {
+      width: 100%;
+      max-width: 480px;
+      background: linear-gradient(180deg, rgba(232,240,248,0.09), rgba(232,240,248,0.04));
+      border: 2px solid #3d8bf4;
+      border-radius: 16px;
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .status-type { font-size: 15px; font-weight: bold; color: #ffd86e; }
+    .status-power { font-size: 15px; color: #9ab4d0; margin-bottom: 6px; }
+    .status-power strong { font-size: 28px; color: #6ec1ff; margin-left: 6px; }
+    .status-src { font-size: 11px; color: #9ab4d0; margin-top: 2px; width: 100%; }
+    .status-note { font-size: 12px; color: #9ab4d0; margin-top: 10px; text-align: center; }
+
+    /* ===== パネル ===== */
+    .panel-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(5, 10, 22, 0.85);
+      z-index: 40;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .panel-overlay.show { display: flex; }
+    .panel-card {
+      background: linear-gradient(180deg, #16263e, #101c30);
+      border: 2px solid #3d8bf4;
+      border-radius: 16px;
+      padding: 22px 24px;
+      max-width: 440px;
+      width: 100%;
+      max-height: 86%;
+      overflow-y: auto;
+      text-align: center;
+      animation: panelIn 0.3s;
+    }
+    @keyframes panelIn { from { transform: scale(0.85); opacity: 0; } }
+    .panel-title { font-size: 22px; font-weight: 900; color: #6ec1ff; margin-bottom: 10px; letter-spacing: 2px; }
+    .yomi-text { font-size: 22px; color: #ffd86e; font-weight: bold; margin: 8px 0; }
+    .mean-text { font-size: 14px; color: #9ab4d0; margin-bottom: 12px; white-space: pre-line; }
+    .bonus-text { font-size: 14px; color: #8fdc9a; font-weight: bold; margin-bottom: 12px; }
+    .stars-big { font-size: 34px; color: #ffd86e; letter-spacing: 6px; margin: 8px 0; }
+    .new-record { color: #ffd86e; font-weight: 900; font-size: 16px; margin-bottom: 8px; }
+    .streak-big { font-size: 24px; font-weight: 900; color: #8fdc9a; margin: 6px 0; }
+    .rule-intro { text-align: left; font-size: 14px; color: #c8d8e8; margin: 10px 0; }
+    .rule-intro b { color: #6ec1ff; }
+    .rule-example {
+      background: rgba(232, 240, 248, 0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-top: 8px;
+      font-size: 14px;
+      color: #c8d8e8;
+    }
+
+    /* ===== 計算のコツ（早見表）モーダル ===== */
+    #modal-rules {
+      position: fixed; inset: 0;
+      background: rgba(5, 10, 22, 0.9);
+      z-index: 50;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    #modal-rules.show { display: flex; }
+    .modal-card {
+      background: #16263e;
+      border: 2px solid #3d8bf4;
+      border-radius: 14px;
+      padding: 20px;
+      max-width: 460px;
+      width: 100%;
+      max-height: 82vh;
+      overflow-y: auto;
+    }
+    .modal-card h2 { font-size: 18px; color: #6ec1ff; text-align: center; margin-bottom: 12px; letter-spacing: 3px; }
+    .rule-block { margin: 12px 0; padding: 10px 12px; background: rgba(232,240,248,0.06); border-radius: 10px; }
+    .rule-block h3 { font-size: 15px; color: #ffd86e; margin-bottom: 4px; }
+    .rule-block p { font-size: 13px; color: #c8d8e8; }
+    .modal-close { display: block; margin: 14px auto 0; }
+
+    /* ===== ゲームオーバー ===== */
+    #screen-gameover { align-items: center; justify-content: center; gap: 16px; padding: 24px; text-align: center; }
+    .gameover-title { font-size: 34px; font-weight: 900; color: #e74c3c; letter-spacing: 4px; }
+
+    @media (max-width: 480px) {
+      .game-title { font-size: 30px; }
+      .calc-problem { font-size: 26px; }
+      .tenkey { grid-template-columns: repeat(4, 58px); }
+    }
+  </style>
+</head>
+<body>
+  <main id="app">
+
+    <!-- ===== タイトル画面（数のダンジョン入口） ===== -->
+    <section id="screen-start" class="screen active">
+      <h1 class="game-title">計算クエスト</h1>
+      <p class="game-subtitle">〜 数のダンジョン 〜</p>
+
+      <div class="title-badge" id="player-title">見習い計算士</div>
+      <p class="next-title-hint" id="next-title-hint"></p>
+
+      <div class="stats-row">
+        <span class="stat-chip">総合戦闘力<strong id="stat-power">0</strong></span>
+        <span class="stat-chip">🛡防御力<strong id="stat-bougyo">0</strong></span>
+        <span class="stat-chip">連続修行<strong id="stat-days">0</strong>日🔥</span>
+      </div>
+      <button class="btn-secondary" id="btn-to-status">📊 ステータスを見る</button>
+
+      <p class="group-label">⚔️ 挑む塔・間をえらべ</p>
+      <div id="tower-list" style="display:flex;flex-direction:column;gap:10px;width:100%;align-items:center;"></div>
+
+      <button class="btn-secondary" id="btn-rules-start" style="margin-top:6px">計算のコツ（早見表）</button>
+    </section>
+
+    <!-- ===== 塔メニュー画面 ===== -->
+    <section id="screen-tower" class="screen">
+      <h2 class="tower-title" id="tower-title"></h2>
+      <p class="tower-sub" id="tower-sub"></p>
+      <div id="tower-modes" style="display:flex;flex-direction:column;gap:10px;width:100%;align-items:center;"></div>
+      <p class="stage-label">🏯 修行（段位をクリアして★を集めよ）</p>
+      <div id="stage-list" style="display:flex;flex-direction:column;gap:8px;width:100%;align-items:center;"></div>
+      <button class="btn-secondary" id="btn-tower-back" style="margin:12px 0 20px">ダンジョン入口へ</button>
+    </section>
+
+    <!-- ===== プレイ画面（全塔共通） ===== -->
+    <section id="screen-calc" class="screen">
+      <div class="hud">
+        <span class="hud-floor" id="hud-floor">⚡</span>
+        <span class="hud-hp" id="hud-hp">❤❤❤❤❤</span>
+        <span class="hud-score" id="hud-score">0</span>
+        <button class="btn-small" id="btn-rules-game">コツ</button>
+        <button class="btn-small" id="btn-game-quit">やめる</button>
+      </div>
+      <div class="enemy-area">
+        <span class="enemy-face" id="enemy-face">🤖</span>
+        <div>
+          <div class="enemy-label" id="enemy-label">番人のちから</div>
+          <div class="enemy-bar-bg"><div class="enemy-bar-fill" id="enemy-bar" style="width:100%"></div></div>
+        </div>
+      </div>
+      <div class="calc-time-bg" id="calc-time-bg"><div class="calc-time-fill" id="calc-time-fill"></div></div>
+      <div class="calc-area">
+        <div class="calc-progress" id="calc-progress"></div>
+        <div class="calc-problem" id="calc-problem"></div>
+        <!-- 回答UI（テンキー／数直線／大小比較／途中式カード を切り替え） -->
+        <div id="calc-board" style="display:flex;flex-direction:column;align-items:center;gap:10px;width:100%"></div>
+        <div class="calc-hint"><span class="hint-text" id="calc-hint" style="visibility:hidden"></span></div>
+      </div>
+    </section>
+
+    <!-- ===== ステータス画面 ===== -->
+    <section id="screen-status" class="screen">
+      <h2 class="tower-title" style="margin-top:18px">📊 ステータス</h2>
+      <div class="status-wrap">
+        <div class="status-card">
+          <div class="title-badge" id="status-badge">見習い計算士</div>
+          <div class="status-type" id="status-type"></div>
+          <div class="status-power">総合戦闘力 <strong id="status-power">0</strong></div>
+          <div id="status-rows" style="width:100%"></div>
+          <p class="status-note">修行の★＋真剣勝負の記録＝能力値。試練クリアで防御力+1！</p>
+        </div>
+        <button class="btn-secondary" id="btn-status-to-title">ダンジョン入口へ</button>
+      </div>
+    </section>
+
+    <!-- ===== ゲームオーバー画面 ===== -->
+    <section id="screen-gameover" class="screen">
+      <div class="gameover-title">敗北…</div>
+      <p style="color:#9ab4d0">番人にやられてしまった。<br>「計算のコツ」を見直して再挑戦だ！</p>
+      <p style="color:#9ab4d0">スコア：<strong style="color:#ffd86e;font-size:22px" id="gameover-score">0</strong></p>
+      <button class="btn-primary" id="btn-retry">再挑戦</button>
+      <button class="btn-secondary" id="btn-gameover-title">ダンジョン入口へ</button>
+    </section>
+  </main>
+
+  <!-- ===== 共有パネル ===== -->
+  <div class="panel-overlay" id="panel-clear">
+    <div class="panel-card">
+      <div class="panel-title" id="clear-title">⚔️ 一撃！</div>
+      <div class="yomi-text" id="clear-answer"></div>
+      <div class="mean-text" id="clear-exp"></div>
+      <div class="bonus-text" id="clear-bonus"></div>
+      <button class="btn-primary" id="btn-next-problem">つぎへ</button>
+    </div>
+  </div>
+  <div class="panel-overlay" id="panel-intro">
+    <div class="panel-card">
+      <div class="panel-title" id="intro-title"></div>
+      <div class="rule-intro" id="intro-body"></div>
+      <button class="btn-primary" id="btn-intro-start">挑戦！</button>
+    </div>
+  </div>
+  <div class="panel-overlay" id="panel-result">
+    <div class="panel-card">
+      <div class="panel-title" id="result-title"></div>
+      <div class="stars-big" id="result-stars"></div>
+      <div class="streak-big" id="result-streak" style="display:none"></div>
+      <div class="new-record" id="result-record" style="display:none">🎉 自己ベスト更新！</div>
+      <div class="mean-text" id="result-detail"></div>
+      <button class="btn-primary" id="btn-result-next">すすむ</button>
+    </div>
+  </div>
+
+  <!-- ===== 計算のコツ（早見表） ===== -->
+  <div id="modal-rules">
+    <div class="modal-card">
+      <h2>計算のコツ</h2>
+      <div class="rule-block">
+        <h3>符号のルール</h3>
+        <p>同符号のかけ算・わり算 → ＋／異符号 → −。<br>（−）×（−）＝＋、（−）×（＋）＝−<br>累乗は注意：(−3)²＝9、−3²＝−9</p>
+      </div>
+      <div class="rule-block">
+        <h3>移項</h3>
+        <p>＝をまたいで項を移すと<b>符号が変わる</b>。<br>2x＋3＝11 → 2x＝11<b>−3</b></p>
+      </div>
+      <div class="rule-block">
+        <h3>分配法則・乗法公式</h3>
+        <p>a(b＋c)＝ab＋ac<br>(x＋a)(x＋b)＝x²＋(a＋b)x＋ab<br>(x＋a)²＝x²＋2ax＋a²（真ん中を忘れない！）<br>(x＋a)(x−a)＝x²−a²</p>
+      </div>
+      <div class="rule-block">
+        <h3>因数分解</h3>
+        <p>x²＋◯x＋△ →「かけて△・たして◯」の2数をさがす</p>
+      </div>
+      <div class="rule-block">
+        <h3>平方根</h3>
+        <p>√a×√b＝√(ab)、√(a²b)＝a√b<br>例：√12＝√(4×3)＝2√3<br>√10は「3²=9 と 4²=16 の間」→ 3.1ぐらい</p>
+      </div>
+      <div class="rule-block">
+        <h3>二次方程式</h3>
+        <p>①因数分解 →（　）（　）＝0 ②x²＝k → x＝±√k<br>③解の公式 x＝(−b±√(b²−4ac))/2a</p>
+      </div>
+      <button class="btn-secondary modal-close" id="btn-rules-close">とじる</button>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ============================================================
+    // 乱数・ユーティリティ
+    // ============================================================
+    function $(id) { return document.getElementById(id); }
+    function saveData(key, value) {
+      try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+    function loadData(key, defaultValue) {
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      } catch (e) { return defaultValue; }
+    }
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+    function seededRandom(seedStr) {
+      let h = 1779033703;
+      for (let i = 0; i < seedStr.length; i++) {
+        h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+        h = (h << 13) | (h >>> 19);
+      }
+      return function () {
+        h = Math.imul(h ^ (h >>> 16), 2246822507);
+        h = Math.imul(h ^ (h >>> 13), 3266489909);
+        h ^= h >>> 16;
+        return (h >>> 0) / 4294967296;
+      };
+    }
+    function dateStr(offsetDays) {
+      const d = new Date(Date.now() + (offsetDays || 0) * 86400000);
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+    // rng（0〜1未満の乱数関数）から a〜b の整数を作る
+    function ri(rng, a, b) { return a + Math.floor(rng() * (b - a + 1)); }
+    function riNZ(rng, a, b) { let v = 0; while (v === 0) v = ri(rng, a, b); return v; } // 0以外
+    function pick(rng, arr) { return arr[Math.floor(rng() * arr.length)]; }
+    // 負の数はかっこ付きで表示（−7 → (−7)）
+    function num(n, first) {
+      const s = String(n).replace('-', '−');
+      return (n < 0 && !first) ? `(${s})` : s;
+    }
+    function fmt(n) { return String(n).replace('-', '−'); }
+    // 係数付きのx表示（1x→x、係数の絶対値表示用）
+    function xa(absVal) { return (Math.abs(absVal) === 1 ? '' : Math.abs(absVal)) + 'x'; }
+
+    // ============================================================
+    // 問題生成器（kind: key=テンキー / line=数直線 / cmp=大小 / order=並べかえ / err=まちがい探し）
+    // ============================================================
+    const HINT = {
+      sign: '符号に注意！（−）×（−）＝＋、（−）×（＋）＝−',
+      add: '正負のたし算は「数直線で移動」をイメージ！',
+      ikou: '移項したら符号が変わる！',
+      bunpai: '分配法則：かっこの中の全部にかける！',
+      kojo: '乗法公式：(x＋a)(x＋b)＝x²＋(a＋b)x＋ab',
+      sqrt: '√の中を「○²×残り」に分解しよう（√12＝√4×√3＝2√3）',
+      jiji: 'まず因数分解できないか考える！「かけて△・たして◯」',
+      pow: '(−3)²＝9 だけど −3²＝−9。かっこの位置に注意！',
+    };
+
+    // --- ⚡ 暗算の塔 ---
+    const GEN_ANZAN = [
+      // 一の段：正負のたし算ひき算
+      rng => {
+        const a = riNZ(rng, -9, 9), b = riNZ(rng, -9, 9);
+        const op = pick(rng, ['+', '-']);
+        const ans = op === '+' ? a + b : a - b;
+        return { kind: 'key', q: `${num(a, true)} ${op === '+' ? '＋' : '−'} ${num(b)}`, answer: ans,
+          hint: HINT.add, exp: `${num(a, true)} ${op === '+' ? '＋' : '−'} ${num(b)} ＝ ${fmt(ans)}` };
+      },
+      // 二の段：正負のかけ算わり算
+      rng => {
+        if (rng() < 0.5) {
+          const a = riNZ(rng, -9, 9), b = riNZ(rng, -9, 9);
+          return { kind: 'key', q: `${num(a, true)} × ${num(b)}`, answer: a * b, hint: HINT.sign,
+            exp: `同符号なら＋、異符号なら−　答え ${fmt(a * b)}` };
+        }
+        const b = riNZ(rng, -9, 9), c = riNZ(rng, -9, 9), a = b * c;
+        return { kind: 'key', q: `${num(a, true)} ÷ ${num(b)}`, answer: c, hint: HINT.sign,
+          exp: `${num(a, true)} ÷ ${num(b)} ＝ ${fmt(c)}` };
+      },
+      // 三の段：四則混合・累乗
+      rng => {
+        const t = ri(rng, 0, 2);
+        if (t === 0) {
+          const a = ri(rng, 2, 6), neg = rng() < 0.5;
+          return neg
+            ? { kind: 'key', q: `(−${a})²`, answer: a * a, hint: HINT.pow, exp: `(−${a})²＝(−${a})×(−${a})＝${a * a}` }
+            : { kind: 'key', q: `−${a}²`, answer: -a * a, hint: HINT.pow, exp: `−${a}²＝−(${a}×${a})＝−${a * a}` };
+        }
+        if (t === 1) {
+          const a = ri(rng, -5, 8), b = riNZ(rng, -4, 4), c = riNZ(rng, -4, 4);
+          return { kind: 'key', q: `${num(a, true)} ＋ ${num(b)} × ${num(c)}`, answer: a + b * c,
+            hint: 'かけ算が先！たし算はあと', exp: `かけ算が先：${num(b, true)}×${num(c)}＝${fmt(b * c)}　→ ${fmt(a + b * c)}` };
+        }
+        const b = riNZ(rng, -4, 4), q2 = riNZ(rng, -5, 5), a = b * q2, c = riNZ(rng, -5, 5);
+        return { kind: 'key', q: `${num(a, true)} ÷ ${num(b)} − ${num(c)}`, answer: q2 - c,
+          hint: 'わり算が先！', exp: `わり算が先：${fmt(q2)}　→ ${fmt(q2)}−${num(c)}＝${fmt(q2 - c)}` };
+      },
+      // 四の段：分配法則・乗法公式の暗算
+      rng => {
+        const t = ri(rng, 0, 2);
+        if (t === 0) {
+          const base = pick(rng, [98, 99, 101, 102]), c = ri(rng, 3, 9);
+          return { kind: 'key', q: `${base} × ${c}`, answer: base * c, hint: HINT.bunpai,
+            exp: `${base}＝${base < 100 ? '100−' + (100 - base) : '100＋' + (base - 100)} とみて分配法則！ ＝ ${base * c}` };
+        }
+        if (t === 1) {
+          const a = riNZ(rng, -6, 6), b = riNZ(rng, -6, 6);
+          return { kind: 'key', q: `(x ${a < 0 ? '−' : '＋'} ${Math.abs(a)})(x ${b < 0 ? '−' : '＋'} ${Math.abs(b)})<small>x の係数は？</small>`,
+            answer: a + b, hint: HINT.kojo, exp: `x の係数＝たして ${fmt(a)}＋${num(b)}＝${fmt(a + b)}` };
+        }
+        const a = riNZ(rng, -6, 6);
+        return { kind: 'key', q: `(x ${a < 0 ? '−' : '＋'} ${Math.abs(a)})²<small>定数項は？</small>`, answer: a * a,
+          hint: HINT.kojo, exp: `定数項＝${num(a, true)}²＝${a * a}` };
+      },
+      // 五の段：平方根の暗算
+      rng => {
+        const t = ri(rng, 0, 2);
+        if (t === 0) {
+          const n = ri(rng, 2, 12);
+          return { kind: 'key', q: `√${n * n}`, answer: n, hint: HINT.sqrt, exp: `√${n * n}＝${n}（${n}²＝${n * n}）` };
+        }
+        if (t === 1) {
+          const n = ri(rng, 2, 6), a = pick(rng, [2, 3, 5]);
+          return { kind: 'key', q: `√${a} × √${a * n * n}`, answer: a * n, hint: HINT.sqrt,
+            exp: `√${a}×√${a * n * n}＝√${a * a * n * n}＝${a * n}` };
+        }
+        const n = ri(rng, 2, 9);
+        return { kind: 'key', q: `(√${n})²`, answer: n, hint: HINT.sqrt, exp: `(√a)²＝a なので ${n}` };
+      },
+    ];
+
+    // --- 📏 数直線の間 ---
+    const GEN_LINE = [
+      // 一の段：たし算ひき算の位置
+      rng => {
+        const a = riNZ(rng, -8, 8), b = riNZ(rng, -8, 8);
+        const op = pick(rng, ['+', '-']);
+        const v = op === '+' ? a + b : a - b;
+        if (Math.abs(v) > 10) return GEN_LINE[0](rng);
+        return { kind: 'line', q: `${num(a, true)} ${op === '+' ? '＋' : '−'} ${num(b)} はどのへん？`,
+          value: v, min: -10, max: 10, tol: 0.5, hint: HINT.add, exp: `答えは ${fmt(v)}` };
+      },
+      // 二の段：かけ算わり算の位置
+      rng => {
+        const a = riNZ(rng, -5, 5), b = riNZ(rng, -4, 4), v = a * b;
+        if (Math.abs(v) > 20) return GEN_LINE[1](rng);
+        return { kind: 'line', q: `${num(a, true)} × ${num(b)} はどのへん？`,
+          value: v, min: -20, max: 20, tol: 1, hint: HINT.sign, exp: `答えは ${fmt(v)}` };
+      },
+      // 三の段：分数・小数の大小
+      rng => {
+        const pairs = [
+          ['2/3', 2 / 3, '0.6', 0.6], ['3/4', 0.75, '0.8', 0.8], ['1/2', 0.5, '0.45', 0.45],
+          ['4/5', 0.8, '0.78', 0.78], ['−1/2', -0.5, '−0.4', -0.4], ['1/3', 1 / 3, '0.35', 0.35],
+          ['5/8', 0.625, '0.65', 0.65], ['−2/3', -2 / 3, '−0.7', -0.7],
+        ];
+        const p = pick(rng, pairs);
+        return { kind: 'cmp', q: 'どっちが大きい？', a: p[0], b: p[2], aVal: p[1], bVal: p[3],
+          hint: '分数は小数に直して比べよう（分子÷分母）', exp: `${p[0]}＝${(Math.round(p[1] * 100) / 100)} なので ${p[1] > p[3] ? p[0] : p[2]} のほうが大きい` };
+      },
+      // 四の段：√の位置・大小
+      rng => {
+        if (rng() < 0.55) {
+          const n = pick(rng, [2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 60, 80]);
+          return { kind: 'line', q: `√${n} はどのへん？`, value: Math.sqrt(n), min: 0, max: 10, tol: 0.5,
+            hint: '近くの平方数ではさもう（9＜10＜16 → √10は3と4の間）',
+            exp: `√${n} ≒ ${Math.sqrt(n).toFixed(2)}` };
+        }
+        const n = pick(rng, [2, 3, 5, 6, 7, 8, 10]), d = (Math.sqrt(n) + (rng() < 0.5 ? 0.2 : -0.2));
+        const dv = Math.round(d * 10) / 10;
+        return { kind: 'cmp', q: 'どっちが大きい？', a: `√${n}`, b: String(dv), aVal: Math.sqrt(n), bVal: dv,
+          hint: `${dv}²＝${Math.round(dv * dv * 100) / 100} と ${n} を比べよう`,
+          exp: `√${n} ≒ ${Math.sqrt(n).toFixed(2)} なので ${Math.sqrt(n) > dv ? `√${n}` : dv} のほうが大きい` };
+      },
+    ];
+
+    // --- 🧱 基礎の塔 ---
+    const GEN_KISO = [
+      // 一の段：正負の数の四則
+      rng => GEN_ANZAN[ri(rng, 0, 1)](rng),
+      // 二の段：文字式の計算
+      rng => {
+        if (rng() < 0.5) {
+          const a = riNZ(rng, -9, 9), b = riNZ(rng, -9, 9);
+          if (a + b === 0) return GEN_KISO[1](rng);
+          return { kind: 'key', q: `${a === 1 ? '' : a === -1 ? '−' : fmt(a)}x ${b < 0 ? '−' : '＋'} ${xa(b)} ＝ □x<small>□に入る数は？</small>`,
+            answer: a + b, hint: '係数どうしを計算！', exp: `${fmt(a)}＋${num(b)}＝${fmt(a + b)} なので ${fmt(a + b)}x` };
+        }
+        const a = riNZ(rng, -5, 5), b = riNZ(rng, 2, 9), c = riNZ(rng, -6, 6);
+        return { kind: 'key', q: `${num(a, true)}(${b}x ${c < 0 ? '−' : '＋'} ${Math.abs(c)})<small>定数項は？</small>`,
+          answer: a * c, hint: HINT.bunpai, exp: `${num(a, true)}×${num(c)}＝${fmt(a * c)}` };
+      },
+      // 三の段：一次方程式
+      rng => {
+        const x = riNZ(rng, -9, 9), a = riNZ(rng, 2, 6), b = riNZ(rng, -9, 9);
+        return { kind: 'key', q: `${a}x ${b < 0 ? '−' : '＋'} ${Math.abs(b)} ＝ ${fmt(a * x + b)}<small>x ＝ ？</small>`,
+          answer: x, hint: HINT.ikou, exp: `${a}x＝${fmt(a * x + b)}−${num(b)}＝${fmt(a * x)}　→ x＝${fmt(x)}` };
+      },
+      // 四の段：単項式・多項式（中2）
+      rng => {
+        if (rng() < 0.5) {
+          const a = riNZ(rng, 2, 6), b = riNZ(rng, 2, 4), c = a * b;
+          return { kind: 'key', q: `${c}x²y ÷ ${a}xy ＝ □x<small>□に入る数は？</small>`, answer: b,
+            hint: '係数どうし・文字どうしで約分！', exp: `${c}÷${a}＝${b}、x²y÷xy＝x　→ ${b}x` };
+        }
+        const a = riNZ(rng, -6, 6), b = riNZ(rng, -6, 6);
+        if (a - b === 0) return GEN_KISO[3](rng);
+        return { kind: 'key', q: `(3x ${a < 0 ? '−' : '＋'} ${Math.abs(a)}y) − (x ${b < 0 ? '−' : '＋'} ${Math.abs(b)}y)<small>y の係数は？</small>`,
+          answer: a - b, hint: 'うしろのかっこは全部符号が変わる！', exp: `${fmt(a)}−${num(b)}＝${fmt(a - b)}` };
+      },
+      // 五の段：連立方程式
+      rng => {
+        const x = riNZ(rng, -6, 6), y = riNZ(rng, -6, 6);
+        const s = x + y, d = x - y;
+        const ask = rng() < 0.5;
+        return { kind: 'key', q: `x＋y＝${fmt(s)}，x−y＝${fmt(d)}<small>${ask ? 'x' : 'y'} ＝ ？</small>`,
+          answer: ask ? x : y, hint: '2つの式をたすと y が消える！（加減法）',
+          exp: `2式をたす→ 2x＝${fmt(2 * x)} → x＝${fmt(x)}、y＝${fmt(y)}` };
+      },
+      // 六の段：展開・乗法公式（中3）
+      rng => {
+        const a = riNZ(rng, -7, 7), b = riNZ(rng, -7, 7);
+        const ask = rng() < 0.5;
+        if (ask && a + b === 0) return GEN_KISO[5](rng);
+        return { kind: 'key',
+          q: `(x ${a < 0 ? '−' : '＋'} ${Math.abs(a)})(x ${b < 0 ? '−' : '＋'} ${Math.abs(b)})<small>${ask ? 'x の係数' : '定数項'}は？</small>`,
+          answer: ask ? a + b : a * b, hint: HINT.kojo,
+          exp: `x の係数＝たして${fmt(a + b)}、定数項＝かけて${fmt(a * b)}` };
+      },
+      // 七の段：因数分解
+      rng => {
+        const a = riNZ(rng, -6, 6), b = riNZ(rng, -6, 6);
+        if (a === b || a + b === 0) return GEN_KISO[6](rng);
+        const p = a + b, q2 = a * b;
+        return { kind: 'key',
+          q: `x² ${p < 0 ? '−' : '＋'} ${xa(p)} ${q2 < 0 ? '−' : '＋'} ${Math.abs(q2)} ＝ (x ${a < 0 ? '−' : '＋'} ${Math.abs(a)})(x ＋ □)<small>□に入る数は？（負の数もOK）</small>`,
+          answer: b, hint: HINT.jiji, exp: `かけて${fmt(q2)}・たして${fmt(p)} → ${fmt(a)} と ${fmt(b)}` };
+      },
+      // 八の段：平方根の計算
+      rng => {
+        const t = ri(rng, 0, 1);
+        if (t === 0) {
+          const a = ri(rng, 2, 5), b = pick(rng, [2, 3, 5, 7]);
+          return { kind: 'key', q: `√${a * a * b} ＝ □√${b}<small>□に入る数は？</small>`, answer: a,
+            hint: HINT.sqrt, exp: `√${a * a * b}＝√(${a * a}×${b})＝${a}√${b}` };
+        }
+        const a = pick(rng, [2, 3, 5]), n = ri(rng, 2, 5);
+        return { kind: 'key', q: `√${a * n * n} × √${a}<small>答えは？</small>`, answer: a * n,
+          hint: HINT.sqrt, exp: `√${a * n * n}×√${a}＝√${a * a * n * n}＝${a * n}` };
+      },
+      // 九の段（ボス）：二次方程式
+      rng => {
+        const t = ri(rng, 0, 1);
+        if (t === 0) {
+          const a = riNZ(rng, -6, 6), b = riNZ(rng, -6, 6);
+          if (a === b || a + b === 0) return GEN_KISO[8](rng);
+          const big = Math.max(-a, -b), p = a + b, q2 = a * b;
+          return { kind: 'key',
+            q: `x² ${p < 0 ? '−' : '＋'} ${xa(p)} ${q2 < 0 ? '−' : '＋'} ${Math.abs(q2)} ＝ 0<small>大きいほうの解は？</small>`,
+            answer: big, hint: HINT.jiji,
+            exp: `(x${a < 0 ? '−' : '＋'}${Math.abs(a)})(x${b < 0 ? '−' : '＋'}${Math.abs(b)})＝0 → x＝${fmt(-a)}，${fmt(-b)}` };
+        }
+        const n = ri(rng, 2, 9);
+        return { kind: 'key', q: `x² ＝ ${n * n}<small>正のほうの解は？</small>`, answer: n,
+          hint: 'x²＝k なら x＝±√k', exp: `x＝±${n}（正のほうは ${n}）` };
+      },
+    ];
+
+    // --- 📝 途中式の間（手作りデータ） ---
+    // order: 最初の式を見て、続く途中式カードを正しい順にタップ
+    // err: まちがっている行を1つタップ
+    const TOCHU = [
+      // 一の段：一次方程式
+      { stage: 0, kind: 'order', q: '2x＋3＝11', steps: ['2x＝11−3', '2x＝8', 'x＝4'],
+        exp: '移項（符号が変わる）→ 計算 → 両辺を2でわる', hint: HINT.ikou },
+      { stage: 0, kind: 'order', q: '5x−4＝3x＋6', steps: ['5x−3x＝6＋4', '2x＝10', 'x＝5'],
+        exp: 'x の項は左へ、数の項は右へ移項！', hint: HINT.ikou },
+      { stage: 0, kind: 'err', q: '3x＋5＝20 を解く', lines: ['3x＝20＋5', '3x＝25', 'x＝25/3'], wrongIdx: 0,
+        exp: '移項したら符号が変わる！正しくは 3x＝20−5＝15 → x＝5', hint: HINT.ikou },
+      { stage: 0, kind: 'order', q: 'x/2 ＋ 1 ＝ 4', steps: ['x/2＝3', 'x＝6'],
+        exp: '1を移項してから、両辺に2をかける', hint: HINT.ikou },
+      // 二の段：連立方程式
+      { stage: 1, kind: 'order', q: 'x＋y＝7，x−y＝3', steps: ['2x＝10（2式をたす）', 'x＝5', '5＋y＝7', 'y＝2'],
+        exp: '加減法：たすと y が消える！', hint: '加減法＝そろっている文字を消す' },
+      { stage: 1, kind: 'err', q: '2x＋y＝8，x＝y＋1（代入法）', lines: ['2(y＋1)＋y＝8', '2y＋1＋y＝8', '3y＝7', 'y＝7/3'], wrongIdx: 1,
+        exp: '分配し忘れ！2(y＋1)＝2y＋2 → 3y＝6 → y＝2', hint: HINT.bunpai },
+      { stage: 1, kind: 'order', q: '3x＋2y＝12，x−2y＝4', steps: ['4x＝16（2式をたす）', 'x＝4', '4−2y＝4', 'y＝0'],
+        exp: '2y と −2y がそろっているので、たすだけで消える', hint: '加減法＝そろっている文字を消す' },
+      // 三の段：展開・因数分解
+      { stage: 2, kind: 'order', q: '(x＋2)(x＋5) を展開', steps: ['x²＋5x＋2x＋10', 'x²＋7x＋10'],
+        exp: '4つの積を作ってから同類項をまとめる', hint: HINT.kojo },
+      { stage: 2, kind: 'err', q: '(x＋3)² を展開', lines: ['x²＋9'], wrongIdx: 0,
+        exp: '真ん中の 2ab を忘れない！(x＋3)²＝x²＋6x＋9', hint: '(a＋b)²＝a²＋2ab＋b²' },
+      { stage: 2, kind: 'order', q: 'x²＋8x＋15 を因数分解', steps: ['かけて15・たして8 → 3と5', '(x＋3)(x＋5)'],
+        exp: '「かけて定数項・たしてxの係数」の2数さがし', hint: HINT.jiji },
+      { stage: 2, kind: 'order', q: 'x²−9 を因数分解', steps: ['x²−3²', '(x＋3)(x−3)'],
+        exp: '2乗の差は和と差の積！a²−b²＝(a＋b)(a−b)', hint: 'a²−b²＝(a＋b)(a−b)' },
+      // 四の段：二次方程式
+      { stage: 3, kind: 'order', q: 'x²−5x＋6＝0', steps: ['(x−2)(x−3)＝0', 'x−2＝0 または x−3＝0', 'x＝2，3'],
+        exp: 'まず因数分解！積が0なら、どちらかが0', hint: HINT.jiji },
+      { stage: 3, kind: 'order', q: 'x²＝18', steps: ['x＝±√18', 'x＝±3√2'],
+        exp: 'x²＝k → x＝±√k。√18は3√2に直す', hint: HINT.sqrt },
+      { stage: 3, kind: 'err', q: 'x²−4x−5＝0 を解く', lines: ['(x−5)(x＋1)＝0', 'x＝−5，1'], wrongIdx: 1,
+        exp: '符号が逆！x−5＝0 なら x＝5。正しくは x＝5，−1', hint: '（　）＝0 になる x を考える' },
+      { stage: 3, kind: 'order', q: 'x²＋6x＋2＝0（解の公式）',
+        steps: ['x＝(−6±√(36−8))/2', 'x＝(−6±√28)/2', 'x＝(−6±2√7)/2', 'x＝−3±√7'],
+        exp: '解の公式 → √の中を計算 → √を簡単に → 約分', hint: 'x＝(−b±√(b²−4ac))/2a' },
+    ];
+
+    // ============================================================
+    // 塔・間の定義
+    // ============================================================
+    const TOWERS = {
+      anzan: { emoji: '⚡', name: '暗算の塔', desc: 'フラッシュ暗算で瞬殺せよ', statIcon: '⚔️', statName: '攻撃力', color: '#e2533d',
+               type: '攻撃型｜数を斬る剣士', gens: GEN_ANZAN,
+               stages: ['一の段・正負のたし算ひき算', '二の段・かけ算わり算（符号判定）', '三の段・四則混合と累乗', '四の段・分配法則の暗算ワザ', '五の段・平方根の暗算'] },
+      line:  { emoji: '📏', name: '数直線の間', desc: '答えのありかを感覚で当てろ', statIcon: '💫', statName: '直感力', color: '#9b59b6',
+               type: '直感型｜数の気配を読む占星術師', gens: GEN_LINE,
+               stages: ['一の段・たし算ひき算の位置', '二の段・かけ算わり算の位置', '三の段・分数と小数の大小', '四の段・√のありかを探せ'] },
+      kiso:  { emoji: '🧱', name: '基礎の塔', desc: '中1〜中3の計算を完全制覇', statIcon: '💪', statName: '体力', color: '#27ae60',
+               type: '体力型｜鍛え抜かれた計算僧兵', gens: GEN_KISO,
+               stages: ['一の段・正負の数の四則', '二の段・文字式の計算', '三の段・一次方程式', '四の段・単項式と多項式', '五の段・連立方程式',
+                        '六の段・展開と乗法公式', '七の段・因数分解', '八の段・平方根の計算', '九の段・二次方程式（ボス）'] },
+      tochu: { emoji: '📝', name: '途中式の間', desc: '解答の道筋を組み立てろ', statIcon: '📖', statName: '知力', color: '#1f9bb0',
+               type: '知力型｜道筋を見抜く賢者', gens: null,
+               stages: ['一の段・一次方程式の道筋', '二の段・連立方程式の道筋', '三の段・展開と因数分解の道筋', '四の段・二次方程式の道筋'] },
+    };
+    const MODES = {
+      shugyo:  { emoji: '🏯', name: '修行' },
+      shiren:  { emoji: '📅', name: '今日の試練' },
+      shinken: { emoji: '🗡', name: '真剣勝負' },
+    };
+    const SHUGYO_FULL = 30;
+    const RUN_HP = 5;
+    const SHUGYO_COUNT = 5;  // 修行1段の問題数
+    // 真剣勝負：1問あたりの制限時間（クリアごとに7%短縮）
+    const SHINKEN_TIME = {
+      anzan: { start: 8000, min: 2500 },
+      line:  { start: 9000, min: 3000 },
+      kiso:  { start: 14000, min: 5000 },
+      tochu: { start: 16000, min: 6000 },
+    };
+    const SHINKEN_DECAY = 0.93;
+    const SPEED_LIMIT_MS = 25000;
+
+    const STORAGE_KEY = 'keisan-quest-save';
+    const TITLES = [
+      { power: 0,   name: '見習い計算士' },
+      { power: 40,  name: '計算士' },
+      { power: 90,  name: '数の剣士' },
+      { power: 150, name: '計算マスター' },
+      { power: 220, name: '数式の達人' },
+      { power: 300, name: '数学王' },
+    ];
+
+    // ============================================================
+    // セーブ
+    // ============================================================
+    function defaultSave() {
+      return {
+        v: 1,
+        towers: {
+          anzan: { stars: [], streakBest: 0 },
+          line:  { stars: [], streakBest: 0 },
+          kiso:  { stars: [], streakBest: 0 },
+          tochu: { stars: [], streakBest: 0 },
+        },
+        dailyCount: 0,
+        dailyDone: {},
+        lastDailyDay: '', dayStreak: 0,
+      };
+    }
+    function loadSave() {
+      const old = loadData(STORAGE_KEY, null);
+      const s = defaultSave();
+      if (old && old.towers) {
+        Object.keys(s.towers).forEach(k => {
+          s.towers[k] = Object.assign(s.towers[k], (old.towers || {})[k] || {});
+        });
+        s.dailyCount = old.dailyCount || 0;
+        s.dailyDone = old.dailyDone || {};
+        s.lastDailyDay = old.lastDailyDay || '';
+        s.dayStreak = old.dayStreak || 0;
+      }
+      return s;
+    }
+    let save = null;
+    let g = null;
+
+    // ============================================================
+    // 問題リスト生成
+    // ============================================================
+    function genProblems(towerKey, stageIdx, count, rng) {
+      const t = TOWERS[towerKey];
+      const r = rng || Math.random;
+      const list = [];
+      for (let i = 0; i < count; i++) {
+        const gi = stageIdx === null ? Math.floor(r() * t.gens.length) : stageIdx;
+        list.push(t.gens[gi](r));
+      }
+      return list;
+    }
+    function buildList(towerKey, mode, stageIdx) {
+      if (towerKey === 'tochu') {
+        if (mode === 'shugyo') return shuffle(TOCHU.filter(p => p.stage === stageIdx));
+        const rng = seededRandom(`keisan-tochu-${dateStr()}`);
+        if (mode === 'shiren') {
+          const arr = [...TOCHU];
+          for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(rng() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+          }
+          return arr.slice(0, 5);
+        }
+        return shuffle(TOCHU); // 真剣勝負（使い切ったら継ぎ足し）
+      }
+      if (mode === 'shugyo') return genProblems(towerKey, stageIdx, SHUGYO_COUNT);
+      if (mode === 'shiren') return genProblems(towerKey, null, 5, seededRandom(`keisan-${towerKey}-${dateStr()}`));
+      return genProblems(towerKey, null, 40); // 真剣勝負
+    }
+
+    // ============================================================
+    // ステータス
+    // ============================================================
+    function maxStarsOf(towerKey) { return TOWERS[towerKey].stages.length * 3; }
+    function towerStat(towerKey) {
+      const t = save.towers[towerKey];
+      const stars = t.stars.reduce((sum, v) => sum + (v || 0), 0);
+      const fromStars = Math.round(stars * SHUGYO_FULL / maxStarsOf(towerKey));
+      return { stars, fromStars, fromStreak: t.streakBest, value: fromStars + t.streakBest };
+    }
+    function totalPower() {
+      let total = save.dailyCount;
+      Object.keys(TOWERS).forEach(k => { total += towerStat(k).value; });
+      return total;
+    }
+    function currentTitle() {
+      const power = totalPower();
+      let cur = TITLES[0], next = null;
+      for (const t of TITLES) {
+        if (power >= t.power) cur = t;
+        else { next = t; break; }
+      }
+      return { cur, next, power };
+    }
+
+    // ============================================================
+    // 画面
+    // ============================================================
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    function renderStart() {
+      const { cur, next, power } = currentTitle();
+      $('player-title').textContent = cur.name;
+      $('next-title-hint').textContent = next
+        ? `次の称号「${next.name}」まで 戦闘力あと${next.power - power}`
+        : '最高位に到達！';
+      $('stat-power').textContent = power;
+      $('stat-bougyo').textContent = save.dailyCount;
+      $('stat-days').textContent = save.dayStreak;
+
+      const list = $('tower-list');
+      list.innerHTML = '';
+      Object.keys(TOWERS).forEach(key => {
+        const t = TOWERS[key];
+        const st = towerStat(key);
+        const doneToday = save.dailyDone[key] === dateStr();
+        const card = document.createElement('button');
+        card.className = 'tower-card';
+        card.innerHTML =
+          `<span class="tower-emoji">${t.emoji}</span>` +
+          `<span class="tower-info"><span class="tower-name">${t.name}</span><br>` +
+          `<span class="tower-desc">${t.desc}　${doneToday ? '📅済' : ''}</span></span>` +
+          `<span class="tower-stat">${t.statIcon}${t.statName} ${st.value}<small>★${st.stars}/${maxStarsOf(key)}・🗡${st.fromStreak}</small></span>`;
+        card.addEventListener('click', () => renderTowerMenu(key));
+        list.appendChild(card);
+      });
+      showScreen('screen-start');
+    }
+
+    let currentTower = 'anzan';
+    function renderTowerMenu(towerKey) {
+      currentTower = towerKey;
+      const t = TOWERS[towerKey];
+      const tSave = save.towers[towerKey];
+      $('tower-title').textContent = `${t.emoji} ${t.name}`;
+      $('tower-sub').textContent = `${t.desc}　｜　${t.statIcon}${t.statName} ${towerStat(towerKey).value}`;
+
+      const modes = $('tower-modes');
+      modes.innerHTML = '';
+      const doneToday = save.dailyDone[towerKey] === dateStr();
+      const shiren = document.createElement('button');
+      shiren.className = 'mode-row';
+      shiren.innerHTML =
+        `<span class="m-emoji">📅</span><span><span class="m-name">今日の試練</span><br>` +
+        `<span class="m-desc">${doneToday ? '本日クリア済み！（再挑戦OK）' : '日替わり5問。クリアで🛡防御力+1！'}</span></span>`;
+      shiren.addEventListener('click', () => startRun(towerKey, 'shiren'));
+      modes.appendChild(shiren);
+
+      const shinken = document.createElement('button');
+      shinken.className = 'mode-row';
+      shinken.innerHTML =
+        `<span class="m-emoji">🗡</span><span><span class="m-name">真剣勝負</span><br>` +
+        `<span class="m-desc">1ミスで終わり・時間制。最高記録 ${tSave.streakBest} がそのまま${t.statName}に加算！</span></span>`;
+      shinken.addEventListener('click', () => startRun(towerKey, 'shinken'));
+      modes.appendChild(shinken);
+
+      const listEl = $('stage-list');
+      listEl.innerHTML = '';
+      t.stages.forEach((name, i) => {
+        const locked = i > 0 && !(tSave.stars[i - 1] > 0);
+        const stars = tSave.stars[i] || 0;
+        const card = document.createElement('div');
+        card.className = 'floor-card' + (locked ? ' locked' : '');
+        card.innerHTML =
+          `<span class="floor-emoji">${locked ? '🔒' : ['👹', '🦊', '⚔️', '🐯', '🐲', '🧊', '🔥', '🌪', '🐉'][i % 9]}</span>` +
+          `<div class="floor-info"><div class="floor-name">${name}</div></div>` +
+          `<span class="floor-stars">${'★'.repeat(stars)}${'☆'.repeat(3 - stars)}</span>`;
+        if (!locked) card.addEventListener('click', () => startRun(towerKey, 'shugyo', i));
+        listEl.appendChild(card);
+      });
+      showScreen('screen-tower');
+    }
+
+    // ============================================================
+    // ラン制御
+    // ============================================================
+    function startRun(towerKey, mode, stageIdx) {
+      const t = TOWERS[towerKey];
+      g = {
+        tower: towerKey, mode, stageIdx: stageIdx || 0,
+        list: buildList(towerKey, mode, stageIdx),
+        idx: 0,
+        hp: mode === 'shinken' ? 1 : RUN_HP,
+        score: 0, mistakes: 0, problemMistakes: 0,
+        chain: 0,
+        locked: true,
+        timerId: null, startTime: 0, lastTick: 0,
+        perMs: SHINKEN_TIME[towerKey].start, problemLimit: 0, problemRemain: 0,
+        keyVal: '', step: 0, foundCount: 0,
+        afterResult: null,
+      };
+      showScreen('screen-calc');
+      $('enemy-face').textContent = t.emoji;
+      $('enemy-label').textContent = mode === 'shugyo' ? t.stages[stageIdx] : `${t.name}・${MODES[mode].name}`;
+      $('enemy-bar').style.width = '100%';
+      $('calc-time-bg').style.display = mode === 'shinken' ? 'block' : 'none';
+      updateHud();
+
+      $('intro-title').textContent = mode === 'shugyo' ? t.stages[stageIdx] : `${MODES[mode].emoji} ${t.name}・${MODES[mode].name}`;
+      $('intro-body').innerHTML = buildIntro(towerKey, mode, stageIdx);
+      $('panel-intro').classList.add('show');
+    }
+
+    function buildIntro(towerKey, mode, stageIdx) {
+      const t = TOWERS[towerKey];
+      const tSave = save.towers[towerKey];
+      let body = '';
+      if (mode === 'shiren') {
+        body = `日替わりの<b>5問</b>に挑戦！<br>クリアすると<b>🛡防御力が+1</b>（どの塔でも1日1回ずつ）。<br>現在の防御力：<b>${save.dailyCount}</b>／連続修行：<b>${save.dayStreak}日</b>🔥`;
+      } else if (mode === 'shinken') {
+        body = `<b>1回でもまちがえたら即終了！</b><br><b>制限時間</b>つき。時間切れもアウトで、クリアするたび短くなる！<br>` +
+          `最高記録がそのまま<b>${t.statIcon}${t.statName}に加算</b>される。<br>自己ベスト：<b>${tSave.streakBest}問</b>`;
+      } else {
+        const tips = {
+          anzan: '答えをテンキーで入力。マイナスは「±」キー！',
+          line: '数直線を<b>タップして答えの位置</b>を当てよう。ピッタリじゃなくてOK、近ければ正解！',
+          kiso: '□に入る数をテンキーで入力。負の数は「±」キー！',
+          tochu: '<b>並べかえ</b>：途中式カードを正しい順にタップ！<br><b>まちがい探し</b>：まちがっている行をタップ！',
+        };
+        body = `<b>${t.stages[stageIdx]}</b><br>` + tips[towerKey] +
+          `<div class="rule-example">ノーミスで★3！　★を集めると${t.statIcon}${t.statName}が上がる（全★で${SHUGYO_FULL}）</div>`;
+      }
+      return body;
+    }
+
+    function registerMiss() {
+      g.mistakes++;
+      g.problemMistakes++;
+      if (g.mode === 'shinken') { endShinken(); return true; }
+      g.hp--;
+      updateHud();
+      if (g.hp <= 0) { gameOver(); return true; }
+      return false;
+    }
+
+    function beginProblem() {
+      const p = g.list[g.idx];
+      g.problemMistakes = 0;
+      g.locked = false;
+      g.keyVal = '';
+      g.step = 0;
+      g.foundCount = 0;
+      hideHint();
+      const isShinken = g.mode === 'shinken';
+      let limitText = '';
+      if (isShinken) {
+        g.problemLimit = Math.round(g.perMs);
+        g.problemRemain = g.problemLimit;
+        limitText = `　制限 ${(g.problemLimit / 1000).toFixed(1)} 秒`;
+      }
+      $('calc-progress').textContent =
+        (isShinken ? `🗡 ${g.chain} 問連続中` : `${MODES[g.mode].name}　${g.idx + 1} / ${g.list.length}`) + limitText;
+      $('calc-problem').innerHTML = p.q;
+      renderBoard(p);
+      g.startTime = Date.now();
+      g.lastTick = Date.now();
+      clearInterval(g.timerId);
+      if (isShinken) {
+        g.timerId = setInterval(tick, 200);
+        tick();
+      }
+    }
+
+    function tick() {
+      if (!g || g.mode !== 'shinken') return;
+      const now = Date.now();
+      if (!g.locked) {
+        const dt = Math.min(1000, now - g.lastTick);
+        g.problemRemain -= dt;
+      }
+      g.lastTick = now;
+      const ratio = Math.max(0, g.problemRemain / g.problemLimit);
+      const bar = $('calc-time-fill');
+      bar.style.width = (ratio * 100) + '%';
+      bar.classList.toggle('danger', ratio < 0.34);
+      if (g.problemRemain <= 0) endShinken('⏰ 時間切れ！');
+    }
+
+    function hideHint() { $('calc-hint').style.visibility = 'hidden'; }
+    function showHint(msg) {
+      const el = $('calc-hint');
+      el.textContent = '💥 ' + msg;
+      el.style.visibility = 'visible';
+    }
+
+    // ============================================================
+    // 回答UIの描画（kind別）
+    // ============================================================
+    function renderBoard(p) {
+      const board = $('calc-board');
+      board.innerHTML = '';
+      if (p.kind === 'key') renderTenkey(p, board);
+      else if (p.kind === 'line') renderNumberLine(p, board);
+      else if (p.kind === 'cmp') renderCompare(p, board);
+      else renderSteps(p, board);
+    }
+
+    // --- テンキー ---
+    function renderTenkey(p, board) {
+      const disp = document.createElement('div');
+      disp.className = 'key-display';
+      disp.id = 'key-display';
+      disp.textContent = '？';
+      board.appendChild(disp);
+      const pad = document.createElement('div');
+      pad.className = 'tenkey';
+      const keys = ['7', '8', '9', 'OK', '4', '5', '6', null, '1', '2', '3', '⌫', '±', '0', null, null];
+      // グリッド構成：OKは縦2マス、0は横2マス
+      pad.innerHTML =
+        `<button data-k="7">7</button><button data-k="8">8</button><button data-k="9">9</button>` +
+        `<button class="key-ok" data-k="OK">OK</button>` +
+        `<button data-k="4">4</button><button data-k="5">5</button><button data-k="6">6</button>` +
+        `<button data-k="1">1</button><button data-k="2">2</button><button data-k="3">3</button><button data-k="⌫">⌫</button>` +
+        `<button data-k="±">±</button><button class="key-zero" data-k="0">0</button>`;
+      pad.addEventListener('click', e => {
+        const k = e.target.dataset && e.target.dataset.k;
+        if (!k || g.locked) return;
+        handleKey(k, p);
+      });
+      board.appendChild(pad);
+    }
+    function handleKey(k, p) {
+      if (k === 'OK') {
+        if (g.keyVal === '' || g.keyVal === '-') return;
+        const v = parseInt(g.keyVal, 10);
+        if (v === p.answer) clearProblem(p);
+        else {
+          showHint(p.hint || 'もう一度！');
+          $('key-display').textContent = '？';
+          g.keyVal = '';
+          registerMiss();
+        }
+        return;
+      }
+      if (k === '⌫') g.keyVal = g.keyVal.slice(0, -1);
+      else if (k === '±') g.keyVal = g.keyVal.startsWith('-') ? g.keyVal.slice(1) : '-' + g.keyVal;
+      else if (g.keyVal.replace('-', '').length < 5) g.keyVal += k;
+      $('key-display').textContent = g.keyVal === '' ? '？' : g.keyVal.replace('-', '−');
+    }
+
+    // --- 数直線 ---
+    function renderNumberLine(p, board) {
+      const wrap = document.createElement('div');
+      wrap.className = 'nline-wrap';
+      const line = document.createElement('div');
+      line.className = 'nline';
+      const range = p.max - p.min;
+      // 目盛り（範囲に応じて間引き）
+      const stepN = range > 20 ? 5 : (range > 10 ? 2 : 1);
+      for (let v = p.min; v <= p.max; v += stepN) {
+        const x = ((v - p.min) / range) * 100;
+        line.insertAdjacentHTML('beforeend', `<span class="ntick" style="left:${x}%"></span>`);
+        line.insertAdjacentHTML('beforeend', `<span class="nlabel" style="left:${x}%">${fmt(v)}</span>`);
+      }
+      line.addEventListener('click', e => {
+        if (g.locked) return;
+        const rect = line.getBoundingClientRect();
+        const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+        const val = p.min + ratio * range;
+        const err = Math.abs(val - p.value);
+        // タップ位置マーカー
+        line.insertAdjacentHTML('beforeend', `<span class="nmark" style="left:${ratio * 100}%">📍</span>`);
+        if (err <= p.tol) {
+          // 正解位置に⭐を表示してクリア
+          const cx = ((p.value - p.min) / range) * 100;
+          line.insertAdjacentHTML('beforeend', `<span class="nmark" style="left:${cx}%;top:-58px">⭐</span>`);
+          g.locked = true;
+          setTimeout(() => clearProblem(p), 350);
+        } else {
+          showHint((p.hint || '') + `（ズレ ${err.toFixed(1)}）`);
+          setTimeout(() => { line.querySelectorAll('.nmark').forEach(m => m.remove()); }, 600);
+          registerMiss();
+        }
+      });
+      wrap.appendChild(line);
+      wrap.insertAdjacentHTML('beforeend', `<div class="nline-note">数直線をタップ！（だいたい合っていればOK・誤差±${p.tol}）</div>`);
+      board.appendChild(wrap);
+    }
+
+    // --- 大小比較 ---
+    function renderCompare(p, board) {
+      const row = document.createElement('div');
+      row.className = 'cmp-row';
+      [['a', p.a, p.aVal], ['b', p.b, p.bVal]].forEach(([side, label, val]) => {
+        const btn = document.createElement('button');
+        btn.className = 'cmp-btn';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          if (g.locked) return;
+          const correct = (p.aVal > p.bVal) ? 'a' : 'b';
+          if (side === correct) clearProblem(p);
+          else { showHint(p.hint || 'もう一度！'); registerMiss(); }
+        });
+        row.appendChild(btn);
+      });
+      board.appendChild(row);
+    }
+
+    // --- 途中式カード（order＝並べかえ／err＝まちがい探し） ---
+    function renderSteps(p, board) {
+      const list = document.createElement('div');
+      list.className = 'step-list';
+      if (p.kind === 'order') {
+        $('calc-problem').innerHTML = p.q + '<small>つづきを正しい順にタップ！</small>';
+        const order = shuffle(p.steps.map((s, i) => i));
+        order.forEach(stepIdx => {
+          const card = document.createElement('button');
+          card.className = 'step-card';
+          card.textContent = p.steps[stepIdx];
+          card.addEventListener('click', () => {
+            if (g.locked || card.classList.contains('done')) return;
+            if (stepIdx === g.step) {
+              g.step++;
+              card.classList.add('done');
+              card.insertAdjacentHTML('beforeend', `<span class="order-badge">${g.step}</span>`);
+              hideHint();
+              if (g.step >= p.steps.length) clearProblem(p);
+            } else {
+              card.classList.add('wrong');
+              setTimeout(() => card.classList.remove('wrong'), 400);
+              showHint(p.hint || '順番がちがう！');
+              registerMiss();
+            }
+          });
+          list.appendChild(card);
+        });
+      } else {
+        $('calc-problem').innerHTML = p.q + '<small>まちがっている行をタップ！</small>';
+        p.lines.forEach((lineText, i) => {
+          const card = document.createElement('button');
+          card.className = 'step-card';
+          card.textContent = lineText;
+          card.addEventListener('click', () => {
+            if (g.locked || card.classList.contains('found-err')) return;
+            if (i === p.wrongIdx) {
+              card.classList.add('found-err');
+              g.locked = true;
+              setTimeout(() => clearProblem(p), 350);
+            } else {
+              card.classList.add('wrong');
+              setTimeout(() => card.classList.remove('wrong'), 400);
+              showHint('その行は合っている！' + (p.hint ? '　' + p.hint : ''));
+              registerMiss();
+            }
+          });
+          list.appendChild(card);
+        });
+      }
+      board.appendChild(list);
+    }
+
+    // ============================================================
+    // クリア・終了処理
+    // ============================================================
+    function clearProblem(p) {
+      g.locked = true;
+      clearInterval(g.timerId);
+      const elapsed = Date.now() - g.startTime;
+      const speedBonus = Math.round(Math.max(0, 1 - elapsed / SPEED_LIMIT_MS) * 50);
+      const points = Math.max(10, 100 - g.problemMistakes * 20) + speedBonus;
+      g.score += points;
+      if (g.mode === 'shinken') g.chain++;
+      updateHud();
+
+      if (g.mode !== 'shinken') {
+        $('enemy-bar').style.width = ((1 - (g.idx + 1) / g.list.length) * 100) + '%';
+        const face = $('enemy-face');
+        face.classList.remove('hit');
+        void face.offsetWidth;
+        face.classList.add('hit');
+      }
+
+      if (g.mode === 'shinken') {
+        // テンポよく次へ（解説は出さず進行）
+        g.perMs = Math.max(SHINKEN_TIME[g.tower].min, g.perMs * SHINKEN_DECAY);
+        setTimeout(() => {
+          if (!g || g.mode !== 'shinken') return;
+          g.idx++;
+          if (g.idx >= g.list.length) {
+            g.list = g.list.concat(g.tower === 'tochu' ? shuffle(TOCHU) : genProblems(g.tower, null, 40));
+          }
+          beginProblem();
+        }, 400);
+      } else {
+        $('clear-title').textContent = '⚔️ 一撃！';
+        $('clear-answer').textContent = p.kind === 'key' ? `答え：${fmt(p.answer)}` : '正解！';
+        $('clear-exp').textContent = p.exp || '';
+        $('clear-bonus').textContent = `+${points} 点` + (speedBonus ? `（速さボーナス +${speedBonus}）` : '');
+        $('panel-clear').classList.add('show');
+      }
+    }
+
+    function nextProblem() {
+      $('panel-clear').classList.remove('show');
+      g.idx++;
+      if (g.idx >= g.list.length) {
+        if (g.mode === 'shugyo') endShugyo();
+        else endShiren();
+      } else {
+        beginProblem();
+      }
+    }
+
+    function endShugyo() {
+      const stars = g.mistakes === 0 ? 3 : (g.mistakes <= 2 ? 2 : 1);
+      const tSave = save.towers[g.tower];
+      tSave.stars[g.stageIdx] = Math.max(tSave.stars[g.stageIdx] || 0, stars);
+      saveData(STORAGE_KEY, save);
+      const t = TOWERS[g.tower];
+      $('result-title').textContent = '🏯 修行成就！';
+      $('result-stars').textContent = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+      $('result-streak').style.display = 'none';
+      $('result-record').style.display = 'none';
+      $('result-detail').textContent =
+        `ミス ${g.mistakes} 回 ／ スコア ${g.score} 点　→ ${t.statIcon}${t.statName} ${towerStat(g.tower).value}` +
+        (stars < 3 ? '　…ノーミスで★3！' : '　完璧！');
+      $('btn-result-next').textContent = 'すすむ';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => renderTowerMenu(g.tower);
+    }
+
+    function endShiren() {
+      const today = dateStr();
+      let gained = false;
+      if (save.dailyDone[g.tower] !== today) {
+        save.dailyDone[g.tower] = today;
+        save.dailyCount++;
+        gained = true;
+        if (save.lastDailyDay !== today) {
+          save.dayStreak = save.lastDailyDay === dateStr(-1) ? save.dayStreak + 1 : 1;
+          save.lastDailyDay = today;
+        }
+      }
+      saveData(STORAGE_KEY, save);
+      $('result-title').textContent = '📅 試練クリア！';
+      $('result-stars').textContent = '';
+      $('result-streak').textContent = gained ? `🛡 防御力 +1 → ${save.dailyCount}` : `本日クリア済み（防御力 ${save.dailyCount}）`;
+      $('result-streak').style.display = 'block';
+      $('result-record').style.display = 'none';
+      $('result-detail').textContent = `スコア ${g.score} 点　連続修行 ${save.dayStreak}日🔥　明日も新しい5問が待っている！`;
+      $('btn-result-next').textContent = 'もどる';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => renderTowerMenu(g.tower);
+    }
+
+    function endShinken(reason) {
+      g.locked = true;
+      clearInterval(g.timerId);
+      const tSave = save.towers[g.tower];
+      const newBest = g.chain > tSave.streakBest;
+      tSave.streakBest = Math.max(tSave.streakBest, g.chain);
+      saveData(STORAGE_KEY, save);
+      const t = TOWERS[g.tower];
+      const p = g.list[g.idx];
+      const ansText = p.kind === 'key' ? fmt(p.answer)
+        : p.kind === 'line' ? fmt(Math.round(p.value * 100) / 100)
+        : p.kind === 'cmp' ? (p.aVal > p.bVal ? p.a : p.b)
+        : (p.exp || '');
+      $('result-title').textContent = '🗡 真剣勝負・終了！';
+      $('result-stars').textContent = `${g.chain} 問連続`;
+      $('result-streak').style.display = 'none';
+      $('result-record').style.display = newBest ? 'block' : 'none';
+      $('result-detail').textContent =
+        `${reason || '💥 一太刀あびた！'}　正解：${ansText}　` +
+        `最高記録 ${tSave.streakBest} → ${t.statIcon}${t.statName}に加算（現在 ${towerStat(g.tower).value}）`;
+      $('btn-result-next').textContent = 'もどる';
+      $('panel-result').classList.add('show');
+      g.afterResult = () => renderTowerMenu(g.tower);
+    }
+
+    function gameOver() {
+      g.locked = true;
+      clearInterval(g.timerId);
+      $('gameover-score').textContent = g.score;
+      showScreen('screen-gameover');
+    }
+
+    function updateHud() {
+      const t = TOWERS[g.tower];
+      $('hud-floor').textContent = t.emoji;
+      $('hud-hp').textContent = g.mode === 'shinken'
+        ? `🗡 ${g.chain} 問連続`
+        : '❤'.repeat(g.hp) + '♡'.repeat(RUN_HP - g.hp);
+      $('hud-score').textContent = g.score;
+    }
+
+    // ============================================================
+    // ステータス（レーダーチャート）
+    // ============================================================
+    function renderStatus() {
+      const { cur } = currentTitle();
+      $('status-badge').textContent = cur.name;
+      const rows = $('status-rows');
+      rows.innerHTML = '';
+      let topStat = null;
+      const allStats = [
+        { icon: '🛡', name: '防御力', color: '#27ae60', value: save.dailyCount,
+          src: `今日の試練クリア累計 ${save.dailyCount}回（+1/クリア）`, type: '防御型｜毎日きたえる鉄壁の求道者' },
+      ];
+      Object.keys(TOWERS).forEach(key => {
+        const t = TOWERS[key];
+        const st = towerStat(key);
+        allStats.push({
+          icon: t.statIcon, name: t.statName, color: t.color, value: st.value,
+          src: `${t.name}　修行★${st.stars}/${maxStarsOf(key)}（=${st.fromStars}）＋真剣勝負 ${st.fromStreak}`,
+          type: t.type,
+        });
+      });
+      let total = 0;
+      allStats.forEach(stat => {
+        total += stat.value;
+        if (stat.value > 0 && (!topStat || stat.value > topStat.value)) topStat = stat;
+      });
+
+      const axisMax = Math.max(40, ...allStats.map(s => s.value));
+      const cx = 160, cy = 145, R = 92, N = allStats.length;
+      const angleOf = i => -Math.PI / 2 + (i * 2 * Math.PI) / N;
+      const ptOf = (i, r) => [cx + r * Math.cos(angleOf(i)), cy + r * Math.sin(angleOf(i))];
+      let svg = `<svg viewBox="0 0 320 300" style="width:100%;max-width:340px" role="img" aria-label="能力レーダーチャート">`;
+      [0.25, 0.5, 0.75, 1].forEach(level => {
+        const pts = allStats.map((s, i) => ptOf(i, R * level).map(v => v.toFixed(1)).join(',')).join(' ');
+        svg += `<polygon points="${pts}" fill="none" stroke="rgba(232,240,248,${level === 1 ? 0.4 : 0.15})" stroke-width="1"/>`;
+      });
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R);
+        svg += `<line x1="${cx}" y1="${cy}" x2="${x.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(232,240,248,0.15)" stroke-width="1"/>`;
+      });
+      const valuePts = allStats.map((s, i) => ptOf(i, R * Math.min(1, s.value / axisMax)).map(v => v.toFixed(1)).join(',')).join(' ');
+      svg += `<polygon points="${valuePts}" fill="rgba(110,193,255,0.35)" stroke="#6ec1ff" stroke-width="2.5" stroke-linejoin="round"/>`;
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R * Math.min(1, s.value / axisMax));
+        svg += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4" fill="${s.color}" stroke="#f0f6ff" stroke-width="1.5"/>`;
+      });
+      allStats.forEach((s, i) => {
+        const [x, y] = ptOf(i, R + 24);
+        svg += `<text x="${x.toFixed(1)}" y="${(y - 2).toFixed(1)}" text-anchor="middle" font-size="13" font-weight="bold" fill="#e8f0f8">${s.icon}${s.name}</text>` +
+          `<text x="${x.toFixed(1)}" y="${(y + 14).toFixed(1)}" text-anchor="middle" font-size="15" font-weight="900" fill="#ffd86e">${s.value}</text>`;
+      });
+      svg += '</svg>';
+      const chart = document.createElement('div');
+      chart.style.textAlign = 'center';
+      chart.innerHTML = svg;
+      rows.appendChild(chart);
+      allStats.forEach(stat => {
+        const src = document.createElement('div');
+        src.className = 'status-src';
+        src.textContent = `${stat.icon} ${stat.name} ${stat.value}　＝ ${stat.src}`;
+        rows.appendChild(src);
+      });
+      $('status-power').textContent = total;
+      $('status-type').textContent = topStat ? `あなたは【${topStat.type}】` : 'まだ無属性…修行を始めよう！';
+      showScreen('screen-status');
+    }
+
+    // ============================================================
+    // 初期化
+    // ============================================================
+    function openRules() { $('modal-rules').classList.add('show'); }
+    function closeRules() { $('modal-rules').classList.remove('show'); }
+    function quitToTower() {
+      if (g) clearInterval(g.timerId);
+      $('panel-clear').classList.remove('show');
+      renderTowerMenu(g ? g.tower : currentTower);
+    }
+
+    function init() {
+      save = loadSave();
+      saveData(STORAGE_KEY, save);
+      renderStart();
+
+      $('btn-to-status').addEventListener('click', renderStatus);
+      $('btn-status-to-title').addEventListener('click', renderStart);
+      $('btn-tower-back').addEventListener('click', renderStart);
+      $('btn-intro-start').addEventListener('click', () => {
+        $('panel-intro').classList.remove('show');
+        beginProblem();
+      });
+      $('btn-next-problem').addEventListener('click', nextProblem);
+      $('btn-result-next').addEventListener('click', () => {
+        $('panel-result').classList.remove('show');
+        if (g && g.afterResult) g.afterResult();
+      });
+      $('btn-retry').addEventListener('click', () => startRun(g.tower, g.mode, g.stageIdx));
+      $('btn-gameover-title').addEventListener('click', renderStart);
+      $('btn-game-quit').addEventListener('click', quitToTower);
+      $('btn-rules-start').addEventListener('click', openRules);
+      $('btn-rules-game').addEventListener('click', openRules);
+      $('btn-rules-close').addEventListener('click', closeRules);
+    }
+
+    init();
+  </script>
+</body>
+</html>
