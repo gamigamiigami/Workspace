@@ -115,33 +115,82 @@
     }
     .seat-grid-wrap { overflow-x: auto; padding-bottom: 6px; }
     .seat-grid { display: grid; gap: 6px; min-width: fit-content; }
+    /* 席マス：中に「机の四角（.desk）」を置く。向きによって四角の形が変わる */
     .seat {
-      min-width: 76px;
-      min-height: 64px;
+      min-width: 80px;
+      height: 92px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      position: relative;
+    }
+    .desk {
       border: 2px solid var(--border);
-      border-radius: 8px;
+      border-radius: 6px;
       background: #fff;
-      padding: 4px;
-      font-size: 13px;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      cursor: pointer;
+      font-size: 13px;
       position: relative;
       word-break: break-all;
+      overflow: hidden;
+      width: 92%;
+      height: 70%;
     }
-    .seat .orient-mark { font-size: 11px; color: #888; }
-    .seat .seat-name { font-weight: bold; }
-    .seat .seat-icons { position: absolute; top: 1px; right: 4px; font-size: 12px; }
-    .seat.disabled { background: #e9ecef; border-style: dashed; color: #aab; }
-    .seat.selected { outline: 3px solid var(--primary); outline-offset: 1px; }
-    .seat.ng-marked { border-color: var(--danger); background: #fdecea; }
-    .seat.warn-seat { border-color: #f1c40f; }
-    .seat.error-seat { border-color: var(--danger); }
-    .seat.highlighted { outline: 3px solid #e67e22; outline-offset: 1px; }
-    .seat.empty-seat { color: #bbc; }
+    /* 机の向き＝四角の縦横比＋太い辺（机の正面）で表現する */
+    .seat.orient-front .desk      { width: 92%; height: 70%; border-top-width: 7px; }
+    .seat.orient-side-left .desk  { width: 66%; height: 96%; border-left-width: 7px; }
+    .seat.orient-side-right .desk { width: 66%; height: 96%; border-right-width: 7px; }
+    .desk .orient-mark { font-size: 10px; color: #999; line-height: 1; }
+    .desk .seat-name { font-weight: bold; line-height: 1.2; }
+    .desk .seat-icons { position: absolute; top: 0; right: 2px; font-size: 11px; }
+    .seat.disabled .desk {
+      background: #eef1f3;
+      border: 2px dashed #c5ccd2;
+      color: #aab;
+      width: 92%; height: 70%;
+    }
+    .seat.ng-marked .desk { border-color: var(--danger); background: #fdecea; }
+    .seat.warn-seat .desk { border-color: #f1c40f; }
+    .seat.error-seat .desk { border-color: var(--danger); }
+    .seat.highlighted .desk { outline: 3px solid #e67e22; outline-offset: 1px; }
+    .seat .empty-seat { color: #bbc; }
+
+    /* 操作モードボタン（選択中をはっきり見せる） */
+    .tool-btn.active {
+      background: #eaf2f8;
+      border: 2px solid var(--primary);
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    /* かんたんステップガイド */
+    .step-guide ol { list-style: none; counter-reset: step; }
+    .step-guide li {
+      counter-increment: step;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 0;
+      font-size: 15px;
+    }
+    .step-guide li::before {
+      content: counter(step);
+      background: var(--primary);
+      color: #fff;
+      font-weight: bold;
+      width: 30px; height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .next-step { text-align: right; margin-top: 12px; }
 
     /* ===== リスト類 ===== */
     .item-list { list-style: none; }
@@ -250,7 +299,8 @@
     /* ===== iPad縦持ち（〜820px）調整 ===== */
     @media (max-width: 820px) {
       nav.tabs button { font-size: 13px; padding: 10px 6px; }
-      .seat { min-width: 64px; min-height: 56px; font-size: 12px; }
+      .seat { min-width: 68px; height: 80px; }
+      .desk { font-size: 12px; }
     }
   </style>
 </head>
@@ -259,69 +309,113 @@
   <!-- ===== ヘッダー：教室の選択・新規作成・バックアップ ===== -->
   <header>
     <span class="app-title">📋 席替えツール</span>
-    <select id="classroomSelect" aria-label="教室の選択"></select>
-    <button id="btnNewClassroom">＋新規</button>
-    <button id="btnExport" title="JSONファイルとして保存">💾保存</button>
-    <button id="btnImport" title="JSONファイルから読込">📂読込</button>
+    <select id="classroomSelect" aria-label="クラスの選択"></select>
+    <button id="btnNewClassroom">＋クラス追加</button>
+    <button id="btnExport" title="ひかえをファイルとして保存します">💾ひかえを保存</button>
+    <button id="btnImport" title="保存したひかえファイルを読み込みます">📂ひかえを開く</button>
     <input type="file" id="importFile" accept=".json,application/json" style="display:none">
   </header>
 
   <!-- ===== タブナビゲーション ===== -->
   <nav class="tabs">
-    <button data-tab="tab-layout" class="active">🏫教室設定</button>
-    <button data-tab="tab-students">👥生徒</button>
+    <button data-tab="tab-layout" class="active">①🏫教室</button>
+    <button data-tab="tab-students">②👥生徒</button>
+    <button data-tab="tab-shuffle">③🎲席替え</button>
     <button data-tab="tab-groups">🎨グループ</button>
     <button data-tab="tab-ng">🚫NG設定</button>
-    <button data-tab="tab-shuffle">🎲席替え</button>
     <button data-tab="tab-roster">📃名簿</button>
     <button data-tab="tab-history">🕐履歴</button>
   </nav>
 
-  <!-- ===== 🏫 教室設定タブ ===== -->
+  <!-- ===== ①🏫 教室タブ ===== -->
   <section id="tab-layout" class="tab-panel active">
-    <div class="card">
-      <h2>机のレイアウト</h2>
-      <div class="row">
-        <label>横（列数）<input type="number" id="inputCols" min="1" max="15" value="6" style="width:80px"></label>
-        <label>縦（行数）<input type="number" id="inputRows" min="1" max="15" value="5" style="width:80px"></label>
-        <button id="btnApplyLayout" class="primary">レイアウト適用</button>
-      </div>
-      <p class="hint">※レイアウトを変えても生徒・履歴データは残ります</p>
+    <!-- はじめての人向けの3ステップガイド -->
+    <div class="card step-guide">
+      <h2>✨ つかい方は3ステップ</h2>
+      <ol>
+        <li>教室の形をつくる（このページ）</li>
+        <li>「②生徒」タブで名前をいれる</li>
+        <li>「③席替え」タブでボタンをおすだけ！</li>
+      </ol>
+      <p class="hint">💡 入力は自動で保存されます。画面を閉じても消えません。<br>
+      💡 グループ分けやNG設定は、あとから好きなときに足せばOKです。</p>
     </div>
+
     <div class="card">
-      <h2>机の設定（タップして選択）</h2>
-      <p class="hint">机をタップ → 下のボタンで向き変更・席の無効化（通路・空席）ができます</p>
-      <div class="row no-print" style="margin:8px 0">
-        <button id="btnOrientFront">↑ 前向き</button>
-        <button id="btnOrientLeft">← 横向き（左）</button>
-        <button id="btnOrientRight">→ 横向き（右）</button>
-        <button id="btnToggleDisable" class="danger-btn">🚫 席なしにする / 戻す</button>
+      <h2>🏫 教室の形をつくる</h2>
+      <div class="row">
+        <label>横にならぶ数 <input type="number" id="inputCols" min="1" max="15" value="6" style="width:80px"></label>
+        <label>たての数 <input type="number" id="inputRows" min="1" max="15" value="5" style="width:80px"></label>
+        <button id="btnApplyLayout" class="primary">この大きさにする</button>
       </div>
+      <h3>よくつかう隊形（ワンタップで変わります）</h3>
+      <div class="row no-print">
+        <button id="btnPresetFront">⬜ ぜんぶ前向きにする</button>
+        <button id="btnPresetU">🔄 コの字にする</button>
+      </div>
+      <h3>1つずつ変えたいとき</h3>
+      <div class="row no-print">
+        <button id="toolOrient" class="tool-btn active">🔄 向きをかえる</button>
+        <button id="toolAisle" class="tool-btn">🚧 通路にする・もどす</button>
+      </div>
+      <p class="hint" id="toolHint">「🔄向きをかえる」をえらんで机をタップすると、↑ → ← の順に向きがかわります</p>
       <div class="board-label">黒　板</div>
       <div class="seat-grid-wrap"><div id="layoutGrid" class="seat-grid"></div></div>
+      <div class="next-step no-print">
+        <button id="btnNextToStudents" class="primary">つぎへ：②生徒の名前をいれる →</button>
+      </div>
     </div>
   </section>
 
-  <!-- ===== 👥 生徒タブ ===== -->
+  <!-- ===== ②👥 生徒タブ ===== -->
   <section id="tab-students" class="tab-panel">
     <div class="card">
-      <h2>生徒の追加</h2>
+      <h2>👥 生徒の名前をいれる</h2>
       <div class="row">
-        <input type="text" id="inputStudentName" placeholder="名前を入力してEnter" style="flex:1;min-width:160px">
+        <input type="text" id="inputStudentName" placeholder="名前を書いて「追加」をおす" style="flex:1;min-width:160px">
         <button id="btnAddStudent" class="primary">追加</button>
       </div>
-      <h3>CSVインポート（1行に1名）</h3>
+      <h3>まとめていれたいとき（1行に1人ずつ）</h3>
       <div class="row">
-        <textarea id="csvText" rows="3" placeholder="田中太郎&#10;鈴木花子" style="flex:1;min-width:200px"></textarea>
+        <textarea id="csvText" rows="3" placeholder="田中太郎&#10;鈴木花子&#10;佐藤次郎" style="flex:1;min-width:200px"></textarea>
       </div>
       <div class="row" style="margin-top:8px">
-        <button id="btnImportCSV">CSVから一括追加</button>
-        <button id="btnExportCSV">CSVエクスポート</button>
+        <button id="btnImportCSV">↑の名前をまとめて追加</button>
+        <button id="btnExportCSV">名簿をファイルに保存（CSV）</button>
       </div>
     </div>
     <div class="card">
       <h2>生徒一覧（<span id="studentCount">0</span>名）</h2>
       <ul id="studentList" class="item-list"></ul>
+      <div class="next-step no-print">
+        <button id="btnNextToShuffle" class="primary">つぎへ：③席替えをする →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== ③🎲 席替えタブ ===== -->
+  <section id="tab-shuffle" class="tab-panel">
+    <!-- 準備ができていないときの案内（生徒0名など） -->
+    <div id="shuffleGuide"></div>
+    <div class="card no-print">
+      <h2>🎲 席替えをする</h2>
+      <p class="hint">ボタンをおすと、固定席・NG設定をまもったランダムな席ができます。<br>
+      気に入らなければ何度でもおしてOK！決まったら「💾この席を記録する」をおしましょう。</p>
+      <div class="row">
+        <button id="btnRunShuffle" class="primary" style="font-size:18px">🎲 席替え実行</button>
+        <button id="btnSaveHistory">💾 この席を記録する</button>
+        <button id="btnPrintSeats">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>座席表</h2>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="shuffleGrid" class="seat-grid"></div></div>
+    </div>
+    <div class="card no-print">
+      <h2>チェック結果</h2>
+      <ul id="warningList" class="warning-list"></ul>
+      <p class="hint">項目をタップすると該当の席がオレンジ枠で光ります</p>
     </div>
   </section>
 
@@ -359,27 +453,6 @@
       <p class="hint">席をタップするとNG席として登録/解除されます（赤＝NG席）</p>
       <div class="board-label">黒　板</div>
       <div class="seat-grid-wrap"><div id="ngGrid" class="seat-grid"></div></div>
-    </div>
-  </section>
-
-  <!-- ===== 🎲 席替えタブ ===== -->
-  <section id="tab-shuffle" class="tab-panel">
-    <div class="card no-print">
-      <div class="row">
-        <button id="btnRunShuffle" class="primary" style="font-size:18px">🎲 席替え実行</button>
-        <button id="btnSaveHistory">💾 履歴に保存</button>
-        <button id="btnPrintSeats">🖨 印刷</button>
-      </div>
-    </div>
-    <div class="card">
-      <h2>座席表</h2>
-      <div class="board-label">黒　板</div>
-      <div class="seat-grid-wrap"><div id="shuffleGrid" class="seat-grid"></div></div>
-    </div>
-    <div class="card no-print">
-      <h2>チェック結果</h2>
-      <ul id="warningList" class="warning-list"></ul>
-      <p class="hint">項目をタップすると該当の席がオレンジ枠で光ります</p>
     </div>
   </section>
 
@@ -442,7 +515,7 @@
     // 状態管理（localStorage との読み書き）
     // =====================================================
     let state = null;
-    let selectedDeskKey = null;     // 教室設定タブで選択中の机
+    let deskTool = 'orient';        // 教室タブの操作モード：'orient'（向き）| 'aisle'（通路）
     let lastWarnings = [];          // 直近の席替えチェック結果
 
     function uid() {
@@ -802,23 +875,25 @@
           const key = r + '-' + c;
           const meta = getDeskMeta(cr, r, c);
           const cell = document.createElement('div');
-          cell.className = 'seat';
+          // 机の四角の形は orient-XXX クラスのCSSで変わる（コの字隊形が見た目でわかる）
+          cell.className = 'seat orient-' + (meta.orient || 'front');
           cell.dataset.key = key;
+          const desk = document.createElement('div');
+          desk.className = 'desk';
 
           if (meta.disabled) {
             cell.classList.add('disabled');
-            cell.innerHTML = '<span class="hint">通路</span>';
+            desk.innerHTML = '<span class="hint">通路</span>';
           } else {
-            // 向きマーク
+            // 向きマーク（四角の形＋矢印の二重表示）
             const orientMark = ORIENT_MARKS[meta.orient] || '↑';
             let nameHtml = '';
             let icons = '';
 
             if (mode === 'layout') {
-              // 教室設定：固定生徒名があれば参考表示
+              // 教室タブ：固定生徒名があれば参考表示
               const fixedSt = meta.fixedStudentId ? getStudent(cr, meta.fixedStudentId) : null;
               nameHtml = fixedSt ? '🔒' + escapeHtml(fixedSt.name) : '<span class="empty-seat">机</span>';
-              if (selectedDeskKey === key) cell.classList.add('selected');
 
             } else if (mode === 'ng') {
               // 着席NG設定：選択中の生徒のNG席を赤表示
@@ -844,8 +919,8 @@
                 }
                 if (!group) group = getGroupOf(cr, sid);
                 if (group) {
-                  cell.style.background = group.color + '33'; // 20%透過
-                  cell.style.borderColor = group.color;
+                  desk.style.background = group.color + '33'; // 20%透過
+                  desk.style.borderColor = group.color;
                 }
                 if (meta.fixedStudentId === sid) icons += '🔒';
                 if (seatLevel[key] === 'warn' || seatLevel[key] === 'error') icons += '⚠️';
@@ -857,12 +932,13 @@
               }
             }
 
-            cell.innerHTML =
+            desk.innerHTML =
               '<span class="seat-icons">' + icons + '</span>' +
               '<span class="orient-mark">' + orientMark + '</span>' +
               nameHtml;
           }
 
+          cell.appendChild(desk);
           if (extra.onTap) {
             cell.addEventListener('click', () => extra.onTap(key));
           }
@@ -872,19 +948,51 @@
     }
 
     // =====================================================
-    // 🏫 教室設定タブ
+    // ①🏫 教室タブ
     // =====================================================
     function renderLayoutTab() {
       const cr = getActiveClassroom();
       document.getElementById('inputCols').value = cr.cols;
       document.getElementById('inputRows').value = cr.rows;
+
+      // 操作モードボタンの見た目とヒント文を更新
+      document.getElementById('toolOrient').classList.toggle('active', deskTool === 'orient');
+      document.getElementById('toolAisle').classList.toggle('active', deskTool === 'aisle');
+      document.getElementById('toolHint').textContent = (deskTool === 'orient')
+        ? '机をタップすると、↑ → ← の順に向きがかわります（四角の太い辺が机の正面です）'
+        : '机をタップすると通路になります。もう一度タップすると机にもどります';
+
       renderGrid('layoutGrid', cr, 'layout', {
         onTap: (key) => {
-          selectedDeskKey = (selectedDeskKey === key) ? null : key;
+          const [r, c] = key.split('-').map(Number);
+          const meta = getDeskMeta(cr, r, c);
+          if (deskTool === 'aisle') {
+            // 通路モード：タップで机⇔通路を切り替え
+            meta.disabled = !meta.disabled;
+            if (meta.disabled) meta.fixedStudentId = null; // 通路にしたら固定も解除
+          } else {
+            // 向きモード：タップするたびに 前→右→左 と回る
+            if (meta.disabled) {
+              alert('ここは通路です。「🚧通路にする・もどす」をえらんでタップすると机にもどせます');
+              return;
+            }
+            const order = ['front', 'side-right', 'side-left'];
+            meta.orient = order[(order.indexOf(meta.orient) + 1) % order.length];
+          }
+          saveState();
           renderLayoutTab();
         }
       });
     }
+
+    document.getElementById('toolOrient').addEventListener('click', () => {
+      deskTool = 'orient';
+      renderLayoutTab();
+    });
+    document.getElementById('toolAisle').addEventListener('click', () => {
+      deskTool = 'aisle';
+      renderLayoutTab();
+    });
 
     document.getElementById('btnApplyLayout').addEventListener('click', () => {
       const cr = getActiveClassroom();
@@ -892,38 +1000,67 @@
       const rows = Math.max(1, Math.min(15, parseInt(document.getElementById('inputRows').value, 10) || 1));
       cr.cols = cols;
       cr.rows = rows;
-      selectedDeskKey = null;
       saveState();
       renderAll();
     });
 
-    function setOrient(orient) {
-      if (!selectedDeskKey) {
-        alert('先に机をタップして選択してください');
-        return;
-      }
+    // プリセット：ぜんぶ前向き（全席を机に戻して前向きにする）
+    document.getElementById('btnPresetFront').addEventListener('click', () => {
       const cr = getActiveClassroom();
-      const [r, c] = selectedDeskKey.split('-').map(Number);
-      getDeskMeta(cr, r, c).orient = orient;
+      if (!confirm('すべての机を「前向き」にして、通路もぜんぶ机にもどします。よろしいですか？')) return;
+      for (let r = 0; r < cr.rows; r++) {
+        for (let c = 0; c < cr.cols; c++) {
+          const meta = getDeskMeta(cr, r, c);
+          meta.disabled = false;
+          meta.orient = 'front';
+        }
+      }
       saveState();
       renderLayoutTab();
-    }
-    document.getElementById('btnOrientFront').addEventListener('click', () => setOrient('front'));
-    document.getElementById('btnOrientLeft').addEventListener('click', () => setOrient('side-left'));
-    document.getElementById('btnOrientRight').addEventListener('click', () => setOrient('side-right'));
+    });
 
-    document.getElementById('btnToggleDisable').addEventListener('click', () => {
-      if (!selectedDeskKey) {
-        alert('先に机をタップして選択してください');
+    // プリセット：コの字（左列＝右向き・右列＝左向き・最後列＝前向き・まんなか＝通路）
+    document.getElementById('btnPresetU').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      if (cr.cols < 3 || cr.rows < 2) {
+        alert('コの字には「横3つ × たて2つ」以上の大きさが必要です。上で大きさを変えてください');
         return;
       }
-      const cr = getActiveClassroom();
-      const [r, c] = selectedDeskKey.split('-').map(Number);
-      const meta = getDeskMeta(cr, r, c);
-      meta.disabled = !meta.disabled;
-      if (meta.disabled) meta.fixedStudentId = null; // 無効化したら固定も解除
+      if (!confirm('コの字の隊形にします。まんなかの机は通路になります。よろしいですか？')) return;
+      for (let r = 0; r < cr.rows; r++) {
+        for (let c = 0; c < cr.cols; c++) {
+          const meta = getDeskMeta(cr, r, c);
+          if (c === 0) {
+            // 左の列：教室の中央（右）を向く
+            meta.disabled = false;
+            meta.orient = 'side-right';
+          } else if (c === cr.cols - 1) {
+            // 右の列：教室の中央（左）を向く
+            meta.disabled = false;
+            meta.orient = 'side-left';
+          } else if (r === cr.rows - 1) {
+            // いちばん後ろの列：黒板（前）を向く
+            meta.disabled = false;
+            meta.orient = 'front';
+          } else {
+            // まんなかは通路にする
+            meta.disabled = true;
+            meta.fixedStudentId = null;
+          }
+        }
+      }
       saveState();
       renderLayoutTab();
+    });
+
+    // 「つぎへ」ボタン（ステップ誘導）
+    document.getElementById('btnNextToStudents').addEventListener('click', () => {
+      switchTab('tab-students');
+      renderAll();
+    });
+    document.getElementById('btnNextToShuffle').addEventListener('click', () => {
+      switchTab('tab-shuffle');
+      renderAll();
     });
 
     // =====================================================
@@ -1329,6 +1466,32 @@
 
     function renderShuffleTab() {
       const cr = getActiveClassroom();
+
+      // 準備ができていないときの案内（生徒0名・席不足）
+      const guide = document.getElementById('shuffleGuide');
+      const activeCount = cr.students.filter(s => !s.inactive).length;
+      const seatCount = getEnabledSeats(cr).length;
+      if (activeCount === 0) {
+        guide.innerHTML =
+          '<div class="card step-guide no-print">' +
+          '<h2>🙋 まだ生徒がいません</h2>' +
+          '<p>さきに「②生徒」タブで名前をいれましょう。</p>' +
+          '<div class="next-step"><button id="btnGuideToStudents" class="primary">②生徒の名前をいれる →</button></div>' +
+          '</div>';
+        document.getElementById('btnGuideToStudents').addEventListener('click', () => {
+          switchTab('tab-students');
+          renderAll();
+        });
+      } else if (activeCount > seatCount) {
+        guide.innerHTML =
+          '<div class="card step-guide no-print">' +
+          '<h2>⚠️ 席がたりません</h2>' +
+          '<p>生徒' + activeCount + '名に対して席が' + seatCount + 'つです。「①教室」タブで大きさを変えるか、通路を机にもどしてください。</p>' +
+          '</div>';
+      } else {
+        guide.innerHTML = '';
+      }
+
       renderGrid('shuffleGrid', cr, 'seating', {
         seats: cr.currentSeats || {},
         warnings: lastWarnings
@@ -1533,7 +1696,6 @@
     }
     document.getElementById('classroomSelect').addEventListener('change', (e) => {
       state.activeId = e.target.value;
-      selectedDeskKey = null;
       lastWarnings = getActiveClassroom().currentSeats
         ? checkSoftConstraints(getActiveClassroom(), getActiveClassroom().currentSeats)
         : [];
@@ -1554,7 +1716,6 @@
           const cr = createClassroom(name, rows, cols);
           state.classrooms.push(cr);
           state.activeId = cr.id;
-          selectedDeskKey = null;
           lastWarnings = [];
           saveState();
           renderAll();
@@ -1596,7 +1757,6 @@
           if (!state.classrooms.find(c => c.id === state.activeId)) {
             state.activeId = state.classrooms[0] ? state.classrooms[0].id : null;
           }
-          selectedDeskKey = null;
           lastWarnings = [];
           saveState();
           renderAll();
