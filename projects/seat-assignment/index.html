@@ -1,0 +1,1664 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>📋 席替えツール</title>
+  <style>
+    /* ===== テーマ変数 ===== */
+    :root {
+      --primary: #2980b9;
+      --primary-dark: #21618c;
+      --bg: #f4f6f8;
+      --panel: #ffffff;
+      --border: #d5dbe0;
+      --text: #2c3e50;
+      --danger: #c0392b;
+      --warn: #b7950b;
+      --info: #2471a3;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      background: var(--bg);
+      color: var(--text);
+      padding-bottom: 40px;
+    }
+    button {
+      font-family: inherit;
+      font-size: 15px;
+      padding: 10px 14px;
+      min-width: 44px;
+      min-height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+    }
+    button.primary { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: bold; }
+    button.danger-btn { color: var(--danger); border-color: var(--danger); }
+    button:active { opacity: 0.8; }
+    input[type="text"], input[type="number"], select, textarea {
+      font-family: inherit;
+      font-size: 16px;
+      padding: 10px;
+      min-height: 44px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+    }
+    h2 { font-size: 18px; margin-bottom: 8px; }
+    h3 { font-size: 16px; margin: 12px 0 6px; }
+
+    /* ===== ヘッダー ===== */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: 10px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    header .app-title { font-size: 18px; font-weight: bold; margin-right: auto; }
+    header select { min-width: 140px; }
+    header button { font-size: 14px; }
+
+    /* ===== タブナビゲーション ===== */
+    nav.tabs {
+      display: flex;
+      flex-wrap: wrap;
+      background: var(--panel);
+      border-bottom: 2px solid var(--border);
+    }
+    nav.tabs button {
+      flex: 1 1 auto;
+      border: none;
+      border-radius: 0;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    nav.tabs button.active {
+      border-bottom-color: var(--primary);
+      color: var(--primary);
+      font-weight: bold;
+      background: #eaf2f8;
+    }
+
+    /* ===== タブパネル ===== */
+    .tab-panel { display: none; padding: 14px; max-width: 1100px; margin: 0 auto; }
+    .tab-panel.active { display: block; }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      margin-bottom: 14px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .hint { font-size: 13px; color: #667; }
+
+    /* ===== 座席グリッド ===== */
+    .board-label {
+      background: #34495e;
+      color: #fff;
+      text-align: center;
+      border-radius: 6px;
+      padding: 4px;
+      margin-bottom: 8px;
+      font-size: 14px;
+      letter-spacing: 0.3em;
+    }
+    .seat-grid-wrap { overflow-x: auto; padding-bottom: 6px; }
+    .seat-grid { display: grid; gap: 6px; min-width: fit-content; }
+    .seat {
+      min-width: 76px;
+      min-height: 64px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      background: #fff;
+      padding: 4px;
+      font-size: 13px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      cursor: pointer;
+      position: relative;
+      word-break: break-all;
+    }
+    .seat .orient-mark { font-size: 11px; color: #888; }
+    .seat .seat-name { font-weight: bold; }
+    .seat .seat-icons { position: absolute; top: 1px; right: 4px; font-size: 12px; }
+    .seat.disabled { background: #e9ecef; border-style: dashed; color: #aab; }
+    .seat.selected { outline: 3px solid var(--primary); outline-offset: 1px; }
+    .seat.ng-marked { border-color: var(--danger); background: #fdecea; }
+    .seat.warn-seat { border-color: #f1c40f; }
+    .seat.error-seat { border-color: var(--danger); }
+    .seat.highlighted { outline: 3px solid #e67e22; outline-offset: 1px; }
+    .seat.empty-seat { color: #bbc; }
+
+    /* ===== リスト類 ===== */
+    .item-list { list-style: none; }
+    .item-list li {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 4px;
+      border-bottom: 1px solid var(--border);
+    }
+    .item-list li .grow { flex: 1; min-width: 100px; }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      border-radius: 10px;
+      padding: 1px 8px;
+      color: #fff;
+      vertical-align: middle;
+    }
+    .badge.gray { background: #95a5a6; }
+
+    /* ===== グループタブ ===== */
+    .group-card { border-left: 8px solid #ccc; }
+    .color-dot {
+      width: 44px; height: 44px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+    .chip {
+      display: inline-block;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 8px 14px;
+      margin: 3px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #fff;
+      user-select: none;
+    }
+    .chip.in-group { color: #fff; font-weight: bold; }
+
+    /* ===== 警告パネル ===== */
+    .warning-list { list-style: none; }
+    .warning-list li {
+      padding: 8px 10px;
+      border-radius: 8px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      border: 1px solid var(--border);
+    }
+    .warning-list li.level-error { background: #fdecea; border-color: var(--danger); color: var(--danger); }
+    .warning-list li.level-warn  { background: #fef9e7; border-color: #f1c40f; color: var(--warn); }
+    .warning-list li.level-info  { background: #eaf2f8; border-color: var(--primary); color: var(--info); }
+
+    /* ===== 名簿タブ ===== */
+    .roster-cards { display: flex; flex-wrap: wrap; gap: 12px; }
+    .roster-card {
+      border: 2px solid #ccc;
+      border-radius: 10px;
+      padding: 10px 14px;
+      min-width: 180px;
+      flex: 1 1 200px;
+      background: #fff;
+    }
+    .roster-card h3 { margin-top: 0; }
+    .roster-card ul { list-style: none; font-size: 14px; }
+
+    /* ===== モーダル ===== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 100;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .modal-overlay.open { display: flex; align-items: flex-start; justify-content: center; }
+    .modal-box {
+      background: #fff;
+      border-radius: 12px;
+      padding: 18px;
+      width: 100%;
+      max-width: 520px;
+      margin-top: 5vh;
+    }
+    .modal-box h2 { margin-bottom: 10px; }
+    .modal-body { margin-bottom: 14px; }
+    .modal-body label { display: block; font-size: 14px; margin: 10px 0 4px; font-weight: bold; }
+    .modal-body input[type="text"], .modal-body select, .modal-body textarea { width: 100%; }
+    .modal-buttons { display: flex; gap: 8px; justify-content: flex-end; }
+
+    /* ===== 印刷 ===== */
+    @media print {
+      header, nav.tabs, .no-print, .tab-panel { display: none !important; }
+      #tab-roster { display: block !important; padding: 0; }
+      body { background: #fff; padding: 0; }
+      .card { border: none; padding: 0; margin-bottom: 16px; }
+      .seat { cursor: default; }
+    }
+
+    /* ===== iPad縦持ち（〜820px）調整 ===== */
+    @media (max-width: 820px) {
+      nav.tabs button { font-size: 13px; padding: 10px 6px; }
+      .seat { min-width: 64px; min-height: 56px; font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== ヘッダー：教室の選択・新規作成・バックアップ ===== -->
+  <header>
+    <span class="app-title">📋 席替えツール</span>
+    <select id="classroomSelect" aria-label="教室の選択"></select>
+    <button id="btnNewClassroom">＋新規</button>
+    <button id="btnExport" title="JSONファイルとして保存">💾保存</button>
+    <button id="btnImport" title="JSONファイルから読込">📂読込</button>
+    <input type="file" id="importFile" accept=".json,application/json" style="display:none">
+  </header>
+
+  <!-- ===== タブナビゲーション ===== -->
+  <nav class="tabs">
+    <button data-tab="tab-layout" class="active">🏫教室設定</button>
+    <button data-tab="tab-students">👥生徒</button>
+    <button data-tab="tab-groups">🎨グループ</button>
+    <button data-tab="tab-ng">🚫NG設定</button>
+    <button data-tab="tab-shuffle">🎲席替え</button>
+    <button data-tab="tab-roster">📃名簿</button>
+    <button data-tab="tab-history">🕐履歴</button>
+  </nav>
+
+  <!-- ===== 🏫 教室設定タブ ===== -->
+  <section id="tab-layout" class="tab-panel active">
+    <div class="card">
+      <h2>机のレイアウト</h2>
+      <div class="row">
+        <label>横（列数）<input type="number" id="inputCols" min="1" max="15" value="6" style="width:80px"></label>
+        <label>縦（行数）<input type="number" id="inputRows" min="1" max="15" value="5" style="width:80px"></label>
+        <button id="btnApplyLayout" class="primary">レイアウト適用</button>
+      </div>
+      <p class="hint">※レイアウトを変えても生徒・履歴データは残ります</p>
+    </div>
+    <div class="card">
+      <h2>机の設定（タップして選択）</h2>
+      <p class="hint">机をタップ → 下のボタンで向き変更・席の無効化（通路・空席）ができます</p>
+      <div class="row no-print" style="margin:8px 0">
+        <button id="btnOrientFront">↑ 前向き</button>
+        <button id="btnOrientLeft">← 横向き（左）</button>
+        <button id="btnOrientRight">→ 横向き（右）</button>
+        <button id="btnToggleDisable" class="danger-btn">🚫 席なしにする / 戻す</button>
+      </div>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="layoutGrid" class="seat-grid"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== 👥 生徒タブ ===== -->
+  <section id="tab-students" class="tab-panel">
+    <div class="card">
+      <h2>生徒の追加</h2>
+      <div class="row">
+        <input type="text" id="inputStudentName" placeholder="名前を入力してEnter" style="flex:1;min-width:160px">
+        <button id="btnAddStudent" class="primary">追加</button>
+      </div>
+      <h3>CSVインポート（1行に1名）</h3>
+      <div class="row">
+        <textarea id="csvText" rows="3" placeholder="田中太郎&#10;鈴木花子" style="flex:1;min-width:200px"></textarea>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="btnImportCSV">CSVから一括追加</button>
+        <button id="btnExportCSV">CSVエクスポート</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>生徒一覧（<span id="studentCount">0</span>名）</h2>
+      <ul id="studentList" class="item-list"></ul>
+    </div>
+  </section>
+
+  <!-- ===== 🎨 グループタブ ===== -->
+  <section id="tab-groups" class="tab-panel">
+    <div class="card">
+      <div class="row">
+        <button id="btnAddGroup" class="primary">＋班を追加</button>
+        <button id="btnAutoAssignGroups">均等自動振り分け</button>
+      </div>
+      <p class="hint">色ドットをタップ＝色変更／班名は直接編集／生徒チップをタップ＝班に入れる・外す</p>
+    </div>
+    <div id="groupList"></div>
+  </section>
+
+  <!-- ===== 🚫 NG設定タブ ===== -->
+  <section id="tab-ng" class="tab-panel">
+    <div class="card">
+      <h2>隣席NG（隣同士にしないペア）</h2>
+      <div class="row">
+        <select id="ngPairA"></select>
+        <span>×</span>
+        <select id="ngPairB"></select>
+        <input type="text" id="ngPairReason" placeholder="理由メモ（任意）" style="flex:1;min-width:120px">
+        <button id="btnAddNgPair" class="primary">追加</button>
+      </div>
+      <ul id="ngPairList" class="item-list"></ul>
+    </div>
+    <div class="card">
+      <h2>着席NG（この生徒が座れない席）</h2>
+      <div class="row">
+        <label>生徒を選択：</label>
+        <select id="ngSeatStudent"></select>
+      </div>
+      <p class="hint">席をタップするとNG席として登録/解除されます（赤＝NG席）</p>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="ngGrid" class="seat-grid"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== 🎲 席替えタブ ===== -->
+  <section id="tab-shuffle" class="tab-panel">
+    <div class="card no-print">
+      <div class="row">
+        <button id="btnRunShuffle" class="primary" style="font-size:18px">🎲 席替え実行</button>
+        <button id="btnSaveHistory">💾 履歴に保存</button>
+        <button id="btnPrintSeats">🖨 印刷</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>座席表</h2>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="shuffleGrid" class="seat-grid"></div></div>
+    </div>
+    <div class="card no-print">
+      <h2>チェック結果</h2>
+      <ul id="warningList" class="warning-list"></ul>
+      <p class="hint">項目をタップすると該当の席がオレンジ枠で光ります</p>
+    </div>
+  </section>
+
+  <!-- ===== 📃 名簿タブ（印刷用ビュー） ===== -->
+  <section id="tab-roster" class="tab-panel">
+    <div class="card no-print">
+      <button id="btnPrintRoster" class="primary">🖨 この内容を印刷</button>
+    </div>
+    <div class="card">
+      <h2 id="rosterTitle">班別名簿</h2>
+      <div id="rosterCards" class="roster-cards"></div>
+    </div>
+    <div class="card">
+      <h2>座席表</h2>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="rosterGrid" class="seat-grid"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== 🕐 履歴タブ ===== -->
+  <section id="tab-history" class="tab-panel">
+    <div class="card">
+      <h2>保存した席替え履歴</h2>
+      <ul id="historyList" class="item-list"></ul>
+    </div>
+    <div class="card" id="historyPreviewCard" style="display:none">
+      <h2 id="historyPreviewTitle">プレビュー</h2>
+      <div class="board-label">黒　板</div>
+      <div class="seat-grid-wrap"><div id="historyGrid" class="seat-grid"></div></div>
+    </div>
+  </section>
+
+  <!-- ===== 共通モーダル ===== -->
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal-box">
+      <h2 id="modalTitle"></h2>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-buttons">
+        <button id="modalCancel">キャンセル</button>
+        <button id="modalOk" class="primary">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    'use strict';
+
+    // =====================================================
+    // 定数
+    // =====================================================
+    const STORAGE_KEY = 'seat_tool_v1';
+    const GROUP_COLORS = [
+      '#e74c3c', '#e67e22', '#f1c40f', '#27ae60', '#16a085',
+      '#2980b9', '#8e44ad', '#e84393', '#795548', '#7f8c8d'
+    ];
+    const ORIENT_MARKS = { 'front': '↑', 'side-left': '←', 'side-right': '→' };
+    const MAX_RESTART = 300; // 席替えアルゴリズムの最大リスタート回数
+
+    // =====================================================
+    // 状態管理（localStorage との読み書き）
+    // =====================================================
+    let state = null;
+    let selectedDeskKey = null;     // 教室設定タブで選択中の机
+    let lastWarnings = [];          // 直近の席替えチェック結果
+
+    function uid() {
+      return Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    }
+
+    // localStorage はプライベートモード等で失敗するため必ず try-catch で保護する
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) {
+        console.warn('読み込みに失敗しました:', e);
+      }
+      return null;
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      } catch (e) {
+        console.warn('保存に失敗しました:', e);
+      }
+    }
+
+    function createClassroom(name, rows, cols) {
+      return {
+        id: uid(),
+        name: name,
+        rows: rows,
+        cols: cols,
+        students: [],
+        groups: [],
+        deskMeta: {},      // "行-列" → { orient, disabled, fixedStudentId, ngStudentIds }
+        ngPairs: [],
+        history: [],
+        currentSeats: null // 直近の席替え結果（席キー → 生徒ID）
+      };
+    }
+
+    function getActiveClassroom() {
+      return state.classrooms.find(c => c.id === state.activeId) || state.classrooms[0];
+    }
+
+    // 机のメタ情報を取得（なければデフォルトを生成して登録）
+    function getDeskMeta(cr, r, c) {
+      const key = r + '-' + c;
+      if (!cr.deskMeta[key]) {
+        cr.deskMeta[key] = { orient: 'front', disabled: false, fixedStudentId: null, ngStudentIds: [] };
+      }
+      return cr.deskMeta[key];
+    }
+
+    // 有効な席（無効化された机を除く）のキー一覧
+    function getEnabledSeats(cr) {
+      const seats = [];
+      for (let r = 0; r < cr.rows; r++) {
+        for (let c = 0; c < cr.cols; c++) {
+          if (!getDeskMeta(cr, r, c).disabled) seats.push(r + '-' + c);
+        }
+      }
+      return seats;
+    }
+
+    // 上下左右の隣接席キー（無効化された机は隣接に含めない）
+    function getNeighbors(cr, key) {
+      const [r, c] = key.split('-').map(Number);
+      const candidates = [[r - 1, c], [r + 1, c], [r, c - 1], [r, c + 1]];
+      const result = [];
+      for (const [nr, nc] of candidates) {
+        if (nr < 0 || nc < 0 || nr >= cr.rows || nc >= cr.cols) continue;
+        if (getDeskMeta(cr, nr, nc).disabled) continue;
+        result.push(nr + '-' + nc);
+      }
+      return result;
+    }
+
+    function getStudent(cr, id) {
+      return cr.students.find(s => s.id === id) || null;
+    }
+
+    function getGroupOf(cr, studentId) {
+      return cr.groups.find(g => g.memberIds.includes(studentId)) || null;
+    }
+
+    // =====================================================
+    // ユーティリティ
+    // =====================================================
+
+    // Fisher-Yates シャッフル（元の配列は変更しない）
+    function shuffle(array) {
+      const arr = [...array];
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, m => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]
+      ));
+    }
+
+    function todayString() {
+      const d = new Date();
+      return d.getFullYear() + '/' + (d.getMonth() + 1) + '/' + d.getDate();
+    }
+
+    // 席キー → 「2行3列」のような表示名
+    function seatLabel(key) {
+      const [r, c] = key.split('-').map(Number);
+      return (r + 1) + '行' + (c + 1) + '列';
+    }
+
+    // =====================================================
+    // 共通モーダル
+    // =====================================================
+    let modalOkHandler = null;
+
+    function openModal(title, bodyHtml, onOk, okLabel) {
+      document.getElementById('modalTitle').textContent = title;
+      document.getElementById('modalBody').innerHTML = bodyHtml;
+      document.getElementById('modalOk').textContent = okLabel || 'OK';
+      modalOkHandler = onOk;
+      document.getElementById('modalOverlay').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('modalOverlay').classList.remove('open');
+      modalOkHandler = null;
+    }
+
+    document.getElementById('modalCancel').addEventListener('click', closeModal);
+    document.getElementById('modalOk').addEventListener('click', () => {
+      // onOk が false を返したらモーダルを閉じない（入力エラー時など）
+      if (modalOkHandler && modalOkHandler() === false) return;
+      closeModal();
+    });
+
+    // =====================================================
+    // 席替えアルゴリズム
+    // =====================================================
+
+    // 隣席NGペアかどうか
+    function isNGPair(cr, idA, idB) {
+      return cr.ngPairs.some(p =>
+        (p.a === idA && p.b === idB) || (p.a === idB && p.b === idA)
+      );
+    }
+
+    // 着席NGの判定のみ（リスタート失敗時の緩和配置で使用）
+    function seatNgOk(cr, student, seatKey) {
+      const meta = cr.deskMeta[seatKey];
+      return !(meta && meta.ngStudentIds && meta.ngStudentIds.includes(student.id));
+    }
+
+    // ハード制約：着席NGでなく、配置済みの隣にNGペア相手がいないこと
+    function hardConstraintOk(cr, student, seatKey, assignment) {
+      if (!seatNgOk(cr, student, seatKey)) return false;
+      for (const nKey of getNeighbors(cr, seatKey)) {
+        const neighborId = assignment[nKey];
+        if (neighborId && isNGPair(cr, student.id, neighborId)) return false;
+      }
+      return true;
+    }
+
+    // 席替え本体：制約付きランダム配置（リスタート方式）
+    function runSeatingAlgorithm(cr) {
+      const seats = getEnabledSeats(cr);
+      const active = cr.students.filter(s => !s.inactive);
+      if (active.length === 0) {
+        return { error: '生徒が登録されていません。「👥生徒」タブで追加してください。' };
+      }
+      if (active.length > seats.length) {
+        return { error: '生徒数（' + active.length + '名）が席数（' + seats.length + '席）を超えています。レイアウトを見直してください。' };
+      }
+
+      // 固定席の生徒を先に配置する
+      const baseAssignment = {};
+      const fixedIds = new Set();
+      for (const key of seats) {
+        const meta = cr.deskMeta[key];
+        if (meta && meta.fixedStudentId) {
+          const st = active.find(s => s.id === meta.fixedStudentId);
+          if (st) {
+            baseAssignment[key] = st.id;
+            fixedIds.add(st.id);
+          }
+        }
+      }
+      const movable = active.filter(s => !fixedIds.has(s.id));
+      const freeSeats = seats.filter(k => !baseAssignment[k]);
+
+      // リスタートループ：シャッフル → 貪欲配置 を最大300回試す
+      let result = null;
+      for (let t = 0; t < MAX_RESTART; t++) {
+        const a = Object.assign({}, baseAssignment);
+        const shuffledStudents = shuffle(movable);
+        const shuffledSeats = shuffle(freeSeats);
+        let ok = true;
+        for (const st of shuffledStudents) {
+          const seat = shuffledSeats.find(k => !a[k] && hardConstraintOk(cr, st, k, a));
+          if (!seat) { ok = false; break; }
+          a[seat] = st.id;
+        }
+        if (ok) { result = a; break; }
+      }
+
+      // 300回失敗 → NG隣接制約を緩和して強制配置（着席NGはなるべく守る）
+      let relaxed = false;
+      if (!result) {
+        relaxed = true;
+        const a = Object.assign({}, baseAssignment);
+        for (const st of shuffle(movable)) {
+          let seat = freeSeats.find(k => !a[k] && seatNgOk(cr, st, k));
+          if (!seat) seat = freeSeats.find(k => !a[k]);
+          if (seat) a[seat] = st.id;
+        }
+        result = a;
+      }
+
+      // 生徒のいない有効席は null（空席）として記録する
+      for (const key of seats) {
+        if (!(key in result)) result[key] = null;
+      }
+      return { assignment: result, relaxed: relaxed };
+    }
+
+    // =====================================================
+    // ソフト制約チェック（履歴照合 → 警告リスト生成）
+    // =====================================================
+    function checkSoftConstraints(cr, assignment) {
+      const warnings = [];
+
+      // --- 同じ席チェック：最新の履歴と比較 ---
+      const latest = cr.history[cr.history.length - 1];
+      if (latest) {
+        for (const key of Object.keys(assignment)) {
+          const sid = assignment[key];
+          if (sid && latest.seats[key] === sid) {
+            const st = getStudent(cr, sid);
+            warnings.push({
+              level: 'warn',
+              text: '⚠️ ' + (st ? st.name : '?') + ' は前回（' + latest.label + '）と同じ席です',
+              seats: [key]
+            });
+          }
+        }
+      }
+
+      // 今回の隣接ペア一覧（重複なし）を作る
+      const seatOf = {}; // 生徒ID → 席キー
+      for (const key of Object.keys(assignment)) {
+        if (assignment[key]) seatOf[assignment[key]] = key;
+      }
+      const currentPairs = []; // [idA, idB]（idA < idB）
+      const pairSeen = new Set();
+      for (const key of Object.keys(assignment)) {
+        const sid = assignment[key];
+        if (!sid) continue;
+        for (const nKey of getNeighbors(cr, key)) {
+          const nid = assignment[nKey];
+          if (!nid) continue;
+          const pairKey = [sid, nid].sort().join('|');
+          if (!pairSeen.has(pairKey)) {
+            pairSeen.add(pairKey);
+            currentPairs.push([sid, nid]);
+          }
+        }
+      }
+
+      // --- 隣履歴チェック：過去に隣だったペアが再び隣か ---
+      for (const h of cr.history) {
+        // この履歴での隣接ペア集合を作る
+        const histAdjacent = new Set();
+        for (const key of Object.keys(h.seats)) {
+          const sid = h.seats[key];
+          if (!sid) continue;
+          for (const nKey of getNeighbors(cr, key)) {
+            const nid = h.seats[nKey];
+            if (nid) histAdjacent.add([sid, nid].sort().join('|'));
+          }
+        }
+        for (const [a, b] of currentPairs) {
+          if (histAdjacent.has([a, b].sort().join('|'))) {
+            const sa = getStudent(cr, a), sb = getStudent(cr, b);
+            if (sa && sb) {
+              warnings.push({
+                level: 'info',
+                text: 'ℹ️ ' + sa.name + ' と ' + sb.name + ' は「' + h.label + '」でも隣でした',
+                seats: [seatOf[a], seatOf[b]].filter(Boolean)
+              });
+            }
+          }
+        }
+      }
+
+      // --- 同班履歴チェック：今回同じ班のペアが過去にも同じ班だったか ---
+      const sameGroupPairs = []; // 今回同じ班のペア
+      for (const g of cr.groups) {
+        const ids = g.memberIds.filter(id => seatOf[id]);
+        for (let i = 0; i < ids.length; i++) {
+          for (let j = i + 1; j < ids.length; j++) {
+            sameGroupPairs.push([ids[i], ids[j], g.name]);
+          }
+        }
+      }
+      for (const h of cr.history) {
+        if (!h.groupSnapshot) continue;
+        for (const [a, b, gname] of sameGroupPairs) {
+          const ga = h.groupSnapshot[a], gb = h.groupSnapshot[b];
+          if (ga && ga === gb) {
+            const sa = getStudent(cr, a), sb = getStudent(cr, b);
+            if (sa && sb) {
+              warnings.push({
+                level: 'info',
+                text: 'ℹ️ ' + sa.name + ' と ' + sb.name + '（' + gname + '）は「' + h.label + '」でも同じ班でした',
+                seats: [seatOf[a], seatOf[b]].filter(Boolean)
+              });
+            }
+          }
+        }
+      }
+
+      return warnings;
+    }
+
+    // =====================================================
+    // 座席グリッド描画（全タブ共通）
+    // mode: 'layout' | 'ng' | 'seating' | 'preview'
+    // extra: { seats, warnings, ngStudentId, onTap }
+    // =====================================================
+    function renderGrid(containerId, cr, mode, extra) {
+      extra = extra || {};
+      const container = document.getElementById(containerId);
+      container.innerHTML = '';
+      container.style.gridTemplateColumns = 'repeat(' + cr.cols + ', minmax(64px, 1fr))';
+
+      // 警告レベルを席キーごとに集計（席替え表示用）
+      const seatLevel = {};
+      if (extra.warnings) {
+        for (const w of extra.warnings) {
+          for (const key of (w.seats || [])) {
+            // error > warn > info の優先順で席の枠色を決める
+            if (w.level === 'error' || seatLevel[key] === undefined ||
+                (w.level === 'warn' && seatLevel[key] === 'info')) {
+              seatLevel[key] = (seatLevel[key] === 'error') ? 'error' : w.level;
+            }
+          }
+        }
+      }
+
+      for (let r = 0; r < cr.rows; r++) {
+        for (let c = 0; c < cr.cols; c++) {
+          const key = r + '-' + c;
+          const meta = getDeskMeta(cr, r, c);
+          const cell = document.createElement('div');
+          cell.className = 'seat';
+          cell.dataset.key = key;
+
+          if (meta.disabled) {
+            cell.classList.add('disabled');
+            cell.innerHTML = '<span class="hint">通路</span>';
+          } else {
+            // 向きマーク
+            const orientMark = ORIENT_MARKS[meta.orient] || '↑';
+            let nameHtml = '';
+            let icons = '';
+
+            if (mode === 'layout') {
+              // 教室設定：固定生徒名があれば参考表示
+              const fixedSt = meta.fixedStudentId ? getStudent(cr, meta.fixedStudentId) : null;
+              nameHtml = fixedSt ? '🔒' + escapeHtml(fixedSt.name) : '<span class="empty-seat">机</span>';
+              if (selectedDeskKey === key) cell.classList.add('selected');
+
+            } else if (mode === 'ng') {
+              // 着席NG設定：選択中の生徒のNG席を赤表示
+              const sid = extra.ngStudentId;
+              if (sid && meta.ngStudentIds.includes(sid)) {
+                cell.classList.add('ng-marked');
+                nameHtml = '🚫NG';
+              } else {
+                nameHtml = '<span class="empty-seat">' + seatLabel(key) + '</span>';
+              }
+
+            } else {
+              // seating / preview：配置された生徒を表示
+              const seatsMap = extra.seats || {};
+              const sid = seatsMap[key];
+              const st = sid ? getStudent(cr, sid) : null;
+              if (st) {
+                nameHtml = '<span class="seat-name">' + escapeHtml(st.name) + '</span>';
+                // 班カラー（preview の場合は当時の班スナップショットを優先）
+                let group = null;
+                if (extra.groupSnapshot && extra.groupSnapshot[sid]) {
+                  group = cr.groups.find(g => g.id === extra.groupSnapshot[sid]) || null;
+                }
+                if (!group) group = getGroupOf(cr, sid);
+                if (group) {
+                  cell.style.background = group.color + '33'; // 20%透過
+                  cell.style.borderColor = group.color;
+                }
+                if (meta.fixedStudentId === sid) icons += '🔒';
+                if (seatLevel[key] === 'warn' || seatLevel[key] === 'error') icons += '⚠️';
+                else if (seatLevel[key] === 'info') icons += 'ℹ️';
+                if (seatLevel[key] === 'error') cell.classList.add('error-seat');
+                else if (seatLevel[key] === 'warn') cell.classList.add('warn-seat');
+              } else {
+                nameHtml = '<span class="empty-seat">空席</span>';
+              }
+            }
+
+            cell.innerHTML =
+              '<span class="seat-icons">' + icons + '</span>' +
+              '<span class="orient-mark">' + orientMark + '</span>' +
+              nameHtml;
+          }
+
+          if (extra.onTap) {
+            cell.addEventListener('click', () => extra.onTap(key));
+          }
+          container.appendChild(cell);
+        }
+      }
+    }
+
+    // =====================================================
+    // 🏫 教室設定タブ
+    // =====================================================
+    function renderLayoutTab() {
+      const cr = getActiveClassroom();
+      document.getElementById('inputCols').value = cr.cols;
+      document.getElementById('inputRows').value = cr.rows;
+      renderGrid('layoutGrid', cr, 'layout', {
+        onTap: (key) => {
+          selectedDeskKey = (selectedDeskKey === key) ? null : key;
+          renderLayoutTab();
+        }
+      });
+    }
+
+    document.getElementById('btnApplyLayout').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const cols = Math.max(1, Math.min(15, parseInt(document.getElementById('inputCols').value, 10) || 1));
+      const rows = Math.max(1, Math.min(15, parseInt(document.getElementById('inputRows').value, 10) || 1));
+      cr.cols = cols;
+      cr.rows = rows;
+      selectedDeskKey = null;
+      saveState();
+      renderAll();
+    });
+
+    function setOrient(orient) {
+      if (!selectedDeskKey) {
+        alert('先に机をタップして選択してください');
+        return;
+      }
+      const cr = getActiveClassroom();
+      const [r, c] = selectedDeskKey.split('-').map(Number);
+      getDeskMeta(cr, r, c).orient = orient;
+      saveState();
+      renderLayoutTab();
+    }
+    document.getElementById('btnOrientFront').addEventListener('click', () => setOrient('front'));
+    document.getElementById('btnOrientLeft').addEventListener('click', () => setOrient('side-left'));
+    document.getElementById('btnOrientRight').addEventListener('click', () => setOrient('side-right'));
+
+    document.getElementById('btnToggleDisable').addEventListener('click', () => {
+      if (!selectedDeskKey) {
+        alert('先に机をタップして選択してください');
+        return;
+      }
+      const cr = getActiveClassroom();
+      const [r, c] = selectedDeskKey.split('-').map(Number);
+      const meta = getDeskMeta(cr, r, c);
+      meta.disabled = !meta.disabled;
+      if (meta.disabled) meta.fixedStudentId = null; // 無効化したら固定も解除
+      saveState();
+      renderLayoutTab();
+    });
+
+    // =====================================================
+    // 👥 生徒タブ
+    // =====================================================
+    function addStudent(name) {
+      const cr = getActiveClassroom();
+      const trimmed = name.trim();
+      if (!trimmed) return false;
+      cr.students.push({ id: uid(), name: trimmed, inactive: false });
+      saveState();
+      return true;
+    }
+
+    document.getElementById('btnAddStudent').addEventListener('click', () => {
+      const input = document.getElementById('inputStudentName');
+      if (addStudent(input.value)) {
+        input.value = '';
+        renderAll();
+      }
+      input.focus();
+    });
+    document.getElementById('inputStudentName').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('btnAddStudent').click();
+      }
+    });
+
+    // CSVインポート（1行1名）
+    function importStudentCSV(text) {
+      const names = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      let count = 0;
+      for (const name of names) {
+        if (addStudent(name)) count++;
+      }
+      return count;
+    }
+    document.getElementById('btnImportCSV').addEventListener('click', () => {
+      const ta = document.getElementById('csvText');
+      const count = importStudentCSV(ta.value);
+      if (count > 0) {
+        ta.value = '';
+        alert(count + '名を追加しました');
+        renderAll();
+      } else {
+        alert('追加できる名前がありません');
+      }
+    });
+
+    // CSVエクスポート（テキストファイルをダウンロード）
+    function exportStudentCSV() {
+      const cr = getActiveClassroom();
+      const text = cr.students.map(s => s.name).join('\n');
+      downloadFile(cr.name + '-名簿.csv', text, 'text/csv');
+    }
+    document.getElementById('btnExportCSV').addEventListener('click', exportStudentCSV);
+
+    function renderStudentsTab() {
+      const cr = getActiveClassroom();
+      document.getElementById('studentCount').textContent =
+        cr.students.filter(s => !s.inactive).length;
+      const ul = document.getElementById('studentList');
+      ul.innerHTML = '';
+      for (const st of cr.students) {
+        const li = document.createElement('li');
+        const group = getGroupOf(cr, st.id);
+        // 固定席の検索
+        let fixedKey = null;
+        for (const key of Object.keys(cr.deskMeta)) {
+          if (cr.deskMeta[key].fixedStudentId === st.id) { fixedKey = key; break; }
+        }
+        li.innerHTML =
+          '<span class="grow">' + escapeHtml(st.name) +
+          (st.inactive ? ' <span class="badge gray">除外中</span>' : '') +
+          (group ? ' <span class="badge" style="background:' + group.color + '">' + escapeHtml(group.name) + '</span>' : '') +
+          (fixedKey ? ' <span class="badge gray">🔒' + seatLabel(fixedKey) + '</span>' : '') +
+          '</span>';
+
+        const btnEdit = document.createElement('button');
+        btnEdit.textContent = '編集';
+        btnEdit.addEventListener('click', () => openStudentEditModal(st.id));
+
+        const btnToggle = document.createElement('button');
+        btnToggle.textContent = st.inactive ? '戻す' : '除外';
+        btnToggle.addEventListener('click', () => {
+          st.inactive = !st.inactive;
+          saveState();
+          renderAll();
+        });
+
+        const btnDelete = document.createElement('button');
+        btnDelete.textContent = '削除';
+        btnDelete.className = 'danger-btn';
+        btnDelete.addEventListener('click', () => {
+          if (!confirm('「' + st.name + '」を削除しますか？（履歴の名前表示にも影響します）')) return;
+          deleteStudent(st.id);
+        });
+
+        li.appendChild(btnEdit);
+        li.appendChild(btnToggle);
+        li.appendChild(btnDelete);
+        ul.appendChild(li);
+      }
+    }
+
+    function deleteStudent(sid) {
+      const cr = getActiveClassroom();
+      cr.students = cr.students.filter(s => s.id !== sid);
+      cr.groups.forEach(g => { g.memberIds = g.memberIds.filter(id => id !== sid); });
+      cr.ngPairs = cr.ngPairs.filter(p => p.a !== sid && p.b !== sid);
+      for (const key of Object.keys(cr.deskMeta)) {
+        const meta = cr.deskMeta[key];
+        if (meta.fixedStudentId === sid) meta.fixedStudentId = null;
+        meta.ngStudentIds = (meta.ngStudentIds || []).filter(id => id !== sid);
+      }
+      if (cr.currentSeats) {
+        for (const key of Object.keys(cr.currentSeats)) {
+          if (cr.currentSeats[key] === sid) cr.currentSeats[key] = null;
+        }
+      }
+      saveState();
+      renderAll();
+    }
+
+    // 生徒の編集モーダル：名前・グループ・固定席
+    function openStudentEditModal(sid) {
+      const cr = getActiveClassroom();
+      const st = getStudent(cr, sid);
+      if (!st) return;
+      const group = getGroupOf(cr, sid);
+      let fixedKey = '';
+      for (const key of Object.keys(cr.deskMeta)) {
+        if (cr.deskMeta[key].fixedStudentId === sid) { fixedKey = key; break; }
+      }
+
+      const groupOptions = ['<option value="">（班なし）</option>']
+        .concat(cr.groups.map(g =>
+          '<option value="' + g.id + '"' + (group && group.id === g.id ? ' selected' : '') + '>' +
+          escapeHtml(g.name) + '</option>'
+        )).join('');
+
+      const seatOptions = ['<option value="">（固定しない）</option>']
+        .concat(getEnabledSeats(cr).map(key => {
+          const occupied = cr.deskMeta[key] && cr.deskMeta[key].fixedStudentId &&
+                           cr.deskMeta[key].fixedStudentId !== sid;
+          const occupant = occupied ? getStudent(cr, cr.deskMeta[key].fixedStudentId) : null;
+          return '<option value="' + key + '"' + (fixedKey === key ? ' selected' : '') + '>' +
+            seatLabel(key) + (occupant ? '（🔒' + escapeHtml(occupant.name) + '）' : '') + '</option>';
+        })).join('');
+
+      openModal('生徒の編集',
+        '<label>名前</label><input type="text" id="editStudentName" value="' + escapeHtml(st.name) + '">' +
+        '<label>グループ</label><select id="editStudentGroup">' + groupOptions + '</select>' +
+        '<label>固定席（移動禁止）</label><select id="editStudentSeat">' + seatOptions + '</select>',
+        () => {
+          const newName = document.getElementById('editStudentName').value.trim();
+          if (!newName) { alert('名前を入力してください'); return false; }
+          st.name = newName;
+
+          // グループの付け替え
+          const gid = document.getElementById('editStudentGroup').value;
+          cr.groups.forEach(g => { g.memberIds = g.memberIds.filter(id => id !== sid); });
+          if (gid) {
+            const g = cr.groups.find(x => x.id === gid);
+            if (g) g.memberIds.push(sid);
+          }
+
+          // 固定席の付け替え（他の机に付いていた固定は解除）
+          const seatKey = document.getElementById('editStudentSeat').value;
+          for (const key of Object.keys(cr.deskMeta)) {
+            if (cr.deskMeta[key].fixedStudentId === sid) cr.deskMeta[key].fixedStudentId = null;
+          }
+          if (seatKey) {
+            const [r, c] = seatKey.split('-').map(Number);
+            getDeskMeta(cr, r, c).fixedStudentId = sid; // 既存の固定は上書き
+          }
+          saveState();
+          renderAll();
+        }, '保存');
+    }
+
+    // =====================================================
+    // 🎨 グループタブ
+    // =====================================================
+    document.getElementById('btnAddGroup').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const color = GROUP_COLORS[cr.groups.length % GROUP_COLORS.length];
+      cr.groups.push({ id: uid(), name: (cr.groups.length + 1) + '班', color: color, memberIds: [] });
+      saveState();
+      renderAll();
+    });
+
+    // 均等自動振り分け：班なし生徒も含めて全員を順番に配る
+    document.getElementById('btnAutoAssignGroups').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      if (cr.groups.length === 0) {
+        alert('先に班を追加してください');
+        return;
+      }
+      if (!confirm('現在の班メンバーをリセットして、全員を均等に振り分けます。よろしいですか？')) return;
+      cr.groups.forEach(g => { g.memberIds = []; });
+      const active = shuffle(cr.students.filter(s => !s.inactive));
+      active.forEach((st, i) => {
+        cr.groups[i % cr.groups.length].memberIds.push(st.id);
+      });
+      saveState();
+      renderAll();
+    });
+
+    function renderGroupsTab() {
+      const cr = getActiveClassroom();
+      const container = document.getElementById('groupList');
+      container.innerHTML = '';
+      for (const g of cr.groups) {
+        const card = document.createElement('div');
+        card.className = 'card group-card';
+        card.style.borderLeftColor = g.color;
+
+        // ヘッダ行：色ドット・班名・削除
+        const head = document.createElement('div');
+        head.className = 'row';
+
+        const dot = document.createElement('div');
+        dot.className = 'color-dot';
+        dot.style.background = g.color;
+        dot.title = 'タップで色を変更';
+        dot.addEventListener('click', () => {
+          const idx = GROUP_COLORS.indexOf(g.color);
+          g.color = GROUP_COLORS[(idx + 1) % GROUP_COLORS.length];
+          saveState();
+          renderAll();
+        });
+
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = g.name;
+        nameInput.style.flex = '1';
+        nameInput.addEventListener('change', () => {
+          g.name = nameInput.value.trim() || g.name;
+          saveState();
+          renderAll();
+        });
+
+        const btnDel = document.createElement('button');
+        btnDel.textContent = '削除';
+        btnDel.className = 'danger-btn';
+        btnDel.addEventListener('click', () => {
+          if (!confirm('「' + g.name + '」を削除しますか？（生徒は班なしになります）')) return;
+          cr.groups = cr.groups.filter(x => x.id !== g.id);
+          saveState();
+          renderAll();
+        });
+
+        head.appendChild(dot);
+        head.appendChild(nameInput);
+        head.appendChild(btnDel);
+        card.appendChild(head);
+
+        // メンバーチップ：タップで所属の切り替え
+        const chips = document.createElement('div');
+        chips.style.marginTop = '8px';
+        for (const st of cr.students.filter(s => !s.inactive)) {
+          const inThis = g.memberIds.includes(st.id);
+          const otherGroup = !inThis && getGroupOf(cr, st.id);
+          const chip = document.createElement('span');
+          chip.className = 'chip' + (inThis ? ' in-group' : '');
+          if (inThis) {
+            chip.style.background = g.color;
+            chip.style.borderColor = g.color;
+          }
+          chip.textContent = st.name + (otherGroup ? '（' + otherGroup.name + '）' : '');
+          chip.addEventListener('click', () => {
+            if (inThis) {
+              g.memberIds = g.memberIds.filter(id => id !== st.id);
+            } else {
+              // 他の班から外してこの班へ
+              cr.groups.forEach(x => { x.memberIds = x.memberIds.filter(id => id !== st.id); });
+              g.memberIds.push(st.id);
+            }
+            saveState();
+            renderAll();
+          });
+          chips.appendChild(chip);
+        }
+        card.appendChild(chips);
+        container.appendChild(card);
+      }
+      if (cr.groups.length === 0) {
+        container.innerHTML = '<div class="card"><p class="hint">班はまだありません。「＋班を追加」で作成できます。</p></div>';
+      }
+    }
+
+    // =====================================================
+    // 🚫 NG設定タブ
+    // =====================================================
+    function renderStudentSelect(selectId, includeEmpty) {
+      const cr = getActiveClassroom();
+      const sel = document.getElementById(selectId);
+      const prev = sel.value;
+      sel.innerHTML = (includeEmpty ? '<option value="">（生徒を選択）</option>' : '');
+      for (const st of cr.students.filter(s => !s.inactive)) {
+        const opt = document.createElement('option');
+        opt.value = st.id;
+        opt.textContent = st.name;
+        sel.appendChild(opt);
+      }
+      // 可能なら以前の選択を維持
+      if ([...sel.options].some(o => o.value === prev)) sel.value = prev;
+    }
+
+    document.getElementById('btnAddNgPair').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const a = document.getElementById('ngPairA').value;
+      const b = document.getElementById('ngPairB').value;
+      if (!a || !b) { alert('生徒を選択してください'); return; }
+      if (a === b) { alert('同じ生徒同士は登録できません'); return; }
+      if (isNGPair(cr, a, b)) { alert('このペアは登録済みです'); return; }
+      const reason = document.getElementById('ngPairReason').value.trim();
+      cr.ngPairs.push({ id: uid(), a: a, b: b, reason: reason });
+      document.getElementById('ngPairReason').value = '';
+      saveState();
+      renderAll();
+    });
+
+    function renderNgTab() {
+      const cr = getActiveClassroom();
+      renderStudentSelect('ngPairA', true);
+      renderStudentSelect('ngPairB', true);
+      renderStudentSelect('ngSeatStudent', true);
+
+      // 隣席NGペア一覧
+      const ul = document.getElementById('ngPairList');
+      ul.innerHTML = '';
+      for (const p of cr.ngPairs) {
+        const sa = getStudent(cr, p.a), sb = getStudent(cr, p.b);
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="grow">' +
+          escapeHtml(sa ? sa.name : '?') + ' × ' + escapeHtml(sb ? sb.name : '?') +
+          (p.reason ? ' <span class="hint">（' + escapeHtml(p.reason) + '）</span>' : '') +
+          '</span>';
+        const btn = document.createElement('button');
+        btn.textContent = '削除';
+        btn.className = 'danger-btn';
+        btn.addEventListener('click', () => {
+          cr.ngPairs = cr.ngPairs.filter(x => x.id !== p.id);
+          saveState();
+          renderNgTab();
+        });
+        li.appendChild(btn);
+        ul.appendChild(li);
+      }
+      if (cr.ngPairs.length === 0) {
+        ul.innerHTML = '<li><span class="hint">隣席NGペアはありません</span></li>';
+      }
+
+      renderNgGrid();
+    }
+
+    function renderNgGrid() {
+      const cr = getActiveClassroom();
+      const sid = document.getElementById('ngSeatStudent').value;
+      renderGrid('ngGrid', cr, 'ng', {
+        ngStudentId: sid,
+        onTap: (key) => {
+          if (!sid) { alert('先に生徒を選択してください'); return; }
+          const [r, c] = key.split('-').map(Number);
+          const meta = getDeskMeta(cr, r, c);
+          if (meta.disabled) return;
+          const idx = meta.ngStudentIds.indexOf(sid);
+          if (idx >= 0) meta.ngStudentIds.splice(idx, 1);
+          else meta.ngStudentIds.push(sid);
+          saveState();
+          renderNgGrid();
+        }
+      });
+    }
+    document.getElementById('ngSeatStudent').addEventListener('change', renderNgGrid);
+
+    // =====================================================
+    // 🎲 席替えタブ
+    // =====================================================
+    document.getElementById('btnRunShuffle').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const result = runSeatingAlgorithm(cr);
+      if (result.error) {
+        alert(result.error);
+        return;
+      }
+      cr.currentSeats = result.assignment;
+      lastWarnings = checkSoftConstraints(cr, result.assignment);
+      if (result.relaxed) {
+        lastWarnings.unshift({
+          level: 'error',
+          text: '❌ NG条件をすべて満たす配置が見つかりませんでした（300回試行）。一部の制約を無視して配置しています。NG設定や固定席を見直してください。',
+          seats: []
+        });
+      }
+      saveState();
+      renderShuffleTab();
+      renderRosterTab();
+    });
+
+    function renderShuffleTab() {
+      const cr = getActiveClassroom();
+      renderGrid('shuffleGrid', cr, 'seating', {
+        seats: cr.currentSeats || {},
+        warnings: lastWarnings
+      });
+
+      // 警告パネル
+      const ul = document.getElementById('warningList');
+      ul.innerHTML = '';
+      if (!cr.currentSeats) {
+        ul.innerHTML = '<li class="level-info">「🎲 席替え実行」を押すと配置が作られます</li>';
+        return;
+      }
+      if (lastWarnings.length === 0) {
+        ul.innerHTML = '<li class="level-info">✅ 問題は見つかりませんでした</li>';
+        return;
+      }
+      for (const w of lastWarnings) {
+        const li = document.createElement('li');
+        li.className = 'level-' + w.level;
+        li.textContent = w.text;
+        // タップで該当席をハイライト
+        li.addEventListener('click', () => {
+          document.querySelectorAll('#shuffleGrid .seat').forEach(el => {
+            el.classList.toggle('highlighted', (w.seats || []).includes(el.dataset.key));
+          });
+        });
+        ul.appendChild(li);
+      }
+    }
+
+    // 現在の配置＋班構成を履歴に保存
+    function saveCurrentAsHistory(label) {
+      const cr = getActiveClassroom();
+      const groupSnapshot = {};
+      for (const g of cr.groups) {
+        for (const sid of g.memberIds) groupSnapshot[sid] = g.id;
+      }
+      cr.history.push({
+        id: uid(),
+        label: label,
+        date: todayString(),
+        seats: Object.assign({}, cr.currentSeats),
+        groupSnapshot: groupSnapshot
+      });
+      saveState();
+    }
+
+    document.getElementById('btnSaveHistory').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      if (!cr.currentSeats) {
+        alert('先に席替えを実行してください');
+        return;
+      }
+      const defaultLabel = todayString() + ' 第' + (cr.history.length + 1) + '回';
+      openModal('履歴に保存',
+        '<label>ラベル</label><input type="text" id="historyLabel" value="' + escapeHtml(defaultLabel) + '">',
+        () => {
+          const label = document.getElementById('historyLabel').value.trim() || defaultLabel;
+          saveCurrentAsHistory(label);
+          renderHistoryTab();
+          alert('保存しました：' + label);
+        }, '保存');
+    });
+
+    // 印刷：名簿タブの内容のみ印刷される（@media print）
+    document.getElementById('btnPrintSeats').addEventListener('click', () => {
+      renderRosterTab();
+      window.print();
+    });
+    document.getElementById('btnPrintRoster').addEventListener('click', () => window.print());
+
+    // =====================================================
+    // 📃 名簿タブ
+    // =====================================================
+    function renderRosterTab() {
+      const cr = getActiveClassroom();
+      document.getElementById('rosterTitle').textContent = cr.name + '　班別名簿';
+      const container = document.getElementById('rosterCards');
+      container.innerHTML = '';
+
+      // 生徒ID → 席キー（座席位置の表示用）
+      const seatOf = {};
+      if (cr.currentSeats) {
+        for (const key of Object.keys(cr.currentSeats)) {
+          if (cr.currentSeats[key]) seatOf[cr.currentSeats[key]] = key;
+        }
+      }
+
+      for (const g of cr.groups) {
+        const card = document.createElement('div');
+        card.className = 'roster-card';
+        card.style.borderColor = g.color;
+        const members = g.memberIds
+          .map(id => getStudent(cr, id))
+          .filter(st => st && !st.inactive);
+        card.innerHTML =
+          '<h3><span class="badge" style="background:' + g.color + '">' + escapeHtml(g.name) + '</span></h3>' +
+          '<ul>' + members.map(st =>
+            '<li>' + escapeHtml(st.name) +
+            (seatOf[st.id] ? ' <span class="hint">（' + seatLabel(seatOf[st.id]) + '）</span>' : '') +
+            '</li>'
+          ).join('') + '</ul>';
+        container.appendChild(card);
+      }
+
+      // 班なしの生徒
+      const noGroup = cr.students.filter(s => !s.inactive && !getGroupOf(cr, s.id));
+      if (noGroup.length > 0) {
+        const card = document.createElement('div');
+        card.className = 'roster-card';
+        card.innerHTML = '<h3>班なし</h3><ul>' + noGroup.map(st =>
+          '<li>' + escapeHtml(st.name) +
+          (seatOf[st.id] ? ' <span class="hint">（' + seatLabel(seatOf[st.id]) + '）</span>' : '') +
+          '</li>'
+        ).join('') + '</ul>';
+        container.appendChild(card);
+      }
+      if (cr.groups.length === 0 && noGroup.length === 0) {
+        container.innerHTML = '<p class="hint">生徒が登録されていません</p>';
+      }
+
+      renderGrid('rosterGrid', cr, 'seating', { seats: cr.currentSeats || {} });
+    }
+
+    // =====================================================
+    // 🕐 履歴タブ
+    // =====================================================
+    function renderHistoryTab() {
+      const cr = getActiveClassroom();
+      const ul = document.getElementById('historyList');
+      ul.innerHTML = '';
+      // 新しい順に表示
+      const items = [...cr.history].reverse();
+      for (const h of items) {
+        const li = document.createElement('li');
+        li.innerHTML = '<span class="grow"><strong>' + escapeHtml(h.label) + '</strong> <span class="hint">' + escapeHtml(h.date) + '</span></span>';
+
+        const btnView = document.createElement('button');
+        btnView.textContent = '表示';
+        btnView.addEventListener('click', () => {
+          document.getElementById('historyPreviewCard').style.display = 'block';
+          document.getElementById('historyPreviewTitle').textContent = 'プレビュー：' + h.label;
+          renderGrid('historyGrid', cr, 'preview', {
+            seats: h.seats,
+            groupSnapshot: h.groupSnapshot
+          });
+        });
+
+        const btnUse = document.createElement('button');
+        btnUse.textContent = 'この配置を使う';
+        btnUse.addEventListener('click', () => {
+          if (!confirm('「' + h.label + '」の配置を席替え画面に復元しますか？')) return;
+          restoreHistory(h.id);
+        });
+
+        const btnDel = document.createElement('button');
+        btnDel.textContent = '削除';
+        btnDel.className = 'danger-btn';
+        btnDel.addEventListener('click', () => {
+          if (!confirm('「' + h.label + '」を削除しますか？（隣・同班チェックの対象から外れます）')) return;
+          cr.history = cr.history.filter(x => x.id !== h.id);
+          saveState();
+          renderHistoryTab();
+        });
+
+        li.appendChild(btnView);
+        li.appendChild(btnUse);
+        li.appendChild(btnDel);
+        ul.appendChild(li);
+      }
+      if (cr.history.length === 0) {
+        ul.innerHTML = '<li><span class="hint">履歴はまだありません。席替え後に「💾 履歴に保存」で記録できます。</span></li>';
+      }
+    }
+
+    // 履歴の配置を席替え画面に復元
+    function restoreHistory(hid) {
+      const cr = getActiveClassroom();
+      const h = cr.history.find(x => x.id === hid);
+      if (!h) return;
+      cr.currentSeats = Object.assign({}, h.seats);
+      lastWarnings = checkSoftConstraints(cr, cr.currentSeats);
+      saveState();
+      switchTab('tab-shuffle');
+      renderShuffleTab();
+      renderRosterTab();
+    }
+
+    // =====================================================
+    // ヘッダー：教室の管理・JSONバックアップ
+    // =====================================================
+    function renderClassroomSelect() {
+      const sel = document.getElementById('classroomSelect');
+      sel.innerHTML = '';
+      for (const cr of state.classrooms) {
+        const opt = document.createElement('option');
+        opt.value = cr.id;
+        opt.textContent = cr.name;
+        if (cr.id === state.activeId) opt.selected = true;
+        sel.appendChild(opt);
+      }
+    }
+    document.getElementById('classroomSelect').addEventListener('change', (e) => {
+      state.activeId = e.target.value;
+      selectedDeskKey = null;
+      lastWarnings = getActiveClassroom().currentSeats
+        ? checkSoftConstraints(getActiveClassroom(), getActiveClassroom().currentSeats)
+        : [];
+      saveState();
+      renderAll();
+    });
+
+    document.getElementById('btnNewClassroom').addEventListener('click', () => {
+      openModal('教室の新規作成',
+        '<label>教室名</label><input type="text" id="newClassName" placeholder="例：3年2組">' +
+        '<label>横（列数）</label><input type="number" id="newClassCols" value="6" min="1" max="15">' +
+        '<label>縦（行数）</label><input type="number" id="newClassRows" value="5" min="1" max="15">',
+        () => {
+          const name = document.getElementById('newClassName').value.trim();
+          if (!name) { alert('教室名を入力してください'); return false; }
+          const cols = Math.max(1, Math.min(15, parseInt(document.getElementById('newClassCols').value, 10) || 6));
+          const rows = Math.max(1, Math.min(15, parseInt(document.getElementById('newClassRows').value, 10) || 5));
+          const cr = createClassroom(name, rows, cols);
+          state.classrooms.push(cr);
+          state.activeId = cr.id;
+          selectedDeskKey = null;
+          lastWarnings = [];
+          saveState();
+          renderAll();
+        }, '作成');
+    });
+
+    // 全データのJSONバックアップ
+    function downloadFile(filename, content, type) {
+      const blob = new Blob([content], { type: type || 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    function exportData() {
+      const d = new Date();
+      const stamp = d.getFullYear() +
+        String(d.getMonth() + 1).padStart(2, '0') +
+        String(d.getDate()).padStart(2, '0');
+      downloadFile('席替えツール-バックアップ-' + stamp + '.json', JSON.stringify(state, null, 2));
+    }
+    document.getElementById('btnExport').addEventListener('click', exportData);
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const data = JSON.parse(reader.result);
+          if (!data.classrooms || !Array.isArray(data.classrooms)) {
+            throw new Error('形式が違います');
+          }
+          if (!confirm('現在のデータをファイルの内容で置き換えます。よろしいですか？')) return;
+          state = data;
+          if (!state.classrooms.find(c => c.id === state.activeId)) {
+            state.activeId = state.classrooms[0] ? state.classrooms[0].id : null;
+          }
+          selectedDeskKey = null;
+          lastWarnings = [];
+          saveState();
+          renderAll();
+          alert('読み込みました');
+        } catch (e) {
+          alert('読み込みに失敗しました。席替えツールのバックアップJSONか確認してください。');
+        }
+      };
+      reader.readAsText(file);
+      event.target.value = ''; // 同じファイルを再選択できるようにリセット
+    }
+    document.getElementById('btnImport').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', importData);
+
+    // =====================================================
+    // タブ切り替え
+    // =====================================================
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(tabId).classList.add('active');
+      document.querySelectorAll('nav.tabs button').forEach(b => {
+        b.classList.toggle('active', b.dataset.tab === tabId);
+      });
+    }
+    document.querySelectorAll('nav.tabs button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        switchTab(btn.dataset.tab);
+        renderAll(); // タブ間でデータの変更が反映されるよう再描画
+      });
+    });
+
+    // =====================================================
+    // 全体描画・初期化
+    // =====================================================
+    function renderAll() {
+      renderClassroomSelect();
+      renderLayoutTab();
+      renderStudentsTab();
+      renderGroupsTab();
+      renderNgTab();
+      renderShuffleTab();
+      renderRosterTab();
+      renderHistoryTab();
+    }
+
+    function init() {
+      state = loadState();
+      if (!state || !state.classrooms || state.classrooms.length === 0) {
+        const cr = createClassroom('1組', 5, 6);
+        state = { classrooms: [cr], activeId: cr.id };
+        saveState();
+      }
+      const cr = getActiveClassroom();
+      if (cr.currentSeats) {
+        lastWarnings = checkSoftConstraints(cr, cr.currentSeats);
+      }
+      renderAll();
+    }
+
+    init();
+  </script>
+</body>
+</html>
