@@ -1,9 +1,69 @@
 # 成功パターン集
 
-最終更新：2026-12-22
+最終更新：2026-06-12
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
+
+---
+
+## テスト・品質保証
+
+### [汎用] Node.js 機械テストによる「実装→テスト→デプロイ」パイプライン
+
+**用途：** 座席配置ツール・教育ゲーム等のアルゴリズム検証が必要な機能について、本番前に Node.js の機械テストで全パターンを検証し、デプロイ後のバグリスク を最小化する方法
+
+**背景：**
+- 席替えツール（seat-assignment）では、制約条件（固定席、NG回避、座席数不足時の処理）が複雑に絡み、手動テストだけでは全パターン網羅が困難
+- 旧形式→新形式への自動データ変換、男女登録・班管理の追加により、変換ロジックの正確性確認が必須
+- 既に実装済みの機能（100回連続配置テスト、班の席ベース管理）を保全し、新機能追加時の退行 regression を防ぐ必要
+
+**実装パターン：**
+
+```javascript
+// test/seating-algorithm.test.js
+const test = require('node:test');
+const assert = require('node:assert');
+const { runSeatingAlgorithm, convertLegacyData } = require('../index.js');
+
+test('100回連続配置テスト（全員配置成功率100%）', async (t) => {
+  for (let i = 0; i < 100; i++) {
+    const result = runSeatingAlgorithm(students, constraints);
+    assert.strictEqual(result.unplacedCount, 0, `試行${i}: 未配置者あり`);
+  }
+});
+
+test('旧形式→新形式の自動変換が成功', async (t) => {
+  const legacyData = { /* 旧JSONフォーマット */ };
+  const converted = convertLegacyData(legacyData);
+  assert.ok(converted.deskMeta.hasOwnProperty('vacant'), '空席フラグ追加確認');
+  assert.ok(converted.groups.every(g => g.seatBased), '班が座席ベース化されたか確認');
+});
+
+test('空席・通路に誰も座らないこと', async (t) => {
+  const result = runSeatingAlgorithm(students, { vacant, disabled });
+  const vacantSeats = Object.keys(result.deskMeta).filter(k => result.deskMeta[k].vacant);
+  result.seating.forEach(s => {
+    assert(!vacantSeats.includes(s.seatKey), `空席に配置: ${s.seatKey}`);
+  });
+});
+```
+
+**実装例：**
+- 座席配置ツール（seat-assignment）：セッション 99～101
+  - セッション 99：基本アルゴリズムテスト（100回連続テスト成功）
+  - セッション 100：向き・通路設定の再テスト
+  - セッション 101：男女登録・班座席化・空席設定の追加テスト＆旧形式変換検証
+
+**成功指標：**
+- 全テストが「デプロイ直前」に必ず実行され、成功を記録
+- 「検証完璧」と日誌に記録される → 実装の信頼性が高い
+- 旧データ形式→新形式への変換が自動化されて、ユーザーの過去データが失われない
+
+**ポイント：**
+- テスト対象は「アルゴリズムの正確性」「データ変換の可逆性」「制約条件の遵守」の3層
+- テストはコミット前に CI/CD で自動実行（GitHub Actions 統合推奨）
+- テスト結果を task-diary に記録し、デプロイ後に問題発生時の調査根拠とする
 
 ---
 
