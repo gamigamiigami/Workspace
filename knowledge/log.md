@@ -1695,3 +1695,24 @@
 **学び：**
 - file:// 直開きはChromeでローカルfetchがCORSブロック → 簡易ローカルサーバ必須。Python不要にするならPowerShell(TcpListener)で代替可能
 - MediaPipeはnpm pack で全アセット取得でき、locateFileをローカルに向ければ完全オフライン化できる
+
+---
+
+### [2026-06-15] toy-story-modoki-web を GitHub Pages 公開
+
+**作業内容：**
+- ブラウザ版 TOY WORLD を GitHub Pages で公開
+- デプロイ用ワークフロー `.github/workflows/deploy-pages.yml` を追加（ゲームフォルダをサイトのルートとして配信）
+- 開発ブランチからの初回デプロイは `github-pages` environment 保護ルールで即失敗（既知＝failures.md記載どおり）
+- ユーザーの明示許可を得て、運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へマージ＆プッシュ → build/deploy ともに成功
+
+**結果：** 公開成功（Actions の deploy ジョブ success を確認）
+
+**公開URL：** https://gamigamiigami.github.io/Workspace/
+
+**補足：**
+- この作業環境のegress制限により、Claude側からは公開URLを直接開けない（403 host_not_allowed）。表示確認はユーザー実機で。
+- カメラはHTTPS（GitHub Pages）なので getUserMedia 利用可。スマホ/PCのブラウザでURLを開けば手＋カメラで遊べる。
+
+**次のアクション：**
+- ユーザーが公開URLをカメラ付き端末で開き、①ページ表示 ②カメラ許可 ③手の「つまみ」発射 を確認
