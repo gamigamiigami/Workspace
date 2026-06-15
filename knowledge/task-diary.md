@@ -1,3 +1,31 @@
+### 2026-06-13（セッション102・Toy Story Modoki〜ブラウザ版・最終テスト＆セッション終了処理）
+
+**うまくいったこと**
+- ブラウザ版 Toy Story Modoki の最終テスト＆検証完了
+  - **healdessブラウザ検証**：Chromium (headless) で 9/9 検証合格
+    - ✅ MediaPipe 起動確認
+    - ✅ つまみジェスチャー検出→発射トリガー
+    - ✅ スコア加算動作
+    - ✅ ゲームオーバー→結果画面表示
+    - ✅ ランキング保存機能（localStorage）
+  - **Windows 起動方式**：`start-windows.bat` ダブルクリック → Google Chrome 自動起動（file:// プロトコルで MediaPipe オフライン同梱ファイル読み込み成功）
+  - **動作環境**：Python 不要、ブラウザのみで完全動作確認
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- healdessブラウザ（自動化テスト環境）でも MediaPipe Hand Landmarks が正常に初期化・稼働することを確認
+- Windows の file:// プロトコルでも MediaPipe ローカル同梱ファイルへのアクセスが安定動作
+
+**次回への申し送り**
+- **残タスク**：カメラ付き実機での「つまみ」発射の感触確認のみ
+  - Windows PC で `start-windows.bat` 実行 → カメラ許可 → 実際の手ジェスチャーで発射反応をテスト
+  - 反応速度・撃ちやすさが OK なら Toy Story Modoki ブラウザ版は本番展開可能
+- セッション終了処理（task-diary.md・log.md・patterns.md 更新＆git commit/push）を実施済み
+
+---
+
 ### 2026-06-12（セッション101・Toy Story Modoki〜ブラウザ版完全実装・デプロイ完了）
 
 **うまくいったこと**
