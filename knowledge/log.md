@@ -1597,3 +1597,29 @@
 **次のアクション：**
 - iPad/実機ではなく「カメラ付きPC」での実機テスト待ち
   - 確認項目: カメラ認識(CAMERA_INDEX)、つまみ判定のしきい値(PINCH_ON)、照準のなめらかさ(SMOOTHING)、2P UDP送受信
+
+---
+
+### [2026-06-15] toy-story-modoki-web（Python不要のブラウザ版に移植・動作検証済み）
+
+**作業内容：**
+- Python版（pygame+MediaPipe）を、Python・インストール不要のブラウザ版に移植
+- `index.html` 1ファイルでゲーム動作（照準=人差し指、発射=つまむ）
+- 手の認識AI MediaPipe Hands を npm から取得しローカル同梱 → オフライン動作（CDN不要）
+- Windows標準PowerShellだけで動く起動ツール `start-windows.bat` + `server.ps1` を用意（file://直開きだとMediaPipeのfetchが失敗するため簡易サーバ方式）
+- ランキングは localStorage に保存
+
+**検証（Playwright + 同梱Chromium /opt/pw-browsers でヘッドレス実行）：9/9 合格**
+- ページ読み込み・致命的JSエラー無し
+- MediaPipe wasm/モデルが同梱ファイルだけで onResults 発火（オフライン動作確認）
+- つまみ=発射でSTART→PLAYING、的9個出現、撃つとスコア加算、40秒でRESULT、ランキング保存
+- プレイ画面スクリーンショットで背景・的・HUD描画を目視確認
+
+**結果：** ブラウザ起動・ゲームプレイのロジック/描画/アセット読込まで動作確認済み
+
+**次のアクション：**
+- カメラ付きWindows実機での確認待ち（①start-windows.batでの起動 ②カメラ許可 ③実際の手の「つまみ」発射の感触・しきい値調整）
+
+**学び：**
+- file:// 直開きはChromeでローカルfetchがCORSブロック → 簡易ローカルサーバ必須。Python不要にするならPowerShell(TcpListener)で代替可能
+- MediaPipeはnpm pack で全アセット取得でき、locateFileをローカルに向ければ完全オフライン化できる

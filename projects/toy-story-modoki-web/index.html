@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>2-4's TOY WORLD (Web)</title>
+<link rel="icon" href="data:,"><!-- favicon無し（不要な404を防ぐ） -->
+<style>
+  /* ------- 全体レイアウト：全画面・はみ出し無し ------- */
+  html, body {
+    margin: 0; padding: 0; height: 100%; overflow: hidden;
+    background: #000; color: #fff;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; /* 外部フォント不要 */
+    user-select: none; -webkit-user-select: none;
+  }
+  #game { display: block; width: 100vw; height: 100vh; }
+  video { display: none; } /* カメラ映像は直接見せず、解析にだけ使う */
+
+  /* ------- 最初の「クリックして開始」オーバーレイ ------- */
+  #overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: rgba(0,0,0,0.88); z-index: 10; cursor: pointer; padding: 24px;
+  }
+  #overlay h1 { font-size: clamp(28px, 5vw, 56px); margin: 0 0 12px; }
+  #overlay p  { font-size: clamp(16px, 2.5vw, 24px); margin: 6px 0; line-height: 1.6; }
+  #overlay .btn {
+    margin-top: 24px; padding: 16px 40px; font-size: clamp(18px, 3vw, 28px);
+    background: #ffcc00; color: #222; border-radius: 999px; font-weight: bold;
+  }
+  #overlay.hidden { display: none; }
+  #status { position: fixed; left: 10px; bottom: 8px; font-size: 12px; color: #888; z-index: 11; }
+</style>
+</head>
+<body>
+  <!-- カメラ映像（非表示・解析用） -->
+  <video id="cam" autoplay playsinline muted></video>
+  <!-- ゲーム描画キャンバス -->
+  <canvas id="game"></canvas>
+
+  <!-- 最初のクリック画面（カメラ許可＋音の再生解禁のため最初だけクリックが必要） -->
+  <div id="overlay">
+    <h1>2-4's TOY WORLD</h1>
+    <p>手とカメラで遊ぶシューティング</p>
+    <p>👉 人差し指の先で <b>ねらう</b><br>🤏 親指と人差し指を <b>つまむ</b> と発射</p>
+    <div class="btn">画面をクリックして スタート</div>
+    <p style="font-size:14px;color:#aaa;margin-top:18px;">※最初にカメラの使用を「許可」してください</p>
+  </div>
+  <div id="status">読み込み中…</div>
+
+  <!-- ローカル同梱の MediaPipe Hands（ネット不要・オフライン動作） -->
+  <script src="./mediapipe/hands.js"></script>
+
+  <script>
+  "use strict";
+  // =====================================================================
+  //  2-4's TOY WORLD ブラウザ版
+  //  もとの Python 版（Wiiリモコン射的）を、Python不要のブラウザ＋手＋カメラに移植。
+  //   - 照準 … 人差し指の先
+  //   - 発射 … 親指と人差し指を「つまむ」
+  //   その他（的の動き・スコア・40秒・結果画面）は元の仕様を踏襲。
+  //   ランキングはこのPCのブラウザ内(localStorage)に保存。
+  // =====================================================================
+
+  // ------- 調整できる設定（困ったらここを変える） -------
+  const CONFIG = {
+    MIRROR: true,          // 鏡うつし（手の動きと画面の向きを合わせる）
+    SMOOTHING: 0.5,        // 照準のなめらかさ（0=即時, 1未満で大きいほど滑らか）
+    PINCH_ON: 0.45,        // この近さでつまんだと判定
+    PINCH_OFF: 0.65,       // この遠さで離したと判定
+    SHOOT_COOLDOWN: 250,   // 連射の最短間隔(ミリ秒)
+    GAME_DURATION: 40,     // 1ゲームの秒数（元と同じ）
+  };
+
+  // 的の種類（元の TARGET_TYPES と同じ）
+  const TARGET_TYPES = [
+    { size: 120, speed: 1, score: 100, count: 3 },
+    { size: 90,  speed: 2, score: 200, count: 4 },
+    { size: 60,  speed: 3, score: 300, count: 2 },
+  ];
+
+  // ------- キャンバス -------
+  const canvas = document.getElementById("game");
+  const ctx = canvas.getContext("2d");
+  let W = 0, H = 0;
+  function resize() {
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+  }
+  window.addEventListener("resize", resize);
+  resize();
+
+  // ------- 画像・音の読み込み -------
+  function loadImage(src) { const img = new Image(); img.src = src; return img; }
+  const bgImg = loadImage("./assets/background.jpg");
+  const targetImgs = [1,2,3,4,5,6].map(i => loadImage(`./assets/target${i}.png`));
+
+  const hitSound = new Audio("./assets/hit.mp3");
+  const warnSound = new Audio("./assets/warning.mp3");
+  const bgm = new Audio("./assets/bgm.mp3");
+  bgm.loop = true; bgm.volume = 0.6;
+  function playHit() { try { hitSound.currentTime = 0; hitSound.play(); } catch(e){} }
+
+  // ------- ランキング（localStorage） -------
+  const RANK_KEY = "toyworld_ranking";
+  function loadRanking() {
+    try { return JSON.parse(localStorage.getItem(RANK_KEY)) || []; } catch(e){ return []; }
+  }
+  function saveScore(score) {
+    const r = loadRanking();
+    r.push({ score: score, date: Date.now() });
+    r.sort((a,b) => b.score - a.score);
+    const top = r.slice(0, 20);
+    try { localStorage.setItem(RANK_KEY, JSON.stringify(top)); } catch(e){}
+    return top;
+  }
+
+  // ------- 的（Target） -------
+  class Target {
+    constructor(type) {
+      this.size = type.size;
+      this.radius = type.size / 2;
+      this.scoreValue = type.score;
+      this.speedX = type.speed * (Math.random() < 0.5 ? -1 : 1);
+      this.img = targetImgs[Math.floor(Math.random() * targetImgs.length)];
+      this.angle = 0;
+      this.rotationSpeed = 0.2 * (Math.PI / 180) * 60; // ラジアン/秒（元は度/フレーム≒0.2）
+      this.reset();
+    }
+    reset() {
+      this.x = 100 + Math.random() * Math.max(1, W - 200);
+      this.baseY = 100 + Math.random() * Math.max(1, H - 200);
+      this.y = this.baseY;
+      this.phase = Math.random() * Math.PI * 2;
+      this.amplitude = 10 + Math.random() * 20;
+    }
+    update(dt, nowMs) {
+      this.x += this.speedX * dt * 60; // 元はフレーム単位なので60倍で秒換算
+      this.y = this.baseY + this.amplitude * Math.sin(nowMs / 500 + this.phase);
+      if (this.x < 50 || this.x > W - 50) this.speedX *= -1;
+      this.angle = (this.angle + this.rotationSpeed * dt) % (Math.PI * 2);
+    }
+    draw() {
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.rotate(this.angle);
+      ctx.drawImage(this.img, -this.size/2, -this.size/2, this.size, this.size);
+      ctx.restore();
+    }
+    isHit(px, py) { return Math.hypot(px - this.x, py - this.y) < this.radius; }
+  }
+
+  // ------- ゲーム状態 -------
+  const STATE = { START: 0, PLAYING: 1, RESULT: 2 };
+  const game = {
+    state: STATE.START,
+    score: 0,
+    targets: [],
+    hitTexts: [],         // 「+100」などの浮き上がる表示
+    startTime: 0,         // ゲーム開始時刻(ms)
+    lastRefresh: 0,
+    warned: false,
+    inputLockedUntil: 0,  // 連続入力ロック（誤操作防止、元の仕様）
+  };
+
+  function spawnTargets() {
+    game.targets = [];
+    for (const t of TARGET_TYPES)
+      for (let i = 0; i < t.count; i++) game.targets.push(new Target(t));
+  }
+
+  // 発射処理（元の trigger_fire と同じ役割。つまみでもクリックでも呼ばれる）
+  function triggerFire(px, py) {
+    if (performance.now() < game.inputLockedUntil) return;
+
+    if (game.state === STATE.PLAYING) {
+      for (const t of game.targets) {
+        if (t.isHit(px, py)) {
+          game.score += t.scoreValue;
+          game.hitTexts.push({ x: t.x, y: t.y, score: t.scoreValue, t0: performance.now() });
+          t.reset();
+          playHit();
+        }
+      }
+    } else if (game.state === STATE.START) {
+      game.score = 0;
+      game.state = STATE.PLAYING;
+      game.startTime = performance.now();
+      game.warned = false;
+      spawnTargets();
+      game.lastRefresh = game.startTime;
+      game.inputLockedUntil = performance.now() + 1000;
+    } else if (game.state === STATE.RESULT) {
+      game.state = STATE.START;
+      game.inputLockedUntil = performance.now() + 1000;
+    }
+  }
+
+  // ------- 照準（手の位置） -------
+  const pointer = { x: W/2, y: H/2, active: false };
+
+  // ------- MediaPipe Hands 手の認識 -------
+  let pinching = false;
+  let lastShootTime = 0;
+  let smoothed = null;
+  const statusEl = document.getElementById("status");
+
+  function onResults(results) {
+    const lms = results.multiHandLandmarks && results.multiHandLandmarks[0];
+    if (!lms) { pointer.active = false; smoothed = null; pinching = false; return; }
+
+    const indexTip = lms[8], thumbTip = lms[4], wrist = lms[0], indexMcp = lms[5];
+
+    // 照準（人差し指の先）。鏡うつしならx反転。
+    let nx = CONFIG.MIRROR ? (1 - indexTip.x) : indexTip.x;
+    let ny = indexTip.y;
+    if (!smoothed) smoothed = { x: nx, y: ny };
+    else {
+      const s = CONFIG.SMOOTHING;
+      smoothed.x = smoothed.x * s + nx * (1 - s);
+      smoothed.y = smoothed.y * s + ny * (1 - s);
+    }
+    pointer.x = smoothed.x * W;
+    pointer.y = smoothed.y * H;
+    pointer.active = true;
+
+    // つまみ判定（手の大きさで正規化）
+    const pinchDist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+    const handSize = Math.hypot(wrist.x - indexMcp.x, wrist.y - indexMcp.y) + 1e-6;
+    const ratio = pinchDist / handSize;
+
+    const now = performance.now();
+    if (!pinching && ratio < CONFIG.PINCH_ON) {
+      pinching = true;
+      if (now - lastShootTime >= CONFIG.SHOOT_COOLDOWN) {
+        lastShootTime = now;
+        triggerFire(pointer.x, pointer.y); // 発射！
+      }
+    } else if (pinching && ratio > CONFIG.PINCH_OFF) {
+      pinching = false;
+    }
+  }
+
+  let hands = null;
+  const video = document.getElementById("cam");
+
+  async function startCameraAndHands() {
+    hands = new Hands({ locateFile: (file) => `./mediapipe/${file}` });
+    hands.setOptions({
+      maxNumHands: 1,
+      modelComplexity: 0,            // 0=軽量モデル（動作を軽く）
+      minDetectionConfidence: 0.6,
+      minTrackingConfidence: 0.5,
+    });
+    hands.onResults(onResults);
+
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: "user" }, audio: false
+    });
+    video.srcObject = stream;
+    await video.play();
+
+    statusEl.textContent = "手の認識を準備中…";
+    // 手の認識ループ（描画ループとは別に回す）
+    async function handLoop() {
+      if (video.readyState >= 2) {
+        try { await hands.send({ image: video }); statusEl.textContent = "カメラOK"; }
+        catch (e) { statusEl.textContent = "認識エラー: " + e.message; }
+      }
+      requestAnimationFrame(handLoop);
+    }
+    handLoop();
+  }
+
+  // ------- 文字描画ヘルパー -------
+  function textCenter(text, y, size, color="#000") {
+    ctx.fillStyle = color; ctx.textAlign = "center";
+    ctx.font = `bold ${size}px system-ui, sans-serif`;
+    ctx.fillText(text, W/2, y);
+  }
+  function drawCrosshair(x, y, color) {
+    ctx.strokeStyle = color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x, y, 15, 0, Math.PI*2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x-20, y); ctx.lineTo(x+20, y);
+    ctx.moveTo(x, y-20); ctx.lineTo(x, y+20); ctx.stroke();
+  }
+
+  // ------- メインの描画ループ -------
+  let lastFrame = performance.now();
+  function render() {
+    const now = performance.now();
+    const dt = Math.min(0.05, (now - lastFrame) / 1000); // 秒（最大0.05で安定化）
+    lastFrame = now;
+
+    // 背景
+    if (bgImg.complete && bgImg.naturalWidth) ctx.drawImage(bgImg, 0, 0, W, H);
+    else { ctx.fillStyle = "#cce"; ctx.fillRect(0,0,W,H); }
+
+    if (game.state === STATE.START) {
+      textCenter("2-4's TOY WORLD", H/2 - 100, 60);
+      textCenter("つまんで スタート", H/2, 34);
+      drawRankingPreview();
+    }
+    else if (game.state === STATE.PLAYING) {
+      const elapsed = (now - game.startTime) / 1000;
+      const remaining = Math.max(0, Math.floor(CONFIG.GAME_DURATION - elapsed));
+
+      if (remaining === 10 && !game.warned) { game.warned = true; try{warnSound.currentTime=0;warnSound.play();}catch(e){} }
+
+      // 的の更新・描画
+      for (const t of game.targets) { t.update(dt, now); t.draw(); }
+
+      // 5秒ごとに的を配置し直す（元の仕様）
+      if (now - game.lastRefresh > 5000) { spawnTargets(); game.lastRefresh = now; }
+
+      // 「+score」浮き上がり表示
+      game.hitTexts = game.hitTexts.filter(ht => {
+        const e = now - ht.t0; if (e > 1000) return false;
+        ctx.globalAlpha = Math.max(0, 1 - e/1000);
+        ctx.fillStyle = "#000"; ctx.textAlign = "left";
+        ctx.font = "bold 32px system-ui, sans-serif";
+        ctx.fillText("+" + ht.score, ht.x, ht.y - (e/1000)*30);
+        ctx.globalAlpha = 1; return true;
+      });
+
+      // HUD
+      ctx.fillStyle = "#000"; ctx.textAlign = "left";
+      ctx.font = "bold 32px system-ui, sans-serif";
+      ctx.fillText("Score: " + game.score, 30, 45);
+      ctx.textAlign = "right";
+      ctx.fillText("Time: " + remaining, W - 30, 45);
+
+      if (elapsed >= CONFIG.GAME_DURATION) {
+        game.state = STATE.RESULT;
+        game.lastRanking = saveScore(game.score);
+        game.inputLockedUntil = now + 1000;
+      }
+    }
+    else if (game.state === STATE.RESULT) {
+      textCenter("タイムアップ！", H/2 - 120, 60);
+      textCenter("スコア: " + game.score, H/2 - 40, 44);
+      textCenter("つまんで もう一度", H/2 + 30, 30);
+      drawRankingPreview(H/2 + 90);
+    }
+
+    // 照準（手＝青）。手が無いときはマウス位置を予備で表示。
+    drawCrosshair(pointer.x, pointer.y, pointer.active ? "#0000ff" : "#888");
+
+    requestAnimationFrame(render);
+  }
+
+  function drawRankingPreview(startY) {
+    const r = (game.lastRanking || loadRanking()).slice(0, 5);
+    if (!r.length) return;
+    const y0 = startY || (H/2 + 70);
+    ctx.fillStyle = "#222"; ctx.textAlign = "center";
+    ctx.font = "bold 26px system-ui, sans-serif";
+    ctx.fillText("★ ハイスコア ★", W/2, y0);
+    ctx.font = "24px system-ui, sans-serif";
+    r.forEach((e, i) => ctx.fillText(`${i+1}.  ${e.score}`, W/2, y0 + 34 + i*30));
+  }
+
+  // ------- 予備操作：マウス（カメラが無い/許可されない時のため） -------
+  canvas.addEventListener("mousemove", (e) => {
+    if (!pointer.active) { pointer.x = e.clientX; pointer.y = e.clientY; }
+  });
+  canvas.addEventListener("mousedown", (e) => { triggerFire(e.clientX, e.clientY); });
+
+  // ------- 起動（クリックでカメラ許可＋音の解禁） -------
+  const overlay = document.getElementById("overlay");
+  let started = false;
+  async function boot() {
+    if (started) return; started = true;
+    try { bgm.play().catch(()=>{}); } catch(e){}   // 音の再生解禁（ユーザー操作内で）
+    overlay.classList.add("hidden");
+    render();                                       // 描画開始
+    try { await startCameraAndHands(); }            // カメラ＆手の認識開始
+    catch (e) {
+      statusEl.textContent = "カメラを使えません: " + e.message + "（マウスで遊べます）";
+    }
+  }
+  overlay.addEventListener("click", boot);
+
+  // ------- 動作確認用フック（自動テストから操作するための入口） -------
+  window.__toyworld = {
+    CONFIG, game, STATE,
+    bootForTest: () => { overlay.classList.add("hidden"); render(); }, // カメラ無しで描画だけ起動
+    aim: (px, py) => { pointer.x = px; pointer.y = py; pointer.active = true; },
+    fire: () => triggerFire(pointer.x, pointer.y),
+    setDuration: (s) => { CONFIG.GAME_DURATION = s; },
+    handsLoaded: () => typeof Hands !== "undefined",
+  };
+  </script>
+</body>
+</html>
