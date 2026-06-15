@@ -1546,3 +1546,24 @@
 **気づき・メモ：**
 - 初回セットアップのため既存プロジェクトなし
 - 次回プロジェクト開始時にこのログの使い方を確認すること
+
+---
+
+### [2026-06-15] toy-story-modoki（射的ゲームの入力をWiiリモコン→手＋カメラに改造）
+
+**作業内容：**
+- 既存のWiiリモコン射的ゲーム（WiinRemote.exeでマウス化）を、Webカメラ＋手のジェスチャー操作に改造
+- 共通モジュール `hand_tracker.py` を新規作成（OpenCV + MediaPipe、すべて無料）
+  - 照準＝人差し指の先、発射＝親指と人差し指の「つまむ」
+  - 別スレッドでカメラ処理、`read()`で (位置, 発射) を返す。つまみはエッジ検出＋クールダウンで誤連射防止
+- `TSM_core.py`（1P）と `TSM_input.py`（2P送信機）の「シューティング部分のみ」差し替え
+- 的・スコア・UDP通信・ランキング(`TSM_score.py`)は元のまま
+- WiinRemote.exe は不要になったため同梱から除外
+
+**結果：** コード完成・構文チェック通過。実機（カメラ付きPC）での動作確認は未実施
+
+**成果物：** `projects/toy-story-modoki/`（hand_tracker.py, TSM_core.py, TSM_input.py, README.md, requirements.txt ほか素材）
+
+**次のアクション：**
+- iPad/実機ではなく「カメラ付きPC」での実機テスト待ち
+  - 確認項目: カメラ認識(CAMERA_INDEX)、つまみ判定のしきい値(PINCH_ON)、照準のなめらかさ(SMOOTHING)、2P UDP送受信

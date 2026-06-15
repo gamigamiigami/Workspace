@@ -1,0 +1,7 @@
+# 手＋カメラのシューティングに必要な無料ライブラリ
+# 下のコマンドでまとめてインストールできます（ターミナルで実行）:
+#   pip install -r requirements.txt
+pygame
+opencv-python
+mediapipe
+numpy
