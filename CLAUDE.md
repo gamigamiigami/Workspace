@@ -41,6 +41,16 @@ Workspace/
 
 `profile.md` と `mistakes.md` はセッション開始時に hook が自動で読み込む。
 
+### 複数リポジトリのセッション管理
+
+同一ワークスペース内に複数の Git リポジトリがある場合（例：`gamigamiigami/workspace` と `gamigamiigami/wii`）：
+
+1. **セッション開始時に repository scope を明示的に選択** — Claude Code on the web のセッション作成時、「どのリポジトリで作業するか」を意識的に選択する
+2. **リポジトリごとにセッションを分ける** — A リポと B リポを行き来する必要がある場合は、各リポごとに独立したセッションを開始（同一セッション内での複数リポ write は不可）
+3. **権限不足時の対応** — 誤った scope でコミットした場合、`git format-patch` でパッチファイルを生成し、正しい scope のセッションで `git am < file.patch` により反映
+
+**理由：** Claude Code の authorization は「セッション作成時に選択したリポジトリ」を単位として固定される。セッション中に別リポへの push 権限を得ることはない。
+
 ### タスクに応じてスキルを使う
 
 | タスクの種類 | 使うスキル |
