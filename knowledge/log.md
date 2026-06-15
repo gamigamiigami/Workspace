@@ -4,6 +4,50 @@
 
 ---
 
+### [2026-06-12] Toy Story Modoki — ブラウザ版完全実装・デプロイ完了
+
+**作業内容：**
+
+- **ブラウザ版フル実装**（セッション101）
+  - HTML5 Canvas ゲームループ（60fps）＋ MediaPipe Hand Landmarks Detector（オフライン同梱）
+  - **操作**：カメラで手をリアルタイム認識 → 人差し指の先で照準＋親指とのつまみジェスチャーで発射
+  - **ゲーム設計**：
+    - 画面中央にキャラ配置、マウスカーソル＆キーボード／タッチ操作も併用対応
+    - つまみ判定：指間距離 < PINCH_ON（デフォルト0.05、手の大きさで正規化）→ 玉を発射
+    - 照準なめらかさ：SMOOTHING（デフォルト0.2）で指先座標の移動平均を実装
+    - スコア・残量・レベル表示＋効果音（Web Audio API）
+  - **MediaPipeのオフライン化**（重要な課題解決）：
+    - 初期試行：Unpkg CDN から MediaPipe ファイルを fetch → **CORS エラー（file:// では fetch 失敗）**
+    - 解決策：MediaPipe ファイルを `projects/toy-story-modoki/` 配下にローカル保存
+    - file:// アクセス時でも Canvas とスクリプト参照が可能に
+  - **Windows用起動スクリプト**：`start-windows.bat`（ブラウザ自動起動）
+  - **ドキュメント整備**：
+    - `README.md`：操作手順（「クリックしてスタート」→ カメラ許可）、CONFIG 調整表（PINCH_ON・SMOOTHING）
+    - つまみ反応速度が調整可能な設計で、実機フィードバック後の改善が容易
+
+**技術的学び：**
+- **file:// での fetch 制限**：ローカル file:// でのセキュリティ制約により、CDN 上のリソースを fetch できない
+  - 回避策：ローカルフォルダに MediaPipe ファイルを同梱してスクリプトで参照
+- **MediaPipe Hand Landmarks の正規化**：手の大きさを計算して検出座標を正規化すれば、カメラからの距離変化に耐性ができる
+- **Canvas ゲームループの design**：60fps を保つために、フレームごとの計算を軽量化（座標更新・当たり判定は必要最小限）
+
+**成果物：**
+- `projects/toy-story-modoki/index.html`（約500行・ゲームロジック＋Canvas描画＋MediaPipe統合）
+- `projects/toy-story-modoki/start-windows.bat`
+- `projects/toy-story-modoki/README.md`（操作手順と CONFIG 調整表）
+- MediaPipe ファイル（ml フォルダ配下・オフライン同梱）
+
+**次のアクション：**
+- Windows PC でのカメラ実機確認（つまんで撃つ感触・反応速度）
+- 発射反応が気になる場合は CONFIG 部の数字（PINCH_ON・SMOOTHING）で 1 回調整で完成
+
+**補足：ブラウザ版 vs Python版**
+- ✅ ブラウザ版：1台・1人でサッと遊ぶ、配布が簡単（URL or バッチファイル）
+- ❌ ブラウザ版：UDP通信ができないため、複数PC連動・2人同時プレイは未実装（ブラウザ制限）
+- Python版との二択設計で、用途に応じた選択が可能
+
+---
+
 ### [2026-06-12] Toy Story Modoki — Wii リモコン → 手トラッキング置き換え実装
 
 **作業内容：**
