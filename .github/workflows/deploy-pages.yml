@@ -6,6 +6,7 @@ name: Deploy Toy World to Pages
 on:
   push:
     branches:
+      - claude/workspace-knowledge-base-setup-ccVKP   # デフォルトブランチ（Pages公開はここから）
       - claude/blissful-bardeen-ggl20i
     paths:
       - "projects/toy-story-modoki-web/**"
