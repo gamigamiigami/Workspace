@@ -4,6 +4,36 @@
 
 ---
 
+### [2026-06-12] Toy Story Modoki — Wii リモコン → 手トラッキング置き換え実装
+
+**作業内容：**
+
+- **実装テーマ**：Wii リモコン＋センサーバーで行っていた照準・発射を、Web カメラ＋手のジェスチャーで実現
+  - **使用技術**：OpenCV（フレーム処理）＋ MediaPipe（手認識） — 無料ライブラリ、WiinRemote.exe 不要
+  - **新規ファイル `hand_tracker.py`**：カメラで手を認識し、2D 座標系に変換するモジュール
+    - 人差し指の先端座標 → 照準
+    - 親指と人差し指のつまみジェスチャー（距離 < 閾値）→ 発射信号
+    - 手の大きさで正規化して、カメラ距離変化に対応
+    - 別スレッド実行でゲーム 60fps に干渉しない
+  - **改修ファイル**：`TSM_core.py`（1P 操作）、`TSM_input.py`（2P 送信機）
+    - Wii 入力部をカメラ入力に切り替え（その他の的・スコア・タイマー・ランキング・UDP通信は元のまま）
+  - **ドキュメント整備**：
+    - `README.md`：初心者向け導入手順（pip install / カメラテスト）
+    - `requirements.txt`：依存パッケージ（opencv-python, mediapipe など）
+    - 調整ポイント表：CAMERA_INDEX（カメラ選択）、PINCH_ON（つまみ閾値）、SMOOTHING（照準なめらかさ）
+
+**成果物：**
+- `projects/toy-story-modoki/hand_tracker.py`（新規）
+- `projects/toy-story-modoki/README.md`（新規）
+- `projects/toy-story-modoki/requirements.txt`（新規）
+- `projects/toy-story-modoki/TSM_core.py`、`TSM_input.py`（改修）
+
+**次のアクション：**
+- **カメラ実機確認**（伊神さん）：PC カメラでの認識・発射反応・照準なめらかさの体感調整
+- 発射ジェスチャー変更対応（要望あれば）
+
+---
+
 ### [2026-06-11] 計算クエスト — 数学・計算力ゲーム新規開発＆公開（古典クエスト姉妹作）
 
 **作業内容：**
