@@ -1,0 +1,50 @@
+# GitHub Pages へ「2-4's TOY WORLD（ブラウザ版）」を自動公開するワークフロー
+# projects/toy-story-modoki-web/ をサイトのトップとして配信する。
+# 公開URL: https://gamigamiigami.github.io/Workspace/
+name: Deploy Toy World to Pages
+
+on:
+  push:
+    branches:
+      - claude/blissful-bardeen-ggl20i
+    paths:
+      - "projects/toy-story-modoki-web/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:   # 手動でも実行できるように
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true   # Pagesの配信元を「GitHub Actions」に自動設定
+
+      - name: Upload game folder as site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: projects/toy-story-modoki-web
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
