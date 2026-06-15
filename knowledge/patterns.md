@@ -1,8 +1,88 @@
 # 成功パターン集
 
-最終更新：2026-12-22
+最終更新：2026-06-12
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## [汎用] ブラウザ版：file:// アクセス時の fetch 制限とローカルファイル同梱による回避
+
+**概要：** HTML5 Canvas ゲーム等をブラウザで「file:// プロトコル」で開く場合、CORS セキュリティポリシーにより外部リソース（CDN 上の JS ライブラリなど）への fetch がブロックされる。MediaPipe Hand Landmarks など大容量ライブラリが必要な場合、ローカルフォルダに同梱して直接参照する回避策。
+
+**背景：**
+- Windows PC での「ダブルクリック → ブラウザ起動」という配布形態を実現するため、file:// アクセスが必須
+- Unpkg CDN から MediaPipe ファイルを fetch しようとするとエラー：`Access to XMLHttpRequest at 'https://...' from origin 'null' has been blocked by CORS policy`
+- セッション101（Toy Story Modoki）で初めて遭遇・解決
+
+**実装パターン：**
+
+1. **問題のあるコード（失敗例）：**
+   ```html
+   <!-- ❌ file:// では fetch 失敗 -->
+   <script async src="https://cdn.jsdelivr.net/npm/@mediapipe/...@latest/...js"></script>
+   ```
+
+2. **解決策：CDN ファイルをローカル同梱**
+   ```
+   projects/toy-story-modoki/
+   ├── index.html
+   ├── ml/
+   │   ├── hand_landmarker.js
+   │   ├── hand_landmarker.wasm
+   │   └── （その他の MediaPipe ファイル）
+   └── start-windows.bat
+   ```
+
+3. **参照方法（ローカルパスで直接指定）：**
+   ```html
+   <script src="./ml/hand_landmarker.js"></script>
+   ```
+   または script 内で：
+   ```javascript
+   const handDetector = new window.HandLandmarker({
+     baseOptions: {
+       modelAssetPath: './ml/hand_landmarker.task'
+     }
+   });
+   ```
+
+4. **Windows 配布形式：**
+   ```batch
+   REM start-windows.bat
+   start http://localhost:8000
+   python -m http.server 8000
+   ```
+   → HTTP サーバーを起動して、file:// の代わりに localhost で開く方法も併用可能
+
+**ポイント：**
+- **ローカル同梱の利点**：インターネット接続なしで動作・デプロイが簡単・起動速度が速い
+- **HTTP サーバー利用の利点**：CORS 制約を回避できる・開発時のデバッグが容易
+- CDN ファイルサイズが大きい（MediaPipe は数 MB）場合、リポジトリサイズに注意
+- .gitignore で MediaPipe ファイルを除外する検討もあり
+
+**使用プロジェクト：** toy-story-modoki（ブラウザ版）
+
+**タグ：** #browser #mediapipe #cors #file-protocol #offline #html5-canvas
+
+---
+
+## MediaPipeで「手＝ポインタ＋つまみ発射」入力（Wiiリモコン代替）
+
+**概要：** Webカメラ＋MediaPipe Handsで、手をマウス/ポインタ代わりにするパターン。
+専用ハード（Wiiリモコン等）なしで照準＋クリック相当を実現。すべて無料。
+
+**ポイント：**
+- 照準＝人差し指の先(landmark 8)、発射＝親指(4)と人差し指(8)を「つまむ」
+- つまみ判定は `指先間の距離 ÷ 手の大きさ(手首0〜付け根5)` で正規化 → カメラとの遠近で誤判定しない
+- ヒステリシス（ON/OFFで別しきい値）＋クールダウンで誤連射を防ぐ
+- カメラ処理は別スレッド、ゲーム側は `read()` で (位置, 発射bool) を取得（描画を止めない）
+- `cv2.flip(frame, 1)` で鏡うつしにすると操作感が自然
+- EMA（指数移動平均）で照準をなめらか化
+
+**使用プロジェクト：** toy-story-modoki
+
+**タグ：** #python #mediapipe #opencv #pygame #gesture #camera-input
 複数プロジェクトで使えると判明したパターンには `[汎用]` タグをつける。
 
 ---

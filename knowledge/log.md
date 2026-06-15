@@ -4,6 +4,108 @@
 
 ---
 
+### [2026-06-13] Toy Story Modoki — ブラウザ版・最終テスト＆検証完了
+
+**作業内容：**
+
+- **healdessブラウザテスト（セッション102）**
+  - Chromium（自動化テスト環境）で 9/9 項目すべて検証合格
+    - ✅ MediaPipe Hand Landmarks 起動確認
+    - ✅ つまみジェスチャー検出 → 発射トリガー
+    - ✅ スコア加算動作
+    - ✅ ゲームオーバー → 結果画面表示
+    - ✅ ランキング保存（localStorage）
+  - **Windows 起動検証**：`start-windows.bat` ダブルクリック → Google Chrome 自動起動成功
+  - **file:// プロトコル検証**：MediaPipe オフライン同梱ファイルの読み込み安定動作を確認
+
+**技術的学び：**
+- healdessブラウザ（自動化テスト環境）でも MediaPipe Hand Landmarks API が正常に初期化・稼働することを確認
+- Windows の file:// プロトコルでも、同梱 MediaPipe ファイルへのアクセスが安定動作
+
+**成果物：**
+- 検証レポート（セッション内で記録済み）
+
+**次のアクション：**
+- **残タスク**：カメラ付き実機での「つまみ」発射の感触確認のみ
+  - Windows PC で `start-windows.bat` 実行 → カメラ許可 → 実際の手ジェスチャーで発射反応をテスト
+  - 反応速度・撃ちやすさが OK なら Toy Story Modoki ブラウザ版は本番展開可能
+
+---
+
+### [2026-06-12] Toy Story Modoki — ブラウザ版完全実装・デプロイ完了
+
+**作業内容：**
+
+- **ブラウザ版フル実装**（セッション101）
+  - HTML5 Canvas ゲームループ（60fps）＋ MediaPipe Hand Landmarks Detector（オフライン同梱）
+  - **操作**：カメラで手をリアルタイム認識 → 人差し指の先で照準＋親指とのつまみジェスチャーで発射
+  - **ゲーム設計**：
+    - 画面中央にキャラ配置、マウスカーソル＆キーボード／タッチ操作も併用対応
+    - つまみ判定：指間距離 < PINCH_ON（デフォルト0.05、手の大きさで正規化）→ 玉を発射
+    - 照準なめらかさ：SMOOTHING（デフォルト0.2）で指先座標の移動平均を実装
+    - スコア・残量・レベル表示＋効果音（Web Audio API）
+  - **MediaPipeのオフライン化**（重要な課題解決）：
+    - 初期試行：Unpkg CDN から MediaPipe ファイルを fetch → **CORS エラー（file:// では fetch 失敗）**
+    - 解決策：MediaPipe ファイルを `projects/toy-story-modoki/` 配下にローカル保存
+    - file:// アクセス時でも Canvas とスクリプト参照が可能に
+  - **Windows用起動スクリプト**：`start-windows.bat`（ブラウザ自動起動）
+  - **ドキュメント整備**：
+    - `README.md`：操作手順（「クリックしてスタート」→ カメラ許可）、CONFIG 調整表（PINCH_ON・SMOOTHING）
+    - つまみ反応速度が調整可能な設計で、実機フィードバック後の改善が容易
+
+**技術的学び：**
+- **file:// での fetch 制限**：ローカル file:// でのセキュリティ制約により、CDN 上のリソースを fetch できない
+  - 回避策：ローカルフォルダに MediaPipe ファイルを同梱してスクリプトで参照
+- **MediaPipe Hand Landmarks の正規化**：手の大きさを計算して検出座標を正規化すれば、カメラからの距離変化に耐性ができる
+- **Canvas ゲームループの design**：60fps を保つために、フレームごとの計算を軽量化（座標更新・当たり判定は必要最小限）
+
+**成果物：**
+- `projects/toy-story-modoki/index.html`（約500行・ゲームロジック＋Canvas描画＋MediaPipe統合）
+- `projects/toy-story-modoki/start-windows.bat`
+- `projects/toy-story-modoki/README.md`（操作手順と CONFIG 調整表）
+- MediaPipe ファイル（ml フォルダ配下・オフライン同梱）
+
+**次のアクション：**
+- Windows PC でのカメラ実機確認（つまんで撃つ感触・反応速度）
+- 発射反応が気になる場合は CONFIG 部の数字（PINCH_ON・SMOOTHING）で 1 回調整で完成
+
+**補足：ブラウザ版 vs Python版**
+- ✅ ブラウザ版：1台・1人でサッと遊ぶ、配布が簡単（URL or バッチファイル）
+- ❌ ブラウザ版：UDP通信ができないため、複数PC連動・2人同時プレイは未実装（ブラウザ制限）
+- Python版との二択設計で、用途に応じた選択が可能
+
+---
+
+### [2026-06-12] Toy Story Modoki — Wii リモコン → 手トラッキング置き換え実装
+
+**作業内容：**
+
+- **実装テーマ**：Wii リモコン＋センサーバーで行っていた照準・発射を、Web カメラ＋手のジェスチャーで実現
+  - **使用技術**：OpenCV（フレーム処理）＋ MediaPipe（手認識） — 無料ライブラリ、WiinRemote.exe 不要
+  - **新規ファイル `hand_tracker.py`**：カメラで手を認識し、2D 座標系に変換するモジュール
+    - 人差し指の先端座標 → 照準
+    - 親指と人差し指のつまみジェスチャー（距離 < 閾値）→ 発射信号
+    - 手の大きさで正規化して、カメラ距離変化に対応
+    - 別スレッド実行でゲーム 60fps に干渉しない
+  - **改修ファイル**：`TSM_core.py`（1P 操作）、`TSM_input.py`（2P 送信機）
+    - Wii 入力部をカメラ入力に切り替え（その他の的・スコア・タイマー・ランキング・UDP通信は元のまま）
+  - **ドキュメント整備**：
+    - `README.md`：初心者向け導入手順（pip install / カメラテスト）
+    - `requirements.txt`：依存パッケージ（opencv-python, mediapipe など）
+    - 調整ポイント表：CAMERA_INDEX（カメラ選択）、PINCH_ON（つまみ閾値）、SMOOTHING（照準なめらかさ）
+
+**成果物：**
+- `projects/toy-story-modoki/hand_tracker.py`（新規）
+- `projects/toy-story-modoki/README.md`（新規）
+- `projects/toy-story-modoki/requirements.txt`（新規）
+- `projects/toy-story-modoki/TSM_core.py`、`TSM_input.py`（改修）
+
+**次のアクション：**
+- **カメラ実機確認**（伊神さん）：PC カメラでの認識・発射反応・照準なめらかさの体感調整
+- 発射ジェスチャー変更対応（要望あれば）
+
+---
+
 ### [2026-06-11] 計算クエスト — 数学・計算力ゲーム新規開発＆公開（古典クエスト姉妹作）
 
 **作業内容：**
@@ -1546,3 +1648,50 @@
 **気づき・メモ：**
 - 初回セットアップのため既存プロジェクトなし
 - 次回プロジェクト開始時にこのログの使い方を確認すること
+
+---
+
+### [2026-06-15] toy-story-modoki（射的ゲームの入力をWiiリモコン→手＋カメラに改造）
+
+**作業内容：**
+- 既存のWiiリモコン射的ゲーム（WiinRemote.exeでマウス化）を、Webカメラ＋手のジェスチャー操作に改造
+- 共通モジュール `hand_tracker.py` を新規作成（OpenCV + MediaPipe、すべて無料）
+  - 照準＝人差し指の先、発射＝親指と人差し指の「つまむ」
+  - 別スレッドでカメラ処理、`read()`で (位置, 発射) を返す。つまみはエッジ検出＋クールダウンで誤連射防止
+- `TSM_core.py`（1P）と `TSM_input.py`（2P送信機）の「シューティング部分のみ」差し替え
+- 的・スコア・UDP通信・ランキング(`TSM_score.py`)は元のまま
+- WiinRemote.exe は不要になったため同梱から除外
+
+**結果：** コード完成・構文チェック通過。実機（カメラ付きPC）での動作確認は未実施
+
+**成果物：** `projects/toy-story-modoki/`（hand_tracker.py, TSM_core.py, TSM_input.py, README.md, requirements.txt ほか素材）
+
+**次のアクション：**
+- iPad/実機ではなく「カメラ付きPC」での実機テスト待ち
+  - 確認項目: カメラ認識(CAMERA_INDEX)、つまみ判定のしきい値(PINCH_ON)、照準のなめらかさ(SMOOTHING)、2P UDP送受信
+
+---
+
+### [2026-06-15] toy-story-modoki-web（Python不要のブラウザ版に移植・動作検証済み）
+
+**作業内容：**
+- Python版（pygame+MediaPipe）を、Python・インストール不要のブラウザ版に移植
+- `index.html` 1ファイルでゲーム動作（照準=人差し指、発射=つまむ）
+- 手の認識AI MediaPipe Hands を npm から取得しローカル同梱 → オフライン動作（CDN不要）
+- Windows標準PowerShellだけで動く起動ツール `start-windows.bat` + `server.ps1` を用意（file://直開きだとMediaPipeのfetchが失敗するため簡易サーバ方式）
+- ランキングは localStorage に保存
+
+**検証（Playwright + 同梱Chromium /opt/pw-browsers でヘッドレス実行）：9/9 合格**
+- ページ読み込み・致命的JSエラー無し
+- MediaPipe wasm/モデルが同梱ファイルだけで onResults 発火（オフライン動作確認）
+- つまみ=発射でSTART→PLAYING、的9個出現、撃つとスコア加算、40秒でRESULT、ランキング保存
+- プレイ画面スクリーンショットで背景・的・HUD描画を目視確認
+
+**結果：** ブラウザ起動・ゲームプレイのロジック/描画/アセット読込まで動作確認済み
+
+**次のアクション：**
+- カメラ付きWindows実機での確認待ち（①start-windows.batでの起動 ②カメラ許可 ③実際の手の「つまみ」発射の感触・しきい値調整）
+
+**学び：**
+- file:// 直開きはChromeでローカルfetchがCORSブロック → 簡易ローカルサーバ必須。Python不要にするならPowerShell(TcpListener)で代替可能
+- MediaPipeはnpm pack で全アセット取得でき、locateFileをローカルに向ければ完全オフライン化できる
