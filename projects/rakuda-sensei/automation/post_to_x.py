@@ -339,14 +339,16 @@ def main(force: bool = False, dry_run: bool = False) -> int:
 
     weekly_file = find_weekly_file(target_date)
     if not weekly_file:
-        print(f"ERROR: weeklyファイルが見つかりません ({WEEKLY_DIR})", file=sys.stderr)
-        return 1
+        # 投稿対象が無いのは「やることなし」→スキップ（赤エラーにしない）
+        print(f"ℹ️  weeklyファイルなし ({WEEKLY_DIR}) → 投稿対象なしのためスキップ")
+        return 0
 
     print(f"📂 weekly: {weekly_file.name}")
     tweet_text = extract_tweet(weekly_file.read_text(encoding="utf-8"), target_date, slot)
     if not tweet_text:
-        print(f"ERROR: {target_date} {slot} のツイート本文を抽出できませんでした", file=sys.stderr)
-        return 1
+        # 該当スロットのツイートが無いのも「やることなし」→スキップ
+        print(f"ℹ️  {target_date} {slot} のツイートなし → スキップ")
+        return 0
 
     print(f"📝 投稿予定: {tweet_text}")
     print(f"📏 文字数: {len(tweet_text)}")
@@ -360,10 +362,10 @@ def main(force: bool = False, dry_run: bool = False) -> int:
     cookie_json = os.environ.get("X_SESSION_COOKIE")
 
     if not cookie_json and (not username or not password):
-        print("ERROR: X_SESSION_COOKIE もしくは X_USERNAME/X_PASSWORD が必要です", file=sys.stderr)
-        print("  → 推奨: Cookie-Editor で取得した X_SESSION_COOKIE を Secret 登録", file=sys.stderr)
-        print("  → 詳細: projects/rakuda-sensei/automation/setup/cookie-setup.md", file=sys.stderr)
-        return 1
+        print("ℹ️  X_SESSION_COOKIE もしくは X_USERNAME/X_PASSWORD 未設定のためスキップ")
+        print("   → 推奨: Cookie-Editor で取得した X_SESSION_COOKIE を Secret 登録")
+        print("   → 詳細: projects/rakuda-sensei/automation/setup/cookie-setup.md")
+        return 0
 
     from playwright.sync_api import sync_playwright
 
