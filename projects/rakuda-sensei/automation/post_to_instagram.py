@@ -120,10 +120,17 @@ def post_to_instagram(image_url: str, caption: str) -> tuple[bool, str]:
 
 
 def main(post_path: str, dry_run: bool = False) -> int:
+    # Meta APIトークン未設定なら「まだ未セットアップ」としてスキップ（エラーにしない）
+    if not dry_run and (not os.environ.get("META_ACCESS_TOKEN") or not os.environ.get("IG_USER_ID")):
+        print("ℹ️  META_ACCESS_TOKEN / IG_USER_ID 未設定のためスキップ")
+        print("   → Meta APIセットアップ完了後に自動投稿が始まります")
+        return 0
+
     md_path = ROOT / post_path
     if not md_path.exists():
-        print(f"ERROR: {md_path} がありません", file=sys.stderr)
-        return 1
+        # 投稿対象ファイルが無いのは「やることなし」→スキップ
+        print(f"ℹ️  {md_path} がない → 投稿対象なしのためスキップ")
+        return 0
 
     meta = parse_post_file(md_path)
     print(f"📷 画像: {meta['image']}")
