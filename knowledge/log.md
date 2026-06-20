@@ -4,6 +4,42 @@
 
 ---
 
+### [2026-06-20] rakuda-sensei — GitHub Actions ワークフロー自動投稿の「エラーハンドリング改善」
+
+**作業内容：**
+
+- **問題の根本原因**
+  - `Post to Threads` ワークフロー（1日3回自動実行）が毎回 `exit 1`（赤エラー）になり、GitHub の赤エラー通知が出続けていた
+  - 原因は2つ：
+    1. Meta APIトークンが未設定（前セッションの未完了）
+    2. その日のツイートが weeklyファイルに無い → 抽出失敗
+  - いずれも「やることなし」「未セットアップ」であり、本来はエラーではないのに通知が出ていた
+
+- **修正内容**
+  - 3つのスクリプトをすべて修正（exit コード設計を統一）
+    - `post_to_threads.py`：トークン未設定 → `exit 0`（スキップ）/ ツイートなし → `exit 0`
+    - `post_to_instagram.py`：トークン未設定 → `exit 0` / ファイルなし → `exit 0`
+    - `post_to_x.py`：認証情報未設定 → `exit 0` / ツイートなし → `exit 0`
+  - 本物のエラー（API失敗、トークン期限切れなど）は従来通り `exit 1`（赤エラー）で検知
+  
+- **運用改善の効果**
+  - Meta APIをセットアップするまでの間も「緑（成功）でスキップ」されるため、無駄なエラー通知が止まる
+  - 設定が完了したら自動で投稿が開始される設計
+  - 他の自動スクリプトでも「未セットアップ」と「実エラー」を区別する設計が推奨される
+
+**修正ファイル：**
+- `projects/rakuda-sensei/automation/post_to_threads.py`
+- `projects/rakuda-sensei/automation/post_to_instagram.py`
+- `projects/rakuda-sensei/automation/post_to_x.py`
+
+**変更行数：** 56行削除・追加（3ファイル）
+
+**次のアクション：**
+1. Meta APIトークンのセットアップ完了後、自動投稿が開始される
+2. X認証情報（Cookie/Username/Password）セットアップで X 投稿が有効化
+
+---
+
 ### [2026-06-08] rakuda-sensei — 通知表ファネル A→D (4記事セット) 完成
 
 **作業内容：**
