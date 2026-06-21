@@ -69,26 +69,18 @@ jobs:
           BOOTH_SESSION_COOKIE: ${{ secrets.BOOTH_SESSION_COOKIE }}
           PIXIV_EMAIL: ${{ secrets.PIXIV_EMAIL }}
           PIXIV_PASSWORD: ${{ secrets.PIXIV_PASSWORD }}
+          INPUT_PRODUCT_PATH: ${{ inputs.product_path }}
+          INPUT_PDF_PATH: ${{ inputs.pdf_path }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_PRICE: ${{ inputs.price }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS="${{ inputs.product_path }}"
-
-          if [ -n "${{ inputs.pdf_path }}" ]; then
-            ARGS="$ARGS --pdf ${{ inputs.pdf_path }}"
-          fi
-
-          if [ -n "${{ inputs.title }}" ]; then
-            ARGS="$ARGS --title \"${{ inputs.title }}\""
-          fi
-
-          if [ "${{ inputs.price }}" != "0" ] && [ -n "${{ inputs.price }}" ]; then
-            ARGS="$ARGS --price ${{ inputs.price }}"
-          fi
-
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            ARGS="$ARGS --dry-run"
-          fi
-
-          eval python projects/rakuda-sensei/automation/post_to_booth.py $ARGS
+          ARGS=("$INPUT_PRODUCT_PATH")
+          [ -n "$INPUT_PDF_PATH" ] && ARGS+=(--pdf "$INPUT_PDF_PATH")
+          [ -n "$INPUT_TITLE" ]    && ARGS+=(--title "$INPUT_TITLE")
+          [ -n "$INPUT_PRICE" ] && [ "$INPUT_PRICE" != "0" ] && ARGS+=(--price "$INPUT_PRICE")
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+          python projects/rakuda-sensei/automation/post_to_booth.py "${ARGS[@]}"
 
       - name: Upload screenshots (always)
         if: always()
