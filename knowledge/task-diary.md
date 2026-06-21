@@ -1,3 +1,30 @@
+### 2026-06-21（セッション103・ワークフローエラー修正＆PR #125 マージ完了）
+
+**うまくいったこと**
+- GitHub Actions ワークフローのエラー3つを修正・マージ完了
+  - **修正1：note投稿後の誤判定**
+    - 日本語タイトル検索失敗で exit 1 になっていた
+    - 投稿ボタン押下済みなら exit 0 に変更
+  - **修正2：トークン未設定の処理**
+    - Meta API 未設定・weeklyファイルなし・ツイートなし → すべてスキップ（exit 0）に変更
+  - **修正3：シェルインジェクション対策**
+    - eval 廃止 → bash 配列方式に変更（post-to-booth.yml / post-to-threads.yml / post-funnel-articles.yml）
+  - **PR作成・マージ**：PR #125 を squash マージで完了
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- GitHub Actions のコンフリクト解消で cherry-pick 確認の有効性
+- シェルスクリプトの eval はセキュリティリスク（シェルインジェクション）が高い
+
+**次回への申し送り**
+- **残タスク**：GitHub Actions の Weekly Content Pipeline を手動トリガーして 6/15〜6/21分の weeklyファイルを生成
+  - リポジトリ → Actions → 「Weekly Content Pipeline」を選択 → 「Run workflow」実行
+  - 実行後、Xの自動投稿が再開される予定
+
+---
+
 ### 2026-06-13（セッション102・Toy Story Modoki〜ブラウザ版・最終テスト＆セッション終了処理）
 
 **うまくいったこと**
