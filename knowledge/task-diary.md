@@ -4,6 +4,28 @@
 
 パターンが見えてきたら `knowledge/patterns.md` または `CLAUDE.md` に昇華させる。
 
+### 2026-06-21（セッション e30f00e5・GitHub Actions ワークフローのセキュリティ修正）
+
+**うまくいったこと**
+- GitHub Actions ワークフロー内のシェルインジェクション脆弱性を系統的に調査・修正
+- `post-to-booth.yml`・`post-to-threads.yml` の `eval` リスクを bash 配列 + env 経由方式に統一
+- `post-funnel-articles.yml` の DRY_RUN_FLAG 生成処理を unsafe な GitHub 式ワンライナーから bash 配列方式に統一（8ジョブすべて）
+- `refresh-tokens.yml`・`improve-articles.yml`・`weekly-content-pipeline.yml` などの既存実装との互換性を検証し、問題なしを確認
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- GitHub Actions の shell コマンド実行時に、`eval` や動的な `--text` 引数がシェルインジェクションのベクトルになることが明白
+- 正規引数（`--flag value`）の安全な受け渡しには bash 配列を中継パラメータとして使用するパターンが有効
+- 既存コード（`||` 構文、`outputs`、`schedule inputs` など）の大多数は正しく設計されている
+
+**次回への申し送り**
+- セキュリティ修正が完了し、本番環境での動作確認待ち
+- 他の CI/CD パイプラインでも同様のシェルインジェクション対策パターン適用可能
+
+---
+
 ### 2026-06-20（セッション e30f00e5・自動化スクリプトのエラーハンドリング改善）
 
 **うまくいったこと**
