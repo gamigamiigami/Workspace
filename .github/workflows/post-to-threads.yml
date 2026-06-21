@@ -52,18 +52,15 @@ jobs:
         env:
           THREADS_ACCESS_TOKEN: ${{ secrets.THREADS_ACCESS_TOKEN }}
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
+          INPUT_TEXT: ${{ inputs.text }}
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          ARGS=""
-          if [ -n "${{ inputs.text }}" ]; then
-            ARGS="$ARGS --text \"${{ inputs.text }}\""
-          fi
-          if [ "${{ inputs.force }}" = "true" ]; then
-            ARGS="$ARGS --force"
-          fi
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            ARGS="$ARGS --dry-run"
-          fi
-          eval python projects/rakuda-sensei/automation/post_to_threads.py $ARGS
+          ARGS=()
+          [ -n "$INPUT_TEXT" ]         && ARGS+=(--text "$INPUT_TEXT")
+          [ "$INPUT_FORCE" = "true" ]   && ARGS+=(--force)
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
+          python projects/rakuda-sensei/automation/post_to_threads.py "${ARGS[@]}"
 
       - name: Commit posted log
         if: success() && inputs.dry_run != true

@@ -46,11 +46,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-通知表-A-共感.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -77,11 +79,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-通知表-B-問題深掘り.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -108,11 +112,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-通知表-C-販売.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -139,11 +145,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-通知表-D-活用方法.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -169,11 +177,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-sidefire-A-共感.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -200,11 +210,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-sidefire-B-問題深掘り.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -231,11 +243,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-sidefire-C-販売.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -262,11 +276,13 @@ jobs:
           NOTE_SESSION_COOKIE: ${{ secrets.NOTE_SESSION_COOKIE }}
           NOTE_EMAIL: ${{ secrets.NOTE_EMAIL }}
           NOTE_PASSWORD: ${{ secrets.NOTE_PASSWORD }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          DRY_RUN_FLAG=${{ inputs.dry_run == true && '--dry-run' || '' }}
+          ARGS=()
+          [ "$INPUT_DRY_RUN" = "true" ] && ARGS+=(--dry-run)
           python projects/rakuda-sensei/automation/post_to_note.py \
             "projects/rakuda-sensei/articles/funnel-sidefire-D-活用方法.md" \
-            $DRY_RUN_FLAG
+            "${ARGS[@]}"
       - if: always()
         uses: actions/upload-artifact@v4
         with:

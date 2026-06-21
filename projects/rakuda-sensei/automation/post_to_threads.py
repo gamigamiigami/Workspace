@@ -136,6 +136,14 @@ def post_to_threads(text: str) -> tuple[bool, str]:
 
 
 def main(text_override: str = "", force: bool = False, dry_run: bool = False) -> int:
+    # Meta APIトークン未設定なら「まだ未セットアップ」としてスキップ（エラーにしない）
+    # ※手動でテキスト指定 or dry_run の場合は設定チェックを後段に回す
+    if not text_override and not dry_run:
+        if not os.environ.get("THREADS_ACCESS_TOKEN") or not os.environ.get("THREADS_USER_ID"):
+            print("ℹ️  THREADS_ACCESS_TOKEN / THREADS_USER_ID 未設定のためスキップ")
+            print("   → Meta APIセットアップ完了後に自動投稿が始まります")
+            return 0
+
     if text_override:
         tweet_text = text_override
         target_date = datetime.date.today()
@@ -150,13 +158,15 @@ def main(text_override: str = "", force: bool = False, dry_run: bool = False) ->
 
         weekly_file = find_weekly_file(target_date)
         if not weekly_file:
-            print(f"ERROR: weeklyファイルなし", file=sys.stderr)
-            return 1
+            # 投稿対象が無いのは「やることなし」なのでエラー扱いにしない
+            print(f"ℹ️  weeklyファイルなし → 投稿対象なしのためスキップ")
+            return 0
 
         tweet_text = extract_tweet(weekly_file.read_text(encoding="utf-8"), target_date, slot)
         if not tweet_text:
-            print(f"ERROR: {target_date} {slot}のツイート抽出失敗", file=sys.stderr)
-            return 1
+            # 該当スロットのツイートが無いのも「やることなし」→スキップ
+            print(f"ℹ️  {target_date} {slot}のツイートなし → スキップ")
+            return 0
 
     print(f"📝 投稿予定: {tweet_text}")
     print(f"📏 文字数: {len(tweet_text)} (Threadsは500字まで)")
