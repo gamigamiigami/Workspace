@@ -1,3 +1,31 @@
+### 2026-06-22（セッション104・note自動投稿の現状確認とブロッカー把握）
+
+**うまくいったこと**
+- ファネル記事8本（通知表AIプロンプト・サイドFIRE計画シート各4本）がファイルとして完成済みであることを確認
+- note自動投稿に必要なステップを明確化
+  - **ブロッカー**：GitHub Secrets に `NOTE_SESSION_COOKIE` を登録する必要あり
+  - ブラウザでnoteにログイン → クッキーをコピー → GitHub Secrets に登録という3ステップ
+  - クッキーさえ登録すれば GitHub Actions > 「ファネル記事を一括投稿」で自動投稿可能な状態であることを説明
+
+**うまくいかなかったこと**
+- なし（確認・整理フェーズのため）
+
+**発見**
+- ファネル記事（8本）はファイルとして完成済みだが、投稿（delivery）がまだされていない状態
+- `.threads-posted.log` が空のため自動投稿ログもなし
+- `post-funnel-articles.yml` は手動トリガーのみ（GitHub Actions > 「Run workflow」で実行する仕様）
+
+**次回への申し送り**
+- **ブロッカー解除手順**（ユーザー対応）：
+  1. note にブラウザでログイン
+  2. DevTools でクッキーをコピー（Chrome: DevTools → Application → Cookies → note.com → sessionid など）
+  3. GitHub Secrets に `NOTE_SESSION_COOKIE` を登録
+  4. GitHub Actions > 「ファネル記事を一括投稿」を手動実行
+- クッキーが有効ならすぐに投稿可能
+- 要ユーザー対応（ブラウザ操作とGitHub Secrets登録）
+
+---
+
 ### 2026-06-21（セッション103・ワークフローエラー修正＆PR #125 マージ完了）
 
 **うまくいったこと**
