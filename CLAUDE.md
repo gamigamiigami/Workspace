@@ -204,6 +204,34 @@ git config user.email noreply@anthropic.com && git config user.name Claude
 
 ---
 
+## 外部API自動化のセットアップパターン（rakuda-sensei）
+
+複数の外部API（note・Threads等）を自動化する場合、以下のパターンが確立した：
+
+**よくあるシーン**：
+- API固有のトークン・認証情報が必要な自動化機能
+- セットアップ前は「機能が無い」のではなく「まだ未セットアップ」の状態
+
+**推奨実装**：
+1. **セットアップ前の挙動** - エラーで停止するのではなく「未設定のためスキップ」と表示
+   - スクリプト起動時に環境変数チェック → 未設定なら情報ログで終了（`return 0`）
+   - 例：`if not os.environ.get("THREADS_ACCESS_TOKEN"): print("ℹ️ 未設定のためスキップ"); return 0`
+
+2. **セットアップ後の挙動** - ユーザーが GitHub Secrets に登録するだけで即座に機能開始
+   - スクリプト側は既に完成（環境変数を読むだけ）
+   - ユーザーハンドオフ：「URL を手入力してSecret登録してください」で十分
+
+3. **通知文の統一性** - 複数APIの場合、同じトーン・フォーマットを使う
+   - ✅ `ℹ️ {API}トークン未設定のためスキップ`
+   - ✅ `→ セットアップ完了後に自動投稿が始まります`
+   - NG `ERROR: 設定エラー` （ユーザーが何をすべきか不明確）
+
+**参考実装**：
+- `projects/rakuda-sensei/automation/post_to_note.py` （note：クッキー or メール認証）
+- `projects/rakuda-sensei/automation/post_to_threads.py` （Threads：アクセストークン）
+
+---
+
 ## 報告ルール
 
 knowledge/ や skills/ を読み書きしたら必ず報告する：
