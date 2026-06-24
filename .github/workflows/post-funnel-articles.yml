@@ -4,6 +4,11 @@ name: ファネル記事を一括投稿
 # 使い方: GitHub Actions > "ファネル記事を一括投稿" > Run workflow
 
 on:
+  push:
+    branches:
+      - claude/workspace-knowledge-base-setup-ccVKP
+    paths:
+      - "projects/rakuda-sensei/articles/.post-trigger"
   workflow_dispatch:
     inputs:
       funnel:
@@ -30,7 +35,7 @@ env:
 
 jobs:
   post-tsuchihyo-A:
-    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,7 +67,7 @@ jobs:
           retention-days: 3
 
   post-tsuchihyo-B:
-    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-tsuchihyo-A
     runs-on: ubuntu-latest
     steps:
@@ -95,7 +100,7 @@ jobs:
           retention-days: 3
 
   post-tsuchihyo-C:
-    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-tsuchihyo-B
     runs-on: ubuntu-latest
     steps:
@@ -128,7 +133,7 @@ jobs:
           retention-days: 3
 
   post-tsuchihyo-D:
-    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == '通知表（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-tsuchihyo-C
     runs-on: ubuntu-latest
     steps:
@@ -161,7 +166,7 @@ jobs:
           retention-days: 3
 
   post-sidefire-A:
-    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -193,7 +198,7 @@ jobs:
           retention-days: 3
 
   post-sidefire-B:
-    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-sidefire-A
     runs-on: ubuntu-latest
     steps:
@@ -226,7 +231,7 @@ jobs:
           retention-days: 3
 
   post-sidefire-C:
-    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-sidefire-B
     runs-on: ubuntu-latest
     steps:
@@ -259,7 +264,7 @@ jobs:
           retention-days: 3
 
   post-sidefire-D:
-    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' }}
+    if: ${{ inputs.funnel == 'サイドFIRE（A→B→C→D）' || inputs.funnel == '全部（8本）' || github.event_name == 'push' }}
     needs: post-sidefire-C
     runs-on: ubuntu-latest
     steps:
