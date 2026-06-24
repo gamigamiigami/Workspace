@@ -4,6 +4,39 @@
 
 ---
 
+### [2026-06-24] rakuda-sensei — Weekly Pipeline トークン上限エラー修正
+
+**作業内容（セッション48）：**
+
+- **問題特定**：`generate_note_article.py` の prompt が8000トークン上限を超過 → 413 HTTP エラーで weekly-content-pipeline が6/7・6/14・6/21 の毎週失敗
+  - 原因：既存記事17件 + 大量コンテキストファイル（playbook 3000字、note_skill 5000字等）をプロンプトに埋め込み
+  
+- **PR #126 修正・マージ完了**
+  - 各参照ファイルのスライス上限を削減：
+    - `playbook[:3000]` → `playbook[:1500]`
+    - `product_pb[:2000]` → `product_pb[:800]`
+    - `note_skill[:5000]` → `note_skill[:2000]`
+    - `insights（全量）` → `insights[:500]`
+    - `used_topics_list[:20]` → `used_topics_list[:10]`
+  - `MAX_TOKENS` を 4096 に調整してトークン圧縮
+  
+- **検証**：PR をマージ、次の日曜 6/28 21:00 UTC の週次パイプライン自動実行を待つ
+  - 必要に応じて GitHub Actions 画面から手動実行（`workflow_dispatch`）可能
+
+**成果物：**
+- PR #126：`projects/rakuda-sensei/automation/generate_note_article.py` 修正
+- 毎週金曜に発生していた article generation 失敗を永続的に解決
+
+**技術的学び：**
+- 複数のコンテキストファイルをプロンプトに埋め込む場合、トークン数を事前計測して上限に余裕を確保すること
+- 特に「既存記事」「プレイブック」などのリファレンスは、全量埋め込みではなくスライス（先頭 N 字）で対応
+
+**次のアクション：**
+- 6/28 21:00 UTC の週次パイプライン実行を監視
+- 修正が有効であれば完了と見做す（再度同じエラーが出ないことを確認）
+
+---
+
 ### [2026-06-13] Toy Story Modoki — ブラウザ版・最終テスト＆検証完了
 
 **作業内容：**
