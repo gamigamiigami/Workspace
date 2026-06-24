@@ -38,7 +38,7 @@ ROTATION_LOG = ROOT / "projects" / "rakuda-sensei" / "articles" / ".rotation.log
 
 GH_MODELS_ENDPOINT = "https://models.github.ai/inference"
 MODEL = "openai/gpt-4o-mini"
-MAX_TOKENS = 8192
+MAX_TOKENS = 4096
 JST = ZoneInfo("Asia/Tokyo")
 
 # 3本柱のテーマ定義
@@ -224,10 +224,10 @@ def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
    （抽象的なノウハウだけは絶対NG・売れない）
 
 ==== 最優先参照1: 伊神さんの実際の口調・人物情報 ====
-{voice}
+{voice[:1500]}
 
 ==== 最優先参照2: 売れる有料記事の戦略 ====
-{sales}
+{sales[:1500]}
 
 上記2ファイルは**ペルソナ厳守より優先**して反映する。
 口調・NG表現・人物情報は voice-and-style から、
@@ -240,22 +240,22 @@ def build_prompt(pillar: str, topic: str, persona: str, playbook: str,
 推奨タグ: {pillar_info['tags']}
 
 ==== ペルソナ（基本情報）====
-{persona}
+{persona[:1000]}
 
 ==== SNSプレイブック（柱と一貫性）====
-{playbook[:3000]}
+{playbook[:1500]}
 
 ==== 商品制作プレイブック ====
-{product_pb[:2000]}
+{product_pb[:800]}
 
 ==== note記事執筆ノウハウ ====
-{note_skill[:5000]}
+{note_skill[:2000]}
 
 ==== 前月のPDCAインサイト ====
-{insights}
+{insights[:500]}
 
 ==== 既存記事タイトル（重複回避）====
-{chr(10).join('- ' + t for t in used_topics_list[:20])}
+{chr(10).join('- ' + t for t in used_topics_list[:10])}
 
 ==== 価格戦略（最重要・2026-06-01 戦略転換）====
 {pricing_instruction}
