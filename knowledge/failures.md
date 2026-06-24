@@ -117,6 +117,43 @@ Claude Code 実行環境（/home/user/Workspace で実行）
 
 ## GitHub Actions
 
+### [2026-06-20] rakuda-sensei — Claude Code の GitHub MCP では actions:write 権限が不足し、ワークフロー自動トリガーが403エラー
+
+**状況：** `post-funnel-articles.yml` ワークフロー（ファネル記事8本を一括投稿）をPythonスクリプトから自動トリガーしようとした
+
+**問題：** 
+- GitHub API `POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches` への呼び出しで以下エラー：
+  ```
+  failed to run workflow: 403 Resource not accessible by integration
+  ```
+- Claude Code の MCP経由のGitHub連携では、ワークフロー実行トリガーが許可されていない
+
+**原因：** 
+- GitHub リポジトリには複数の権限レベルが存在：
+  1. **リポジトリレベル権限**（contents:read など）— Workflow ファイル読み書き
+  2. **Action/Workflow 実行権限**（actions:write）— Workflow 実行トリガー
+- Claude Code の GITHUB MCP は`actions:write` 権限を持たない設定
+- GitHub App（OAuth トークン）の権限ポリシーで、外部エージェントからの Workflow トリガーが意図的に制限されている可能性が高い
+
+**解決策：**
+1. **短期**：ユーザーが手動で GitHub UI から Workflow をトリガー
+   - リポジトリ → Actions → 「ファネル記事を一括投稿」→ Run workflow ボタン
+2. **長期**：以下の選択肢を検討
+   - `actions:write` 権限をリポジトリ設定で確認して再許可
+   - GitHub App の権限スコープを拡張
+   - または、Workflow トリガーを「Push ブランチの自動検出」などイベントドリブンに変更
+
+**再発防止：**
+- GitHub Actions のワークフロー自動実行には `actions:write` 権限が必須
+- Claude Code（外部エージェント） → GitHub API のトリガーは「環境の権限制限」の対象になりやすい
+- **事前チェック**：ワークフロー自動化実装前に、MCP/API側の権限スコープを確認
+  - 実行可能か試行する → 403 エラーならば設計変更（スケジュール、Webhook、UI トリガー など）
+- セッション内での権限確認コストが高いため、設計段階で「マニュアルトリガーで十分」と判定するのも有効な判断
+
+**タグ：** #github-actions #permissions #mcp #api-automation #workflow-trigger
+
+---
+
 ### [2026-05-31] addness-side-income — GitHub Actions で issue:write 権限が明示的に必要
 
 **状況：** GitHub Actions ワークフロー（`post-to-x.yml`）内で GitHub Issue を自動作成する機能を実装
