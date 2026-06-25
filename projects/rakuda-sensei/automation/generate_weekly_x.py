@@ -153,7 +153,14 @@ def main() -> int:
     playbook = PLAYBOOK_PATH.read_text(encoding="utf-8")
 
     today = datetime.date.today()
-    week_start = next_monday(today)
+    # WEEK_OFFSET: 1=来week（デフォルト・通常運用）, 0=今週（取りこぼし救済用）
+    week_offset = int(os.environ.get("WEEK_OFFSET", "1"))
+    if week_offset <= 0:
+        # 今週の月曜（今日を含む週）から数えてオフセット
+        this_monday = today - datetime.timedelta(days=today.weekday())
+        week_start = this_monday + datetime.timedelta(weeks=week_offset)
+    else:
+        week_start = next_monday(today) + datetime.timedelta(weeks=week_offset - 1)
 
     print(f"📅 生成対象週: {week_start} 〜 {week_start + datetime.timedelta(days=6)}")
     print(f"🤖 モデル: {MODEL} (GitHub Models・無料)")
