@@ -11,6 +11,12 @@ name: Weekly Content Pipeline (生成→投稿の完全自動)
 on:
   schedule:
     - cron: "0 21 * * 0"  # 毎週日曜 21:00 UTC
+  # 取りこぼし救済: .x-refresh-trigger をpushすると今週分を生成し直す
+  push:
+    branches:
+      - claude/workspace-knowledge-base-setup-ccVKP
+    paths:
+      - "projects/rakuda-sensei/sns/.x-refresh-trigger"
   workflow_dispatch:
     inputs:
       include_booth:
@@ -23,6 +29,11 @@ on:
         required: false
         type: string
         default: ""
+      week_offset:
+        description: "生成する週 (1=来週・通常 / 0=今週・取りこぼし救済)"
+        required: false
+        type: string
+        default: "1"
 
 permissions:
   contents: write
@@ -60,9 +71,11 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       # === 1. X週次14本生成 ===
+      # push(救済)時は今週(WEEK_OFFSET=0)、手動時は入力値、schedule時は来週(1)
       - name: Generate weekly X posts (3本柱対応)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEEK_OFFSET: ${{ github.event_name == 'push' && '0' || (inputs.week_offset || '1') }}
         run: python projects/rakuda-sensei/automation/generate_weekly_x.py
 
       - name: Commit X weekly
