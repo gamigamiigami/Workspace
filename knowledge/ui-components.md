@@ -1,8 +1,217 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-05-23
+最終更新：2026-06-26
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## [旅行プランメーカー] トグル式明細⇄合計表示
+
+**用途：** 複数行のデータを「詳細表示」と「合計表示」で切り替える。旅行費用・複数費目の管理などに最適。
+
+```html
+<div id="money-section">
+  <button onclick="toggleMoneyDisplay()">💰 詳細/合計 切り替え</button>
+  
+  <!-- 詳細表示（デフォルト） -->
+  <div id="details-view" class="money-view">
+    <div class="expense-item">
+      <span>函館→すすきの（バス）</span>
+      <span>¥200</span>
+    </div>
+    <div class="expense-item">
+      <span>すすきの→赤レンガ倉庫（電車）</span>
+      <span>¥150</span>
+    </div>
+  </div>
+  
+  <!-- 合計表示 -->
+  <div id="summary-view" class="money-view" style="display:none;">
+    <div class="expense-summary">
+      <strong>移動費：¥350</strong>
+    </div>
+    <div class="expense-summary">
+      <strong>一人あたり：¥175</strong>
+    </div>
+  </div>
+</div>
+```
+
+```css
+.expense-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+.expense-summary {
+  padding: 12px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  margin: 4px 0;
+}
+```
+
+```javascript
+function toggleMoneyDisplay() {
+  const details = document.getElementById('details-view');
+  const summary = document.getElementById('summary-view');
+  details.style.display = details.style.display === 'none' ? 'block' : 'none';
+  summary.style.display = summary.style.display === 'none' ? 'block' : 'none';
+}
+```
+
+**ポイント：**
+- 単純な `display: none/block` 切り替えで軽量
+- 複数行データの縮約表示に最適
+- タップ/クリック1回で両状態を反転
+
+---
+
+## [旅行プランメーカー] 場所カード（色分けピン対応）
+
+**用途：** 地図上のピン情報を表示するカード。ピンの種類（観光地/宿泊/食事など）を色分けで表現。
+
+```html
+<div class="location-card" data-type="observation">
+  <div class="pin-marker observation"></div>
+  <div class="card-content">
+    <h3>函館山展望台</h3>
+    <p>Day 1 | 🔍確定</p>
+    <p class="memo">夜景がきれい</p>
+    <a href="https://..." target="_blank">🔍 調べる</a>
+  </div>
+</div>
+```
+
+```css
+.location-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f9f9f9;
+  margin: 8px 0;
+  border-left: 4px solid #999;
+}
+
+.pin-marker {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.pin-marker.observation { background: #ff4444; } /* 観光地：赤 */
+.pin-marker.accommodation { background: #4444ff; } /* 宿泊：青 */
+.pin-marker.food { background: #44bb44; } /* 食事：緑 */
+.pin-marker.transit { background: #bb44bb; } /* 移動拠点：紫 */
+.pin-marker.other { background: #888; } /* その他：灰 */
+
+.card-content {
+  flex: 1;
+}
+
+.card-content h3 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+}
+
+.card-content p {
+  margin: 2px 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.memo {
+  padding: 4px 8px;
+  background: #fff;
+  border-radius: 4px;
+  border-left: 2px solid #ddd;
+}
+```
+
+**ポイント：**
+- ピン色とカード左ボーダーを連動させると視覚的統一性が出る
+- Day 情報・状態フラグ・メモを同時表示
+- リンク付きで調べる導線をワンステップ化
+
+---
+
+## [旅行プランメーカー] Day タブ（日程わけ切り替え）
+
+**用途：** 複数日の旅行計画を Day1/Day2/... で切り替え表示。シンプルなタブUI。
+
+```html
+<div class="day-tabs">
+  <button class="day-tab active" onclick="switchDay(1)">Day 1</button>
+  <button class="day-tab" onclick="switchDay(2)">Day 2</button>
+  <button class="day-tab" onclick="switchDay(3)">Day 3</button>
+  <button class="day-add" onclick="addDay()">+ 日程追加</button>
+</div>
+
+<div id="day-1" class="day-content">
+  <!-- Day1 の場所・費用が表示される -->
+</div>
+<div id="day-2" class="day-content" style="display:none;">
+  <!-- Day2 の場所・費用が表示される -->
+</div>
+```
+
+```css
+.day-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px;
+  border-bottom: 1px solid #ddd;
+}
+
+.day-tab {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: #f0f0f0;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.day-tab.active {
+  background: #333;
+  color: #fff;
+  font-weight: bold;
+}
+
+.day-add {
+  padding: 8px 12px;
+  border: 1px dashed #999;
+  background: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.day-content {
+  padding: 16px;
+}
+```
+
+```javascript
+function switchDay(dayNum) {
+  // 全コンテンツを非表示
+  document.querySelectorAll('.day-content').forEach(el => el.style.display = 'none');
+  document.querySelectorAll('.day-tab').forEach(el => el.classList.remove('active'));
+  
+  // 選択日を表示・ハイライト
+  document.getElementById(`day-${dayNum}`).style.display = 'block';
+  event.target.classList.add('active');
+}
+```
+
+**ポイント：**
+- 横スクロール対応で多日程にも対応
+- 日程追加ボタンで動的に増やせる設計
+- アクティブタブの視覚的フィードバック重要
 
 ---
 
