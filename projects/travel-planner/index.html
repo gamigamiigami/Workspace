@@ -266,6 +266,14 @@
     };
     const TYPE_ORDER = ['sight', 'hotel', 'food', 'hub', 'other'];
 
+    // 移動手段（gmode = Googleマップの travelmode）
+    const MODES = {
+      driving: { label: '車',       icon: '🚗', gmode: 'driving' },
+      transit: { label: '電車・バス', icon: '🚃', gmode: 'transit' },
+      walking: { label: '徒歩',     icon: '🚶', gmode: 'walking' }
+    };
+    const MODE_ORDER = ['driving', 'transit', 'walking'];
+
     // ============================================================
     // 状態管理
     // ============================================================
@@ -398,7 +406,7 @@
         days: data.days || 1,
         people: data.people || 1,
         places: (data.places || []).map(p => ({ costs: [], memo: '', url: '', day: 0, status: 'tentative', type: 'sight', ...p })),
-        legs: (data.legs || []).map(l => ({ costs: [], ...l })),
+        legs: (data.legs || []).map(l => ({ costs: [], mode: 'driving', ...l })),
         moneyView: data.moneyView || 'detail'
       };
     }
@@ -515,9 +523,10 @@
         row.className = 'leg-row';
         row.dataset.legId = l.id;
         const cost = sumCosts(l.costs);
+        const mode = MODES[l.mode] || MODES.driving;
         const route = (l.distance != null)
-          ? '<div class="place-sub">約 ' + (l.distance / 1000).toFixed(1) + 'km / 約 ' + Math.round(l.duration / 60) + '分</div>'
-          : '<div class="place-sub">経路未検索</div>';
+          ? '<div class="place-sub">' + mode.icon + ' ' + mode.label + '・距離 約 ' + (l.distance / 1000).toFixed(1) + 'km</div>'
+          : '<div class="place-sub">' + mode.icon + ' ' + mode.label + '</div>';
         row.innerHTML =
           '<div class="place-main">' +
             '<div class="place-name">' + escapeHtml(from ? from.name : '?') + ' → ' + escapeHtml(to ? to.name : '?') + '</div>' +
@@ -768,16 +777,25 @@
       if (state.places.length < 2) { alert('移動を作るには場所が2つ以上必要です。'); return; }
       let leg = id ? getLeg(id) : null;
       const isNew = !leg;
-      if (isNew) leg = { id: genId(), fromId: state.places[0].id, toId: state.places[1].id, distance: null, duration: null, costs: [] };
+      if (isNew) leg = { id: genId(), fromId: state.places[0].id, toId: state.places[1].id, mode: 'driving', distance: null, duration: null, costs: [] };
 
       const opts = (selId) => state.places.map(p =>
         '<option value="' + p.id + '"' + (p.id === selId ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>').join('');
+
+      const modeButtons = MODE_ORDER.map(k =>
+        '<button data-mode="' + k + '" class="' + (leg.mode === k ? 'on' : '') + '">' + MODES[k].icon + ' ' + MODES[k].label + '</button>'
+      ).join('');
 
       const modal = openModal(
         '<h3>🚌 移動の編集</h3>' +
         '<div class="field"><label>出発地</label><select id="lg-from">' + opts(leg.fromId) + '</select></div>' +
         '<div class="field"><label>目的地</label><select id="lg-to">' + opts(leg.toId) + '</select></div>' +
-        '<div class="field"><button class="ghost" id="lg-route">🔍 経路を検索（距離・時間）</button>' +
+        '<div class="field"><label>移動手段</label><div class="seg-choices" id="lg-modes">' + modeButtons + '</div></div>' +
+        '<div class="field">' +
+          '<button id="lg-gmap">🗺️ 本物の地図で経路を見る（正確な所要時間）</button>' +
+          '<div class="hint" style="margin-top:8px">選んだ移動手段のまま Googleマップの経路検索を開きます。電車の時刻表・渋滞込みの<b>実際の所要時間</b>はこちらで確認してください（無料）。</div>' +
+        '</div>' +
+        '<div class="field"><button class="ghost" id="lg-route">📍 地図に線を引く（距離のめやす）</button>' +
           '<div id="lg-route-info" style="margin-top:8px"></div></div>' +
         '<div class="field"><label>交通費（バス・電車など複数OK）</label><div id="lg-costs"></div>' +
           '<button class="add-btn" id="lg-add-cost">＋費用を追加</button></div>' +
@@ -785,10 +803,12 @@
         '<div class="spacer"></div><button id="lg-close">閉じる</button></div>'
       );
 
+      // アプリ内のOSRMは「車」前提。距離のめやすと地図表示用（所要時間は車・渋滞なし）
       const showRoute = () => {
         const info = modal.querySelector('#lg-route-info');
         if (leg.distance != null) {
-          info.innerHTML = '<div class="route-info">約 ' + (leg.distance / 1000).toFixed(1) + 'km / 約 ' + Math.round(leg.duration / 60) + '分（車ルートの目安）</div>';
+          info.innerHTML = '<div class="route-info">距離 約 ' + (leg.distance / 1000).toFixed(1) +
+            'km（車で約 ' + Math.round(leg.duration / 60) + '分・渋滞なしのめやす）</div>';
         } else { info.innerHTML = ''; }
       };
       showRoute();
@@ -796,11 +816,30 @@
       modal.querySelector('#lg-from').addEventListener('change', (e) => { leg.fromId = e.target.value; leg.distance = null; saveState(); showRoute(); });
       modal.querySelector('#lg-to').addEventListener('change', (e) => { leg.toId = e.target.value; leg.distance = null; saveState(); showRoute(); });
 
+      // 移動手段の選択（Googleマップの travelmode に反映）
+      modal.querySelectorAll('#lg-modes button').forEach(b => b.addEventListener('click', () => {
+        leg.mode = b.dataset.mode; saveState();
+        modal.querySelectorAll('#lg-modes button').forEach(x => x.classList.toggle('on', x === b));
+      }));
+
+      // 本物の地図（Googleマップ）で、選んだ手段の正確な経路を開く＝無料
+      modal.querySelector('#lg-gmap').addEventListener('click', () => {
+        const from = getPlace(leg.fromId), to = getPlace(leg.toId);
+        if (!from || !to || from.id === to.id) { alert('違う2地点を選んでください。'); return; }
+        const m = MODES[leg.mode] || MODES.driving;
+        const url = 'https://www.google.com/maps/dir/?api=1' +
+          '&origin=' + from.lat + ',' + from.lng +
+          '&destination=' + to.lat + ',' + to.lng +
+          '&travelmode=' + m.gmode;
+        window.open(url, '_blank');
+      });
+
+      // アプリ内：距離のめやす＋地図に線（OSRM＝車）
       modal.querySelector('#lg-route').addEventListener('click', async () => {
         const from = getPlace(leg.fromId), to = getPlace(leg.toId);
         if (!from || !to || from.id === to.id) { alert('違う2地点を選んでください。'); return; }
         const info = modal.querySelector('#lg-route-info');
-        info.innerHTML = '<div class="empty">検索中…</div>';
+        info.innerHTML = '<div class="empty">計算中…</div>';
         try {
           const route = await fetchRoute(from, to);
           leg.distance = route.distance; leg.duration = route.duration;
@@ -813,7 +852,7 @@
             map.fitBounds(coords, { padding: [40, 40] });
           }
         } catch (err) {
-          info.innerHTML = '<div class="empty">経路が取得できませんでした（ネット接続を確認）。</div>';
+          info.innerHTML = '<div class="empty">距離を取得できませんでした（ネット接続を確認）。</div>';
         }
       });
 
