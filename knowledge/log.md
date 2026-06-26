@@ -1864,9 +1864,14 @@
 - 日程グループ化・確定/候補バッジ・お金明細(区間別/場所別)・合計(種類別集計)・一人あたり・編集で即時再計算 すべて期待値一致
 - 移動/共有/追加モーダル・スマホ縦積み・地図フォールバック表示 すべてOK
 
+**公開（GitHub Pages・無料）：** 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` から deploy 成功。
+- トップ（作品一覧）: https://gamigamiigami.github.io/Workspace/
+- 旅行プラン: https://gamigamiigami.github.io/Workspace/projects/travel-planner/
+- deploy-pages.yml を「ホワイトリストした公開サイトだけを _site に集めて配信」方式へ刷新。knowledge/・CLAUDE.md・rakuda-sensei（cookie/token等の機密）は公開対象外。site/index.html を追加。
+
 **次のアクション：**
-- **iPad実機テスト待ち**（①地図表示・ピン操作の感触 ②場所検索・経路検索が学校外ネットで動くか ③タブレット縦持ちのレイアウト・タップ操作 ④共有リンクの受け渡し）
-- ※地図・検索・経路は外部サービス利用のため、実機の通常ネット環境での確認が必須
+- **iPhone/iPad実機テスト待ち**（①公開URLで地図表示・ピン操作 ②場所検索・経路検索が通常ネットで動くか ③スマホ/タブレット縦持ちのレイアウト・タップ操作 ④共有リンクの受け渡し）
+- ※地図・検索・経路は外部サービス利用のため、実機の通常ネット環境での確認が必須（学校制限ネットでは地図がブロックされる可能性）
 
 **学び：**
 - CDN依存アプリは読み込み失敗で全機能停止 → `mapReady` フラグで縦退運転（failures.md に記録）
