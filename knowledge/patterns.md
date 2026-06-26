@@ -1370,6 +1370,41 @@ showScreen('screen-quiz');
 
 ---
 
+## 費用を「区間 or 場所」に紐づけるデータモデル（旅行プランツール）
+
+**課題：** お金を単なる合計ではなく「何に対する費用か」で管理したい（A→Bのバス代、宿の宿泊代など）。
+
+**パターン：** 費用を2系統に分けて持つ。
+```javascript
+// 場所：その場所自体の費用（宿泊・入場・食事…）
+place = { id, name, lat, lng, type, status, day, costs:[{id,name,amount}] }
+// 移動(区間)：2地点間の費用（バス・電車を複数行で）
+leg   = { id, fromId, toId, distance, duration, costs:[{id,name,amount}] }
+```
+- 明細表示＝区間ごと/場所ごとにグループ化。合計表示＝種類別に集計（移動・宿泊・食事…）。トグルで切替。
+- 経路検索(OSRM)の「区間」概念とお金の「区間」が一致するので自然に噛み合う。
+
+**タグ：** #data-model #travel #money
+
+---
+
+## サーバー不要の「共有」：URLハッシュ + ファイル書き出し/取り込み
+
+**課題：** 課金・サーバーなしで作ったデータを他人に渡したい。
+
+**パターン：**
+- 共有リンク：状態JSONを UTF-8安全なBase64化して `location.hash` に埋め、コピー。開いた側は hash を復元して確認ダイアログ後に読み込み。
+- ファイル：`Blob` でJSON書き出し / `FileReader` で取り込み。
+```javascript
+const toBase64 = s => btoa(String.fromCharCode(...new TextEncoder().encode(s)));
+const fromBase64 = b => new TextDecoder().decode(Uint8Array.from(atob(b), c=>c.charCodeAt(0)));
+```
+- 普段は localStorage に自動保存。リアルタイム同時編集が要るときだけ初めてサーバーを検討。
+
+**タグ：** #share #no-server #localstorage #free
+
+---
+
 ## 関連リンク
 
 - 失敗・注意点 → [failures.md](./failures.md)

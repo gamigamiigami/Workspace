@@ -552,3 +552,28 @@ function loadData(key, defaultValue) {
 
 - 成功パターン集 → [patterns.md](./patterns.md)
 - コーディング規約 → [rules.md](./rules.md)
+
+---
+
+## CDN依存のアプリは、ライブラリ読み込み失敗で全機能が死ぬ
+
+**症状：** 地図ライブラリ(Leaflet)をCDNから読むツールで、CDNに到達できないと `L is not defined` でスクリプトが途中停止し、地図と無関係な「リスト・お金計算」まで含めて画面が真っ白になった。
+
+**原因：** 初期化の冒頭で `L.map()` を呼び、ここで例外→以降の `bindUi()` `render()` が全く実行されない。
+
+**再発防止：**
+- 外部ライブラリ依存の初期化は `typeof L === 'undefined'` で守り、失敗しても残りのUIを描画する（`mapReady` フラグで地図機能だけ無効化）。
+- 地図領域には「読み込めませんでした／他機能は使えます」と明示。
+- ＝外部依存は「無くても最低限動く」縮退運転を必ず用意する。
+
+**タグ：** #cdn #resilience #graceful-degradation #leaflet
+
+---
+
+## サンドボックスのegressポリシーで外部接続が403 → 迂回・retry禁止
+
+**症状：** unpkg / OpenStreetMap / google.com への接続が proxy で 403（CONNECT tunnel failed）。
+
+**対応：** `curl -sS "$HTTPS_PROXY/__agentproxy/status"` で `recentRelayFailures` を確認すれば遮断ホストが分かる。403/407は組織ポリシー拒否なので**retryや迂回をせず報告する**。憶測で「できない」と断定せず status で原因確認（mistakes.md と同系統）。実機（通常ブラウザ）では動く点も合わせて伝える。
+
+**タグ：** #proxy #egress #sandbox #403
