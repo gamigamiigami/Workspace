@@ -1,0 +1,925 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>旅行プランメーカー</title>
+
+  <!-- ===== 地図ライブラリ Leaflet（無料・APIキー不要・要ネット接続） ===== -->
+  <!-- ※このプロジェクトは「本物の動く地図」を実現するため外部CDNを使う（coding-rules の例外。README参照） -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* ===== 基本設定 ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #1e3a5f;       /* 基調の濃紺（信頼感） */
+      --navy-dark: #15293f;
+      --accent: #2563eb;     /* アクセント青 */
+      --bg: #f5f7fa;
+      --line: #e2e8f0;
+      --text: #1f2933;
+      --muted: #64748b;
+      /* ピンの種類カラー */
+      --c-sight: #e3342f;    /* 観光地・赤 */
+      --c-hotel: #2563eb;    /* 宿・青 */
+      --c-food:  #16a34a;    /* 食事・緑 */
+      --c-hub:   #7c3aed;    /* 移動拠点・紫 */
+      --c-other: #6b7280;    /* その他・グレー */
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      color: var(--text);
+      background: var(--bg);
+      overflow: hidden;
+    }
+    button {
+      font-family: inherit;
+      font-size: 15px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      min-height: 40px;
+      padding: 8px 14px;
+      background: var(--accent);
+      color: #fff;
+    }
+    button.ghost { background: #fff; color: var(--navy); border: 1px solid var(--line); }
+    button.danger { background: #fff; color: #dc2626; border: 1px solid #fecaca; }
+    button:active { opacity: .85; }
+    input, select, textarea {
+      font-family: inherit;
+      font-size: 16px;          /* モバイルでズームしない最小サイズ */
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      width: 100%;
+      background: #fff;
+      color: var(--text);
+    }
+    label { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+
+    /* ===== 全体レイアウト（PC：左地図＋右パネル） ===== */
+    #app { display: flex; flex-direction: column; height: 100vh; }
+    #topbar {
+      background: var(--navy);
+      color: #fff;
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 12px;
+      flex-wrap: wrap;
+    }
+    #topbar .brand { font-weight: 700; font-size: 18px; white-space: nowrap; }
+    #topbar input.plan-name {
+      background: rgba(255,255,255,.12); color: #fff; border: 1px solid rgba(255,255,255,.25);
+      max-width: 240px; min-width: 120px;
+    }
+    #topbar input.plan-name::placeholder { color: #cdd8e6; }
+    #topbar .spacer { flex: 1; }
+    #topbar .save-state { font-size: 13px; color: #b9f6ca; white-space: nowrap; }
+    #topbar button { background: rgba(255,255,255,.15); }
+
+    #main { flex: 1; display: flex; min-height: 0; }
+    #map { flex: 1; min-height: 0; }
+    #panel {
+      width: 380px; max-width: 42vw;
+      background: #fff; border-left: 1px solid var(--line);
+      overflow-y: auto; padding: 14px;
+    }
+    .section { margin-bottom: 22px; }
+    .section h2 { font-size: 15px; color: var(--navy); margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+    .row-2 { display: flex; gap: 8px; }
+    .row-2 > div { flex: 1; }
+
+    /* ===== 場所リスト ===== */
+    .day-group { margin-bottom: 12px; }
+    .day-title { font-size: 13px; font-weight: 700; color: var(--muted); margin: 8px 0 4px; }
+    .place-row, .leg-row {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px; border: 1px solid var(--line); border-radius: 10px;
+      margin-bottom: 6px; cursor: pointer; background: #fff;
+    }
+    .place-row:hover, .leg-row:hover { border-color: var(--accent); }
+    .place-dot {
+      width: 22px; height: 22px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 12px; flex-shrink: 0; color: #fff;
+    }
+    .place-main { flex: 1; min-width: 0; }
+    .place-name { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .place-sub { font-size: 12px; color: var(--muted); }
+    .badge {
+      font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap;
+    }
+    .badge.fixed { background: #dcfce7; color: #166534; }
+    .badge.tentative { background: #fef3c7; color: #92400e; border: 1px dashed #d6a700; }
+    .cost-tag { font-size: 13px; color: var(--navy); font-weight: 600; white-space: nowrap; }
+
+    /* ===== お金パネル ===== */
+    .money-head { display: flex; align-items: center; justify-content: space-between; }
+    .toggle { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+    .toggle button { background: #fff; color: var(--muted); border-radius: 0; min-height: 32px; padding: 4px 14px; font-size: 13px; }
+    .toggle button.on { background: var(--navy); color: #fff; }
+    .money-box { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-top: 8px; }
+    .money-group-title { font-size: 13px; font-weight: 700; color: var(--navy); margin: 8px 0 4px; }
+    .money-leg { font-size: 13px; color: var(--muted); margin-top: 6px; }
+    .money-item { display: flex; justify-content: space-between; padding: 2px 0 2px 12px; font-size: 14px; }
+    .money-total { display: flex; justify-content: space-between; border-top: 2px solid var(--line); margin-top: 8px; padding-top: 8px; font-weight: 700; }
+    .grand {
+      background: var(--navy); color: #fff; border-radius: 10px; padding: 12px;
+      text-align: center; font-size: 22px; font-weight: 800; margin-top: 10px;
+    }
+    .per-person { text-align: center; font-size: 14px; color: var(--muted); margin-top: 6px; }
+    .summary-line { display: flex; justify-content: space-between; padding: 4px 0; font-size: 15px; }
+
+    .add-btn { width: 100%; background: #fff; color: var(--accent); border: 1px dashed var(--accent); margin-top: 4px; }
+    .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
+
+    /* ===== モーダル ===== */
+    .overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.4);
+      display: flex; align-items: flex-end; justify-content: center; z-index: 1000;
+    }
+    .modal {
+      background: #fff; width: 100%; max-width: 460px; max-height: 88vh; overflow-y: auto;
+      border-radius: 16px 16px 0 0; padding: 18px;
+    }
+    .modal h3 { color: var(--navy); margin-bottom: 12px; }
+    .field { margin-bottom: 12px; }
+    .modal-actions { display: flex; gap: 8px; margin-top: 16px; }
+    .modal-actions .spacer { flex: 1; }
+    .cost-edit-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+    .cost-edit-row input.cn { flex: 2; }
+    .cost-edit-row input.ca { flex: 1; }
+    .cost-edit-row button { min-height: 36px; padding: 6px 10px; }
+    .seg-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+    .seg-choices button { background: #fff; color: var(--text); border: 1px solid var(--line); min-height: 36px; }
+    .seg-choices button.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .search-result { padding: 10px; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; cursor: pointer; font-size: 14px; }
+    .search-result:hover { border-color: var(--accent); }
+    .hint { background: #eff6ff; color: var(--navy); border: 1px solid #bfdbfe; border-radius: 8px; padding: 8px 10px; font-size: 13px; margin-bottom: 10px; }
+    .route-info { background: #f0fdf4; color: #166534; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+
+    /* ===== 地図ピン（種類で色・状態で見た目） ===== */
+    .pin {
+      width: 30px; height: 30px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 15px; color: #fff; border: 3px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.4); position: relative;
+    }
+    .pin.tentative { opacity: .7; border-style: dashed; border-color: #fff; }
+    .pin .check {
+      position: absolute; right: -4px; bottom: -4px;
+      background: #166534; color: #fff; border-radius: 50%;
+      width: 15px; height: 15px; font-size: 10px;
+      display: flex; align-items: center; justify-content: center; border: 2px solid #fff;
+    }
+
+    /* ===== モバイル：縦積み（地図が上・パネルが下） ===== */
+    @media (max-width: 768px) {
+      body { overflow: auto; }
+      #app { height: auto; min-height: 100vh; }
+      #main { flex-direction: column; }
+      #map { height: 45vh; min-height: 280px; }
+      #panel { width: 100%; max-width: 100%; border-left: none; border-top: 1px solid var(--line); }
+      .modal { max-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <!-- ===== アプリ全体 ===== -->
+  <div id="app">
+
+    <!-- ===== 上部バー：プラン名・人数・共有・保存状態 ===== -->
+    <header id="topbar">
+      <span class="brand">🧳 旅行プラン</span>
+      <input class="plan-name" id="plan-name" placeholder="プラン名（例：北海道2泊3日）">
+      <div class="spacer"></div>
+      <span class="save-state" id="save-state">保存済</span>
+      <button class="ghost" id="btn-share">共有</button>
+    </header>
+
+    <!-- ===== メイン：左に地図、右に操作パネル ===== -->
+    <div id="main">
+      <div id="map"><!-- Leaflet地図がここに入る --></div>
+
+      <aside id="panel">
+        <!-- 旅程の基本設定 -->
+        <div class="section">
+          <div class="row-2">
+            <div>
+              <label>日数</label>
+              <select id="days-select"></select>
+            </div>
+            <div>
+              <label>人数（割り勘用）</label>
+              <input type="number" id="people-input" min="1" value="1">
+            </div>
+          </div>
+        </div>
+
+        <!-- 場所リスト -->
+        <div class="section">
+          <h2>📍 行きたい場所</h2>
+          <div id="place-list"></div>
+          <button class="add-btn" id="btn-add-place">＋ 場所を追加</button>
+        </div>
+
+        <!-- 移動リスト -->
+        <div class="section">
+          <h2>🚌 移動（経路・交通費）</h2>
+          <div id="leg-list"></div>
+          <button class="add-btn" id="btn-add-leg">＋ 移動を追加</button>
+        </div>
+
+        <!-- お金パネル -->
+        <div class="section">
+          <div class="money-head">
+            <h2>💰 お金</h2>
+            <div class="toggle">
+              <button id="view-detail" class="on">明細</button>
+              <button id="view-summary">合計</button>
+            </div>
+          </div>
+          <div id="money-box" class="money-box"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <!-- モーダルの差し込み先 -->
+  <div id="modal-root"></div>
+
+  <script>
+    // ============================================================
+    // 定数：ピンの種類（色・アイコン・ラベル）
+    // ============================================================
+    const TYPES = {
+      sight: { label: '観光地',   color: 'var(--c-sight)', icon: '📷' },
+      hotel: { label: '宿',       color: 'var(--c-hotel)', icon: '🛏' },
+      food:  { label: '食事',     color: 'var(--c-food)',  icon: '🍴' },
+      hub:   { label: '移動拠点', color: 'var(--c-hub)',   icon: '🚉' },
+      other: { label: 'その他',   color: 'var(--c-other)', icon: '📌' }
+    };
+    const TYPE_ORDER = ['sight', 'hotel', 'food', 'hub', 'other'];
+
+    // ============================================================
+    // 状態管理
+    // ============================================================
+    let state = {
+      planName: '',
+      days: 1,
+      people: 1,
+      places: [],   // {id,name,lat,lng,type,status,day,memo,url,costs:[{id,name,amount}]}
+      legs: [],     // {id,fromId,toId,distance,duration,costs:[{id,name,amount}]}
+      moneyView: 'detail'
+    };
+    let map, markerLayer, routeLayer;
+    let mapClickAddMode = false;
+    let mapReady = false;   // 地図ライブラリが読めたか（読めなくても他機能は動かす）
+
+    const $ = (sel) => document.querySelector(sel);
+    const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const yen = (n) => '¥' + (Number(n) || 0).toLocaleString('ja-JP');
+    const sumCosts = (costs) => (costs || []).reduce((s, c) => s + (Number(c.amount) || 0), 0);
+
+    // ============================================================
+    // 初期化
+    // ============================================================
+    function initApp() {
+      loadFromHashOrStorage();
+      initMap();
+      bindUi();
+      renderAll();
+    }
+
+    function initMap() {
+      // 地図ライブラリ（Leaflet）が読めなかった場合：地図だけ諦め、他機能は継続
+      if (typeof L === 'undefined') {
+        mapReady = false;
+        const el = $('#map');
+        el.style.display = 'flex';
+        el.style.alignItems = 'center';
+        el.style.justifyContent = 'center';
+        el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:14px;line-height:1.8">' +
+          '🗺️ 地図を読み込めませんでした。<br>インターネット接続を確認して、ページを再読み込みしてください。<br>' +
+          '<span style="font-size:13px">（場所リストやお金の記録はそのまま使えます）</span></div>';
+        return;
+      }
+      map = L.map('map').setView([35.681, 139.767], 5); // 初期：東京駅あたり・日本全体
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+      markerLayer = L.layerGroup().addTo(map);
+      routeLayer = L.layerGroup().addTo(map);
+      mapReady = true;
+
+      // 地図クリックで場所追加（追加モードのときだけ）
+      map.on('click', async (e) => {
+        if (!mapClickAddMode) return;
+        mapClickAddMode = false;
+        const name = await reverseGeocode(e.latlng.lat, e.latlng.lng);
+        const place = createPlace(name, e.latlng.lat, e.latlng.lng);
+        state.places.push(place);
+        saveState();
+        renderAll();
+        openPlaceModal(place.id);
+      });
+    }
+
+    function bindUi() {
+      $('#plan-name').addEventListener('input', (e) => { state.planName = e.target.value; saveState(); });
+      $('#people-input').addEventListener('input', (e) => { state.people = Math.max(1, Number(e.target.value) || 1); saveState(); renderMoney(); });
+      $('#days-select').addEventListener('change', (e) => { state.days = Number(e.target.value); saveState(); renderPlaces(); });
+      $('#btn-add-place').addEventListener('click', openAddPlaceModal);
+      $('#btn-add-leg').addEventListener('click', () => openLegModal(null));
+      $('#btn-share').addEventListener('click', openShareModal);
+      $('#view-detail').addEventListener('click', () => setMoneyView('detail'));
+      $('#view-summary').addEventListener('click', () => setMoneyView('summary'));
+
+      // 場所リスト・移動リストはイベント委譲でクリックを拾う
+      $('#place-list').addEventListener('click', (e) => {
+        const row = e.target.closest('[data-place-id]');
+        if (row) openPlaceModal(row.dataset.placeId);
+      });
+      $('#leg-list').addEventListener('click', (e) => {
+        const row = e.target.closest('[data-leg-id]');
+        if (row) openLegModal(row.dataset.legId);
+      });
+    }
+
+    // ============================================================
+    // データ操作
+    // ============================================================
+    function createPlace(name, lat, lng) {
+      return { id: genId(), name: name || '新しい場所', lat, lng,
+               type: 'sight', status: 'tentative', day: 0, memo: '', url: '', costs: [] };
+    }
+    function getPlace(id) { return state.places.find(p => p.id === id); }
+    function getLeg(id) { return state.legs.find(l => l.id === id); }
+
+    // ============================================================
+    // 保存・読み込み（localStorage / 共有リンク）
+    // ============================================================
+    const STORAGE_KEY = 'travel-planner-data';
+
+    function saveState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      const el = $('#save-state');
+      el.textContent = '保存済 ✓';
+      el.style.color = '#b9f6ca';
+    }
+
+    function loadFromHashOrStorage() {
+      // 共有リンク（#plan=...）が付いていたら最優先で確認
+      if (location.hash.startsWith('#plan=')) {
+        try {
+          const decoded = fromBase64(location.hash.slice(6));
+          const data = JSON.parse(decoded);
+          const ok = !localStorage.getItem(STORAGE_KEY) ||
+                     confirm('共有されたプランを開きますか？（今の保存内容は上書きされます）');
+          if (ok) { state = normalizeState(data); return; }
+        } catch (err) { /* 壊れたリンクは無視 */ }
+      }
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try { state = normalizeState(JSON.parse(saved)); } catch (err) { /* 無視 */ }
+      }
+    }
+
+    // 古い/欠けたデータでも落ちないように補完
+    function normalizeState(data) {
+      return {
+        planName: data.planName || '',
+        days: data.days || 1,
+        people: data.people || 1,
+        places: (data.places || []).map(p => ({ costs: [], memo: '', url: '', day: 0, status: 'tentative', type: 'sight', ...p })),
+        legs: (data.legs || []).map(l => ({ costs: [], ...l })),
+        moneyView: data.moneyView || 'detail'
+      };
+    }
+
+    // UTF-8 を安全に Base64 化（日本語対応）
+    function toBase64(str) { return btoa(String.fromCharCode(...new TextEncoder().encode(str))); }
+    function fromBase64(b64) { return new TextDecoder().decode(Uint8Array.from(atob(b64), c => c.charCodeAt(0))); }
+
+    // ============================================================
+    // 外部サービス：場所検索 / 逆ジオコーディング / 経路検索
+    // すべて無料・APIキー不要（要ネット接続）
+    // ============================================================
+    async function searchPlaces(query) {
+      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&accept-language=ja&q=' + encodeURIComponent(query);
+      const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      return await res.json();
+    }
+    async function reverseGeocode(lat, lng) {
+      try {
+        const url = 'https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ja&lat=' + lat + '&lon=' + lng;
+        const res = await fetch(url);
+        const data = await res.json();
+        return (data.name || (data.display_name || '').split(',')[0] || '新しい場所');
+      } catch (err) { return '新しい場所'; }
+    }
+    async function fetchRoute(from, to) {
+      // OSRM 公開サーバー（車ルートの目安）
+      const coords = from.lng + ',' + from.lat + ';' + to.lng + ',' + to.lat;
+      const url = 'https://router.project-osrm.org/route/v1/driving/' + coords + '?overview=full&geometries=geojson';
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!data.routes || !data.routes.length) throw new Error('ルートが見つかりません');
+      return data.routes[0]; // {distance(m), duration(s), geometry}
+    }
+
+    // ============================================================
+    // 描画：全体
+    // ============================================================
+    function renderAll() {
+      $('#plan-name').value = state.planName;
+      $('#people-input').value = state.people;
+      renderDaysSelect();
+      renderPlaces();
+      renderLegs();
+      renderMoney();
+      renderPins();
+    }
+
+    function renderDaysSelect() {
+      const sel = $('#days-select');
+      sel.innerHTML = '';
+      for (let i = 1; i <= 14; i++) {
+        const o = document.createElement('option');
+        o.value = i; o.textContent = i + '日間';
+        if (i === state.days) o.selected = true;
+        sel.appendChild(o);
+      }
+    }
+
+    // 場所リスト（日程ごとにグループ表示）
+    function renderPlaces() {
+      const box = $('#place-list');
+      box.innerHTML = '';
+      if (!state.places.length) {
+        box.innerHTML = '<div class="empty">まだ場所がありません。「＋ 場所を追加」から登録しましょう。</div>';
+        return;
+      }
+      // 未定(0) → Day1 → Day2 … の順でグループ化
+      const groups = [{ day: 0, label: '未定' }];
+      for (let i = 1; i <= state.days; i++) groups.push({ day: i, label: 'Day' + i });
+
+      groups.forEach(g => {
+        const inDay = state.places.filter(p => (p.day || 0) === g.day || (g.day === 0 && p.day > state.days));
+        if (!inDay.length) return;
+        const wrap = document.createElement('div');
+        wrap.className = 'day-group';
+        wrap.innerHTML = '<div class="day-title">' + g.label + '</div>';
+        inDay.forEach(p => wrap.appendChild(buildPlaceRow(p)));
+        box.appendChild(wrap);
+      });
+    }
+
+    function buildPlaceRow(p) {
+      const t = TYPES[p.type] || TYPES.other;
+      const row = document.createElement('div');
+      row.className = 'place-row';
+      row.dataset.placeId = p.id;
+      const cost = sumCosts(p.costs);
+      const badge = p.status === 'fixed'
+        ? '<span class="badge fixed">確定</span>'
+        : '<span class="badge tentative">候補</span>';
+      row.innerHTML =
+        '<div class="place-dot" style="background:' + t.color + '">' + t.icon + '</div>' +
+        '<div class="place-main">' +
+          '<div class="place-name">' + escapeHtml(p.name) + '</div>' +
+          '<div class="place-sub">' + t.label + (p.memo ? '・' + escapeHtml(p.memo) : '') + '</div>' +
+        '</div>' +
+        badge +
+        (cost ? '<span class="cost-tag">' + yen(cost) + '</span>' : '');
+      return row;
+    }
+
+    // 移動リスト
+    function renderLegs() {
+      const box = $('#leg-list');
+      box.innerHTML = '';
+      if (!state.legs.length) {
+        box.innerHTML = '<div class="empty">移動を追加すると経路と交通費を記録できます。</div>';
+        return;
+      }
+      state.legs.forEach(l => {
+        const from = getPlace(l.fromId), to = getPlace(l.toId);
+        const row = document.createElement('div');
+        row.className = 'leg-row';
+        row.dataset.legId = l.id;
+        const cost = sumCosts(l.costs);
+        const route = (l.distance != null)
+          ? '<div class="place-sub">約 ' + (l.distance / 1000).toFixed(1) + 'km / 約 ' + Math.round(l.duration / 60) + '分</div>'
+          : '<div class="place-sub">経路未検索</div>';
+        row.innerHTML =
+          '<div class="place-main">' +
+            '<div class="place-name">' + escapeHtml(from ? from.name : '?') + ' → ' + escapeHtml(to ? to.name : '?') + '</div>' +
+            route +
+          '</div>' +
+          (cost ? '<span class="cost-tag">' + yen(cost) + '</span>' : '');
+        box.appendChild(row);
+      });
+    }
+
+    // 地図のピン
+    function renderPins() {
+      if (!mapReady) return;
+      markerLayer.clearLayers();
+      const pts = [];
+      state.places.forEach(p => {
+        const t = TYPES[p.type] || TYPES.other;
+        const html = '<div class="pin ' + (p.status === 'tentative' ? 'tentative' : '') + '" style="background:' + t.color + '">' +
+                     t.icon + (p.status === 'fixed' ? '<span class="check">✓</span>' : '') + '</div>';
+        const icon = L.divIcon({ html, className: '', iconSize: [30, 30], iconAnchor: [15, 15] });
+        const m = L.marker([p.lat, p.lng], { icon }).addTo(markerLayer);
+        m.bindPopup('<b>' + escapeHtml(p.name) + '</b><br>' + t.label);
+        m.on('click', () => openPlaceModal(p.id));
+        pts.push([p.lat, p.lng]);
+      });
+      if (pts.length === 1) map.setView(pts[0], 13);
+      else if (pts.length > 1) map.fitBounds(pts, { padding: [40, 40] });
+    }
+
+    // ============================================================
+    // 描画：お金パネル（明細 / 合計 切り替え）
+    // ============================================================
+    function setMoneyView(view) {
+      state.moneyView = view;
+      $('#view-detail').classList.toggle('on', view === 'detail');
+      $('#view-summary').classList.toggle('on', view === 'summary');
+      saveState();
+      renderMoney();
+    }
+
+    function calcTotals() {
+      const legTotal = state.legs.reduce((s, l) => s + sumCosts(l.costs), 0);
+      const byType = { sight: 0, hotel: 0, food: 0, hub: 0, other: 0 };
+      state.places.forEach(p => { byType[p.type] = (byType[p.type] || 0) + sumCosts(p.costs); });
+      const placeTotal = Object.values(byType).reduce((a, b) => a + b, 0);
+      const grand = legTotal + placeTotal;
+      const perPerson = Math.round(grand / Math.max(1, state.people));
+      return { legTotal, byType, grand, perPerson };
+    }
+
+    function renderMoney() {
+      const box = $('#money-box');
+      // 保存状態に合わせてトグルの見た目も同期
+      $('#view-detail').classList.toggle('on', state.moneyView === 'detail');
+      $('#view-summary').classList.toggle('on', state.moneyView === 'summary');
+      const t = calcTotals();
+      if (state.moneyView === 'detail') {
+        box.innerHTML = buildMoneyDetail() +
+          '<div class="money-total"><span>合計</span><span>' + yen(t.grand) + '</span></div>';
+      } else {
+        box.innerHTML = buildMoneySummary(t);
+      }
+    }
+
+    function buildMoneyDetail() {
+      let html = '';
+      // 移動の費用
+      const legsWithCost = state.legs.filter(l => sumCosts(l.costs) > 0);
+      if (legsWithCost.length) {
+        html += '<div class="money-group-title">🚌 移動の費用</div>';
+        legsWithCost.forEach(l => {
+          const from = getPlace(l.fromId), to = getPlace(l.toId);
+          html += '<div class="money-leg">' + escapeHtml(from ? from.name : '?') + ' → ' + escapeHtml(to ? to.name : '?') + '</div>';
+          l.costs.forEach(c => {
+            html += '<div class="money-item"><span>' + escapeHtml(c.name || '交通費') + '</span><span>' + yen(c.amount) + '</span></div>';
+          });
+        });
+      }
+      // 場所の費用
+      const placesWithCost = state.places.filter(p => sumCosts(p.costs) > 0);
+      if (placesWithCost.length) {
+        html += '<div class="money-group-title">📍 場所の費用</div>';
+        placesWithCost.forEach(p => {
+          const tp = TYPES[p.type] || TYPES.other;
+          html += '<div class="money-leg">' + tp.icon + ' ' + escapeHtml(p.name) + '（' + tp.label + '）</div>';
+          p.costs.forEach(c => {
+            html += '<div class="money-item"><span>' + escapeHtml(c.name || '費用') + '</span><span>' + yen(c.amount) + '</span></div>';
+          });
+        });
+      }
+      if (!html) html = '<div class="empty">まだ費用がありません。場所や移動を開いて「＋費用」から登録できます。</div>';
+      return html;
+    }
+
+    function buildMoneySummary(t) {
+      let html = '';
+      if (t.legTotal) html += '<div class="summary-line"><span>🚌 移動</span><span>' + yen(t.legTotal) + '</span></div>';
+      const labels = { hotel: '🏨 宿泊', food: '🍴 食事', sight: '📷 観光', hub: '🚉 移動拠点', other: '📌 その他' };
+      ['hotel', 'food', 'sight', 'hub', 'other'].forEach(k => {
+        if (t.byType[k]) html += '<div class="summary-line"><span>' + labels[k] + '</span><span>' + yen(t.byType[k]) + '</span></div>';
+      });
+      if (!html) html = '<div class="empty">まだ費用がありません。</div>';
+      html += '<div class="grand">総額 ' + yen(t.grand) + '</div>';
+      html += '<div class="per-person">一人あたり ' + yen(t.perPerson) + '（' + state.people + '人）</div>';
+      return html;
+    }
+
+    // ============================================================
+    // モーダル：共通
+    // ============================================================
+    function openModal(innerHtml) {
+      const root = $('#modal-root');
+      root.innerHTML = '<div class="overlay"><div class="modal">' + innerHtml + '</div></div>';
+      const overlay = root.querySelector('.overlay');
+      overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+      return root.querySelector('.modal');
+    }
+    function closeModal() { $('#modal-root').innerHTML = ''; }
+
+    // ============================================================
+    // モーダル：場所の追加（検索 or 地図クリック）
+    // ============================================================
+    function openAddPlaceModal() {
+      const modal = openModal(
+        '<h3>場所を追加</h3>' +
+        '<div class="field">' +
+          '<label>場所名で検索</label>' +
+          '<div class="row-2"><div><input id="ap-q" placeholder="例：函館山、東京駅"></div>' +
+          '<div style="flex:0 0 auto"><button id="ap-search">🔍 検索</button></div></div>' +
+        '</div>' +
+        '<div id="ap-results"></div>' +
+        '<div class="hint">または地図上を直接タップして追加することもできます。</div>' +
+        '<div class="modal-actions"><button class="ghost" id="ap-map">🗺️ 地図をタップして追加</button>' +
+        '<div class="spacer"></div><button class="ghost" id="ap-close">閉じる</button></div>'
+      );
+      modal.querySelector('#ap-close').addEventListener('click', closeModal);
+      modal.querySelector('#ap-map').addEventListener('click', () => {
+        if (!mapReady) { alert('地図が使えないため、上の検索から追加してください。'); return; }
+        mapClickAddMode = true;
+        closeModal();
+        alert('地図上の追加したい場所をタップしてください。');
+      });
+      const doSearch = async () => {
+        const q = modal.querySelector('#ap-q').value.trim();
+        if (!q) return;
+        const results = modal.querySelector('#ap-results');
+        results.innerHTML = '<div class="empty">検索中…</div>';
+        try {
+          const list = await searchPlaces(q);
+          if (!list.length) { results.innerHTML = '<div class="empty">見つかりませんでした。</div>'; return; }
+          results.innerHTML = '';
+          list.forEach(r => {
+            const div = document.createElement('div');
+            div.className = 'search-result';
+            div.textContent = r.display_name;
+            div.addEventListener('click', () => {
+              const place = createPlace((r.display_name || '').split(',')[0], Number(r.lat), Number(r.lon));
+              state.places.push(place);
+              saveState();
+              renderAll();
+              openPlaceModal(place.id);
+            });
+            results.appendChild(div);
+          });
+        } catch (err) {
+          results.innerHTML = '<div class="empty">検索に失敗しました（ネット接続を確認してください）。</div>';
+        }
+      };
+      modal.querySelector('#ap-search').addEventListener('click', doSearch);
+      modal.querySelector('#ap-q').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+    }
+
+    // ============================================================
+    // モーダル：場所の編集
+    // ============================================================
+    function openPlaceModal(id) {
+      const p = getPlace(id);
+      if (!p) return;
+      const dayOptions = ['<option value="0">未定</option>']
+        .concat(Array.from({ length: state.days }, (_, i) => '<option value="' + (i + 1) + '">Day' + (i + 1) + '</option>')).join('');
+      const typeButtons = TYPE_ORDER.map(k =>
+        '<button data-type="' + k + '" class="' + (p.type === k ? 'on' : '') + '">' + TYPES[k].icon + ' ' + TYPES[k].label + '</button>'
+      ).join('');
+
+      const modal = openModal(
+        '<h3>📍 場所の編集</h3>' +
+        '<div class="field"><label>名前</label><input id="pe-name" value="' + escapeAttr(p.name) + '"></div>' +
+        '<div class="field"><label>種類（ピンの色）</label><div class="seg-choices" id="pe-types">' + typeButtons + '</div></div>' +
+        '<div class="field"><label>状態</label><div class="seg-choices" id="pe-status">' +
+          '<button data-status="tentative" class="' + (p.status === 'tentative' ? 'on' : '') + '">候補</button>' +
+          '<button data-status="fixed" class="' + (p.status === 'fixed' ? 'on' : '') + '">確定 ✓</button>' +
+        '</div></div>' +
+        '<div class="field"><label>日程</label><select id="pe-day">' + dayOptions + '</select></div>' +
+        '<div class="field"><label>ひとことメモ（営業時間・予約番号など）</label><textarea id="pe-memo" rows="2">' + escapeHtml(p.memo) + '</textarea></div>' +
+        '<div class="field"><label>公式サイトURL</label>' +
+          '<div class="row-2"><div><input id="pe-url" placeholder="https://…" value="' + escapeAttr(p.url) + '"></div>' +
+          '<div style="flex:0 0 auto"><button class="ghost" id="pe-find">🔍 調べる</button></div></div></div>' +
+        '<div class="field"><label>この場所の費用</label><div id="pe-costs"></div>' +
+          '<button class="add-btn" id="pe-add-cost">＋費用を追加</button></div>' +
+        '<div class="modal-actions"><button class="danger" id="pe-del">削除</button>' +
+        '<div class="spacer"></div><button id="pe-close">閉じる</button></div>'
+      );
+
+      modal.querySelector('#pe-day').value = String(p.day || 0);
+
+      // 入力の保存（閉じたときと変更時に反映）
+      const nameEl = modal.querySelector('#pe-name');
+      nameEl.addEventListener('input', () => { p.name = nameEl.value; saveState(); });
+      modal.querySelector('#pe-memo').addEventListener('input', (e) => { p.memo = e.target.value; saveState(); });
+      modal.querySelector('#pe-url').addEventListener('input', (e) => { p.url = e.target.value; saveState(); });
+      modal.querySelector('#pe-day').addEventListener('change', (e) => { p.day = Number(e.target.value); saveState(); });
+
+      // 種類ボタン
+      modal.querySelectorAll('#pe-types button').forEach(b => b.addEventListener('click', () => {
+        p.type = b.dataset.type; saveState();
+        modal.querySelectorAll('#pe-types button').forEach(x => x.classList.toggle('on', x === b));
+      }));
+      // 状態ボタン
+      modal.querySelectorAll('#pe-status button').forEach(b => b.addEventListener('click', () => {
+        p.status = b.dataset.status; saveState();
+        modal.querySelectorAll('#pe-status button').forEach(x => x.classList.toggle('on', x === b));
+      }));
+      // 公式サイトを調べる（場所名でGoogle検索を新タブで開く＝無料）
+      modal.querySelector('#pe-find').addEventListener('click', () => {
+        window.open('https://www.google.com/search?q=' + encodeURIComponent(p.name + ' 公式サイト'), '_blank');
+      });
+      // 費用の編集
+      renderCostEditor(modal.querySelector('#pe-costs'), p.costs);
+      modal.querySelector('#pe-add-cost').addEventListener('click', () => {
+        p.costs.push({ id: genId(), name: '', amount: 0 });
+        saveState();
+        renderCostEditor(modal.querySelector('#pe-costs'), p.costs);
+      });
+
+      modal.querySelector('#pe-del').addEventListener('click', () => {
+        if (!confirm('この場所を削除しますか？')) return;
+        state.places = state.places.filter(x => x.id !== p.id);
+        state.legs = state.legs.filter(l => l.fromId !== p.id && l.toId !== p.id); // 関連する移動も削除
+        saveState(); closeModal(); renderAll();
+      });
+      modal.querySelector('#pe-close').addEventListener('click', () => { closeModal(); renderAll(); });
+    }
+
+    // ============================================================
+    // モーダル：移動（経路・交通費）
+    // ============================================================
+    function openLegModal(id) {
+      if (state.places.length < 2) { alert('移動を作るには場所が2つ以上必要です。'); return; }
+      let leg = id ? getLeg(id) : null;
+      const isNew = !leg;
+      if (isNew) leg = { id: genId(), fromId: state.places[0].id, toId: state.places[1].id, distance: null, duration: null, costs: [] };
+
+      const opts = (selId) => state.places.map(p =>
+        '<option value="' + p.id + '"' + (p.id === selId ? ' selected' : '') + '>' + escapeHtml(p.name) + '</option>').join('');
+
+      const modal = openModal(
+        '<h3>🚌 移動の編集</h3>' +
+        '<div class="field"><label>出発地</label><select id="lg-from">' + opts(leg.fromId) + '</select></div>' +
+        '<div class="field"><label>目的地</label><select id="lg-to">' + opts(leg.toId) + '</select></div>' +
+        '<div class="field"><button class="ghost" id="lg-route">🔍 経路を検索（距離・時間）</button>' +
+          '<div id="lg-route-info" style="margin-top:8px"></div></div>' +
+        '<div class="field"><label>交通費（バス・電車など複数OK）</label><div id="lg-costs"></div>' +
+          '<button class="add-btn" id="lg-add-cost">＋費用を追加</button></div>' +
+        '<div class="modal-actions"><button class="danger" id="lg-del">削除</button>' +
+        '<div class="spacer"></div><button id="lg-close">閉じる</button></div>'
+      );
+
+      const showRoute = () => {
+        const info = modal.querySelector('#lg-route-info');
+        if (leg.distance != null) {
+          info.innerHTML = '<div class="route-info">約 ' + (leg.distance / 1000).toFixed(1) + 'km / 約 ' + Math.round(leg.duration / 60) + '分（車ルートの目安）</div>';
+        } else { info.innerHTML = ''; }
+      };
+      showRoute();
+
+      modal.querySelector('#lg-from').addEventListener('change', (e) => { leg.fromId = e.target.value; leg.distance = null; saveState(); showRoute(); });
+      modal.querySelector('#lg-to').addEventListener('change', (e) => { leg.toId = e.target.value; leg.distance = null; saveState(); showRoute(); });
+
+      modal.querySelector('#lg-route').addEventListener('click', async () => {
+        const from = getPlace(leg.fromId), to = getPlace(leg.toId);
+        if (!from || !to || from.id === to.id) { alert('違う2地点を選んでください。'); return; }
+        const info = modal.querySelector('#lg-route-info');
+        info.innerHTML = '<div class="empty">検索中…</div>';
+        try {
+          const route = await fetchRoute(from, to);
+          leg.distance = route.distance; leg.duration = route.duration;
+          saveState(); showRoute();
+          // 地図に経路線を描く（地図が使えるときだけ）
+          if (mapReady) {
+            routeLayer.clearLayers();
+            const coords = route.geometry.coordinates.map(c => [c[1], c[0]]);
+            L.polyline(coords, { color: '#2563eb', weight: 5, opacity: .7 }).addTo(routeLayer);
+            map.fitBounds(coords, { padding: [40, 40] });
+          }
+        } catch (err) {
+          info.innerHTML = '<div class="empty">経路が取得できませんでした（ネット接続を確認）。</div>';
+        }
+      });
+
+      renderCostEditor(modal.querySelector('#lg-costs'), leg.costs);
+      modal.querySelector('#lg-add-cost').addEventListener('click', () => {
+        leg.costs.push({ id: genId(), name: '', amount: 0 });
+        if (isNew && !state.legs.includes(leg)) { state.legs.push(leg); }
+        saveState();
+        renderCostEditor(modal.querySelector('#lg-costs'), leg.costs);
+      });
+
+      modal.querySelector('#lg-del').addEventListener('click', () => {
+        state.legs = state.legs.filter(x => x.id !== leg.id);
+        saveState(); closeModal(); renderAll();
+      });
+      modal.querySelector('#lg-close').addEventListener('click', () => {
+        // 新規で経路 or 費用があれば保存（空のまま閉じたら捨てる）
+        if (isNew && !state.legs.includes(leg) && (leg.distance != null || leg.costs.length)) state.legs.push(leg);
+        saveState(); closeModal(); renderAll();
+      });
+    }
+
+    // 費用の編集行（場所・移動の共通部品）
+    function renderCostEditor(container, costs) {
+      container.innerHTML = '';
+      costs.forEach(c => {
+        const row = document.createElement('div');
+        row.className = 'cost-edit-row';
+        row.innerHTML =
+          '<input class="cn" placeholder="名目（バス/宿泊…）" value="' + escapeAttr(c.name) + '">' +
+          '<input class="ca" type="number" placeholder="金額" value="' + (c.amount || '') + '">' +
+          '<button class="danger" title="削除">✕</button>';
+        row.querySelector('.cn').addEventListener('input', (e) => { c.name = e.target.value; saveState(); renderMoney(); });
+        row.querySelector('.ca').addEventListener('input', (e) => { c.amount = Number(e.target.value) || 0; saveState(); renderMoney(); });
+        row.querySelector('button').addEventListener('click', () => {
+          const i = costs.indexOf(c); if (i > -1) costs.splice(i, 1);
+          saveState(); renderCostEditor(container, costs); renderMoney();
+        });
+        container.appendChild(row);
+      });
+    }
+
+    // ============================================================
+    // モーダル：共有（書き出し / 取り込み / リンク）
+    // ============================================================
+    function openShareModal() {
+      const modal = openModal(
+        '<h3>🤝 プランを共有</h3>' +
+        '<div class="hint">相手も同じ地図・費用を見られます。サーバー不要・無料です。</div>' +
+        '<div class="field"><button id="sh-link">🔗 共有リンクをコピー</button>' +
+          '<div id="sh-link-msg" class="place-sub"></div></div>' +
+        '<div class="field"><button class="ghost" id="sh-export">💾 ファイルに書き出す</button></div>' +
+        '<div class="field"><label>ファイルから取り込む</label><input type="file" id="sh-import" accept="application/json"></div>' +
+        '<div class="modal-actions"><div class="spacer"></div><button class="ghost" id="sh-close">閉じる</button></div>'
+      );
+      modal.querySelector('#sh-close').addEventListener('click', closeModal);
+
+      // 共有リンク（プランをURLに埋め込む）
+      modal.querySelector('#sh-link').addEventListener('click', async () => {
+        const link = location.origin + location.pathname + '#plan=' + toBase64(JSON.stringify(state));
+        const msg = modal.querySelector('#sh-link-msg');
+        try {
+          await navigator.clipboard.writeText(link);
+          msg.textContent = 'コピーしました！LINEなどで送れます。';
+        } catch (err) {
+          msg.textContent = 'コピー失敗。下のリンクを手動でコピーしてください：';
+          const ta = document.createElement('textarea'); ta.value = link; ta.style.marginTop = '6px';
+          msg.appendChild(ta);
+        }
+      });
+
+      // ファイル書き出し
+      modal.querySelector('#sh-export').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (state.planName || '旅行プラン') + '.json';
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+
+      // ファイル取り込み
+      modal.querySelector('#sh-import').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            state = normalizeState(JSON.parse(reader.result));
+            saveState(); closeModal(); renderAll();
+          } catch (err) { alert('読み込みに失敗しました（ファイル形式を確認してください）。'); }
+        };
+        reader.readAsText(file);
+      });
+    }
+
+    // ============================================================
+    // ユーティリティ：HTMLエスケープ（入力値の安全表示）
+    // ============================================================
+    function escapeHtml(s) {
+      return String(s || '').replace(/[&<>"']/g, m => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+    }
+    function escapeAttr(s) { return escapeHtml(s); }
+
+    // 起動
+    initApp();
+  </script>
+</body>
+</html>

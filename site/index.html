@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Workspace — 作品一覧</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: linear-gradient(160deg, #1e3a5f 0%, #15293f 100%);
+      color: #fff; min-height: 100vh; padding: 32px 16px;
+    }
+    .wrap { max-width: 720px; margin: 0 auto; }
+    header { text-align: center; margin-bottom: 32px; }
+    header h1 { font-size: 26px; letter-spacing: .02em; }
+    header p { color: #b9c7d9; margin-top: 8px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    a.card {
+      display: block; background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.15); border-radius: 16px;
+      padding: 20px; text-decoration: none; color: #fff;
+      transition: transform .15s, background .15s;
+    }
+    a.card:hover { transform: translateY(-3px); background: rgba(255,255,255,.15); }
+    .card .emoji { font-size: 34px; }
+    .card .title { font-size: 17px; font-weight: 700; margin-top: 10px; }
+    .card .desc { font-size: 13px; color: #c8d4e2; margin-top: 6px; line-height: 1.5; }
+    footer { text-align: center; color: #8aa0b8; font-size: 12px; margin-top: 32px; }
+    @media (max-width: 520px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <!-- ===== ヘッダー ===== -->
+    <header>
+      <h1>🧳 Workspace 作品一覧</h1>
+      <p>スマホ・iPadからもどうぞ。気になるものをタップして開いてください。</p>
+    </header>
+
+    <!-- ===== 作品カード（公開している projects だけを掲載） ===== -->
+    <div class="grid">
+      <a class="card" href="projects/travel-planner/">
+        <div class="emoji">🗺️</div>
+        <div class="title">旅行プランメーカー</div>
+        <div class="desc">地図に行きたい場所をピン留め、経路と費用を記録して旅行プランを組み立てる。</div>
+      </a>
+      <a class="card" href="projects/toy-story-modoki-web/">
+        <div class="emoji">🎯</div>
+        <div class="title">Toy World</div>
+        <div class="desc">カメラで手を認識して的を撃つブラウザゲーム。</div>
+      </a>
+      <a class="card" href="projects/hinshi-panic/">
+        <div class="emoji">🧩</div>
+        <div class="title">品詞パニック</div>
+        <div class="desc">国語の品詞をすばやく見分ける学習ゲーム。</div>
+      </a>
+      <a class="card" href="projects/kaeriten-quest/">
+        <div class="emoji">↩️</div>
+        <div class="title">返り点クエスト</div>
+        <div class="desc">漢文の返り点・書き下しを学べるクイズゲーム。</div>
+      </a>
+      <a class="card" href="projects/keisan-quest/">
+        <div class="emoji">🔢</div>
+        <div class="title">計算クエスト</div>
+        <div class="desc">計算問題に挑戦する学習ゲーム。</div>
+      </a>
+      <a class="card" href="projects/rough/">
+        <div class="emoji">🎲</div>
+        <div class="title">Rough（ボドゲ会）</div>
+        <div class="desc">ボードゲーム会の案内・紹介サイト。</div>
+      </a>
+    </div>
+
+    <footer>© Workspace / 個人用ページ</footer>
+  </div>
+</body>
+</html>

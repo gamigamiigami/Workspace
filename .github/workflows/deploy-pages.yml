@@ -1,15 +1,21 @@
-# GitHub Pages へ「2-4's TOY WORLD（ブラウザ版）」を自動公開するワークフロー
-# projects/toy-story-modoki-web/ をサイトのトップとして配信する。
-# 公開URL: https://gamigamiigami.github.io/Workspace/
-name: Deploy Toy World to Pages
+# GitHub Pages へ「公開してよいサイトだけ」をまとめて公開するワークフロー。
+#
+# ★安全方針（重要）★
+#   リポジトリ全体は公開しない。knowledge/（個人情報）・CLAUDE.md・
+#   rakuda-sensei（cookie/token等の機密を含む自動化バックエンド）は公開対象外。
+#   下の PUBLIC_DIRS に列挙した「index.html を持つ公開用サイト」だけを _site に集めて配信する。
+#
+# 公開トップ: https://gamigamiigami.github.io/Workspace/
+#   - 各サイト: https://gamigamiigami.github.io/Workspace/projects/<name>/
+name: Deploy Workspace Sites to Pages
 
 on:
   push:
     branches:
-      - claude/workspace-knowledge-base-setup-ccVKP   # デフォルトブランチ（Pages公開はここから）
-      - claude/blissful-bardeen-ggl20i
+      - claude/workspace-knowledge-base-setup-ccVKP   # 運用ブランチ（Pages公開が許可されているのはここだけ）
     paths:
-      - "projects/toy-story-modoki-web/**"
+      - "projects/**"
+      - "site/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:   # 手動でも実行できるように
 
@@ -34,10 +40,30 @@ jobs:
         with:
           enablement: true   # Pagesの配信元を「GitHub Actions」に自動設定
 
-      - name: Upload game folder as site
+      - name: Assemble public site (whitelist only)
+        run: |
+          set -e
+          # 公開してよいサイト（index.html を持つもの）だけを列挙
+          PUBLIC_DIRS="travel-planner toy-story-modoki-web hinshi-panic kaeriten-quest keisan-quest rough"
+          mkdir -p _site/projects
+          # トップページ（作品一覧）
+          cp site/index.html _site/index.html
+          # 各公開サイトをコピー（存在するものだけ）
+          for d in $PUBLIC_DIRS; do
+            if [ -d "projects/$d" ]; then
+              cp -r "projects/$d" "_site/projects/$d"
+              echo "published: projects/$d"
+            else
+              echo "skip (not found): projects/$d"
+            fi
+          done
+          echo "=== _site tree (top) ==="
+          ls -R _site | head -40
+
+      - name: Upload site artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: projects/toy-story-modoki-web
+          path: _site
 
   deploy:
     needs: build
