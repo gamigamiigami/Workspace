@@ -48,11 +48,13 @@ jobs:
           mkdir -p _site/projects
           # トップページ（作品一覧）
           cp site/index.html _site/index.html
-          # 各公開サイトをコピー（存在するものだけ）
+          # 各公開サイトをコピー（存在するものだけ）。
+          # 旧URL(/<name>/)と新URL(/projects/<name>/)の両方で開けるよう2か所に配置する。
           for d in $PUBLIC_DIRS; do
             if [ -d "projects/$d" ]; then
-              cp -r "projects/$d" "_site/projects/$d"
-              echo "published: projects/$d"
+              cp -r "projects/$d" "_site/projects/$d"   # 新URL: /Workspace/projects/<name>/
+              cp -r "projects/$d" "_site/$d"            # 旧URL: /Workspace/<name>/（後方互換）
+              echo "published: $d (projects/ と ルート直下 の両方)"
             else
               echo "skip (not found): projects/$d"
             fi
