@@ -1,29 +1,13 @@
-name: Deploy Sites to GitHub Pages
+name: Deploy Sites to GitHub Pages (DISABLED — superseded by deploy-pages.yml)
 
-# dashboard / rough / hinshi-panic / kaeriten-quest が更新されたら自動デプロイ
-# 初回のみ手動セットアップ必要: Settings > Pages > Source: "GitHub Actions"
-# 注意: Pagesのデプロイは運用ブランチ(claude/workspace-knowledge-base-setup-ccVKP)からのみ許可
-#       (environment保護ルール。詳細は knowledge/failures.md 2026-06-10 参照)
-# デプロイ先:
-#   ダッシュボード: gamigamiigami.github.io/Workspace/
-#   ボドゲ会サイト: gamigamiigami.github.io/Workspace/rough/
-#   品詞パニック: gamigamiigami.github.io/Workspace/hinshi-panic/
-#   古典クエスト: gamigamiigami.github.io/Workspace/kaeriten-quest/
-#   計算クエスト: gamigamiigami.github.io/Workspace/keisan-quest/
+# ⚠️ このワークフローは廃止（自動実行を停止）した。
+# 後継 deploy-pages.yml（whitelist方式）が公開を担当する。
+# 理由：両方が同じ "pages" 環境にデプロイして競合し、URL構造が入れ替わって404が発生していた。
+#       また旧方式は projects/rakuda-sensei/dashboard を公開していたが、機密を含むため
+#       新方式では意図的に非公開化している。安全のため旧方式は自動実行しない。
+# 復活させたい場合だけ手動（workflow_dispatch）で実行できる。
 
 on:
-  push:
-    branches:
-      - main
-      - claude/workspace-knowledge-base-setup-ccVKP
-      - claude/educational-game-middle-school-102jqo
-    paths:
-      - "projects/rakuda-sensei/dashboard/**"
-      - "projects/rough/**"
-      - "projects/hinshi-panic/**"
-      - "projects/kaeriten-quest/**"
-      - "projects/keisan-quest/**"
-      - ".github/workflows/deploy-dashboard.yml"
   workflow_dispatch:
 
 permissions:
