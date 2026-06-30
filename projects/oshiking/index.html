@@ -96,6 +96,11 @@
   .scrow .pt{color:var(--lime); font-weight:900;}
   .scrow .swatch{width:18px; height:18px; border-radius:50%;}
 
+  /* 親機プレイ（デバッグ用：ホストPCでも遊ぶ） */
+  .host-play-btn{position:fixed; right:18px; bottom:18px; z-index:50; background:radial-gradient(circle at 35% 30%, #ff6b8f, var(--hot)); color:#fff; border:none; border-radius:18px; padding:14px 18px; font-weight:900; font-size:15px; line-height:1.25; text-align:center; cursor:pointer; box-shadow:0 6px 0 #b81f47, 0 8px 20px rgba(255,59,107,.4);}
+  .host-play-btn:active{transform:translateY(4px); box-shadow:0 2px 0 #b81f47;}
+  .host-play-btn small{display:block; font-size:11px; opacity:.85; font-weight:700;}
+
   /* ============ コントローラー画面（スマホ） ============ */
   #ctrlView{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:28px 20px calc(28px + env(safe-area-inset-bottom)); background:#0d0a14;}
   .ctrl-top{text-align:center; width:100%;}
@@ -123,6 +128,7 @@
   </div>
   <div class="stage" id="stage"></div>
   <div class="board hidden" id="board"></div>
+  <button id="hostPlayBtn" class="host-play-btn hidden">あなたが押す<small>SPACE / クリック</small></button>
 </div>
 
 <!-- ============ コントローラー画面 ============ -->
@@ -181,7 +187,8 @@ let round=0;
 let nextId=0;
 let started=false;
 let running=false;
-let pressHandler=null;            // 各ゲームが設定。コントローラー/CPUの press を受ける
+let hostPlayerId=null;            // 親機（ホストPC）で遊ぶプレイヤーのID（デバッグ用・SPACE/クリックで押す）
+let pressHandler=null;            // 各ゲームが設定。コントローラー/CPU/親機の press を受ける
 let cpuTimers=[], cpuIntervals=[];
 let ratings=loadData("oshiking-ratings", {}); // {gameKey: stars(1-3)}
 
@@ -201,6 +208,12 @@ function host_init(){
     conn.on("data", msg=>handleHostMessage(conn,msg));
     conn.on("close", ()=>{});
   });
+  // 親機プレイ（デバッグ）：SPACE/Enter または画面右下ボタンで押す
+  window.addEventListener("keydown", e=>{
+    if((e.code==="Space"||e.code==="Enter") && hostPlayerId!=null && pressHandler){ e.preventDefault(); hostPress(); }
+  });
+  const hb=$("hostPlayBtn");
+  if(hb) hb.addEventListener("pointerdown", e=>{ e.preventDefault(); hostPress(); });
 }
 
 function handleHostMessage(conn,msg){
@@ -245,6 +258,7 @@ function showLobby(urlOrMsg, roomId){
         '<div class="lobby-actions">'+
           '<button class="startbtn" id="startBtn" disabled>テストメニューへ</button>'+
           '<button class="ghostbtn" id="addCpuBtn">＋CPUを追加（テスト用）</button>'+
+          '<button class="ghostbtn" id="addHostBtn">＋自分も参加（親機）</button>'+
         '</div>'+
         '<div class="sub" id="lobbyHint" style="text-align:left; margin-top:10px">1人＋CPUでも遊べます</div>'+
       '</div>'+
@@ -252,6 +266,7 @@ function showLobby(urlOrMsg, roomId){
   $("roundLabel").textContent="参加者をあつめよう";
   if($("startBtn")) $("startBtn").onclick=enterMenu;
   if($("addCpuBtn")) $("addCpuBtn").onclick=addCpu;
+  if($("addHostBtn")) $("addHostBtn").onclick=addHostPlayer;
   renderLobbyPlayers();
 }
 function addCpu(){
@@ -261,9 +276,27 @@ function addCpu(){
   players.push(p); scores[p.id]=0;
   if(started) renderMenu(); else renderLobbyPlayers();
 }
+// 親機プレイ（デバッグ用）：ホストPCの人もプレイヤーとして参加。SPACE/Enter/画面ボタンで押す。
+function addHostPlayer(){
+  if(hostPlayerId!=null) return; // 親機プレイヤーは1人だけ
+  const p={id:nextId++, name:"あなた(親機)", color:COLORS[(nextId-1)%COLORS.length], cpu:false, conn:null, host:true, alive:true};
+  players.push(p); scores[p.id]=0; hostPlayerId=p.id;
+  updateHostPlayBtn();
+  if(started) renderMenu(); else renderLobbyPlayers();
+}
+function hostPress(){
+  if(hostPlayerId!=null && pressHandler){
+    pressHandler(hostPlayerId, Date.now());
+    const b=$("hostPlayBtn"); if(b) b.animate([{transform:"scale(1)"},{transform:"scale(.92)"},{transform:"scale(1)"}],{duration:120});
+  }
+}
+function updateHostPlayBtn(){
+  const b=$("hostPlayBtn"); if(!b) return;
+  if(hostPlayerId!=null) b.classList.remove("hidden"); else b.classList.add("hidden");
+}
 function renderLobbyPlayers(){
   const box=$("playerChips"); if(!box) return; box.innerHTML="";
-  players.forEach(p=>{ const c=document.createElement("div"); c.className="pchip"; c.innerHTML='<span class="sw" style="background:'+p.color+'"></span>'+p.name+(p.cpu?" 🤖":""); box.appendChild(c); });
+  players.forEach(p=>{ const c=document.createElement("div"); c.className="pchip"; c.innerHTML='<span class="sw" style="background:'+p.color+'"></span>'+p.name+(p.host?" 🎮":(p.cpu?" 🤖":"")); box.appendChild(c); });
   if($("startBtn")) $("startBtn").disabled = players.length<1;
   if($("lobbyHint")) $("lobbyHint").textContent = players.length<1 ? "1人＋CPUでも遊べます" : (players.length+"人 参加中。メニューへ！");
 }
@@ -284,11 +317,13 @@ function renderMenu(){
     '<div class="lobby-actions">'+
       '<button class="startbtn" id="runAllBtn">▶ 通しで全部</button>'+
       '<button class="ghostbtn" id="addCpuBtn2">＋CPUを追加</button>'+
+      '<button class="ghostbtn" id="addHostBtn2">＋自分も参加（親機）</button>'+
     '</div></div>';
   $("stage").innerHTML=html;
   $("stage").querySelectorAll(".gcard").forEach(b=> b.onclick=()=>runSingle(b.dataset.key));
   if($("runAllBtn")) $("runAllBtn").onclick=runTournament;
   if($("addCpuBtn2")) $("addCpuBtn2").onclick=addCpu;
+  if($("addHostBtn2")) $("addHostBtn2").onclick=addHostPlayer;
 }
 
 // --- ラン制御 ---
@@ -553,7 +588,7 @@ function renderBoard(){
   const sorted=[...players].sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
   const board=$("board"); board.innerHTML="";
   sorted.forEach((p,i)=>{ const row=document.createElement("div"); row.className="scrow";
-    row.innerHTML='<span class="rk">'+(i+1)+'</span><span class="swatch" style="background:'+p.color+'"></span><span class="nm">'+p.name+(p.cpu?" 🤖":"")+'</span><span class="pt">'+(scores[p.id]||0)+' pt</span>';
+    row.innerHTML='<span class="rk">'+(i+1)+'</span><span class="swatch" style="background:'+p.color+'"></span><span class="nm">'+p.name+(p.host?" 🎮":(p.cpu?" 🤖":""))+'</span><span class="pt">'+(scores[p.id]||0)+' pt</span>';
     board.appendChild(row); });
 }
 
