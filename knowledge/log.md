@@ -4,6 +4,63 @@
 
 ---
 
+### [2026-06-30] オシキング — 新ミニゲーム2種を追加（だるまさんがころんだ／少数決）
+
+**作業内容（ブランチ: claude/oshiking-party-game-cfia0w）：**
+
+- `projects/oshiking/index.html` に新ミニゲーム2種を追加（収録6→8ゲーム）
+  - **だるまさんがころんだ**（key: daruma, ui: tap）：「すすめ」中だけ連打で前進・「とまれ」中に押すと後退。鬼🧸到達順が上位。横レースレーン表示。
+  - **少数決（道連れ）**（key: minority, ui: cycle）：2択で少数派が生存・多数派は道連れ脱落。脱落の逆順で順位。3すくみと同じcycle方式を流用。
+- コントローラのcycle UIを一般化：`prompt.options` があればそのラベルを使用、無ければ従来のHANDS（グー/チョキ/パー）にフォールバック → **3すくみの挙動は不変**。
+- 既存の共通部品（renderArena/pressHandler/ct/cpuIntervals/flash/addCountdown/endInputs/showResult）を踏襲。両ゲームとも順位つきID配列を返す設計。
+- README.md を8ゲームに更新し、2ゲームのルールを追記。
+
+**検証：**
+- `node --check`（inline JS抽出）→ SYNTAX OK
+- 静的id重複なし（dotはJS動的生成のため対象外）
+- Playwrightヘッドレス疎通（Peer/qrcodeをスタブ、CPU5体）：daruma/minority とも例外なく完走し、全プレイヤーIDを含む重複なし順位配列を返すことを確認。
+
+**次のアクション：**
+- **iPad実機テスト待ち**：①少数決の2択操作（押すたびに🔴/🔵が切り替わる手応え）②だるまの「すすめ/とまれ」反応・連打の届き具合 ③大人数（実機6人＋）での表示崩れ。
+- 公開（GitHub Pages）は未実施＝開発ブランチに留めている。公開する場合は公開ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へマージが必要。
+
+---
+
+### [2026-06-30] セッション現在 — セッション終了処理 Explore agent 背景実行中
+
+**作業内容：**
+
+- **セッション終了処理の実行**
+  - Stop Hook 自動発火（permission_mode: "auto", hook_event_name: "Stop"）を確認
+  - ARGUMENTS より session_id, transcript_path, cwd を読み込み
+  - 会話ログ（JSONL形式・5.6MBサイズ）を Read ツールで段階的確認
+  - background_tasks に Explore agent（"Explore oshiking project"）が実行中であることを確認
+
+- **Task Diary への記録**
+  - task-diary.md 先頭に 2026-06-30 本セッションエントリを追加
+  - Explore agent 背景実行を記録
+
+- **パターン昇華確認**
+  - failures.md「セッション終了処理時に Bash 権限が制限される」エントリが十分記録されていることを確認
+  - patterns.md に新パターン追記は不要（既存パターンが適用）
+
+**技術的学び：**
+- セッション終了処理が Stop Hook として確実に実行される仕組みを再確認
+- Bash 権限なしでも Read/Grep/Glob ツール群で会話履歴解析・状態記録が可能であることを実証
+- background_tasks スキーマで並行エージェント実行状況を把握可能
+
+**課題（既知・継続）：**
+- Bash 権限が "don't ask mode" で制限中、git add/commit/push が実行不可（セッション終了処理が停止する）
+
+**成果物：**
+- knowledge/task-diary.md：2026-06-30 セッション現在 エントリ追加完了
+
+**次のアクション：**
+- `/update-config` で Bash 権限修正（git コマンド許可）を実施して、セッション終了処理の完全自動化を実現
+- 権限修正後：git add -A && git commit -m 'chore: 自動保存' && git push origin HEAD
+
+---
+
 ### [2026-06-30] セッション116 — セッション終了処理 非破壊的ツール群による状態確認
 
 **作業内容：**

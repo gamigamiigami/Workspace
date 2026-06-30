@@ -158,6 +158,8 @@ const GAMES=[
   {key:"sank",    title:"3すくみ",    rule:"押すたび グー→チョキ→パー", ui:"cycle"},
   {key:"mash",    title:"連打耐久",   rule:"5秒間で一番多く押せ",     ui:"tap"},
   {key:"chicken", title:"チキンレース", rule:"ギリギリまで我慢！最後はダメ", ui:"tap"},
+  {key:"daruma",  title:"だるまさんがころんだ", rule:"進めの間だけ連打！止まれで押すと後退", ui:"tap"},
+  {key:"minority", title:"少数決",     rule:"少ない方が生き残る。多数派は道連れ", ui:"cycle"},
 ];
 
 const PARAMS=new URLSearchParams(location.search);
@@ -325,6 +327,8 @@ async function playGame(game){
   if(game.key==="sank")    return await gameSankume();
   if(game.key==="mash")    return await gameMash();
   if(game.key==="chicken") return await gameChicken();
+  if(game.key==="daruma")  return await gameDaruma();
+  if(game.key==="minority") return await gameMinority();
   return [];
 }
 
@@ -437,6 +441,92 @@ async function gameChicken(){
   return ranking;
 }
 
+// だるまさんがころんだ：「すすめ」中だけ連打で前進、「とまれ」中に押すと後退。ゴール到達順＝上位。
+async function gameDaruma(){
+  $("stage").innerHTML='<div class="arena"></div>';
+  const arena=$("stage").querySelector(".arena");
+  // 鬼（ゴール）
+  const oni=document.createElement("div");
+  oni.style.cssText="position:absolute;right:3%;top:50%;transform:translateY(-50%);font-size:clamp(40px,9vw,86px);";
+  oni.textContent="🧸"; arena.appendChild(oni);
+  const phaseEl=addCountdown("…"); phaseEl.style.top="13%";
+  // プレイヤーごとに横レーンのコマを置く（flashが効くようid=dot+pid）
+  const n=players.length, step=Math.min(13,58/Math.max(1,n));
+  const size=Math.max(26,Math.min(44,360/Math.sqrt(n+1)));
+  const lanes={};
+  players.forEach((p,i)=>{
+    const tok=document.createElement("div"); tok.className="dot"; tok.id="dot"+p.id;
+    tok.style.width=size+"px"; tok.style.height=size+"px"; tok.style.fontSize=Math.max(10,size*0.26)+"px";
+    tok.style.background=p.color; tok.textContent=p.name.slice(0,2);
+    tok.style.left="5%"; tok.style.top=(24+i*step)+"%"; tok.style.transition="left .15s, transform .12s";
+    arena.appendChild(tok); lanes[p.id]=tok;
+  });
+  const GOAL=100, prog={}; players.forEach(p=>prog[p.id]=0);
+  const finished=[]; // ゴール到達順
+  const place=id=>{ lanes[id].style.left=(5+Math.min(GOAL,prog[id])/GOAL*80)+"%"; };
+  let phase="stop"; // go / stop
+  pressHandler=(id)=>{
+    if(finished.includes(id)) return;
+    if(phase==="go"){ prog[id]+=4+Math.random()*2; flash(id); }
+    else { prog[id]=Math.max(0,prog[id]-10); flash(id); sendToId(id,{type:"prompt",text:"動いた！下がる！",enable:true}); }
+    if(prog[id]>=GOAL){ finished.push(id); prog[id]=GOAL; lanes[id].style.boxShadow="0 0 0 4px var(--gold)"; sendToId(id,{type:"prompt",text:"ゴール！🎉",enable:false}); }
+    place(id);
+  };
+  // CPU：すすめ中は高確率で連打、とまれ中はまれに誤反応（フライング）
+  const cpuIv=setInterval(()=>{
+    players.forEach(p=>{ if(!p.cpu||finished.includes(p.id)) return;
+      if(phase==="go"){ if(Math.random()<0.7) pressHandler(p.id); }
+      else if(Math.random()<0.05) pressHandler(p.id);
+    });
+  },220); cpuIntervals.push(cpuIv);
+  const t0=performance.now(), DUR=18000;
+  while(performance.now()-t0<DUR && finished.length<players.length){
+    phase="stop"; phaseEl.textContent="…とまれ…"; phaseEl.style.color="var(--hot)";
+    broadcast({type:"prompt", text:"とまれ！押すな", ui:"tap", enable:true});
+    await sleep(700+Math.random()*1500);
+    if(finished.length>=players.length) break;
+    phase="go"; phaseEl.textContent="すすめ！"; phaseEl.style.color="var(--lime)";
+    broadcast({type:"prompt", text:"すすめ！連打！", enable:true});
+    await sleep(900+Math.random()*1400);
+  }
+  phaseEl.textContent="しゅうりょう！"; endInputs();
+  // ゴール到達順 → 残りは進捗降順
+  const rest=players.map(p=>p.id).filter(id=>!finished.includes(id)).sort((a,b)=>prog[b]-prog[a]);
+  return [...finished, ...rest];
+}
+
+// 少数決（道連れ）：2択で少数派が生き残り、多数派は道連れで脱落。脱落の逆順＝順位。
+async function gameMinority(){
+  renderArena();
+  const OPTIONS=["🔴 あか","🔵 あお"];
+  let alive=players.map(p=>p.id); const elim=[];
+  let roundNo=0;
+  while(alive.length>2 && roundNo<6){
+    roundNo++;
+    const votes={}; alive.forEach(id=>votes[id]=0);
+    broadcast({type:"prompt", text:"少ない方が生き残る！\n押して選ぶ", ui:"cycle", options:OPTIONS, enable:true});
+    players.forEach(p=>{ if(alive.includes(p.id)) { const d=$("dot"+p.id); if(d) d.classList.remove("dead"); } });
+    pressHandler=(id)=>{ if(!alive.includes(id)) return; votes[id]=((votes[id]||0)+1)%2; flash(id); };
+    // CPU：ランダム回数トグル（最終選択がばらける）
+    alive.forEach(id=>{ const p=players.find(x=>x.id===id); if(p&&p.cpu){ const taps=Math.floor(Math.random()*3); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(id); }, 200+Math.random()*2200); } });
+    const cd=addCountdown(roundNo>1?("第"+roundNo+"回"):"3"); await sleep(roundNo>1?700:0);
+    for(let i=3;i>=1;i--){ cd.textContent=i; await sleep(900); }
+    cd.textContent="オープン！"; endInputs();
+    const c=[0,0]; alive.forEach(id=>c[votes[id]]++);
+    await sleep(500);
+    if(c[0]===c[1]){ cd.textContent="同数！全員セーフ"; cd.style.color="var(--cool)"; await sleep(1100); continue; }
+    const minoritySide=c[0]<c[1]?0:1;
+    const survivors=alive.filter(id=>votes[id]===minoritySide);
+    const losers=alive.filter(id=>votes[id]!==minoritySide);
+    losers.forEach(id=>{ flash(id,true); elim.push(id); if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"多数派…道連れ脱落",enable:false}); });
+    cd.textContent=OPTIONS[minoritySide].slice(0,2)+" 少数派の勝ち！"; cd.style.color="var(--lime)";
+    alive=survivors; await sleep(1300);
+  }
+  endInputs();
+  // 最後まで残った少数派が上位。脱落は遅い順に上位（生存＞遅く脱落＞早く脱落）。
+  return [...alive, ...elim.reverse()];
+}
+
 // ===== 表示・採点 =====
 function addCountdown(txt){
   const arena=$("stage").querySelector(".arena")||$("stage");
@@ -511,6 +601,7 @@ async function showFinal(){
    ============================================================ */
 let myConn=null, myCurrentUi="tap";
 let cycleHand=0; const HANDS=["✊ グー","✌ チョキ","✋ パー"];
+let myCycleOptions=HANDS;  // cycle時の選択肢（prompt.optionsで上書き、無ければHANDS）
 
 function ctrl_init(){
   $("ctrlView").classList.remove("hidden");
@@ -540,7 +631,7 @@ function handleCtrlMessage(msg){
   if(msg.type==="welcome"){ if(msg.name) $("ctrlName").textContent=msg.name; return; }
   if(msg.type==="prompt"){
     if(msg.ui) myCurrentUi=msg.ui;
-    if(msg.ui==="cycle"){ cycleHand=0; setStatus(msg.text+"\n今：押して選ぶ"); } else setStatus(msg.text);
+    if(msg.ui==="cycle"){ cycleHand=0; myCycleOptions=(msg.options&&msg.options.length)?msg.options:HANDS; setStatus(msg.text+"\n今："+myCycleOptions[0]); } else setStatus(msg.text);
     if(typeof msg.enable==="boolean") setEnabled(msg.enable);
     return;
   }
@@ -549,7 +640,7 @@ function handleCtrlMessage(msg){
 function setStatus(t){ $("phoneStatus").textContent=t; }
 function setEnabled(on){
   const tap=$("tap"); tap.disabled=!on;
-  if(on && myCurrentUi==="cycle"){ tap.onclick=()=>{ cycleHand=(cycleHand+1)%3; setStatus("今："+HANDS[cycleHand]); }; }
+  if(on && myCurrentUi==="cycle"){ tap.onclick=()=>{ cycleHand=(cycleHand+1)%myCycleOptions.length; setStatus("今："+myCycleOptions[cycleHand]); }; }
   else tap.onclick=null;
 }
 
