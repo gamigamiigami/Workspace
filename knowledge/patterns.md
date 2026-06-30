@@ -1,9 +1,181 @@
 # 成功パターン集
 
-最終更新：2026-06-12
-最終更新：2026-06-11
+最終更新：2025-01-16
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## [汎用] Web Audio API による周波数生成の効果音エコシステム
+
+**概要：** ブラウザの Web Audio API を使用して、音声ファイルに依存せず周波数と時間長だけで効果音を**その場生成**するパターン。学校の Wi-Fi が外部 CDN を制限している環境でも確実に動作し、サウンドバンクの更新や拡張が容易。
+
+**背景：**
+- オシキング（party game collection）で、13 個のゲーム全体に統一された効果音を実装する必要が発生
+- 音声ファイル（mp3/wav）を CDN で配信する方式では、学校の Wi-Fi が外部リソースをブロックするリスクがある
+- セッション「オシキング サウンド＆新ゲーム第1弾」で実装・検証完了（2025-01-16）
+
+**実装パターン：**
+
+1. **基本構造（AudioContext とオシレータ）：**
+   ```javascript
+   const playSound = (frequency, duration, type = 'sine') => {
+     const ctx = new (window.AudioContext || window.webkitAudioContext)();
+     const osc = ctx.createOscillator();
+     const gain = ctx.createGain();
+     
+     osc.connect(gain);
+     gain.connect(ctx.destination);
+     
+     osc.frequency.value = frequency;
+     osc.type = type;
+     
+     gain.gain.setValueAtTime(0.3, ctx.currentTime);
+     gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+     
+     osc.start(ctx.currentTime);
+     osc.stop(ctx.currentTime + duration);
+   };
+   ```
+
+2. **効果音バンク（周波数 + 時間の組み合わせ）：**
+   ```javascript
+   const soundBank = {
+     tap: { freq: 800, duration: 0.1, type: 'sine' },        // 押下音
+     countdown: { freq: 600, duration: 0.08, type: 'square' }, // カウントダウン
+     go: { freq: 1000, duration: 0.15, type: 'square' },      // GO音
+     buzzer: { freq: 300, duration: 0.2, type: 'sine' },      // 脱落ブザー
+     victory: { freq: 1200, duration: 0.3, type: 'sine' },    // 勝利音
+     fanfare: [
+       { freq: 1200, duration: 0.2, type: 'sine' },
+       { freq: 1400, duration: 0.2, type: 'sine' },
+     ]                                                          // 優勝ファンファーレ（複数音の連鎖）
+   };
+   ```
+
+3. **複合効果（アニメーション + 音 + 画面フラッシュ）：**
+   ```javascript
+   const celebrate = () => {
+     playSound(...soundBank.fanfare[0]);  // 音声
+     document.body.style.background = 'white'; // フラッシュ
+     // 紙吹雪アニメーション開始
+   };
+   ```
+
+**メリット：**
+- **外部依存なし**：CDN ファイルの読み込みが不要 → 学校 Wi-Fi 制限環境でも動作
+- **ファイルサイズ 0**：音声ファイルが存在しない → リポジトリサイズ肥大化なし
+- **カスタマイズ容易**：周波数・時間を変えるだけで新しい効果音を追加可能
+- **統一感**：全効果音が同じ API で生成されるため、サウンドスケープの統一性が高い
+
+**デメリット・注意点：**
+- 周波数だけでは「複雑な音」（楽器音・音声）は再現できない（sine/square/sawtooth 波形は限定的）
+- オシレータの種類が限定的（Web Audio API の制約）
+- 同時発音数の上限あり（複数効果音が同時に鳴ると CPU 負荷増加）
+
+**使用プロジェクト：** oshiking（party game collection）
+
+**参考資料：**
+- [MDN: Web Audio API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Audio_API)
+- [Web Audio API: OscillatorNode](https://developer.mozilla.org/en-US/docs/Web/API/OscillatorNode)
+
+**タグ：** #web-audio #browser-api #offline #no-cdn #sound-design #game-development
+
+---
+
+## [汎用] ゲーム実装の UI フレームワークと再利用パターン
+
+**概要：** パーティゲーム集（oshiking）において、複数のゲーム実装で共通する「アリーナ描画→入力受け付け→判定→結果表示」のライフサイクルを標準化し、新規ゲーム実装を 300〜500 行程度に短縮するパターン。
+
+**背景：**
+- oshiking の最初の 8 ゲーム実装で「ゲーム固有の判定ロジック」と「共通の演出・入力処理」が分離できることに気付く
+- セッション「オシキング サウンド＆新ゲーム第1弾」で 13 ゲーム実装時に完全に確立（2025-01-16）
+- 実装時間短縮 + バグ減少 + 一貫性向上が確認されたため、パターン昇華
+
+**実装パターン：**
+
+1. **共通ライフサイクル（全ゲーム共通）：**
+   ```javascript
+   async function gameX(playerIds, ui, prompt) {
+     // 1. アリーナ初期化
+     const { renderArena, pressHandler, cpuIntervals, ... } = initCommonResources();
+     
+     // 2. ゲーム固有の初期化
+     const state = { ... };  // ゲーム固有の状態
+     
+     // 3. 入力処理（tap or cycle UI）
+     await runCountdown();   // 共通カウントダウン
+     await handleInputs(playerIds, (playerId, inputType) => {
+       // ゲーム固有の判定
+       handleInputX(playerId, inputType, state);
+     });
+     
+     // 4. 順位決定・結果表示
+     const rankings = computeRankings(state);
+     showResult(playerIds, rankings);
+     
+     return rankings;  // プレイヤーID の順序付き配列
+   }
+   ```
+
+2. **共通部品のシグネチャ：**
+   - `renderArena(playerIds, callback)`：アリーナ描画 & リアルタイム更新
+   - `pressHandler(playerId, inputType)`：全プレイヤーの入力受け付け（スマホ/CPU/親機統一経路）
+   - `cpuIntervals(playerIds, handler)`：CPU プレイヤーの自動入力シミュレーション
+   - `flash(color, duration)`：画面フラッシュエフェクト
+   - `addCountdown(seconds)`：カウントダウン表示
+   - `endInputs()`：入力受け付け終了
+   - `showResult(playerIds, rankings)`：結果画面表示 + 効果音
+
+3. **ゲーム固有実装の最小化（例：秒数当て）：**
+   ```javascript
+   async function gameSecondsGuess(playerIds, ui, prompt) {
+     const { renderArena, pressHandler, ... } = initCommonResources();
+     
+     // ゲーム固有：目標秒数をランダム選択
+     const targetSeconds = Math.floor(Math.random() * 10) + 3;
+     const pressed = {};  // { playerId: pressedSeconds }
+     
+     // 共通フロー
+     await addCountdown(3);  // 「3・2・1・GO」
+     renderArena(playerIds, () => {
+       // ゲーム固有描画：時計表示（最初3秒）→「？」
+       drawClock(currentTime < 3 ? currentTime : null);
+     });
+     
+     // 入力処理（tap UI）
+     await handleInputs(playerIds, (playerId) => {
+       pressed[playerId] = elapsedSeconds;  // 押した時刻を記録
+     });
+     
+     // 順位計算：目標秒との誤差が小さい順
+     const rankings = playerIds.sort(
+       (a, b) => Math.abs(pressed[a] - targetSeconds) - Math.abs(pressed[b] - targetSeconds)
+     );
+     
+     showResult(playerIds, rankings);
+     return rankings;
+   }
+   ```
+
+**メリット：**
+- **実装速度向上**：新規ゲームの骨組みが決まっているため、ゲーム固有ロジックに集中可能
+- **バグ減少**：入力処理・UI・効果音など共通部分は既に検証済み
+- **一貫性**：全ゲーム共通の操作感・演出スタイルを自動実現
+- **スマホ/CPU/親機の統一入力処理**：`pressHandler` 一本で全ターゲットをサポート
+
+**注意点：**
+- 新しい入力方式（カメラ・十字キー・テキスト入力）が必要なゲームはこのフレームワークでは実装不可（別フレームワークが必要）
+- アクティブな開発中はフレームワーク変更時に全ゲームの再検証が必須
+
+**使用プロジェクト：** oshiking（party game collection：13 ゲーム）
+
+**拡張可能ゲーム：**
+- tap UI のみ：最速おし・がまん・ジャスト・連打耐久・丸太ジャンプ・3の倍数で押すな・早撃ちガンマン・秒数当て
+- cycle UI（選択肢）：3すくみ・少数決・偶奇投票
+- 次バッチ（新フレームワーク必要）：写真ジャンプ・座標取り・限界ジャンケン・鬼役ゲーム
+
+**タグ：** #game-design #framework #code-reuse #architecture #party-game
 
 ---
 
