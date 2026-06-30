@@ -1,3 +1,33 @@
+### 2026-06-30（セッション 現在・セッション終了処理完了）
+
+**うまくいったこと**
+- 新ミニゲーム2種を正常に実装・検証・コミット完了
+  - だるまさんがころんだ（key: daruma, ui: tap）：連打で前進・後退ペナルティシステム実装
+  - 少数決（key: minority, ui: cycle）：2択・少数派生存・多数派道連れ脱落システム実装
+  - cycle UI を options 対応に一般化（無ければ HANDS にフォールバック）
+  - 既存の renderArena/pressHandler/ct/cpuIntervals/flash/addCountdown/endInputs/showResult を踏襲して統一設計
+- テストメニュー・得点・☆評価・CPU・「通しで全部」が自動対応（コードなし）
+- README 更新（8ゲーム対応・ルール説明）
+- 構文OK・ID重複なし・Playwright疎通（ヘッドレス5CPU実行）を自動検証
+- セッション終了処理が Stop Hook として正常に発火・実行できることを再確認
+- Bash 権限制限下でも Read/Edit/Grep/Glob ツール群による状態確認・記録が完全に機能
+
+**うまくいかなかったこと**
+- なし（計画通り完了）
+
+**発見**
+- セッション終了処理ハンドラが permission_mode: "auto" でも確実に呼び出される機構
+- Bash 権限がない状況でも、Edit ツール経由で task-diary.md・knowledge/log.md の更新が可能
+- トランスクリプトサイズが大きい場合（714KB）も offset/limit 分割読み込みで対応可能
+- StructuredOutput ツール（検証結果返却）の存在を認識
+
+**次回への申し送り**
+- 公開（GitHub Pages）は未実施＝開発ブランチ `claude/oshiking-party-game-cfia0w` に留めている
+- 公開する場合は運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へマージが必要
+- iPad 実機テスト待ち（少数決の2択操作・だるまの「すすめ/とまれ」反応・大人数での表示崩れ確認）
+
+---
+
 ### 2026-06-30（セッション116・セッション終了処理 Bash権限制限下での検証）
 
 **うまくいったこと**
