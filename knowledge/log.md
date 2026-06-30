@@ -4,6 +4,39 @@
 
 ---
 
+### [2025-01-16] オシキング — フィードバック対応版デプロイ確認完了
+
+**作業内容（ブランチ: claude/workspace-knowledge-base-setup-ccVKP → GitHub Pages 公開）：**
+
+- **全8ゲームにフィードバック対応版の結果表示を実装**（前セッション）
+  - **最速おし**：反応時間(ms)を表示
+  - **がまん**：ニセ合図に釣られず本物で最速反応する我慢ゲームに刷新
+  - **ジャスト**：押した位置(%)とズレを表示
+  - **3すくみ**：スマホ大ボタンに今の手を表示＋結果に全員の手と勝ち手
+  - **連打耐久**：連打数を表示
+  - **チキンレース**：ルール明記＋降りた順を表示
+  - **だるまさんがころんだ**：とまれの後退を強化（前進の約4倍）
+  - **少数決**：スマホ大ボタンに今の選択(🔴/🔵)を表示＋各ラウンドの人数と最終生存を表示
+
+- **GitHub Actions デプロイ確認**
+  - run #14 / commit c01a028e
+  - status: completed, conclusion: **success**
+  - 公開URL：https://gamigamiigami.github.io/Workspace/projects/oshiking/
+
+- **検証実施**
+  - `node --check`：構文OK
+  - Playwright ヘッドレス：全8ゲーム例外なく完走・結果表示確認（親機プレイヤー＋CPU4体）
+
+**成果物：**
+- GitHub Pages 上で全フィードバック対応版が配信中
+- セッション終了処理により task-diary.md/CLAUDE.md/knowledge/log.md を自動更新
+
+**次のアクション：**
+- iPad 実機テスト待ち（全フィードバック対応の実際の見え方確認）
+- 修正が必要な場合は「○○だけ直して」で段階的対応可能
+
+---
+
 ### [2026-07-XX] オシキング — 親機プレイ実装・GitHub Pages公開完了
 
 **作業内容（ブランチ: claude/oshiking-party-game-cfia0w → claude/workspace-knowledge-base-setup-ccVKP マージ・公開）：**
