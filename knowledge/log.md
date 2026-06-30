@@ -20,9 +20,13 @@
 - 静的id重複なし（dotはJS動的生成のため対象外）
 - Playwrightヘッドレス疎通（Peer/qrcodeをスタブ、CPU5体）：daruma/minority とも例外なく完走し、全プレイヤーIDを含む重複なし順位配列を返すことを確認。
 
+**追加対応（同セッション）：**
+- **親機プレイ（デバッグ用）**：ホストPCの人もプレイヤー参加可能に。「＋自分も参加（親機）」ボタン→`あなた(親機)🎮`。ゲーム中はSPACE/Enter or 画面右下ボタンで押下（経路はスマホ/CPUと同じpressHandler）。1人のみ重複ガード。Playwrightで連打耐久を実プレイし1位入賞・例外なしを確認。
+- **公開実施**：公開ブランチ `claude/workspace-knowledge-base-setup-ccVKP` の `projects/oshiking/` のみ更新（knowledge競合回避のため部分チェックアウト）→ push。deploy-pages.yml run#13 が success。新旧URL両対応で配信。
+  - ※サンドボックスからは `gamigamiigami.github.io` への直接アクセスがネットワークポリシーで403（policy denial）のため、ライブ目視はできず。デプロイ成功＝配信済みと判断。
+
 **次のアクション：**
-- **iPad実機テスト待ち**：①少数決の2択操作（押すたびに🔴/🔵が切り替わる手応え）②だるまの「すすめ/とまれ」反応・連打の届き具合 ③大人数（実機6人＋）での表示崩れ。
-- 公開（GitHub Pages）は未実施＝開発ブランチに留めている。公開する場合は公開ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へマージが必要。
+- **iPad実機テスト待ち**：①少数決の2択操作（押すたびに🔴/🔵が切り替わる手応え）②だるまの「すすめ/とまれ」反応・連打の届き具合 ③大人数（実機6人＋）での表示崩れ ④親機プレイのSPACE/ボタン操作感。
 
 ---
 
