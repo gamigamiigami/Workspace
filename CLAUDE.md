@@ -127,6 +127,25 @@ OK: 次回からの正しい対応
 
 ---
 
+## 🌐 GitHub Pages 公開ルール（絶対厳守）
+
+新しいサイトを公開するときは、**既存の公開ページのリンクを絶対に壊さないこと**。
+
+1. **古典クエスト（kaeriten-quest）は、必ず元々のリンクで開ける状態を保つ**
+   - 旧URL: `https://gamigamiigami.github.io/Workspace/kaeriten-quest/`（生徒へ配布済み）
+   - これが404になる変更は禁止。新URL `/projects/kaeriten-quest/` も併せて維持する。
+2. **全公開サイトは「新旧URL両対応」を保つ**
+   - 公開ワークフロー `deploy-pages.yml` は各サイトを `_site/<名前>/`（旧URL）と `_site/projects/<名前>/`（新URL）の**両方に配置**している。この両配置を消さない。
+3. **リンク集（作品一覧トップ）を継続して使い、新サイトは必ずそこに追加する**
+   - トップページ: `site/index.html`（公開先 `https://gamigamiigami.github.io/Workspace/`）
+   - 新サイトを公開したら、`site/index.html` にカードを1枚追加する。
+4. **公開の手順（新サイト追加時）**
+   - `projects/<名前>/` に作る → `deploy-pages.yml` の `PUBLIC_DIRS` に `<名前>` を追加 → `site/index.html` にカード追加 → 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` にマージして push（ここからのみPages公開可）。
+   - 公開係（ワークフロー）は `deploy-pages.yml` の**1本だけ**にする。旧 `deploy-dashboard.yml` は自動実行停止済み（復活させて二重化すると404の原因になる）。
+   - 機密（`knowledge/`・`CLAUDE.md`・`rakuda-sensei` 等）は `PUBLIC_DIRS` に**入れない**＝公開しない。
+
+---
+
 ## Gitコミット前の必須設定
 
 コミット前に必ず以下を実行すること（セッションをまたぐとリセットされる）：
