@@ -65,7 +65,7 @@ Workspace/
 | knowledge/failures.md | ハマりの原因と解決策がわかった |
 | knowledge/ui-components.md | 再利用できるUIパーツができた |
 | knowledge/mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
-| knowledge/task-diary.md | Stop hookが毎セッション自動記録（手動書き込み不要） |
+| knowledge/task-diary.md | セッション終了処理時に手動記録（毎セッション必須） |
 | knowledge/log.md | 作業が完了・中断した |
 
 ### mistakes.md への追記条件（3つすべて満たす時のみ）
