@@ -37,6 +37,34 @@ Workspace/
 
 ---
 
+## セッション終了処理・自動保存の制約
+
+⚠️ **現在の状態（2026-07-04以降）：**
+
+セッション終了フック（Stop event）によって自動実行される task-diary/log の記録更新は **正常に機能**していますが、最後の git add/commit/push が以下の理由で常に権限エラーで止まります：
+
+```
+セッション終了フック内での Bash 実行 → permission_mode: "auto" が制限
+→ 「Bash 実行許可か？」の permission prompt が発生
+→ セッション終了フロー中にユーザーが応答できない
+→ スクリプト停止・git push 未実行
+```
+
+**対応状況：**
+- task-diary.md と log.md の記録自体は **Edit/Write ツール経由で完了**している ✅
+- git push だけが Bash 権限制限で止まっている ❌
+
+**必要な修正：**
+```
+/update-config コマンドで以下のいずれかを実行：
+1. permission_mode を "allow" に変更（全 Bash コマンド許可）
+2. .claude/settings.json に git コマンドをホワイトリスト追加（推奨）
+```
+
+修正後は、セッション終了処理が完全自動化されます。
+
+---
+
 ## 作業開始
 
 `profile.md` と `mistakes.md` はセッション開始時に hook が自動で読み込む。
@@ -65,7 +93,7 @@ Workspace/
 | knowledge/failures.md | ハマりの原因と解決策がわかった |
 | knowledge/ui-components.md | 再利用できるUIパーツができた |
 | knowledge/mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
-| knowledge/task-diary.md | Stop hookが毎セッション自動記録（手動書き込み不要） |
+| knowledge/task-diary.md | セッション終了処理時に手動記録（毎セッション必須） |
 | knowledge/log.md | 作業が完了・中断した |
 
 ### mistakes.md への追記条件（3つすべて満たす時のみ）
@@ -124,6 +152,25 @@ OK: 次回からの正しい対応
 - 有料化が避けられない機能は「実装しない」「半自動運用で代用」を選ぶ
 - 「¥500/月なら安い」と感じても、オーナーの明示OKなしに有料化しない
 - 現在使用中の無料サービス一覧: `projects/rakuda-sensei/automation/README.md` 参照
+
+---
+
+## 🌐 GitHub Pages 公開ルール（絶対厳守）
+
+新しいサイトを公開するときは、**既存の公開ページのリンクを絶対に壊さないこと**。
+
+1. **古典クエスト（kaeriten-quest）は、必ず元々のリンクで開ける状態を保つ**
+   - 旧URL: `https://gamigamiigami.github.io/Workspace/kaeriten-quest/`（生徒へ配布済み）
+   - これが404になる変更は禁止。新URL `/projects/kaeriten-quest/` も併せて維持する。
+2. **全公開サイトは「新旧URL両対応」を保つ**
+   - 公開ワークフロー `deploy-pages.yml` は各サイトを `_site/<名前>/`（旧URL）と `_site/projects/<名前>/`（新URL）の**両方に配置**している。この両配置を消さない。
+3. **リンク集（作品一覧トップ）を継続して使い、新サイトは必ずそこに追加する**
+   - トップページ: `site/index.html`（公開先 `https://gamigamiigami.github.io/Workspace/`）
+   - 新サイトを公開したら、`site/index.html` にカードを1枚追加する。
+4. **公開の手順（新サイト追加時）**
+   - `projects/<名前>/` に作る → `deploy-pages.yml` の `PUBLIC_DIRS` に `<名前>` を追加 → `site/index.html` にカード追加 → 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` にマージして push（ここからのみPages公開可）。
+   - 公開係（ワークフロー）は `deploy-pages.yml` の**1本だけ**にする。旧 `deploy-dashboard.yml` は自動実行停止済み（復活させて二重化すると404の原因になる）。
+   - 機密（`knowledge/`・`CLAUDE.md`・`rakuda-sensei` 等）は `PUBLIC_DIRS` に**入れない**＝公開しない。
 
 ---
 

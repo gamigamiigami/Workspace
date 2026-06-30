@@ -1,8 +1,45 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-10
+最終更新：2026-07-04（セッション111で再確認）
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## Claude Code 権限・セッション管理
+
+### [2026-07-02] セッション終了処理時に Bash 権限が auto モードで制限される
+
+**状況：** セッション終了フック（Stop hook）が自動的に実行される際、後続の git push を含む自動保存スクリプトが Bash 権限制限に引っかかり、完全実行されない
+
+**問題：**
+- セッション107・108・109 の終了処理で、git merge / git push / git add などが permission deny で実行されず
+- セッション終了フック内の自動化スクリプトが Bash 権限を要求すると、permission_mode: "auto" の制限により「ユーザー確認待ち」→「タイムアウト」となり、スクリプト中断
+- task-diary.md など knowledge/ の変更がローカルに残ったまま、remote に push されない状態が続く
+
+**原因：**
+```
+Claude Code のセッション終了メカニズム：
+├── Stop hook が自動発火（permission_mode: auto）
+├── セッション終了処理スクリプト内で Bash を多用
+├── Bash の permission_mode: auto により「実行か拒否か」の判定が入る
+├── セッション終了フロー中に permission prompt が発生すると、タイムアウト待ち状態に
+└── ユーザーが応答できないため、スクリプトが部分実行で終了 → push されず残る
+```
+
+**判断・対応方針：**
+- セッション終了処理を Bash フル依存から、Read/Edit/Grep/Write などのツールベースに段階的に移行
+- git status / git diff は Bash ではなく、スクリプト出力を必要に応じて Glob/Grep で補完
+- git push は最後に「ユーザー確認が必要な手動コマンド」として手順化（自動化から除外）
+
+**再発防止：**
+- セッション終了フック内のスクリプトは「高頻度 Bash 呼び出し」を避ける
+- permission_mode: auto でも実行可能な tool 組み合わせで手順を再設計
+- 本格的には permission_mode を「session-level で auto → manual への変更」検討
+
+**関連セッション：** セッション107（初発見）→ セッション108（再現・パターン化）→ セッション109（再現・確認）→ セッション110（継続）→ セッション111（再確認・競合解決処理で顕在化）→ セッション115（マージ競合解決・非破壊的修正成功：knowledge/log.md の `=======` と `>>>>>>> claude/educational-game-middle-school-102jqo` を Edit ツールで除去。Bash 権限不要な Edit/Read/Grep による対応が有効であることを再確認）→ セッション116（Bash 権限制限下でも Read/Grep/Glob/Edit ツールによる状態確認・記録が可能であることを実証）
+
+**タグ：** #claude-code #session-hooks #bash #permission #automation #git-push
 
 ---
 
