@@ -88,6 +88,15 @@
   .rate-row{display:flex; gap:8px; justify-content:center; align-items:center; margin-top:8px; flex-wrap:wrap;}
   .star-btn{font-size:34px; background:none; border:none; cursor:pointer; color:#888; line-height:1;}
   .star-btn.on{color:var(--gold);}
+  /* ゲームごとの結果（だれが何をしたか） */
+  .result-detail{margin:14px auto 4px; max-width:min(540px,92%);}
+  .detail-title{font-size:14px; opacity:.8; font-weight:800; margin:10px 0 6px;}
+  .detail-list{display:flex; flex-direction:column; gap:5px;}
+  .drow{display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.07); border-radius:10px; padding:7px 12px; font-weight:800; font-size:15px;}
+  .drow.dead{opacity:.42;}
+  .drow .dsw{width:14px; height:14px; border-radius:50%; flex:none;}
+  .drow .dnm{flex:1; text-align:left;}
+  .drow .dval{color:var(--lime); font-weight:900; text-align:right; white-space:nowrap;}
   /* スコアボード */
   .board{padding:10px 26px 20px; max-height:34vh; overflow:auto; background:rgba(0,0,0,.2);}
   .scrow{display:flex; align-items:center; gap:12px; padding:6px 0; font-weight:800; font-size:clamp(15px,2vw,20px);}
@@ -159,11 +168,11 @@ const COLORS=["#ff3b6b","#3bc9ff","#ffcf3b","#9bff5b","#c77bff","#ff944d","#4dff
 // ミニゲーム定義（ui: tap=1ボタン / cycle=押すたび手が変わる）
 const GAMES=[
   {key:"fast",    title:"最速おし",   rule:"GO！が出たら一番早く押せ", ui:"tap"},
-  {key:"slow",    title:"がまん",     rule:"最後まで押すな",          ui:"tap"},
+  {key:"slow",    title:"がまん",     rule:"ニセ合図に釣られるな！本物の解除で押せ", ui:"tap"},
   {key:"just",    title:"ジャスト",   rule:"ゲージがド真ん中で押せ",  ui:"tap"},
   {key:"sank",    title:"3すくみ",    rule:"押すたび グー→チョキ→パー", ui:"cycle"},
   {key:"mash",    title:"連打耐久",   rule:"5秒間で一番多く押せ",     ui:"tap"},
-  {key:"chicken", title:"チキンレース", rule:"ギリギリまで我慢！最後はダメ", ui:"tap"},
+  {key:"chicken", title:"チキンレース", rule:"最後から2・3・4番目が勝ち！ドベと未押下はダメ", ui:"tap"},
   {key:"daruma",  title:"だるまさんがころんだ", rule:"進めの間だけ連打！止まれで押すと後退", ui:"tap"},
   {key:"minority", title:"少数決",     rule:"少ない方が生き残る。多数派は道連れ", ui:"cycle"},
 ];
@@ -188,6 +197,7 @@ let nextId=0;
 let started=false;
 let running=false;
 let hostPlayerId=null;            // 親機（ホストPC）で遊ぶプレイヤーのID（デバッグ用・SPACE/クリックで押す）
+let resultDetail="";              // 各ゲームが設定する「だれが何をしたか」の結果HTML（showResultが表示）
 let pressHandler=null;            // 各ゲームが設定。コントローラー/CPU/親機の press を受ける
 let cpuTimers=[], cpuIntervals=[];
 let ratings=loadData("oshiking-ratings", {}); // {gameKey: stars(1-3)}
@@ -356,6 +366,7 @@ async function showGameIntro(game){
 async function playGame(game){
   players.forEach(p=>p.alive=true);
   clearCpu();
+  resultDetail="";
   if(game.key==="fast")    return await gameFast();
   if(game.key==="slow")    return await gameSlow();
   if(game.key==="just")    return await gameJust();
@@ -365,6 +376,16 @@ async function playGame(game){
   if(game.key==="daruma")  return await gameDaruma();
   if(game.key==="minority") return await gameMinority();
   return [];
+}
+
+// 結果リスト用ヘルパー（だれが何をしたか）
+function pname(id){ const p=players.find(x=>x.id===id); return p?p.name:("P"+id); }
+function pcolor(id){ const p=players.find(x=>x.id===id); return p?p.color:"#888"; }
+function pmark(id){ const p=players.find(x=>x.id===id); return p?(p.host?" 🎮":(p.cpu?" 🤖":"")):""; }
+function detailRows(rows){ // rows: [{id, val, dead}]
+  let h='<div class="detail-list">';
+  rows.forEach(r=>{ h+='<div class="drow'+(r.dead?' dead':'')+'"><span class="dsw" style="background:'+pcolor(r.id)+'"></span><span class="dnm">'+pname(r.id)+pmark(r.id)+'</span><span class="dval">'+r.val+'</span></div>'; });
+  return h+'</div>';
 }
 
 // ===== 各ミニゲーム（戻り値＝順位つきID配列 best→worst。CPUも press で動く） =====
@@ -385,20 +406,55 @@ async function gameFast(){
   players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 130+Math.random()*460); });
   await sleep(1000);
   endInputs();
-  return Object.entries(times).filter(([id,t])=>typeof t==="number").sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
+  const ranking=Object.entries(times).filter(([id,t])=>typeof t==="number").sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
+  const rows=ranking.map(id=>({id, val:Math.round(times[id]-goAt)+"ms ⚡"}));
+  players.forEach(p=>{ if(times[p.id]==="foul") rows.push({id:p.id, val:"フライング", dead:true}); else if(times[p.id]===undefined) rows.push({id:p.id, val:"押さず", dead:true}); });
+  resultDetail='<div class="detail-title">反応タイム（GOから・速い順）</div>'+detailRows(rows);
+  return ranking;
 }
 
-// がまん（最後まで押さない）
+// がまん（ひっかけ）：ニセの「押せ！」に釣られるな。本物の「解除！」で一番早く押した人が勝ち。
 async function gameSlow(){
   renderArena();
-  broadcast({type:"prompt", text:"押すな…耐えろ…", ui:"tap", enable:true});
-  let alive=players.map(p=>p.id); const elim=[];
-  pressHandler=(id)=>{ if(alive.includes(id)){ alive=alive.filter(x=>x!==id); elim.push(id); flash(id,true); sendToId(id,{type:"prompt",text:"押しちゃった！脱落",enable:false}); } };
-  players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 600+Math.random()*5200); });
+  const cd=addCountdown("…");
+  broadcast({type:"prompt", text:"押すな…耐えろ\nニセの合図に釣られるな", ui:"tap", enable:true});
+  let phase="hold"; let goAt=0;
+  const aliveSet=new Set(players.map(p=>p.id));
+  const elim=[];        // 釣られて脱落した順
+  const reacted={};     // 解除後に押した時刻(ms)
+  pressHandler=(id)=>{
+    if(phase==="hold"){
+      if(aliveSet.has(id)){ aliveSet.delete(id); elim.push(id); flash(id,true); sendToId(id,{type:"prompt",text:"釣られた！脱落",enable:false}); }
+    }else{
+      if(aliveSet.has(id) && reacted[id]===undefined){ reacted[id]=performance.now()-goAt; flash(id); sendToId(id,{type:"prompt",text:"反応OK！",enable:false}); }
+    }
+  };
+  const holdDur=4000+Math.random()*2500, traps=2+Math.floor(Math.random()*2);
+  function fakeSignal(){
+    if(phase!=="hold") return;
+    cd.textContent="いま押せ！？"; cd.style.color="var(--hot)";
+    broadcast({type:"prompt", text:"いま押せ！？（ニセかも…）", enable:true});
+    players.forEach(p=>{ if(p.cpu && aliveSet.has(p.id) && Math.random()<0.22) ct(()=>{ if(pressHandler&&phase==="hold") pressHandler(p.id); }, 80+Math.random()*250); });
+    setTimeout(()=>{ if(phase==="hold"){ cd.textContent="…まだ…"; cd.style.color="var(--gold)"; broadcast({type:"prompt", text:"…まだ！耐えろ…", enable:true}); } }, 550);
+  }
+  for(let k=0;k<traps;k++){ ct(fakeSignal, 700+(k+1)*(holdDur/(traps+1))); }
   const t0=performance.now();
-  while(alive.length>1 && performance.now()-t0<6500){ await sleep(200); }
+  while(performance.now()-t0<holdDur && aliveSet.size>0){ await sleep(120); }
+  phase="go"; goAt=performance.now(); cd.textContent="解除！押せ！"; cd.style.color="var(--lime)";
+  broadcast({type:"prompt", text:"解除！今だ押せ！", enable:true});
+  players.forEach(p=>{ if(p.cpu && aliveSet.has(p.id)) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 150+Math.random()*500); });
+  await sleep(1300);
   endInputs();
-  return [...alive, ...elim.reverse()]; // 生存者＞遅く脱落＞早く脱落
+  const reactedIds=Object.keys(reacted).map(Number).sort((a,b)=>reacted[a]-reacted[b]);
+  const noReact=[...aliveSet].filter(id=>reacted[id]===undefined);
+  const elimRev=[...elim].reverse(); // 遅く釣られた＝よく耐えた人ほど上位
+  const ranking=[...reactedIds, ...noReact, ...elimRev];
+  const rows=[];
+  reactedIds.forEach(id=>rows.push({id, val:Math.round(reacted[id])+"ms ⚡"}));
+  noReact.forEach(id=>rows.push({id, val:"無反応"}));
+  elimRev.forEach(id=>rows.push({id, val:"釣られた✗", dead:true}));
+  resultDetail='<div class="detail-title">本物の「解除」への反応（ニセに釣られた人は脱落）</div>'+detailRows(rows);
+  return ranking;
 }
 
 // ジャスト（中央で押す）
@@ -411,14 +467,17 @@ async function gameJust(){
   const center=document.createElement("div"); center.style.cssText="position:absolute;left:50%;top:0;width:4px;height:100%;background:#fff;transform:translateX(-50%)";
   bar.appendChild(mark); bar.appendChild(center); arena.appendChild(bar);
   broadcast({type:"prompt", text:"ド真ん中で押せ！", ui:"tap", enable:true});
-  let pos=0, dir=1, stopped=false; const errs={};
-  pressHandler=(id)=>{ if(!stopped && errs[id]===undefined){ errs[id]=Math.abs(pos-50); flash(id); } };
+  let pos=0, dir=1, stopped=false; const errs={}, stops={};
+  pressHandler=(id)=>{ if(!stopped && errs[id]===undefined){ errs[id]=Math.abs(pos-50); stops[id]=pos; flash(id); sendToId(id,{type:"prompt",text:"ストップ！"+Math.round(pos)+"（中央50）",enable:false}); } };
   players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 300+Math.random()*2300); });
   const t0=performance.now();
   await new Promise(res=>{ (function loop(){ pos+=dir*2.2; if(pos>=100){pos=100;dir=-1;} if(pos<=0){pos=0;dir=1;} mark.style.left=pos+"%"; if(performance.now()-t0>2800){stopped=true;res();} else requestAnimationFrame(loop); })(); });
   endInputs();
   players.forEach(p=>{ if(errs[p.id]===undefined) errs[p.id]=999; });
-  return Object.entries(errs).sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
+  const ranking=Object.entries(errs).sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
+  const rows=ranking.map(id=>({id, val: stops[id]===undefined?"押さず✗":(Math.round(stops[id])+"％（ズレ"+Math.round(errs[id])+"）"), dead: stops[id]===undefined}));
+  resultDetail='<div class="detail-title">どこで押した？（ド真ん中＝50％）</div>'+detailRows(rows);
+  return ranking;
 }
 
 // 3すくみ
@@ -436,7 +495,11 @@ async function gameSankume(){
   const winners=players.filter(p=>hands[p.id]===best).map(p=>p.id);
   const losers=players.filter(p=>hands[p.id]!==best).map(p=>p.id);
   await sleep(600);
-  return [...shuffle(winners), ...shuffle(losers)];
+  const ranking=[...shuffle(winners), ...shuffle(losers)];
+  const HL=["✊グー","✌チョキ","✋パー"];
+  const rows=ranking.map(id=>({id, val:HL[hands[id]]+(hands[id]===best?" ◎勝ち":""), dead:hands[id]!==best}));
+  resultDetail='<div class="detail-title">みんなの手（勝ち手＝'+HL[best]+'）</div>'+detailRows(rows);
+  return ranking;
 }
 
 // 連打耐久
@@ -449,7 +512,9 @@ async function gameMash(){
   const cd=addCountdown("5");
   for(let i=5;i>=1;i--){ cd.textContent=i; await sleep(1000); }
   cd.textContent="STOP"; endInputs();
-  return Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id])=>+id);
+  const ranking=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id])=>+id);
+  resultDetail='<div class="detail-title">連打数（多い順）</div>'+detailRows(ranking.map(id=>({id, val:counts[id]+"回"})));
+  return ranking;
 }
 
 // チキンレース：押した順で、最後から2・3・4番目が3・2・1点。ドベと未押下は負け。
@@ -460,7 +525,11 @@ async function gameChicken(){
   bar.style.cssText="position:absolute;left:12%;right:12%;bottom:14%;height:22px;background:rgba(255,255,255,.1);border-radius:99px;overflow:hidden";
   const fill=document.createElement("div"); fill.style.cssText="position:absolute;left:0;top:0;height:100%;width:0;background:linear-gradient(90deg,var(--lime),var(--hot))";
   bar.appendChild(fill); arena.appendChild(bar);
-  broadcast({type:"prompt", text:"ギリギリまで我慢！\nでも最後はダメ！", ui:"tap", enable:true});
+  const note=document.createElement("div");
+  note.style.cssText="position:absolute;left:0;right:0;bottom:24%;text-align:center;font-weight:900;font-size:clamp(15px,2.4vw,22px);color:var(--gold);";
+  note.innerHTML="最後から<b>2・3・4番目</b>が勝ち！<br><span style='color:var(--hot)'>ドベ（最後）と未押下はダメ</span>";
+  arena.appendChild(note);
+  broadcast({type:"prompt", text:"ギリギリまで我慢！\nでもドベ（最後）はダメ！", ui:"tap", enable:true});
   const pressedAt={}; const order=[];
   pressHandler=(id)=>{ if(pressedAt[id]===undefined){ pressedAt[id]=performance.now(); order.push(id); flash(id); sendToId(id,{type:"prompt",text:"降りた！",enable:false}); } };
   players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 500+Math.random()*7000); });
@@ -473,6 +542,18 @@ async function gameChicken(){
   if(n>=4) ranking.push(order[n-4]);  // 4番目 = 3位(1点)
   if(n>=1) flash(order[n-1], true);   // ドベ = 負け
   players.forEach(p=>{ if(pressedAt[p.id]===undefined) flash(p.id, true); }); // 未押下 = 負け
+  const rows=[];
+  order.forEach((id,idx)=>{
+    const fromLast=n-1-idx; let label;
+    if(fromLast===0) label="ドベ（最後）✗";
+    else if(fromLast===1) label="🥇最後から2番目 +3";
+    else if(fromLast===2) label="🥈最後から3番目 +2";
+    else if(fromLast===3) label="🥉最後から4番目 +1";
+    else label=(idx+1)+"番目に降りた";
+    rows.push({id, val:label, dead:(fromLast===0)});
+  });
+  players.forEach(p=>{ if(pressedAt[p.id]===undefined) rows.push({id:p.id, val:"最後まで押さず✗", dead:true}); });
+  resultDetail='<div class="detail-title">降りた順（最後から2・3・4番目が勝ち／ドベ・未押下は負け）</div>'+detailRows(rows);
   return ranking;
 }
 
@@ -503,7 +584,7 @@ async function gameDaruma(){
   pressHandler=(id)=>{
     if(finished.includes(id)) return;
     if(phase==="go"){ prog[id]+=4+Math.random()*2; flash(id); }
-    else { prog[id]=Math.max(0,prog[id]-10); flash(id); sendToId(id,{type:"prompt",text:"動いた！下がる！",enable:true}); }
+    else { prog[id]=Math.max(0,prog[id]-20); flash(id); const d=$("dot"+id); if(d){ d.style.transition="left .25s, transform .12s"; } sendToId(id,{type:"prompt",text:"動いた！大きく後退！",enable:true}); } // とまれの後退は強め（前進の約4倍）
     if(prog[id]>=GOAL){ finished.push(id); prog[id]=GOAL; lanes[id].style.boxShadow="0 0 0 4px var(--gold)"; sendToId(id,{type:"prompt",text:"ゴール！🎉",enable:false}); }
     place(id);
   };
@@ -527,7 +608,10 @@ async function gameDaruma(){
   phaseEl.textContent="しゅうりょう！"; endInputs();
   // ゴール到達順 → 残りは進捗降順
   const rest=players.map(p=>p.id).filter(id=>!finished.includes(id)).sort((a,b)=>prog[b]-prog[a]);
-  return [...finished, ...rest];
+  const ranking=[...finished, ...rest];
+  const rows=ranking.map(id=>({id, val: finished.includes(id)?("ゴール！"+(finished.indexOf(id)+1)+"着 🏁"):("途中 "+Math.round(prog[id])+"%"), dead:!finished.includes(id)&&prog[id]<1}));
+  resultDetail='<div class="detail-title">ゴール状況</div>'+detailRows(rows);
+  return ranking;
 }
 
 // 少数決（道連れ）：2択で少数派が生き残り、多数派は道連れで脱落。脱落の逆順＝順位。
@@ -535,7 +619,7 @@ async function gameMinority(){
   renderArena();
   const OPTIONS=["🔴 あか","🔵 あお"];
   let alive=players.map(p=>p.id); const elim=[];
-  let roundNo=0;
+  let roundNo=0; const roundLog=[]; // {r, c0, c1, winSide|null}
   while(alive.length>2 && roundNo<6){
     roundNo++;
     const votes={}; alive.forEach(id=>votes[id]=0);
@@ -549,15 +633,22 @@ async function gameMinority(){
     cd.textContent="オープン！"; endInputs();
     const c=[0,0]; alive.forEach(id=>c[votes[id]]++);
     await sleep(500);
-    if(c[0]===c[1]){ cd.textContent="同数！全員セーフ"; cd.style.color="var(--cool)"; await sleep(1100); continue; }
+    if(c[0]===c[1]){ roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:null}); cd.textContent="同数！全員セーフ（🔴"+c[0]+" / 🔵"+c[1]+"）"; cd.style.color="var(--cool)"; await sleep(1300); continue; }
     const minoritySide=c[0]<c[1]?0:1;
+    roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:minoritySide});
     const survivors=alive.filter(id=>votes[id]===minoritySide);
     const losers=alive.filter(id=>votes[id]!==minoritySide);
     losers.forEach(id=>{ flash(id,true); elim.push(id); if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"多数派…道連れ脱落",enable:false}); });
-    cd.textContent=OPTIONS[minoritySide].slice(0,2)+" 少数派の勝ち！"; cd.style.color="var(--lime)";
-    alive=survivors; await sleep(1300);
+    cd.textContent="🔴"+c[0]+" / 🔵"+c[1]+" → "+OPTIONS[minoritySide].slice(0,2)+"の少数派が勝ち！"; cd.style.color="var(--lime)";
+    alive=survivors; await sleep(1600);
   }
   endInputs();
+  // 結果表示：各ラウンドの内訳（何人ずつ）＋最終生存
+  let dt='<div class="detail-title">各ラウンドの内訳（少ない方が生存）</div><div class="detail-list">';
+  roundLog.forEach(L=>{ const res=L.winSide===null?"同数で全員セーフ":(OPTIONS[L.winSide].slice(0,2)+"少数派が勝ち"); dt+='<div class="drow"><span class="dnm">第'+L.r+'回</span><span class="dval">🔴'+L.c0+' / 🔵'+L.c1+' → '+res+'</span></div>'; });
+  dt+='</div>';
+  dt+='<div class="detail-title">最終生存</div>'+detailRows(alive.map(id=>({id, val:"生き残り 👑"})));
+  resultDetail=dt;
   // 最後まで残った少数派が上位。脱落は遅い順に上位（生存＞遅く脱落＞早く脱落）。
   return [...alive, ...elim.reverse()];
 }
@@ -603,6 +694,7 @@ async function showResult(game, ranking){
     top.forEach((id,i)=>{ const p=players.find(x=>x.id===id); if(p) html+='<div class="rwin" style="color:'+p.color+'">'+medals[i]+' '+p.name+' <small>+'+(3-i)+'</small></div>'; });
     html+='</div>';
   }else{ html+='<div class="winner">勝者なし…</div>'; }
+  if(resultDetail) html+='<div class="result-detail">'+resultDetail+'</div>';
   html+='<div class="rate-wrap"><div class="sub">面白さは？（デバッグ評価）</div><div class="rate-row" id="rateRow"></div></div></div>';
   $("stage").innerHTML=html;
   top.forEach(id=>{ if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"入賞！🎉",enable:false}); });
@@ -675,8 +767,13 @@ function handleCtrlMessage(msg){
 function setStatus(t){ $("phoneStatus").textContent=t; }
 function setEnabled(on){
   const tap=$("tap"); tap.disabled=!on;
-  if(on && myCurrentUi==="cycle"){ tap.onclick=()=>{ cycleHand=(cycleHand+1)%myCycleOptions.length; setStatus("今："+myCycleOptions[cycleHand]); }; }
-  else tap.onclick=null;
+  if(myCurrentUi==="cycle"){
+    // cycle系（3すくみ・少数決）：ボタンに「今の選択」を大きく表示
+    tap.textContent=myCycleOptions[cycleHand];
+    tap.onclick = on ? (()=>{ cycleHand=(cycleHand+1)%myCycleOptions.length; tap.textContent=myCycleOptions[cycleHand]; setStatus("今の選択：\n"+myCycleOptions[cycleHand]); }) : null;
+  }else{
+    tap.textContent="OSU!"; tap.onclick=null;
+  }
 }
 
 /* ===== 起動 ===== */
