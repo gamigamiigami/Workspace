@@ -98,11 +98,11 @@
   .drow .dnm{flex:1; text-align:left;}
   .drow .dval{color:var(--lime); font-weight:900; text-align:right; white-space:nowrap;}
   /* 結果バー（ジャストのド真ん中バー再現） */
-  .result-bar-wrap{margin:22px auto 4px; max-width:min(540px,92%);}
-  .result-bar{position:relative; height:30px; border-radius:99px; background:rgba(255,255,255,.1); margin-top:20px;}
-  .result-bar .rb-center{position:absolute; left:50%; top:-8px; bottom:-8px; width:3px; background:#fff; transform:translateX(-50%);}
-  .result-bar .rb-mark{position:absolute; top:50%; width:15px; height:15px; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 0 0 2px rgba(0,0,0,.45);}
-  .result-bar .rb-label{position:absolute; top:-24px; font-size:11px; font-weight:900; transform:translateX(-50%); white-space:nowrap;}
+  .result-bar-wrap{margin:26px auto 4px; max-width:min(560px,94%);}
+  .result-bar{position:relative; height:36px; border-radius:99px; background:rgba(255,255,255,.1); margin:26px 0 30px;}
+  .result-bar .rb-center{position:absolute; left:50%; top:-10px; bottom:-10px; width:3px; background:#fff; transform:translateX(-50%);}
+  .result-bar .rb-mark{position:absolute; width:24px; height:24px; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);}
+  .result-bar .rb-scale{position:absolute; bottom:-22px; transform:translateX(-50%); font-size:11px; font-weight:800; opacity:.65; white-space:nowrap;}
   /* 連打のライブカウントバッジ */
   .mash-badge{position:absolute; right:-3px; top:-3px; min-width:20px; height:20px; padding:0 4px; border-radius:99px; background:#fff; color:#1a1a1a; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 0 rgba(0,0,0,.3); z-index:2;}
   /* 演出（紙吹雪・画面フラッシュ） */
@@ -139,6 +139,9 @@
   .tapbtn{width:min(74vw,300px); aspect-ratio:1; border-radius:50%; border:none; cursor:pointer; background:radial-gradient(circle at 35% 30%, #ff6b8f, var(--hot)); color:#fff; font-size:clamp(28px,9vw,44px); font-weight:900; letter-spacing:.05em; box-shadow:0 12px 0 #b81f47, 0 16px 34px rgba(255,59,107,.4); transition:transform .05s, box-shadow .05s;}
   .tapbtn:active{transform:translateY(10px); box-shadow:0 2px 0 #b81f47;}
   .tapbtn:disabled{opacity:.3; cursor:default; box-shadow:0 4px 0 #555;}
+  .minusbtn{background:rgba(255,255,255,.12); color:var(--paper); border:2px solid var(--cool); font-weight:900; font-size:16px; padding:12px 26px; border-radius:99px; cursor:pointer; box-shadow:0 4px 0 rgba(59,201,255,.35);}
+  .minusbtn:active{transform:translateY(3px); box-shadow:0 1px 0 rgba(59,201,255,.35);}
+  .minusbtn:disabled{opacity:.3; cursor:default;}
   .phone-status{font-size:18px; font-weight:800; min-height:26px; text-align:center; padding:0 10px; white-space:pre-line;}
   .conn-banner{font-size:14px; font-weight:700; opacity:.7; min-height:20px; text-align:center;}
 </style>
@@ -171,6 +174,7 @@
   <div class="hidden" id="playScreen" style="display:flex; flex-direction:column; align-items:center; gap:22px; flex:1; justify-content:center; width:100%;">
     <div class="phone-status" id="phoneStatus">スタート待ち…</div>
     <button class="tapbtn" id="tap" disabled>OSU!</button>
+    <button class="minusbtn hidden" id="counterMinus" disabled>−1 もどす</button>
   </div>
   <div class="conn-banner" id="connBanner2"></div>
 </div>
@@ -231,6 +235,8 @@ function sfx(name){
   switch(name){
     case "press":   tone(660,0.05,"square",0.10); break;
     case "count":   tone(440,0.12,"sine",0.18); break;
+    case "tick":    tone(1500,0.045,"square",0.13); break;
+    case "tickHi":  tone(1900,0.05,"square",0.15); break;
     case "go":      tone(880,0.16,"square",0.20); tone(1320,0.16,"square",0.10,0.02); break;
     case "good":    tone(740,0.10,"triangle",0.18); tone(988,0.12,"triangle",0.14,0.08); break;
     case "lose":    { const n=performance.now(); if(n-_lastLose<110) return; _lastLose=n; tone(220,0.26,"sawtooth",0.16); tone(160,0.30,"sawtooth",0.13,0.05); } break;
@@ -261,12 +267,13 @@ let running=false;
 let hostPlayerId=null;            // 親機（ホストPC）で遊ぶプレイヤーのID（デバッグ用・SPACE/クリックで押す）
 let resultDetail="";              // 各ゲームが設定する「だれが何をしたか」の結果HTML（showResultが表示）
 let pressHandler=null;            // 各ゲームが設定。コントローラー/CPU/親機の press を受ける
+let minusHandler=null;            // カウンター系ゲームが設定。コントローラーの「−1」を受ける
 let cpuTimers=[], cpuIntervals=[];
 let ratings=loadData("oshiking-ratings", {}); // {gameKey: stars(1-3)}
 
 function ct(fn,delay){ const t=setTimeout(fn,delay); cpuTimers.push(t); return t; }
 function clearCpu(){ cpuTimers.forEach(clearTimeout); cpuTimers=[]; cpuIntervals.forEach(clearInterval); cpuIntervals=[]; }
-function endInputs(){ pressHandler=null; clearCpu(); broadcast({type:"enable", on:false}); }
+function endInputs(){ pressHandler=null; minusHandler=null; clearCpu(); broadcast({type:"enable", on:false}); }
 
 function host_init(){
   $("hostView").classList.remove("hidden");
@@ -303,6 +310,10 @@ function handleHostMessage(conn,msg){
   if(msg.type==="press"){
     const p=players.find(x=>x.conn===conn);
     if(p && pressHandler) pressHandler(p.id, msg.t);
+  }
+  if(msg.type==="minus"){
+    const p=players.find(x=>x.conn===conn);
+    if(p && minusHandler) minusHandler(p.id);
   }
 }
 function sendTo(p,msg){ if(p.conn && p.conn.open){ try{p.conn.send(msg);}catch(e){} } }
@@ -458,6 +469,15 @@ function detailRows(rows){ // rows: [{id, val, dead}]
   rows.forEach(r=>{ h+='<div class="drow'+(r.dead?' dead':'')+'"><span class="dsw" style="background:'+pcolor(r.id)+'"></span><span class="dnm">'+pname(r.id)+pmark(r.id)+'</span><span class="dval">'+r.val+'</span></div>'; });
   return h+'</div>';
 }
+// 投票系（少数決・偶奇投票）：誰がどれに投票したかを選択肢ごとにグルーピングして表示
+function voteTable(entries, labels){ // entries:[{id,choice}], labels:[選択肢の表示名,...]
+  let h='<div class="detail-list">';
+  labels.forEach((lab,idx)=>{
+    const ids=entries.filter(e=>e.choice===idx).map(e=>e.id);
+    h+='<div class="drow"><span class="dnm">'+lab+'</span><span class="dval">'+(ids.length? ids.map(id=>pname(id)).join('、') : '（0人）')+'</span></div>';
+  });
+  return h+'</div>';
+}
 
 // ===== 各ミニゲーム（戻り値＝順位つきID配列 best→worst。CPUも press で動く） =====
 
@@ -546,12 +566,21 @@ async function gameJust(){
   endInputs();
   players.forEach(p=>{ if(errs[p.id]===undefined) errs[p.id]=999; });
   const ranking=Object.entries(errs).sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
-  // 実際のバー＋各自が押した位置を再現表示
-  let barHtml='<div class="result-bar-wrap"><div class="detail-title">どこで押した？（ド真ん中＝センター）</div><div class="result-bar"><div class="rb-center"></div>';
-  ranking.forEach(id=>{ if(stops[id]===undefined) return;
-    barHtml+='<div class="rb-mark" style="left:'+stops[id]+'%; background:'+pcolor(id)+';"></div>'+
-         '<div class="rb-label" style="left:'+stops[id]+'%; color:'+pcolor(id)+';">'+pname(id)+'</div>'; });
-  barHtml+='</div></div>';
+  // 実際のバー＋各自が押した位置を再現表示（①②③…の着順バッジ、名前は下の一覧で確認）
+  const posEntries=ranking.map((id,rank)=>({id, rank, pos:stops[id]})).filter(e=>e.pos!==undefined).sort((a,b)=>a.pos-b.pos);
+  let lastPos=null, laneToggle=1;
+  const RANK_ICON=["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+  let marksHtml='';
+  posEntries.forEach(e=>{
+    let dy=0;
+    if(lastPos!==null && Math.abs(e.pos-lastPos)<5){ dy=laneToggle*17; laneToggle=-laneToggle; } else { laneToggle=1; }
+    lastPos=e.pos;
+    marksHtml+='<div class="rb-mark" style="left:'+e.pos+'%; top:calc(50% + '+dy+'px); background:'+pcolor(e.id)+';">'+(RANK_ICON[e.rank]||(e.rank+1))+'</div>';
+  });
+  let barHtml='<div class="result-bar-wrap"><div class="detail-title">どこで押した？（白い線＝ド真ん中）</div>'+
+    '<div class="result-bar"><div class="rb-center"></div>'+
+    '<div class="rb-scale" style="left:0%">0%</div><div class="rb-scale" style="left:50%">中央</div><div class="rb-scale" style="left:100%">100%</div>'+
+    marksHtml+'</div></div>';
   const rows=ranking.map(id=>({id, val: stops[id]===undefined?"押さず✗":("ズレ "+Math.round(errs[id])+"％"), dead: stops[id]===undefined}));
   resultDetail=barHtml+detailRows(rows);
   return ranking;
@@ -743,9 +772,10 @@ async function gameMinority(){
     cd.textContent="オープン！"; endInputs();
     const c=[0,0]; alive.forEach(id=>c[votes[id]]++);
     await sleep(500);
-    if(c[0]===c[1]){ roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:null}); cd.textContent="同数！全員セーフ（🔴"+c[0]+" / 🔵"+c[1]+"）"; cd.style.color="var(--cool)"; await sleep(1300); continue; }
+    const voteSnapshot=alive.map(id=>({id, choice:votes[id]}));
+    if(c[0]===c[1]){ roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:null, votes:voteSnapshot}); cd.textContent="同数！全員セーフ（🔴"+c[0]+" / 🔵"+c[1]+"）"; cd.style.color="var(--cool)"; await sleep(1300); continue; }
     const minoritySide=c[0]<c[1]?0:1;
-    roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:minoritySide});
+    roundLog.push({r:roundNo, c0:c[0], c1:c[1], winSide:minoritySide, votes:voteSnapshot});
     const survivors=alive.filter(id=>votes[id]===minoritySide);
     const losers=alive.filter(id=>votes[id]!==minoritySide);
     losers.forEach(id=>{ flash(id,true); elim.push(id); if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"多数派…道連れ脱落",enable:false}); });
@@ -753,10 +783,12 @@ async function gameMinority(){
     alive=survivors; await sleep(1600);
   }
   endInputs();
-  // 結果表示：各ラウンドの内訳（何人ずつ）＋最終生存
-  let dt='<div class="detail-title">各ラウンドの内訳（少ない方が生存）</div><div class="detail-list">';
-  roundLog.forEach(L=>{ const res=L.winSide===null?"同数で全員セーフ":(OPTIONS[L.winSide].slice(0,2)+"少数派が勝ち"); dt+='<div class="drow"><span class="dnm">第'+L.r+'回</span><span class="dval">🔴'+L.c0+' / 🔵'+L.c1+' → '+res+'</span></div>'; });
-  dt+='</div>';
+  // 結果表示：各ラウンドの内訳（何人ずつ）＋誰が何色に投票したか＋最終生存
+  let dt='';
+  roundLog.forEach(L=>{
+    const res=L.winSide===null?"同数で全員セーフ":(OPTIONS[L.winSide].slice(0,2)+"少数派が勝ち");
+    dt+='<div class="detail-title">第'+L.r+'回：🔴'+L.c0+' / 🔵'+L.c1+' → '+res+'</div>'+voteTable(L.votes, OPTIONS);
+  });
   dt+='<div class="detail-title">最終生存</div>'+detailRows(alive.map(id=>({id, val:"生き残り 👑"})));
   resultDetail=dt;
   // 最後まで残った少数派が上位。脱落は遅い順に上位（生存＞遅く脱落＞早く脱落）。
@@ -768,11 +800,11 @@ async function gameMinority(){
 async function gameMaruta(){
   $("stage").innerHTML='<div class="arena"></div>';
   const arena=$("stage").querySelector(".arena");
-  const n=players.length, margin=10, span=100-margin*2;
+  const n=players.length, leftM=10, rightM=20, span=100-leftM-rightM; // 右端は少し内側に寄せて丸太が見えやすい位置に
   const xs={}, toks={};
   const size=Math.max(30,Math.min(52, 380/Math.sqrt(n+1)));
   players.forEach((p,i)=>{
-    const x = n<=1 ? 50 : margin + span*(i/(n-1));
+    const x = n<=1 ? 50 : leftM + span*(i/(n-1));
     xs[p.id]=x;
     const tok=document.createElement("div"); tok.className="dot"; tok.id="dot"+p.id;
     tok.style.width=size+"px"; tok.style.height=size+"px"; tok.style.fontSize=Math.max(11,size*0.28)+"px";
@@ -787,40 +819,52 @@ async function gameMaruta(){
   log.textContent="🪵"; log.style.cssText="position:absolute;bottom:15.5%;font-size:clamp(30px,7vw,60px);";
   arena.appendChild(log);
   const cd=addCountdown("よういドン！"); cd.style.top="8%"; cd.style.fontSize="clamp(18px,3vw,28px)"; cd.style.color="var(--gold)";
-  broadcast({type:"prompt", text:"丸太が来たらジャンプ！\n（押すとジャンプ）", ui:"tap", enable:true});
+  broadcast({type:"prompt", text:"丸太が来たらジャンプ！\n（何回押してもOK）", ui:"tap", enable:true});
   await sleep(1000);
 
   const alive=new Set(players.map(p=>p.id)); const elim=[];
   const dodgeCount={}; players.forEach(p=>dodgeCount[p.id]=0);
-  const jumping={};
-  const HITBOX=6, START=106, END=-8;
+  const landTimers={};
+  const START=106, END=-8;
   const passes=6;
   for(let r=1; r<=passes && alive.size>0; r++){
-    const dur=Math.max(1500, 3200-r*260);
-    const hitThisPass=new Set();
+    const dur=Math.max(1600, 3200-r*230);
+    const FUZZ=Math.max(230, dur*0.19); // ファジー判定：この幅の中でジャンプしていればセーフ
+    const arrival={}; alive.forEach(id=>{ arrival[id]=((START-xs[id])/(START-END))*dur; });
+    const jumpTimes={}; const hitThisPass=new Set(), safeThisPass=new Set();
     let logX=START;
     log.style.left=logX+"%";
     const t0=performance.now();
     pressHandler=(id)=>{
-      if(!alive.has(id) || jumping[id]) return;
-      jumping[id]=true; sfx("press");
-      const el=toks[id]; if(el) el.style.bottom="38%";
-      setTimeout(()=>{ jumping[id]=false; const el2=toks[id]; if(el2 && alive.has(id)) el2.style.bottom="20%"; }, 300);
+      if(!alive.has(id)) return;
+      const t=performance.now()-t0;
+      (jumpTimes[id]=jumpTimes[id]||[]).push(t);
+      sfx("press");
+      const el=toks[id]; if(el){ el.style.bottom="38%"; clearTimeout(landTimers[id]);
+        landTimers[id]=setTimeout(()=>{ if(alive.has(id) && el) el.style.bottom="20%"; }, 260); }
     };
     players.forEach(p=>{ if(p.cpu && alive.has(p.id)){
-      const arrival=((START-xs[p.id])/(START-END))*dur;
-      const err=(Math.random()*2-1)*220;
-      ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.max(0,arrival+err));
+      const err=(Math.random()*2-1)*FUZZ*0.7;
+      ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.max(0,arrival[p.id]+err));
     }});
     await new Promise(res=>{ (function loop(){
       const e=performance.now()-t0;
       logX = START - (START-END)*(e/dur);
       log.style.left=logX+"%";
-      alive.forEach(id=>{ if(hitThisPass.has(id)) return;
-        if(Math.abs(logX-xs[id])<HITBOX && !jumping[id]){ hitThisPass.add(id); flash(id,true); }
+      alive.forEach(id=>{ if(hitThisPass.has(id)||safeThisPass.has(id)) return;
+        const arr=arrival[id];
+        if(e>=arr+FUZZ){
+          const ok=(jumpTimes[id]||[]).some(t=>Math.abs(t-arr)<=FUZZ);
+          if(ok) safeThisPass.add(id); else { hitThisPass.add(id); flash(id,true); }
+        }
       });
       if(e>=dur) res(); else requestAnimationFrame(loop);
     })(); });
+    // 念のため：時間切れで未判定の生存者は最後にまとめて判定
+    alive.forEach(id=>{ if(hitThisPass.has(id)||safeThisPass.has(id)) return;
+      const arr=arrival[id]; const ok=(jumpTimes[id]||[]).some(t=>Math.abs(t-arr)<=FUZZ);
+      if(!ok){ hitThisPass.add(id); flash(id,true); }
+    });
     pressHandler=null; clearCpu();
     alive.forEach(id=>{ if(!hitThisPass.has(id)) dodgeCount[id]++; });
     hitThisPass.forEach(id=>{ alive.delete(id); elim.push(id); sendToId(id,{type:"prompt",text:"丸太に当たった！",enable:false}); });
@@ -841,14 +885,17 @@ async function gameSan3(){
   const cd=addCountdown("用意…");
   broadcast({type:"prompt", text:"数字でリズム押し！\n3の倍数・3の付く数は押すな", ui:"tap", enable:true});
   const alive=new Set(players.map(p=>p.id)); const elim=[]; let lastNum=0, beat=475; // テンポ2倍速
-  await sleep(600);
+  const beatPulse=()=>{ cd.animate([{transform:"translate(-50%,-50%) scale(1)"},{transform:"translate(-50%,-50%) scale(1.18)"},{transform:"translate(-50%,-50%) scale(1)"}],{duration:Math.min(240,beat*0.55)}); };
+  // メトロノーム的な予備カウント（本編前にテンポを体で覚えてもらう）
+  cd.textContent="♪"; cd.style.color="var(--cool)";
+  for(let i=0;i<3;i++){ sfx("tick"); beatPulse(); await sleep(beat); }
   for(let n=1; n<=30 && alive.size>1; n++){
     lastNum=n;
     const ng=(n%3===0)||String(n).includes("3");
     const tapped=new Set();
     pressHandler=(id)=>{ if(alive.has(id)){ tapped.add(id); flash(id); } };
     cd.textContent=n+(ng?" 🚫":""); cd.style.color= ng ? "var(--hot)" : "var(--lime)";
-    if(!ng) sfx("count");
+    sfx(ng?"tickHi":"tick"); beatPulse(); // 毎拍必ず鳴らす＝メトロノーム。危険な数字は高い音で区別。
     const acc=Math.max(0.7, 0.97 - n*0.008);
     players.forEach(p=>{ if(p.cpu && alive.has(p.id)){
       if(ng){ if(Math.random()>acc) ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.random()*beat*0.8); }
@@ -878,25 +925,19 @@ async function gameGunman(){
   const targets=new Set(shuffle(ids).slice(0, nT));
   broadcast({type:"prompt", text:"まもなく標的が発表される…", ui:"wait", enable:false});
   await sleep(1100);
-  // 3・2・1 → 標的の名前を一斉発表（直前まで誰が標的かわからない演出）
-  for(let i=3;i>=1;i--){ cd.textContent=i; cd.style.fontSize="clamp(60px,16vw,150px)"; sfx("count"); await sleep(650); }
+  // 3・2・1・標的＆どん！ を一気に：カウントダウンの勢いのまま標的発表＝即スタート
+  for(let i=3;i>=1;i--){ cd.textContent=i; cd.style.fontSize="clamp(60px,16vw,150px)"; sfx("count"); await sleep(600); }
   const targetNames=[...targets].map(id=>pname(id)).join("・");
-  cd.style.fontSize="clamp(22px,4.2vw,40px)"; cd.style.color="var(--hot)"; cd.textContent="🎯 "+targetNames;
-  sfx("lose"); screenFlash();
+  cd.style.fontSize="clamp(22px,4.2vw,40px)"; cd.style.color="var(--hot)";
+  cd.innerHTML="🎯 "+targetNames+"！<br><span style='color:var(--lime)'>どん！🔫</span>";
+  sfx("lose"); sfx("go"); screenFlash();
+  const times={}; const fouls=new Set(); const goAt=performance.now();
   players.forEach(p=>{ const tgt=targets.has(p.id); const d=$("dot"+p.id); if(d && tgt) d.textContent="🎯";
-    sendToId(p.id,{type:"prompt", text: tgt?"🎯あなたは標的！\n撃つな（押すな）":"あなたは撃ち手！\n早押しで撃て", ui:"tap", enable:false}); });
-  await sleep(1500);
-  const times={}; const fouls=new Set(); let go=false, goAt=0;
-  cd.textContent="構え…"; cd.style.fontSize="clamp(60px,16vw,150px)"; cd.style.color="#fff";
-  broadcast({type:"prompt", text:"まだ…（標的は押すな）", enable:true});
+    sendToId(p.id,{type:"prompt", text: tgt?"🎯あなたは標的！\n撃つな（押すな）":"どん！撃て！🔫", ui:"tap", enable:true}); });
   pressHandler=(id)=>{
     if(targets.has(id)){ if(!fouls.has(id)){ fouls.add(id); flash(id,true); sendToId(id,{type:"prompt",text:"標的なのに撃った…負け",enable:false}); } return; }
-    if(!go){ if(times[id]===undefined){ times[id]="foul"; flash(id,true); sendToId(id,{type:"prompt",text:"早すぎ！フライング",enable:false}); } return; }
     if(times[id]===undefined){ times[id]=performance.now()-goAt; flash(id); }
   };
-  await sleep(900+Math.random()*1700);
-  go=true; goAt=performance.now(); cd.textContent="撃て！🔫"; cd.style.color="var(--lime)"; sfx("go");
-  broadcast({type:"prompt", text:"撃て！（標的以外）", enable:true});
   players.forEach(p=>{ if(p.cpu){ if(targets.has(p.id)){ if(Math.random()<0.15) ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.random()*1500); }
     else ct(()=>{ if(pressHandler) pressHandler(p.id); }, 150+Math.random()*500); } });
   await sleep(1100);
@@ -909,7 +950,7 @@ async function gameGunman(){
   const ranking=[...valid, ...shooterFail, ...targetSafe, ...targetFoul];
   const rows=[];
   valid.forEach(id=>rows.push({id, val:Math.round(times[id])+"ms ⚡撃った"}));
-  shooterFail.forEach(id=>rows.push({id, val: times[id]==="foul"?"フライング✗":"撃てず", dead:true}));
+  shooterFail.forEach(id=>rows.push({id, val:"撃てず", dead:true}));
   targetSafe.forEach(id=>rows.push({id, val:"🎯標的（撃たずセーフ）"}));
   targetFoul.forEach(id=>rows.push({id, val:"🎯標的なのに撃った✗", dead:true}));
   resultDetail='<div class="detail-title">早撃ち結果（🎯標的は撃ったら負け）</div>'+detailRows(rows);
@@ -962,7 +1003,8 @@ async function gameEvenOdd(){
     cd.textContent="オープン！"; sfx("go"); endInputs();
     const c=[0,0,0]; alive.forEach(id=>c[votes[id]]++);
     const okGroup=[0,1,2].filter(g=>c[g]>0 && (c[g]%2)===parity);
-    log.push({r:roundNo, c:[...c], parity});
+    const voteSnapshot=alive.map(id=>({id, choice:votes[id]}));
+    log.push({r:roundNo, c:[...c], parity, votes:voteSnapshot});
     await sleep(500);
     if(okGroup.length===0){ cd.textContent="該当グループなし！全員セーフ"; cd.style.color="var(--cool)"; await sleep(1300); continue; }
     const survivors=alive.filter(id=>okGroup.includes(votes[id]));
@@ -972,9 +1014,11 @@ async function gameEvenOdd(){
     alive=survivors; await sleep(1500);
   }
   endInputs();
-  let dt='<div class="detail-title">各ラウンドの投票（A/B/C人数 → 指定パリティが生存）</div><div class="detail-list">';
-  log.forEach(L=>{ dt+='<div class="drow"><span class="dnm">第'+L.r+'回 '+(L.parity===0?"偶数":"奇数")+'</span><span class="dval">A'+L.c[0]+' / B'+L.c[1]+' / C'+L.c[2]+'</span></div>'; });
-  dt+='</div><div class="detail-title">最終生存</div>'+detailRows(alive.map(id=>({id, val:"生き残り👑"})));
+  let dt='';
+  log.forEach(L=>{
+    dt+='<div class="detail-title">第'+L.r+'回（'+(L.parity===0?"偶数":"奇数")+'が生存）：A'+L.c[0]+' / B'+L.c[1]+' / C'+L.c[2]+'</div>'+voteTable(L.votes, OPTS);
+  });
+  dt+='<div class="detail-title">最終生存</div>'+detailRows(alive.map(id=>({id, val:"生き残り👑"})));
   resultDetail=dt;
   return [...alive, ...elim.reverse()];
 }
@@ -1087,9 +1131,10 @@ async function gameFruit(){
   await sleep(1000);
   field.remove();
   cd.textContent=targetFruit+" は何個だった？"; cd.style.color="var(--lime)"; sfx("go");
-  broadcast({type:"prompt", text:targetFruit+" は何個だった？\n押すたび+1でかぞえて答える", ui:"counter", enable:true});
+  broadcast({type:"prompt", text:targetFruit+" は何個だった？\n押すたび+1、押しすぎたら−1で戻せる", ui:"counter", enable:true});
   const counts={}; players.forEach(p=>counts[p.id]=0);
   pressHandler=(id)=>{ counts[id]=(counts[id]||0)+1; flash(id); };
+  minusHandler=(id)=>{ counts[id]=Math.max(0,(counts[id]||0)-1); flash(id,true); };
   players.forEach(p=>{ if(p.cpu){ const guess=Math.max(0, targetCount+Math.floor(Math.random()*5-2)); for(let k=0;k<guess;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 300+Math.random()*4200); } });
   const cd2=addCountdown("6"); cd2.style.top="66%";
   for(let i=6;i>=1;i--){ cd2.textContent=i; sfx("count"); await sleep(1000); }
@@ -1220,16 +1265,24 @@ function handleCtrlMessage(msg){
 function setStatus(t){ $("phoneStatus").textContent=t; }
 function setEnabled(on){
   const tap=$("tap"); tap.disabled=!on;
+  const minus=$("counterMinus");
   if(myCurrentUi==="cycle"){
     // cycle系（3すくみ・少数決・偶奇投票）：ボタンに「今の選択」を大きく表示
     tap.textContent=myCycleOptions[cycleHand];
     tap.onclick = on ? (()=>{ cycleHand=(cycleHand+1)%myCycleOptions.length; tap.textContent=myCycleOptions[cycleHand]; setStatus("今の選択：\n"+myCycleOptions[cycleHand]); }) : null;
+    if(minus){ minus.classList.add("hidden"); minus.onclick=null; }
   }else if(myCurrentUi==="counter"){
-    // counter系（果物カウント）：押すたび+1でボタンに現在の数を表示
+    // counter系（果物カウント）：押すたび+1、−1ボタンで押しすぎを戻せる
     tap.textContent=String(myCounter);
     tap.onclick = on ? (()=>{ myCounter++; tap.textContent=String(myCounter); setStatus("今のかず：\n"+myCounter); }) : null;
+    if(minus){
+      minus.classList.remove("hidden"); minus.disabled=!on;
+      minus.onclick = on ? (()=>{ if(myCounter<=0) return; myCounter--; tap.textContent=String(myCounter); setStatus("今のかず：\n"+myCounter);
+        if(myConn&&myConn.open) myConn.send({type:"minus"}); }) : null;
+    }
   }else{
     tap.textContent="OSU!"; tap.onclick=null;
+    if(minus){ minus.classList.add("hidden"); minus.onclick=null; }
   }
 }
 
