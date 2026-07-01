@@ -4,6 +4,8 @@
 
 公開URL（ホスト画面）：https://gamigamiigami.github.io/Workspace/projects/oshiking/
 
+> 🤖 **開発を引き継ぐ場合は先に [`HANDOFF.md`](./HANDOFF.md) を読むこと。** アーキテクチャの勘所・既知のハマりどころ・未実装項目をまとめてある。このREADMEは遊び方・ルール説明が中心。
+
 ## 遊び方（当日の流れ）
 
 1. **ホスト**：上のURLをPCで開いてスクリーン投影 → 画面にQRコードが出る
