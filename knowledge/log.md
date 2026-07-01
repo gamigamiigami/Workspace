@@ -4,6 +4,52 @@
 
 ---
 
+### [2026-07-03] オシキング — HANDOFF.md 公開確認完了（run #19）
+
+**作業内容（ブランチ: claude/oshiking-party-game-cfia0w → claude/workspace-knowledge-base-setup-ccVKP）：**
+
+- **HANDOFF.md の GitHub Pages 公開確認完了**
+  - run #19（ID: `28555466770`）にて正常に公開
+  - commit: `95eb0fbf`「公開: オシキング 引き継ぎ書(HANDOFF.md)を追加」
+  - 公開URL：https://gamigamiigami.github.io/Workspace/projects/oshiking/HANDOFF.md
+  - README.md からの導線も正常に機能確認
+
+**成果物：**
+- HANDOFF.md が GitHub Pages で公開・アクセス可能
+- README.md からのリンクが正常に機能
+
+**次のアクション：**
+- **iPad実機テスト**（見え方・操作感・音量バランス確認）
+- 次フェーズ（協力系・限界ジャンケン・座標取り・鬼役ゲーム）は計画・分解済み
+
+---
+
+### [2026-07-02] オシキング — HANDOFF.md 引き継ぎ書作成
+
+**作業内容（ブランチ: claude/oshiking-party-game-cfia0w）：**
+
+- **HANDOFF.md の作成** — プロジェクト再開時の情報源として一本化
+  - 収録16ゲームの一覧表（一言ルール付き）
+  - アーキテクチャの勘所：`pressHandler` への入力集約設計、コントローラーの3種UIモード（tap/cycle/counter）、新ゲーム追加の「3点セット」パターン
+  - 本セッションで直した主なバグを再発防止のため記録：3すくみの勝敗判定が逆だった件、多ラウンドゲームの表示が重なるバグ、カウンターの−1がホストと同期していないと危険な件、丸太ジャンプの判定方式の教訓
+  - 未実装・保留項目の一覧（写真ジャンプ・座標取り・限界ジャンケン・鬼役ゲーム等）となぜ保留か
+  - 検証方法：`node --check`／Playwrightヘッドレステストの組み方
+  - 次のアクション：iPad実機テストで重点確認してほしい項目
+
+- **README.md の冒頭に HANDOFF.md への導線追加**
+- **開発ブランチ・公開ブランチ両方にコミット・プッシュ済み**
+
+**成果物：**
+- `projects/oshiking/HANDOFF.md`
+- README.md の冒頭に導線追加済み
+
+**次のアクション：**
+- **デプロイ確認**：HANDOFF.md が GitHub Pages に正しく公開されたか確認が必要
+- **iPad実機テスト**（見え方・操作感・音量バランス確認）
+- 次フェーズ（協力系・限界ジャンケン・座標取り・鬼役ゲーム）は計画・分解済み
+
+---
+
 ### [2026-01-21] オシキング — 6件フィードバック対応版・本番公開確認完了（run #18）
 
 **作業内容（ブランチ: claude/oshiking-party-game-cfia0w）：**
