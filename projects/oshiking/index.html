@@ -97,6 +97,14 @@
   .drow .dsw{width:14px; height:14px; border-radius:50%; flex:none;}
   .drow .dnm{flex:1; text-align:left;}
   .drow .dval{color:var(--lime); font-weight:900; text-align:right; white-space:nowrap;}
+  /* 結果バー（ジャストのド真ん中バー再現） */
+  .result-bar-wrap{margin:22px auto 4px; max-width:min(540px,92%);}
+  .result-bar{position:relative; height:30px; border-radius:99px; background:rgba(255,255,255,.1); margin-top:20px;}
+  .result-bar .rb-center{position:absolute; left:50%; top:-8px; bottom:-8px; width:3px; background:#fff; transform:translateX(-50%);}
+  .result-bar .rb-mark{position:absolute; top:50%; width:15px; height:15px; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 0 0 2px rgba(0,0,0,.45);}
+  .result-bar .rb-label{position:absolute; top:-24px; font-size:11px; font-weight:900; transform:translateX(-50%); white-space:nowrap;}
+  /* 連打のライブカウントバッジ */
+  .mash-badge{position:absolute; right:-3px; top:-3px; min-width:20px; height:20px; padding:0 4px; border-radius:99px; background:#fff; color:#1a1a1a; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 0 rgba(0,0,0,.3); z-index:2;}
   /* 演出（紙吹雪・画面フラッシュ） */
   .fx-confetti{position:fixed; inset:0; pointer-events:none; z-index:90; overflow:hidden;}
   .fx-confetti span{position:absolute; top:-8%; will-change:transform; animation:confFall 2s linear forwards;}
@@ -190,7 +198,7 @@ const GAMES=[
   {key:"evenodd", title:"偶奇投票",   rule:"A/B/Cに投票。人数が指定の偶/奇のグループが生存", ui:"cycle"},
   {key:"odai",    title:"お題早押し", rule:"お題に合うものが出たら早押し！違うのは押すな", ui:"tap"},
   {key:"repeat",  title:"最速◯回",   rule:"規定回数を最速連打！ロック中に押すとリセット", ui:"tap"},
-  {key:"fruit",   title:"果物カウント", rule:"指定の果物が何個あったか数えて答える", ui:"cycle"},
+  {key:"fruit",   title:"果物カウント", rule:"次々出る果物を数えて、押した回数で答える", ui:"counter"},
 ];
 
 const PARAMS=new URLSearchParams(location.search);
@@ -538,30 +546,54 @@ async function gameJust(){
   endInputs();
   players.forEach(p=>{ if(errs[p.id]===undefined) errs[p.id]=999; });
   const ranking=Object.entries(errs).sort((a,b)=>a[1]-b[1]).map(([id])=>+id);
-  const rows=ranking.map(id=>({id, val: stops[id]===undefined?"押さず✗":(Math.round(stops[id])+"％（ズレ"+Math.round(errs[id])+"）"), dead: stops[id]===undefined}));
-  resultDetail='<div class="detail-title">どこで押した？（ド真ん中＝50％）</div>'+detailRows(rows);
+  // 実際のバー＋各自が押した位置を再現表示
+  let barHtml='<div class="result-bar-wrap"><div class="detail-title">どこで押した？（ド真ん中＝センター）</div><div class="result-bar"><div class="rb-center"></div>';
+  ranking.forEach(id=>{ if(stops[id]===undefined) return;
+    barHtml+='<div class="rb-mark" style="left:'+stops[id]+'%; background:'+pcolor(id)+';"></div>'+
+         '<div class="rb-label" style="left:'+stops[id]+'%; color:'+pcolor(id)+';">'+pname(id)+'</div>'; });
+  barHtml+='</div></div>';
+  const rows=ranking.map(id=>({id, val: stops[id]===undefined?"押さず✗":("ズレ "+Math.round(errs[id])+"％"), dead: stops[id]===undefined}));
+  resultDetail=barHtml+detailRows(rows);
   return ranking;
 }
 
 // 3すくみ
 async function gameSankume(){
   renderArena();
-  broadcast({type:"prompt", text:"押すたび グー→チョキ→パー", ui:"cycle", enable:true});
-  const hands={}; players.forEach(p=>hands[p.id]=0);
-  pressHandler=(id)=>{ hands[id]=((hands[id]||0)+1)%3; flash(id); };
-  players.forEach(p=>{ if(p.cpu){ const taps=Math.floor(Math.random()*4); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 200+Math.random()*2200); } });
-  const cd=addCountdown("3");
-  for(let i=3;i>=1;i--){ cd.textContent=i; await sleep(900); }
-  cd.textContent="ドン！"; endInputs();
-  const counts=[0,0,0]; Object.values(hands).forEach(v=>counts[v]++);
-  let best=0,bw=-1; for(let m=0;m<3;m++){ const w=counts[(m+2)%3]; if(w>bw){bw=w;best=m;} }
-  const winners=players.filter(p=>hands[p.id]===best).map(p=>p.id);
-  const losers=players.filter(p=>hands[p.id]!==best).map(p=>p.id);
-  await sleep(600);
-  const ranking=[...shuffle(winners), ...shuffle(losers)];
+  const arenaEl=$("stage").querySelector(".arena");
   const HL=["✊グー","✌チョキ","✋パー"];
-  const rows=ranking.map(id=>({id, val:HL[hands[id]]+(hands[id]===best?" ◎勝ち":""), dead:hands[id]!==best}));
-  resultDetail='<div class="detail-title">みんなの手（勝ち手＝'+HL[best]+'）</div>'+detailRows(rows);
+  // 本物のじゃんけんルール：手が2種類だけ出ていれば勝つ方の手が勝ち。1種類or3種類全部出ていれば「あいこ」＝もう一回。
+  let hands={}, best=null, attempt=0;
+  const MAXTRY=4;
+  while(best===null && attempt<MAXTRY){
+    attempt++;
+    if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove());
+    hands={}; players.forEach(p=>hands[p.id]=0);
+    broadcast({type:"prompt", text: attempt===1?"押すたび グー→チョキ→パー":"あいこでしょ！\nもう一回", ui:"cycle", options:HL, enable:true});
+    pressHandler=(id)=>{ hands[id]=((hands[id]||0)+1)%3; flash(id); };
+    players.forEach(p=>{ if(p.cpu){ const taps=Math.floor(Math.random()*4); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 150+Math.random()*(attempt===1?2200:1100)); } });
+    const cd=addCountdown(attempt===1?"3":"せーの");
+    if(attempt===1){ for(let i=3;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(900); } }
+    else{ sfx("count"); await sleep(1000); }
+    cd.textContent="ドン！"; sfx("go"); endInputs();
+    const counts=[0,0,0]; Object.values(hands).forEach(v=>counts[v]++);
+    const present=[0,1,2].filter(h=>counts[h]>0);
+    if(present.length===2){ const [a,b]=present; best = ((a+1)%3===b) ? a : b; } // aがbを倒すなら a が勝ち手
+    if(best===null){ cd.textContent="あいこ！"; cd.style.color="var(--cool)"; await sleep(600); }
+  }
+  let ranking, headline;
+  if(best===null){
+    ranking=shuffle(players.map(p=>p.id));
+    headline="あいこ続き…引き分け（全員おなじ点）";
+  }else{
+    const winners=players.filter(p=>hands[p.id]===best).map(p=>p.id);
+    const losers=players.filter(p=>hands[p.id]!==best).map(p=>p.id);
+    ranking=[...shuffle(winners), ...shuffle(losers)];
+    headline="みんなの手（勝ち手＝"+HL[best]+"）";
+  }
+  await sleep(600);
+  const rows=ranking.map(id=>({id, val:HL[hands[id]]+(hands[id]===best?" ◎勝ち":""), dead:best!==null&&hands[id]!==best}));
+  resultDetail='<div class="detail-title">'+headline+'</div>'+detailRows(rows);
   return ranking;
 }
 
@@ -569,14 +601,19 @@ async function gameSankume(){
 async function gameMash(){
   renderArena();
   broadcast({type:"prompt", text:"5秒間 連打しろ！", ui:"tap", enable:true});
-  const counts={}; players.forEach(p=>counts[p.id]=0);
-  pressHandler=(id)=>{ counts[id]=(counts[id]||0)+1; if(counts[id]%4===0) flash(id); };
+  const counts={}; players.forEach(p=>{ counts[p.id]=0;
+    const d=$("dot"+p.id); if(d){ const b=document.createElement("div"); b.className="mash-badge"; b.id="badge"+p.id; b.textContent="0"; d.appendChild(b); } });
+  pressHandler=(id)=>{
+    counts[id]=(counts[id]||0)+1;
+    const d=$("dot"+id); if(d) d.animate([{transform:"scale(1)"},{transform:"scale(1.22)"},{transform:"scale(1)"}],{duration:110});
+    const b=$("badge"+id); if(b) b.textContent=counts[id];
+  };
   players.forEach(p=>{ if(p.cpu){ const rate=70+Math.random()*130; const iv=setInterval(()=>{ if(pressHandler) pressHandler(p.id); }, rate); cpuIntervals.push(iv); } });
   const cd=addCountdown("5");
   for(let i=5;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(1000); }
   cd.textContent="STOP"; sfx("go"); endInputs();
   const ranking=Object.entries(counts).sort((a,b)=>b[1]-a[1]).map(([id])=>+id);
-  resultDetail='<div class="detail-title">連打数（多い順）</div>'+detailRows(ranking.map(id=>({id, val:counts[id]+"回"})));
+  resultDetail='<div class="detail-title">連打数（多い順・実際にカウントした回数）</div>'+detailRows(ranking.map(id=>({id, val:counts[id]+"回"})));
   return ranking;
 }
 
@@ -592,19 +629,27 @@ async function gameChicken(){
   note.style.cssText="position:absolute;left:0;right:0;bottom:24%;text-align:center;font-weight:900;font-size:clamp(15px,2.4vw,22px);color:var(--gold);";
   note.innerHTML="最後から<b>2・3・4番目</b>が勝ち！<br><span style='color:var(--hot)'>ドベ（最後）と未押下はダメ</span>";
   arena.appendChild(note);
-  broadcast({type:"prompt", text:"ギリギリまで我慢！\nでもドベ（最後）はダメ！", ui:"tap", enable:true});
+  broadcast({type:"prompt", text:"ギリギリまで我慢！\nでもドベ（最後）はダメ！\n（誰がいつ降りたかは結果発表まで内緒）", ui:"tap", enable:true});
   const pressedAt={}; const order=[];
-  pressHandler=(id)=>{ if(pressedAt[id]===undefined){ pressedAt[id]=performance.now(); order.push(id); flash(id); sendToId(id,{type:"prompt",text:"降りた！",enable:false}); } };
+  // プレイ中は誰が押したか他の人に見えないようにする（flashしない・本人にだけ通知）
+  pressHandler=(id)=>{ if(pressedAt[id]===undefined){ pressedAt[id]=performance.now(); order.push(id); sendToId(id,{type:"prompt",text:"降りた！（結果は発表までナイショ）",enable:false}); } };
   players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 500+Math.random()*7000); });
   const DUR=8000, t0=performance.now();
   await new Promise(res=>{ (function loop(){ const e=performance.now()-t0; fill.style.width=Math.min(100,e/DUR*100)+"%"; if(e>=DUR) res(); else requestAnimationFrame(loop); })(); });
   endInputs();
+  note.remove();
+  const cdReveal=addCountdown("結果発表…"); cdReveal.style.top="8%"; cdReveal.style.fontSize="clamp(20px,3.2vw,32px)"; cdReveal.style.color="var(--gold)";
+  await sleep(700);
+  // ここで初めて、押した順を一人ずつ明かす演出
+  for(const id of order){ flash(id); sfx("press"); await sleep(260); }
+  players.forEach(p=>{ if(pressedAt[p.id]===undefined) flash(p.id, true); });
+  await sleep(300);
   const n=order.length, ranking=[];
   if(n>=2) ranking.push(order[n-2]);  // 最後から2番目 = 1位(3点)
   if(n>=3) ranking.push(order[n-3]);  // 3番目 = 2位(2点)
   if(n>=4) ranking.push(order[n-4]);  // 4番目 = 3位(1点)
-  if(n>=1) flash(order[n-1], true);   // ドベ = 負け
-  players.forEach(p=>{ if(pressedAt[p.id]===undefined) flash(p.id, true); }); // 未押下 = 負け
+  if(n>=1){ const d=$("dot"+order[n-1]); if(d) d.classList.add("dead"); }
+  players.forEach(p=>{ if(pressedAt[p.id]===undefined){ const d=$("dot"+p.id); if(d) d.classList.add("dead"); } });
   const rows=[];
   order.forEach((id,idx)=>{
     const fromLast=n-1-idx; let label;
@@ -680,11 +725,13 @@ async function gameDaruma(){
 // 少数決（道連れ）：2択で少数派が生き残り、多数派は道連れで脱落。脱落の逆順＝順位。
 async function gameMinority(){
   renderArena();
+  const arenaEl=$("stage").querySelector(".arena");
   const OPTIONS=["🔴 あか","🔵 あお"];
   let alive=players.map(p=>p.id); const elim=[];
   let roundNo=0; const roundLog=[]; // {r, c0, c1, winSide|null}
   while(alive.length>2 && roundNo<6){
     roundNo++;
+    if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove()); // 前ラウンドの表示を消してから
     const votes={}; alive.forEach(id=>votes[id]=0);
     broadcast({type:"prompt", text:"少ない方が生き残る！\n押して選ぶ", ui:"cycle", options:OPTIONS, enable:true});
     players.forEach(p=>{ if(alive.includes(p.id)) { const d=$("dot"+p.id); if(d) d.classList.remove("dead"); } });
@@ -717,42 +764,74 @@ async function gameMinority(){
 }
 
 // 丸太ジャンプ：丸太が来た瞬間にジャンプ(押す)。早すぎ・未ジャンプは被弾。生き残り＆越えた数で順位。
+// 丸太ジャンプ：プレイヤーを横一列に並べ、丸太が右から左へ転がってくる。自分の所に来た瞬間に押してジャンプ！よけよう。
 async function gameMaruta(){
-  renderArena();
-  const cd=addCountdown("…");
-  const alive=new Set(players.map(p=>p.id));
-  const elim=[]; const survivedCount={}, reactSum={};
-  players.forEach(p=>{ survivedCount[p.id]=0; reactSum[p.id]=0; });
-  const logs=6;
-  for(let r=1; r<=logs && alive.size>1; r++){
-    let phase="approach", jumpAt=0; const jumpedEarly=new Set(), jumped={};
-    cd.textContent="まるた接近…"; cd.style.color="var(--gold)";
-    broadcast({type:"prompt", text:"まだジャンプするな…", ui:"tap", enable:true});
+  $("stage").innerHTML='<div class="arena"></div>';
+  const arena=$("stage").querySelector(".arena");
+  const n=players.length, margin=10, span=100-margin*2;
+  const xs={}, toks={};
+  const size=Math.max(30,Math.min(52, 380/Math.sqrt(n+1)));
+  players.forEach((p,i)=>{
+    const x = n<=1 ? 50 : margin + span*(i/(n-1));
+    xs[p.id]=x;
+    const tok=document.createElement("div"); tok.className="dot"; tok.id="dot"+p.id;
+    tok.style.width=size+"px"; tok.style.height=size+"px"; tok.style.fontSize=Math.max(11,size*0.28)+"px";
+    tok.style.background=p.color; tok.textContent=p.name.slice(0,2);
+    tok.style.left="calc("+x+"% - "+(size/2)+"px)"; tok.style.bottom="20%"; tok.style.transition="bottom .16s ease-out";
+    arena.appendChild(tok); toks[p.id]=tok;
+  });
+  const ground=document.createElement("div");
+  ground.style.cssText="position:absolute;left:0;right:0;bottom:18%;height:4px;background:rgba(255,255,255,.25);";
+  arena.appendChild(ground);
+  const log=document.createElement("div");
+  log.textContent="🪵"; log.style.cssText="position:absolute;bottom:15.5%;font-size:clamp(30px,7vw,60px);";
+  arena.appendChild(log);
+  const cd=addCountdown("よういドン！"); cd.style.top="8%"; cd.style.fontSize="clamp(18px,3vw,28px)"; cd.style.color="var(--gold)";
+  broadcast({type:"prompt", text:"丸太が来たらジャンプ！\n（押すとジャンプ）", ui:"tap", enable:true});
+  await sleep(1000);
+
+  const alive=new Set(players.map(p=>p.id)); const elim=[];
+  const dodgeCount={}; players.forEach(p=>dodgeCount[p.id]=0);
+  const jumping={};
+  const HITBOX=6, START=106, END=-8;
+  const passes=6;
+  for(let r=1; r<=passes && alive.size>0; r++){
+    const dur=Math.max(1500, 3200-r*260);
+    const hitThisPass=new Set();
+    let logX=START;
+    log.style.left=logX+"%";
+    const t0=performance.now();
     pressHandler=(id)=>{
-      if(!alive.has(id)) return;
-      if(phase==="approach"){ jumpedEarly.add(id); }
-      else if(phase==="jump" && jumped[id]===undefined){ jumped[id]=performance.now()-jumpAt; flash(id); }
+      if(!alive.has(id) || jumping[id]) return;
+      jumping[id]=true; sfx("press");
+      const el=toks[id]; if(el) el.style.bottom="38%";
+      setTimeout(()=>{ jumping[id]=false; const el2=toks[id]; if(el2 && alive.has(id)) el2.style.bottom="20%"; }, 300);
     };
-    await sleep(900+Math.random()*1400);
-    phase="jump"; jumpAt=performance.now(); const win=Math.max(420, 760-r*55);
-    cd.textContent="ジャンプ！🪵"; cd.style.color="var(--lime)"; sfx("go");
-    broadcast({type:"prompt", text:"今だ！ジャンプ！", enable:true});
     players.forEach(p=>{ if(p.cpu && alive.has(p.id)){
-      if(Math.random()<0.12) ct(()=>{ if(pressHandler&&phase==="approach") pressHandler(p.id); }, 50+Math.random()*300);
-      else ct(()=>{ if(pressHandler) pressHandler(p.id); }, 80+Math.random()*(win*0.8));
+      const arrival=((START-xs[p.id])/(START-END))*dur;
+      const err=(Math.random()*2-1)*220;
+      ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.max(0,arrival+err));
     }});
-    await sleep(win);
-    phase="done"; clearCpu(); pressHandler=null;
-    const hit=[];
-    alive.forEach(id=>{ if(jumpedEarly.has(id) || jumped[id]===undefined) hit.push(id); else { survivedCount[id]++; reactSum[id]+=jumped[id]; } });
-    hit.forEach(id=>{ alive.delete(id); elim.push(id); flash(id,true); sendToId(id,{type:"prompt",text:"丸太に当たった！",enable:false}); });
-    await sleep(700);
+    await new Promise(res=>{ (function loop(){
+      const e=performance.now()-t0;
+      logX = START - (START-END)*(e/dur);
+      log.style.left=logX+"%";
+      alive.forEach(id=>{ if(hitThisPass.has(id)) return;
+        if(Math.abs(logX-xs[id])<HITBOX && !jumping[id]){ hitThisPass.add(id); flash(id,true); }
+      });
+      if(e>=dur) res(); else requestAnimationFrame(loop);
+    })(); });
+    pressHandler=null; clearCpu();
+    alive.forEach(id=>{ if(!hitThisPass.has(id)) dodgeCount[id]++; });
+    hitThisPass.forEach(id=>{ alive.delete(id); elim.push(id); sendToId(id,{type:"prompt",text:"丸太に当たった！",enable:false}); });
+    cd.textContent = alive.size>0 ? ("丸太 "+r+"本目クリア！") : "全滅…";
+    await sleep(650);
   }
   endInputs();
-  const survivors=[...alive].sort((a,b)=>(reactSum[a]/Math.max(1,survivedCount[a]))-(reactSum[b]/Math.max(1,survivedCount[b])));
+  const survivors=[...alive].sort((a,b)=>dodgeCount[b]-dodgeCount[a]);
   const ranking=[...survivors, ...elim.reverse()];
-  const rows=ranking.map(id=>({id, val: alive.has(id)?("完走 "+survivedCount[id]+"本越え ⚡"):(survivedCount[id]+"本で被弾"), dead:!alive.has(id)}));
-  resultDetail='<div class="detail-title">越えた丸太の数（完走者は反応の速さで順位）</div>'+detailRows(rows);
+  const rows=ranking.map(id=>({id, val: alive.has(id)?("完走！"+dodgeCount[id]+"本よけた 🏆"):(dodgeCount[id]+"本よけて被弾"), dead:!alive.has(id)}));
+  resultDetail='<div class="detail-title">丸太を何本よけた？</div>'+detailRows(rows);
   return ranking;
 }
 
@@ -761,8 +840,8 @@ async function gameSan3(){
   renderArena();
   const cd=addCountdown("用意…");
   broadcast({type:"prompt", text:"数字でリズム押し！\n3の倍数・3の付く数は押すな", ui:"tap", enable:true});
-  const alive=new Set(players.map(p=>p.id)); const elim=[]; let lastNum=0, beat=950;
-  await sleep(1200);
+  const alive=new Set(players.map(p=>p.id)); const elim=[]; let lastNum=0, beat=475; // テンポ2倍速
+  await sleep(600);
   for(let n=1; n<=30 && alive.size>1; n++){
     lastNum=n;
     const ng=(n%3===0)||String(n).includes("3");
@@ -780,8 +859,8 @@ async function gameSan3(){
     const wrong=[];
     alive.forEach(id=>{ const t=tapped.has(id); if(ng && t) wrong.push(id); else if(!ng && !t) wrong.push(id); });
     wrong.forEach(id=>{ alive.delete(id); elim.push(id); flash(id,true); sendToId(id,{type:"prompt",text:(ng?"押しちゃダメ！":"押し忘れ！")+" 脱落",enable:false}); });
-    beat=Math.max(480, beat-18);
-    await sleep(260);
+    beat=Math.max(240, beat-9);
+    await sleep(130);
   }
   endInputs();
   const ranking=[...alive, ...elim.reverse()];
@@ -793,22 +872,29 @@ async function gameSan3(){
 // 早撃ちガンマン：約3割が🎯標的。標的以外は早押しで得点／標的が押す・フライングは負け。
 async function gameGunman(){
   renderArena();
-  const cd=addCountdown("…");
+  const cd=addCountdown("だれが標的…？"); cd.style.color="var(--gold)";
   const ids=players.map(p=>p.id);
   let nT=Math.max(1, Math.round(ids.length*0.3)); nT=Math.min(nT, Math.max(0, ids.length-1));
   const targets=new Set(shuffle(ids).slice(0, nT));
+  broadcast({type:"prompt", text:"まもなく標的が発表される…", ui:"wait", enable:false});
+  await sleep(1100);
+  // 3・2・1 → 標的の名前を一斉発表（直前まで誰が標的かわからない演出）
+  for(let i=3;i>=1;i--){ cd.textContent=i; cd.style.fontSize="clamp(60px,16vw,150px)"; sfx("count"); await sleep(650); }
+  const targetNames=[...targets].map(id=>pname(id)).join("・");
+  cd.style.fontSize="clamp(22px,4.2vw,40px)"; cd.style.color="var(--hot)"; cd.textContent="🎯 "+targetNames;
+  sfx("lose"); screenFlash();
   players.forEach(p=>{ const tgt=targets.has(p.id); const d=$("dot"+p.id); if(d && tgt) d.textContent="🎯";
     sendToId(p.id,{type:"prompt", text: tgt?"🎯あなたは標的！\n撃つな（押すな）":"あなたは撃ち手！\n早押しで撃て", ui:"tap", enable:false}); });
-  cd.textContent="標的を確認…"; cd.style.color="var(--gold)"; await sleep(2200);
+  await sleep(1500);
   const times={}; const fouls=new Set(); let go=false, goAt=0;
-  cd.textContent="構え…";
+  cd.textContent="構え…"; cd.style.fontSize="clamp(60px,16vw,150px)"; cd.style.color="#fff";
   broadcast({type:"prompt", text:"まだ…（標的は押すな）", enable:true});
   pressHandler=(id)=>{
     if(targets.has(id)){ if(!fouls.has(id)){ fouls.add(id); flash(id,true); sendToId(id,{type:"prompt",text:"標的なのに撃った…負け",enable:false}); } return; }
     if(!go){ if(times[id]===undefined){ times[id]="foul"; flash(id,true); sendToId(id,{type:"prompt",text:"早すぎ！フライング",enable:false}); } return; }
     if(times[id]===undefined){ times[id]=performance.now()-goAt; flash(id); }
   };
-  await sleep(1400+Math.random()*2400);
+  await sleep(900+Math.random()*1700);
   go=true; goAt=performance.now(); cd.textContent="撃て！🔫"; cd.style.color="var(--lime)"; sfx("go");
   broadcast({type:"prompt", text:"撃て！（標的以外）", enable:true});
   players.forEach(p=>{ if(p.cpu){ if(targets.has(p.id)){ if(Math.random()<0.15) ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.random()*1500); }
@@ -834,6 +920,8 @@ async function gameGunman(){
 async function gameClock(){
   renderArena();
   const target=5+Math.floor(Math.random()*5); // 5〜9秒
+  const targetLabel=addCountdown("🎯 目標："+target+"秒");
+  targetLabel.style.top="10%"; targetLabel.style.fontSize="clamp(20px,3.6vw,34px)"; targetLabel.style.color="var(--gold)";
   const cd=addCountdown("0.0");
   broadcast({type:"prompt", text:target+"秒ピッタリで押せ！\n途中で時計は消えるよ", ui:"tap", enable:true});
   const t0=performance.now(); const pressedAt={};
@@ -854,16 +942,21 @@ async function gameClock(){
 // 偶奇投票：A/B/Cに投票（cycle）。各グループ人数が指定パリティ(偶/奇)に一致したら生存。脱落の逆順で順位。
 async function gameEvenOdd(){
   renderArena();
+  const arenaEl=$("stage").querySelector(".arena");
   const OPTS=["🅰 A","🅱 B","🅲 C"];
   let alive=players.map(p=>p.id); const elim=[]; let roundNo=0; const log=[];
   while(alive.length>2 && roundNo<6){
     roundNo++;
+    if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove()); // 前ラウンドの表示を消してから
     const parity=Math.random()<0.5?0:1; // 0=偶数,1=奇数
+    const parityLabel=parity===0?"偶数":"奇数";
     const votes={}; alive.forEach(id=>votes[id]=0);
-    broadcast({type:"prompt", text:"A/B/Cに投票！\n人数が【"+(parity===0?"偶数":"奇数")+"】のグループが生存", ui:"cycle", options:OPTS, enable:true});
+    broadcast({type:"prompt", text:"A/B/Cに投票！\n今回は【"+parityLabel+"】が生き残り", ui:"cycle", options:OPTS, enable:true});
     alive.forEach(id=>{ const d=$("dot"+id); if(d) d.classList.remove("dead"); });
     pressHandler=(id)=>{ if(!alive.includes(id)) return; votes[id]=((votes[id]||0)+1)%3; flash(id); };
     alive.forEach(id=>{ const p=players.find(x=>x.id===id); if(p&&p.cpu){ const taps=Math.floor(Math.random()*4); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(id); }, 200+Math.random()*2200); } });
+    const parityTag=addCountdown("今回は【"+parityLabel+"】が生き残り！");
+    parityTag.style.top="9%"; parityTag.style.fontSize="clamp(18px,3vw,28px)"; parityTag.style.color= parity===0 ? "var(--cool)" : "var(--hot)";
     const cd=addCountdown("3");
     for(let i=3;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(850); }
     cd.textContent="オープン！"; sfx("go"); endInputs();
@@ -961,39 +1054,48 @@ async function gameRepeat(){
   return ranking;
 }
 
-// 果物カウント：果物を多数ばらまく→指定の果物の数を数える→cycleで数字を選んで回答。正解を速さ順。
+// 果物カウント：果物が1個ずつ動画のように出現→数えて→ボタン連打のカウンターで回答。正確さ順。
 async function gameFruit(){
   renderArena();
   const arena=$("stage").querySelector(".arena");
   const FRUITS=["🍎","🍌","🍇","🍓","🍊"];
   const targetFruit=FRUITS[Math.floor(Math.random()*FRUITS.length)];
-  const total=14+Math.floor(Math.random()*10);
+  const total=16+Math.floor(Math.random()*10);
   let targetCount=0;
-  const field=document.createElement("div"); field.style.cssText="position:absolute;inset:8% 6% 24% 6%;";
-  for(let i=0;i<total;i++){ const f=FRUITS[Math.floor(Math.random()*FRUITS.length)]; if(f===targetFruit) targetCount++;
-    const s=document.createElement("span"); s.textContent=f; s.style.cssText="position:absolute;font-size:clamp(22px,4vw,42px);left:"+(Math.random()*90)+"%;top:"+(Math.random()*90)+"%;"; field.appendChild(s); }
+  const field=document.createElement("div"); field.style.cssText="position:absolute;inset:16% 6% 20% 6%;";
   arena.appendChild(field);
-  const cd=addCountdown(""); cd.style.top="8%"; cd.style.fontSize="clamp(20px,3vw,32px)"; cd.style.color="var(--gold)";
-  broadcast({type:"prompt", text:targetFruit+" は何個？\nよく見て数えて！", ui:"wait", enable:false});
-  for(let s=5;s>=1;s--){ cd.textContent=targetFruit+" を数えろ！ "+s; await sleep(1000); }
+  const cd=addCountdown(targetFruit+" を数えろ！"); cd.style.top="7%"; cd.style.fontSize="clamp(20px,3.4vw,32px)"; cd.style.color="var(--gold)";
+  broadcast({type:"prompt", text:targetFruit+" の数を数えて！\n（あとでカウンターで答える）", ui:"wait", enable:false});
+  await sleep(1300);
+  // 動画のように1個ずつランダムな位置にポップ表示（数えやすいテンポで出現）
+  const used=[];
+  for(let i=0;i<total;i++){
+    const f=FRUITS[Math.floor(Math.random()*FRUITS.length)]; if(f===targetFruit) targetCount++;
+    let left,top,tries=0;
+    do{ left=4+Math.random()*84; top=4+Math.random()*84; tries++; }
+    while(tries<10 && used.some(u=>Math.abs(u.left-left)<11 && Math.abs(u.top-top)<14));
+    used.push({left,top});
+    const s=document.createElement("span");
+    s.textContent=f;
+    s.style.cssText="position:absolute;font-size:clamp(26px,4.6vw,48px);opacity:0;transform:scale(.2);left:"+left+"%;top:"+top+"%;transition:opacity .16s ease-out, transform .16s ease-out;";
+    field.appendChild(s);
+    void s.offsetWidth;
+    s.style.opacity="1"; s.style.transform="scale(1)";
+    if(f===targetFruit) sfx("count");
+    await sleep(140+Math.random()*110);
+  }
+  await sleep(1000);
   field.remove();
-  const opts=new Set([targetCount]);
-  while(opts.size<4){ const d=targetCount+(Math.floor(Math.random()*7)-3); if(d>=0) opts.add(d); }
-  const optArr=shuffle([...opts]); const optLabels=optArr.map(v=>"🔢 "+v);
-  broadcast({type:"prompt", text:targetFruit+" は何個だった？\n押して数字を選ぶ", ui:"cycle", options:optLabels, enable:true});
-  cd.textContent="何個だった？";
-  const idx={}, firstAt={}; players.forEach(p=>idx[p.id]=0);
-  pressHandler=(id)=>{ idx[id]=((idx[id]||0)+1)%optArr.length; if(firstAt[id]===undefined) firstAt[id]=performance.now(); flash(id); };
-  players.forEach(p=>{ if(p.cpu){ const wantVal=Math.random()<0.6?targetCount:optArr[Math.floor(Math.random()*optArr.length)]; const wantIdx=Math.max(0,optArr.indexOf(wantVal)); const taps=wantIdx+(Math.random()<0.5?optArr.length:0); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 200+Math.random()*3200); } });
-  const cd2=addCountdown("5"); cd2.style.top="62%";
-  for(let i=5;i>=1;i--){ cd2.textContent=i; sfx("count"); await sleep(1000); }
-  cd2.textContent="しめきり"; sfx("go"); endInputs();
-  const chosen={}; players.forEach(p=>chosen[p.id]=optArr[idx[p.id]]);
-  const isCorrect=id=>chosen[id]===targetCount && firstAt[id]!==undefined;
-  const correct=players.map(p=>p.id).filter(isCorrect).sort((a,b)=>firstAt[a]-firstAt[b]);
-  const wrong=players.map(p=>p.id).filter(id=>!isCorrect(id));
-  const ranking=[...correct, ...wrong];
-  const rows=ranking.map(id=>({id, val:(firstAt[id]===undefined?"無回答":(chosen[id]+"個"))+(isCorrect(id)?" ◎正解":""), dead:!isCorrect(id)}));
+  cd.textContent=targetFruit+" は何個だった？"; cd.style.color="var(--lime)"; sfx("go");
+  broadcast({type:"prompt", text:targetFruit+" は何個だった？\n押すたび+1でかぞえて答える", ui:"counter", enable:true});
+  const counts={}; players.forEach(p=>counts[p.id]=0);
+  pressHandler=(id)=>{ counts[id]=(counts[id]||0)+1; flash(id); };
+  players.forEach(p=>{ if(p.cpu){ const guess=Math.max(0, targetCount+Math.floor(Math.random()*5-2)); for(let k=0;k<guess;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 300+Math.random()*4200); } });
+  const cd2=addCountdown("6"); cd2.style.top="66%";
+  for(let i=6;i>=1;i--){ cd2.textContent=i; sfx("count"); await sleep(1000); }
+  cd2.textContent="しめきり！"; sfx("go"); endInputs();
+  const ranking=players.map(p=>p.id).sort((a,b)=>Math.abs(counts[a]-targetCount)-Math.abs(counts[b]-targetCount));
+  const rows=ranking.map(id=>({id, val: counts[id]+"個"+(counts[id]===targetCount?" ◎正解":"（誤差"+Math.abs(counts[id]-targetCount)+"）"), dead: counts[id]!==targetCount}));
   resultDetail='<div class="detail-title">正解：'+targetFruit+' は '+targetCount+'個</div>'+detailRows(rows);
   return ranking;
 }
@@ -1076,6 +1178,7 @@ async function showFinal(){
 let myConn=null, myCurrentUi="tap";
 let cycleHand=0; const HANDS=["✊ グー","✌ チョキ","✋ パー"];
 let myCycleOptions=HANDS;  // cycle時の選択肢（prompt.optionsで上書き、無ければHANDS）
+let myCounter=0;          // counter時：押すたび+1で数える自分の回答値
 
 function ctrl_init(){
   $("ctrlView").classList.remove("hidden");
@@ -1106,7 +1209,9 @@ function handleCtrlMessage(msg){
   if(msg.type==="welcome"){ if(msg.name) $("ctrlName").textContent=msg.name; return; }
   if(msg.type==="prompt"){
     if(msg.ui) myCurrentUi=msg.ui;
-    if(msg.ui==="cycle"){ cycleHand=0; myCycleOptions=(msg.options&&msg.options.length)?msg.options:HANDS; setStatus(msg.text+"\n今："+myCycleOptions[0]); } else setStatus(msg.text);
+    if(msg.ui==="cycle"){ cycleHand=0; myCycleOptions=(msg.options&&msg.options.length)?msg.options:HANDS; setStatus(msg.text+"\n今："+myCycleOptions[0]); }
+    else if(msg.ui==="counter"){ myCounter=0; setStatus(msg.text+"\n今のかず：0"); }
+    else setStatus(msg.text);
     if(typeof msg.enable==="boolean") setEnabled(msg.enable);
     return;
   }
@@ -1116,9 +1221,13 @@ function setStatus(t){ $("phoneStatus").textContent=t; }
 function setEnabled(on){
   const tap=$("tap"); tap.disabled=!on;
   if(myCurrentUi==="cycle"){
-    // cycle系（3すくみ・少数決）：ボタンに「今の選択」を大きく表示
+    // cycle系（3すくみ・少数決・偶奇投票）：ボタンに「今の選択」を大きく表示
     tap.textContent=myCycleOptions[cycleHand];
     tap.onclick = on ? (()=>{ cycleHand=(cycleHand+1)%myCycleOptions.length; tap.textContent=myCycleOptions[cycleHand]; setStatus("今の選択：\n"+myCycleOptions[cycleHand]); }) : null;
+  }else if(myCurrentUi==="counter"){
+    // counter系（果物カウント）：押すたび+1でボタンに現在の数を表示
+    tap.textContent=String(myCounter);
+    tap.onclick = on ? (()=>{ myCounter++; tap.textContent=String(myCounter); setStatus("今のかず：\n"+myCounter); }) : null;
   }else{
     tap.textContent="OSU!"; tap.onclick=null;
   }
