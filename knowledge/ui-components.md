@@ -1,8 +1,141 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-05-23
+最終更新：2026-07-02
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## SVGアバター生成（プレイヤー個別キャラクター化）
+
+**用途：** 絵文字に頼らずにプレイヤーごとの独自アバターを動的生成。色・表情をパラメータで制御可能。オシキングで16ゲームのプレイヤー表示を統一。
+
+```javascript
+// SVGアバター生成関数（色グラデ球体×目4種×口4種=16表情）
+function avatarSVG(playerColor, emotionIdx) {
+  // emotionIdx: 0=normal, 1=happy, 2=sad, 3=surprised (各4段階)
+  // emotionIdx % 4 = 口、Math.floor(emotionIdx / 4) = 目
+  
+  const baseColor = playerColor || '#FF6B6B';
+  const accent = adjustBrightness(baseColor, 30);
+  
+  // 目と口のシェイプ定義
+  const eyeShapes = [
+    '●●',  // 0: 通常
+    '◡◡',  // 1: 嬉しい
+    '……',  // 2: 悲しい
+    '◯◯'   // 3: 驚き
+  ];
+  
+  const mouthShapes = [
+    '─',    // 0: 真顔
+    '⌢',    // 1: 笑い
+    '⌣',    // 2: 悲しい
+    '◯'     // 3: 驚き
+  ];
+  
+  const eyeIdx = Math.floor(emotionIdx / 4) % 4;
+  const mouthIdx = emotionIdx % 4;
+  
+  // SVG生成（色グラデ球体）
+  const svg = `
+    <svg width="60" height="60" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <radialGradient id="grad-${emotionIdx}" cx="35%" cy="35%">
+          <stop offset="0%" style="stop-color:${accent};stop-opacity:1" />
+          <stop offset="100%" style="stop-color:${baseColor};stop-opacity:1" />
+        </radialGradient>
+      </defs>
+      <circle cx="30" cy="30" r="28" fill="url(#grad-${emotionIdx})" />
+      <circle cx="30" cy="30" r="28" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1" />
+      
+      <!-- 目 -->
+      <text x="20" y="32" font-size="14" font-weight="bold" fill="white" text-anchor="middle">${eyeShapes[eyeIdx]}</text>
+      <text x="40" y="32" font-size="14" font-weight="bold" fill="white" text-anchor="middle">${eyeShapes[eyeIdx]}</text>
+      
+      <!-- 口 -->
+      <text x="30" y="45" font-size="16" font-weight="bold" fill="white" text-anchor="middle">${mouthShapes[mouthIdx]}</text>
+    </svg>
+  `;
+  
+  return svg;
+}
+
+// ヘルパー：色を明るく/暗くする
+function adjustBrightness(color, percent) {
+  const num = parseInt(color.replace('#',''), 16);
+  const r = Math.min(255, (num >> 16) + percent);
+  const g = Math.min(255, (num >> 8 & 0x00FF) + percent);
+  const b = Math.min(255, (num & 0x0000FF) + percent);
+  return '#' + (0x1000000 + r * 0x10000 + g * 0x100 + b).toString(16).slice(1);
+}
+
+// 使用例
+const html = avatarSVG('#FF6B6B', 5); // 赤色、嬉しい表情
+document.getElementById('player1').innerHTML = html;
+```
+
+**ポイント：**
+- `emotionIdx` で表情を0-15の16パターン指定（4眼×4口）
+- グラデで「球体感」が出る（radialGradient + offset 35%で光源効果）
+- ストローク 1px で輪郭を引き締める
+- 絵文字と違い、CSS で `width` や回転を自由に制御可能
+
+**互換性：** IE11未対応（SVG gradientGradient は対応）、全モダンブラウザOK
+
+---
+
+## ガラス質感UIパネル
+
+**用途：** バックドロップフィルタと多層シャドウで「すりガラス」「奥行き」感を実現。ポップアップ、スコア表示、ゲームパネルに適用。
+
+```html
+<div class="glass-panel">
+  <h3>スコア</h3>
+  <p class="score-text">12,450</p>
+</div>
+```
+
+```css
+.glass-panel {
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 12px;
+  padding: 24px;
+  
+  /* 多層シャドウで奥行きを演出 */
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.4),      /* 上側の光反射 */
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),           /* 下側の影 */
+    0 4px 12px rgba(0, 0, 0, 0.25),              /* 外側の影（遠景） */
+    0 12px 24px rgba(0, 0, 0, 0.15);             /* 外側の影（近景） */
+}
+
+/* グラデーション文字（オプション） */
+.score-text {
+  background: linear-gradient(135deg, #ffd700, #ffed4e);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-weight: bold;
+  font-size: 32px;
+}
+```
+
+**互換性注意：**
+- `backdrop-filter` は Safari 9+, Chrome 76+, Edge 79+
+- Firefox では `@supports` で fallback 必要
+- モバイル古機種では無視される（background-color が表示される）
+
+**Fallback例：**
+```css
+@supports not (backdrop-filter: blur(1px)) {
+  .glass-panel {
+    background: rgba(255, 255, 255, 0.8);
+  }
+}
+```
 
 ---
 
