@@ -105,17 +105,20 @@ if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove());
 - `sfxInit()`をユーザー操作（参加ボタン押下・メニュー表示等）のタイミングで呼ぶこと（ブラウザの自動再生ポリシー対策。呼び忘れると音が鳴らない）。
 - `partyBurst()`（紙吹雪）／`screenFlash()`（画面フラッシュ）は勝利・優勝時に使用。
 
-### 4.5 ビジュアル層（2026-07-02 全面リニューアル）
+### 4.5 ビジュアル層（2026-07-02 商用クオリティ版に全面刷新）
 
-ゲームロジックには手を入れず、**表示レイヤーだけ**を番組/Jackbox風に刷新した。次に触る人向けの要点：
+ゲームロジックには手を入れず、**表示レイヤーだけ**をプロ品質（ガラスUI・SVG描画・3D・粒子）に刷新した。次に触る人向けの要点：
 
-- **アバタートークン**：プレイヤーは `makeToken(p,size)` で生成（顔絵文字 `p.face`＋色グラデ＋名前タグ）。`id="dot"+pid` と `.dot` クラスは従来のまま＝`flash()`・`.mash-badge`・`.dead` がそのまま効く。**新ゲームでトークンを自作せず必ず `makeToken()` を使うこと。**
-  - `p.face` は `FACES` 配列から参加順に自動割当（join/addCpu/addHostPlayerの3箇所）。`welcome` メッセージでスマホにも送っている。
-  - 顔絵文字を差し替えたいゲーム（例：ガンマンの🎯）は `dot.querySelector(".face").textContent` を書き換える（`dot.textContent=` で潰すと名前タグごと消えるので禁止）。
-- **タイトルカード**：`showGameIntro()` が `GAMES` の `icon`/`color` を使う（`--accent` CSS変数でテーマ色が変わる）。新ゲーム追加時は `GAMES` 行に `icon` と `color` も必ず入れる。
-- **表彰台**：`showResult()` は3位→2位→1位の順に `pod.show` を付けて発表（ドラムロール→1位でファンファーレ＋紙吹雪）。順位配列の意味は従来どおり。
+- **SVGアバター**：プレイヤーは絵文字ではなく `avatarSVG(p,size?)` がその場で生成するSVG（色グラデ球体＋目4種×口4種=16表情）。`p.face` は **0〜15の整数**（参加順 `(nextId-1)%16` を join/addCpu/addHostPlayer の3箇所で割当、`welcome` でスマホにも送る）。
+- **アバタートークン**：ホスト画面のコマは `makeToken(p,size)` で生成（SVG＋名前タグ）。`id="dot"+pid` と `.dot` クラスは従来どおり＝`flash()`・`.mash-badge`・`.dead` がそのまま効く。**新ゲームでトークンを自作せず必ず `makeToken()` を使うこと。**
+  - トークンに目印を付けたいゲーム（例：ガンマンの🎯）は `dot.insertAdjacentHTML("beforeend",'<span class="dot-badge">🎯</span>')` のようにバッジを重ねる（`dot.innerHTML` を潰すとアバターごと消えるので禁止）。
+- **SVG王冠ロゴ**：`CROWN` 定数（HUD・ロビーヒーロー・優勝セレモニーで共用）。
+- **環境レイヤー**：`<canvas id="fxCanvas">`（浮遊粒子、`initParticles()`）＋ `#stageFloor`（3Dパースグリッド床）＋ `#grain`（フィルムグレイン）。**全部fixedでstageの外**にあるので `stage.innerHTML` 書き換えの影響を受けない。`body.host` クラスが付いた時だけ表示（`host_init()` で付与）。
+- **タイトルカード**：`showGameIntro()` が `GAMES` の `icon`/`color` を使う（`--accent` CSS変数でテーマ色）。新ゲーム追加時は `GAMES` 行に `icon` と `color` も必ず入れる。
+- **表彰台**：`showResult()` は3位→2位→1位の順に `pod.show` を付けて発表（ドラムロール→1位でファンファーレ＋紙吹雪）。3Dぽい傾き＋反射は `-webkit-box-reflect`（Chrome/Safari系のみ。他ブラウザでは単に反射が出ないだけで壊れない）。
 - **プレイヤー名のHTML埋め込みは必ず `esc()` を通す**（外部入力なので）。
-- スマホ側は `--mycolor` CSS変数で自分の色にテーマ化、`vibe(ms)` でバイブ。
+- スマホ側は `--mycolor` CSS変数で自分の色にテーマ化（ボタン＋アンビエント光）、`vibe(ms)` でバイブ。
+- `color-mix()` をCSSで多用している（iOS16.2+/Chrome111+。古い端末では色が単色fallbackになるだけ）。SVGグラデは `hexMix()` でJS側計算。
 
 ---
 
