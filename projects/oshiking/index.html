@@ -16,8 +16,9 @@
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
   :root{
-    --ink:#16121f; --paper:#fef6e4; --hot:#ff3b6b; --cool:#3bc9ff;
-    --gold:#ffcf3b; --lime:#9bff5b; --shadow:#0a0710;
+    --ink:#120d22; --deep:#1c1440; --paper:#fef6e4; --hot:#ff3b6b; --cool:#3bc9ff;
+    --gold:#ffcf3b; --lime:#9bff5b; --shadow:#0a0710; --panel:rgba(255,255,255,.07);
+    --accent:#ffcf3b;
   }
   *{box-sizing:border-box; margin:0; padding:0;}
   body{
@@ -32,69 +33,179 @@
   #hostView{min-height:100vh; display:flex; flex-direction:column;}
   .hud{
     display:flex; justify-content:space-between; align-items:center;
-    padding:14px 22px; font-weight:800; letter-spacing:.04em; background:rgba(0,0,0,.25);
+    padding:12px 22px; font-weight:800; letter-spacing:.04em;
+    background:linear-gradient(180deg, rgba(0,0,0,.5), rgba(0,0,0,.25));
+    border-bottom:1px solid rgba(255,255,255,.09); z-index:3; position:relative;
   }
-  .hud .logo{font-size:22px; color:var(--gold);}
-  .hud .round{font-size:14px; opacity:.7;}
+  .hud .logo{
+    font-size:clamp(18px,2.6vw,24px); font-weight:900; letter-spacing:.06em;
+    background:linear-gradient(180deg,#fff3c8 10%, var(--gold) 45%, #ff9d3b 90%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 2px 0 rgba(0,0,0,.55)) drop-shadow(0 0 14px rgba(255,207,59,.35));
+  }
+  .hud .round{
+    font-size:clamp(11px,1.6vw,14px); font-weight:900; letter-spacing:.14em;
+    background:var(--panel); border:1px solid rgba(255,255,255,.18);
+    padding:6px 16px; border-radius:99px;
+  }
+  /* ステージ＝番組セット：回転する照明レイヤー＋スポットライトのビネット */
   .stage{
     flex:1; position:relative; display:flex; align-items:center; justify-content:center;
-    padding:12px 24px; background:radial-gradient(circle at 50% 30%, #2a1f3d, #120d1c 70%); overflow:auto;
+    padding:12px 24px; overflow:auto;
+    background:radial-gradient(ellipse at 50% 24%, #372a66 0%, #211843 45%, #120d22 100%);
   }
-  .big-title{font-size:clamp(30px,6vw,60px); font-weight:900; text-align:center; line-height:1.15;}
+  .stage::before{
+    content:""; position:absolute; inset:-60%; pointer-events:none; z-index:0;
+    background:repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,.05) 0deg 11deg, transparent 11deg 30deg);
+    animation:raySpin 80s linear infinite;
+  }
+  @keyframes raySpin{to{transform:rotate(360deg);}}
+  .stage::after{
+    content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+    background:radial-gradient(ellipse at 50% 42%, transparent 42%, rgba(6,3,14,.55) 100%);
+  }
+  .stage>*{position:relative; z-index:1;}
+  .big-title{font-size:clamp(30px,6vw,60px); font-weight:900; text-align:center; line-height:1.15; text-shadow:0 3px 0 rgba(0,0,0,.4);}
   .sub{font-size:clamp(14px,2vw,18px); opacity:.75; margin-top:10px; text-align:center;}
   .rule-chip{
-    display:inline-block; background:var(--hot); color:#fff; font-weight:800;
-    padding:8px 20px; border-radius:99px; font-size:clamp(15px,2.2vw,20px); margin-top:16px;
+    display:inline-block; background:linear-gradient(180deg,#ff5d85,var(--hot)); color:#fff; font-weight:800;
+    padding:9px 22px; border-radius:99px; font-size:clamp(15px,2.2vw,20px); margin-top:16px;
+    box-shadow:0 4px 0 rgba(0,0,0,.35), 0 0 22px rgba(255,59,107,.35);
   }
+
+  /* ゲーム開始のタイトルカード（番組のコーナー入り演出） */
+  .title-card{text-align:center; width:min(900px,96%);}
+  .tc-round{
+    display:inline-block; background:var(--panel); border:1px solid rgba(255,255,255,.22);
+    padding:6px 20px; border-radius:99px; font-weight:900; letter-spacing:.24em;
+    font-size:clamp(12px,1.7vw,16px); color:var(--accent); animation:fadeDown .4s both;
+  }
+  .tc-icon{display:block; font-size:clamp(54px,11vw,104px); margin-top:14px; animation:popin .5s cubic-bezier(.2,1.6,.4,1) both .1s; filter:drop-shadow(0 6px 12px rgba(0,0,0,.45));}
+  .tc-title{
+    font-size:clamp(40px,8.6vw,88px); font-weight:900; line-height:1.08; letter-spacing:.02em; margin-top:4px;
+    animation:slamIn .5s cubic-bezier(.15,1.25,.3,1) both .18s;
+    text-shadow:0 4px 0 rgba(0,0,0,.4), 0 0 40px var(--accent);
+  }
+  .tc-rule{
+    display:inline-block; margin-top:20px; padding:10px 26px; border-radius:99px;
+    background:var(--accent); color:#161221; font-weight:900; font-size:clamp(16px,2.4vw,22px);
+    box-shadow:0 5px 0 rgba(0,0,0,.35); animation:fadeUp .4s both .5s;
+  }
+  @keyframes slamIn{from{transform:scale(2.8) rotate(-5deg); opacity:0;} 62%{transform:scale(.94) rotate(.5deg); opacity:1;} to{transform:scale(1) rotate(0);} }
+  @keyframes fadeDown{from{transform:translateY(-16px); opacity:0;} to{transform:none; opacity:1;}}
+  @keyframes fadeUp{from{transform:translateY(16px); opacity:0;} to{transform:none; opacity:1;}}
+
   /* ロビー */
-  .lobby{display:flex; gap:clamp(20px,5vw,60px); align-items:center; flex-wrap:wrap; justify-content:center;}
-  .qrbox{background:#fff; padding:16px; border-radius:18px; width:clamp(200px,30vw,300px); display:flex; align-items:center; justify-content:center;}
+  .lobby{display:flex; gap:clamp(20px,5vw,60px); align-items:center; flex-wrap:wrap; justify-content:center; width:100%;}
+  .logo-hero{
+    font-size:clamp(34px,6.5vw,64px); font-weight:900; letter-spacing:.05em; line-height:1.1;
+    background:linear-gradient(180deg,#fff3c8 5%, var(--gold) 45%, #ff9d3b 95%);
+    -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,.55)) drop-shadow(0 0 26px rgba(255,207,59,.4));
+    animation:heroGlow 2.6s ease-in-out infinite alternate;
+  }
+  @keyframes heroGlow{from{filter:drop-shadow(0 3px 0 rgba(0,0,0,.55)) drop-shadow(0 0 14px rgba(255,207,59,.25));} to{filter:drop-shadow(0 3px 0 rgba(0,0,0,.55)) drop-shadow(0 0 34px rgba(255,207,59,.6));}}
+  .logo-crown{display:block; font-size:clamp(30px,5vw,52px); animation:crownBob 2.2s ease-in-out infinite;}
+  @keyframes crownBob{0%,100%{transform:translateY(0) rotate(-4deg);} 50%{transform:translateY(-7px) rotate(4deg);}}
+  .logo-tag{font-size:clamp(13px,1.8vw,17px); font-weight:800; opacity:.8; letter-spacing:.2em; margin-top:8px;}
+  .qr-panel{display:flex; flex-direction:column; align-items:center; gap:14px;}
+  .qrbox{
+    background:#fff; padding:16px; border-radius:22px; width:clamp(200px,28vw,290px);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 0 5px var(--gold), 0 0 44px rgba(255,207,59,.35), 0 14px 34px rgba(0,0,0,.5);
+  }
   .qrbox img{width:100%; height:auto; image-rendering:pixelated;}
   .qrfallback{color:#16121f; font-weight:800; text-align:center; font-size:14px; padding:20px;}
-  .joininfo{max-width:420px;}
+  .joininfo{max-width:460px;}
   .joininfo h2{font-size:clamp(22px,3.5vw,34px); font-weight:900; margin-bottom:8px;}
-  .joininfo .url{background:rgba(255,255,255,.1); border-radius:10px; padding:8px 12px; margin-top:10px; font-size:12px; word-break:break-all; opacity:.85;}
-  .roomcode{font-size:14px; opacity:.6; margin-top:6px;}
+  .joininfo .url{background:var(--panel); border:1px solid rgba(255,255,255,.14); border-radius:10px; padding:8px 12px; margin-top:10px; font-size:12px; word-break:break-all; opacity:.85;}
+  .roomcode{font-size:13px; opacity:.55; margin-top:6px;}
   .playerchips{display:flex; flex-wrap:wrap; gap:8px; margin-top:18px;}
-  .pchip{display:flex; align-items:center; gap:6px; background:rgba(255,255,255,.08); border-radius:99px; padding:6px 14px; font-weight:800; font-size:15px; animation:popin .3s;}
-  @keyframes popin{from{transform:scale(.4); opacity:0;} to{transform:scale(1); opacity:1;}}
-  .pchip .sw{width:14px; height:14px; border-radius:50%;}
+  .pchip{
+    display:flex; align-items:center; gap:7px; background:var(--panel);
+    border:1px solid rgba(255,255,255,.16); border-radius:99px; padding:6px 15px 6px 8px;
+    font-weight:800; font-size:15px; animation:popin .35s cubic-bezier(.2,1.5,.4,1);
+  }
+  @keyframes popin{from{transform:scale(.3); opacity:0;} to{transform:scale(1); opacity:1;}}
+  .pchip .sw{width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:inset 0 -3px 6px rgba(0,0,0,.3);}
   .lobby-actions{margin-top:22px; display:flex; gap:12px; flex-wrap:wrap; align-items:center; justify-content:center;}
-  .startbtn{background:var(--gold); color:#1a1a1a; border:none; font-weight:900; font-size:18px; padding:15px 38px; border-radius:99px; cursor:pointer; box-shadow:0 5px 0 #c79a17;}
-  .startbtn:active{transform:translateY(3px); box-shadow:0 2px 0 #c79a17;}
+  .startbtn{
+    background:linear-gradient(180deg,#ffe27a,var(--gold) 60%,#f0a92c); color:#241a05; border:none; font-weight:900;
+    font-size:18px; padding:15px 38px; border-radius:99px; cursor:pointer;
+    box-shadow:0 5px 0 #a87d12, 0 8px 22px rgba(255,207,59,.35);
+  }
+  .startbtn:active{transform:translateY(3px); box-shadow:0 2px 0 #a87d12;}
   .startbtn:disabled{opacity:.4; cursor:default; box-shadow:0 2px 0 #777;}
-  .ghostbtn{background:rgba(255,255,255,.1); color:var(--paper); border:1px solid rgba(255,255,255,.25); font-weight:800; font-size:14px; padding:13px 20px; border-radius:99px; cursor:pointer;}
+  .ghostbtn{background:var(--panel); color:var(--paper); border:1px solid rgba(255,255,255,.25); font-weight:800; font-size:14px; padding:13px 20px; border-radius:99px; cursor:pointer;}
+  .ghostbtn:active{transform:translateY(2px);}
 
-  /* テストメニュー */
-  .menu-wrap{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%;}
-  .menu-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; width:min(900px,94%);}
-  .gcard{background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:16px; padding:16px 14px; cursor:pointer; color:var(--paper); text-align:center; transition:transform .12s, background .12s;}
-  .gcard:hover{transform:translateY(-3px); background:rgba(255,255,255,.16);}
-  .gcard .gt{font-weight:900; font-size:18px;}
-  .gcard .gs{color:var(--gold); font-size:18px; margin:4px 0; letter-spacing:2px;}
-  .gcard .gd{font-size:12px; opacity:.7; line-height:1.4;}
+  /* ゲームメニュー */
+  .menu-wrap{display:flex; flex-direction:column; align-items:center; gap:14px; width:100%; padding:8px 0;}
+  .menu-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(172px,1fr)); gap:12px; width:min(980px,96%);}
+  .gcard{
+    position:relative; background:linear-gradient(160deg, rgba(255,255,255,.1), rgba(255,255,255,.04));
+    border:1px solid rgba(255,255,255,.16); border-top:3px solid var(--gc, var(--gold));
+    border-radius:16px; padding:14px 12px 12px; cursor:pointer; color:var(--paper); text-align:center;
+    transition:transform .12s, box-shadow .12s; overflow:hidden;
+  }
+  .gcard:hover{transform:translateY(-3px); box-shadow:0 10px 24px rgba(0,0,0,.4), 0 0 18px color-mix(in srgb, var(--gc, var(--gold)) 35%, transparent);}
+  .gcard .gi{font-size:30px; line-height:1; display:block; margin-bottom:5px; filter:drop-shadow(0 3px 5px rgba(0,0,0,.4));}
+  .gcard .gt{font-weight:900; font-size:17px;}
+  .gcard .gs{color:var(--gold); font-size:15px; margin:3px 0; letter-spacing:2px;}
+  .gcard .gd{font-size:11.5px; opacity:.66; line-height:1.4;}
 
-  /* アリーナ */
+  /* アリーナ（アバタートークン） */
   .arena{position:absolute; inset:0;}
-  .dot{position:absolute; border-radius:50%; display:flex; align-items:center; justify-content:center; font-weight:900; color:#1a1a1a; transition:transform .12s ease, opacity .3s; box-shadow:0 4px 0 rgba(0,0,0,.3); text-align:center; line-height:1.05; overflow:hidden;}
-  .dot.dead{opacity:.18; filter:grayscale(1);}
-  .countdown{font-size:clamp(60px,16vw,150px); font-weight:900; color:var(--gold); z-index:5;}
-  .winner{font-size:clamp(34px,8vw,72px); font-weight:900; color:var(--gold);}
-  /* 結果（3・2・1） */
-  .result-top{display:flex; flex-direction:column; gap:8px; margin:16px 0;}
-  .rwin{font-size:clamp(24px,5vw,44px); font-weight:900;}
-  .rwin small{font-size:.5em; color:var(--lime);}
-  .rate-wrap{margin-top:18px;}
+  .dot{
+    position:absolute; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-weight:900; color:#1a1a1a; transition:transform .12s ease, opacity .3s;
+    box-shadow:inset 0 -6px 10px rgba(0,0,0,.28), inset 0 5px 8px rgba(255,255,255,.35), 0 5px 10px rgba(0,0,0,.45);
+    text-align:center; line-height:1.05; overflow:visible;
+  }
+  .dot .face{line-height:1; filter:drop-shadow(0 2px 2px rgba(0,0,0,.3));}
+  .dot .tag{
+    position:absolute; top:calc(100% + 3px); left:50%; transform:translateX(-50%);
+    font-size:11px; font-weight:800; color:var(--paper); white-space:nowrap;
+    text-shadow:0 1px 3px rgba(0,0,0,.8); pointer-events:none;
+  }
+  .dot.dead{opacity:.2; filter:grayscale(1);}
+  .countdown{font-size:clamp(60px,16vw,150px); font-weight:900; color:var(--gold); z-index:5; text-shadow:0 4px 0 rgba(0,0,0,.4), 0 0 40px rgba(255,207,59,.35);}
+  .winner{font-size:clamp(34px,8vw,72px); font-weight:900; color:var(--gold); text-shadow:0 4px 0 rgba(0,0,0,.4), 0 0 44px rgba(255,207,59,.5);}
+
+  /* 結果：表彰台 */
+  .result-wrap{text-align:center; width:min(980px,96%); max-height:100%;}
+  .result-head{
+    display:inline-block; font-weight:900; letter-spacing:.22em; font-size:clamp(13px,1.9vw,17px);
+    color:var(--gold); border:1px solid rgba(255,207,59,.4); background:rgba(255,207,59,.09);
+    padding:6px 22px; border-radius:99px; margin-bottom:6px;
+  }
+  .podium{display:flex; align-items:flex-end; justify-content:center; gap:clamp(10px,2.6vw,24px); margin:12px 0 4px; min-height:190px;}
+  .pod{width:clamp(92px,15vw,150px); opacity:0;}
+  .pod.show{opacity:1; animation:podUp .55s cubic-bezier(.2,1.45,.4,1) both;}
+  @keyframes podUp{from{transform:translateY(60px); opacity:0;} to{transform:none; opacity:1;}}
+  .pod .pod-face{font-size:clamp(34px,6vw,58px); line-height:1.15; filter:drop-shadow(0 4px 8px rgba(0,0,0,.45));}
+  .pod .pod-name{font-weight:900; font-size:clamp(13px,2vw,18px); margin-top:2px; text-shadow:0 2px 3px rgba(0,0,0,.6);}
+  .pod .pod-pt{font-weight:900; font-size:clamp(12px,1.8vw,15px); color:var(--lime);}
+  .pod .pod-block{
+    border-radius:12px 12px 0 0; margin-top:7px; display:flex; align-items:flex-start; justify-content:center;
+    padding-top:7px; font-weight:900; font-size:clamp(18px,3vw,28px); color:rgba(0,0,0,.55);
+    box-shadow:inset 0 6px 8px rgba(255,255,255,.35), inset 0 -12px 18px rgba(0,0,0,.25);
+  }
+  .pod.p1 .pod-block{height:110px; background:linear-gradient(180deg,#ffe27a,#e9b62e);}
+  .pod.p2 .pod-block{height:78px;  background:linear-gradient(180deg,#e8ecf4,#aab4c4);}
+  .pod.p3 .pod-block{height:56px;  background:linear-gradient(180deg,#e8a869,#b0763d);}
+  .rate-wrap{margin-top:14px;}
   .rate-row{display:flex; gap:8px; justify-content:center; align-items:center; margin-top:8px; flex-wrap:wrap;}
   .star-btn{font-size:34px; background:none; border:none; cursor:pointer; color:#888; line-height:1;}
   .star-btn.on{color:var(--gold);}
+
   /* ゲームごとの結果（だれが何をしたか） */
-  .result-detail{margin:14px auto 4px; max-width:min(540px,92%);}
-  .detail-title{font-size:14px; opacity:.8; font-weight:800; margin:10px 0 6px;}
+  .result-detail{margin:12px auto 4px; max-width:min(560px,94%);}
+  .detail-title{font-size:14px; opacity:.85; font-weight:800; margin:10px 0 6px;}
   .detail-list{display:flex; flex-direction:column; gap:5px;}
-  .drow{display:flex; align-items:center; gap:10px; background:rgba(255,255,255,.07); border-radius:10px; padding:7px 12px; font-weight:800; font-size:15px;}
+  .drow{display:flex; align-items:center; gap:10px; background:var(--panel); border:1px solid rgba(255,255,255,.08); border-radius:10px; padding:7px 12px; font-weight:800; font-size:15px;}
   .drow.dead{opacity:.42;}
-  .drow .dsw{width:14px; height:14px; border-radius:50%; flex:none;}
+  .drow .dsw{width:22px; height:22px; border-radius:50%; flex:none; display:flex; align-items:center; justify-content:center; font-size:13px; box-shadow:inset 0 -3px 5px rgba(0,0,0,.3);}
   .drow .dnm{flex:1; text-align:left;}
   .drow .dval{color:var(--lime); font-weight:900; text-align:right; white-space:nowrap;}
   /* 結果バー（ジャストのド真ん中バー再現） */
@@ -104,7 +215,19 @@
   .result-bar .rb-mark{position:absolute; width:24px; height:24px; border-radius:50%; transform:translate(-50%,-50%); box-shadow:0 0 0 3px rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:900; color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.6);}
   .result-bar .rb-scale{position:absolute; bottom:-22px; transform:translateX(-50%); font-size:11px; font-weight:800; opacity:.65; white-space:nowrap;}
   /* 連打のライブカウントバッジ */
-  .mash-badge{position:absolute; right:-3px; top:-3px; min-width:20px; height:20px; padding:0 4px; border-radius:99px; background:#fff; color:#1a1a1a; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 0 rgba(0,0,0,.3); z-index:2;}
+  .mash-badge{position:absolute; right:-4px; top:-4px; min-width:20px; height:20px; padding:0 4px; border-radius:99px; background:#fff; color:#1a1a1a; font-size:11px; font-weight:900; display:flex; align-items:center; justify-content:center; box-shadow:0 2px 0 rgba(0,0,0,.3); z-index:2;}
+
+  /* 優勝セレモニー */
+  .final-wrap{text-align:center;}
+  .final-spot{
+    position:relative; display:block; padding:26px 40px 18px; border-radius:26px;
+    background:radial-gradient(ellipse at 50% 0%, rgba(255,207,59,.22), transparent 70%);
+  }
+  .final-face{font-size:clamp(64px,13vw,130px); line-height:1.1; filter:drop-shadow(0 8px 16px rgba(0,0,0,.5)); animation:popin .6s cubic-bezier(.2,1.5,.4,1) both;}
+  .final-crown{display:block; font-size:clamp(34px,6vw,60px); animation:crownDrop .7s cubic-bezier(.3,1.6,.4,1) both .35s;}
+  @keyframes crownDrop{from{transform:translateY(-70px) rotate(-16deg); opacity:0;} to{transform:none; opacity:1;}}
+  .final-standings{margin:14px auto 0; max-width:min(460px,92%);}
+
   /* 演出（紙吹雪・画面フラッシュ） */
   .fx-confetti{position:fixed; inset:0; pointer-events:none; z-index:90; overflow:hidden;}
   .fx-confetti span{position:absolute; top:-8%; will-change:transform; animation:confFall 2s linear forwards;}
@@ -113,13 +236,16 @@
   @keyframes flashOut{ from{opacity:.75;} to{opacity:0;} }
   .winner{animation:winPop .5s cubic-bezier(.2,1.4,.4,1);}
   @keyframes winPop{ from{transform:scale(.3); opacity:0;} to{transform:scale(1); opacity:1;} }
+
   /* スコアボード */
-  .board{padding:10px 26px 20px; max-height:34vh; overflow:auto; background:rgba(0,0,0,.2);}
-  .scrow{display:flex; align-items:center; gap:12px; padding:6px 0; font-weight:800; font-size:clamp(15px,2vw,20px);}
-  .scrow .rk{width:30px; text-align:center; color:var(--gold); font-weight:900;}
+  .board{padding:10px 26px 18px; max-height:34vh; overflow:auto; background:linear-gradient(180deg, rgba(0,0,0,.4), rgba(0,0,0,.24)); border-top:1px solid rgba(255,255,255,.09); position:relative; z-index:2;}
+  .scrow{position:relative; display:flex; align-items:center; gap:12px; padding:7px 12px; margin:4px 0; font-weight:800; font-size:clamp(15px,2vw,20px); border-radius:10px; overflow:hidden;}
+  .scrow .scbar{position:absolute; left:0; top:0; bottom:0; background:linear-gradient(90deg, rgba(255,255,255,.12), rgba(255,255,255,.03)); border-radius:10px; z-index:0;}
+  .scrow>span{position:relative; z-index:1;}
+  .scrow .rk{width:34px; text-align:center; color:var(--gold); font-weight:900;}
   .scrow .nm{flex:1;}
   .scrow .pt{color:var(--lime); font-weight:900;}
-  .scrow .swatch{width:18px; height:18px; border-radius:50%;}
+  .scrow .swatch{width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; box-shadow:inset 0 -3px 5px rgba(0,0,0,.3);}
 
   /* 親機プレイ（デバッグ用：ホストPCでも遊ぶ） */
   .host-play-btn{position:fixed; right:18px; bottom:18px; z-index:50; background:radial-gradient(circle at 35% 30%, #ff6b8f, var(--hot)); color:#fff; border:none; border-radius:18px; padding:14px 18px; font-weight:900; font-size:15px; line-height:1.25; text-align:center; cursor:pointer; box-shadow:0 6px 0 #b81f47, 0 8px 20px rgba(255,59,107,.4);}
@@ -127,22 +253,37 @@
   .host-play-btn small{display:block; font-size:11px; opacity:.85; font-weight:700;}
 
   /* ============ コントローラー画面（スマホ） ============ */
-  #ctrlView{min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:28px 20px calc(28px + env(safe-area-inset-bottom)); background:#0d0a14;}
+  #ctrlView{
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:space-between;
+    padding:24px 20px calc(24px + env(safe-area-inset-bottom));
+    background:radial-gradient(ellipse at 50% 12%, #2b2052 0%, #17102e 55%, #0d0a18 100%);
+    --mycolor:#ff3b6b;
+  }
   .ctrl-top{text-align:center; width:100%;}
-  .ctrl-top .label{font-size:13px; opacity:.55; font-weight:700;}
-  .ctrl-top .me{font-weight:900; font-size:22px; margin-top:4px;}
+  .ctrl-top .label{font-size:12px; opacity:.55; font-weight:800; letter-spacing:.18em;}
+  .ctrl-top .me{font-weight:900; font-size:22px; margin-top:4px; display:flex; align-items:center; justify-content:center; gap:8px;}
+  .ctrl-top .me .myface{font-size:26px; filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));}
   .name-screen{display:flex; flex-direction:column; gap:16px; align-items:center; width:100%; max-width:340px; margin:auto;}
   .name-screen h2{font-size:22px; font-weight:900; text-align:center;}
   .name-input{width:100%; font-size:20px; padding:14px 16px; border-radius:14px; border:2px solid var(--gold); background:#fff; color:#16121f; text-align:center; font-family:inherit;}
-  .joinbtn{background:var(--gold); color:#1a1a1a; border:none; font-weight:900; font-size:20px; padding:16px 40px; border-radius:99px; cursor:pointer; box-shadow:0 5px 0 #c79a17;}
-  .joinbtn:active{transform:translateY(3px); box-shadow:0 2px 0 #c79a17;}
-  .tapbtn{width:min(74vw,300px); aspect-ratio:1; border-radius:50%; border:none; cursor:pointer; background:radial-gradient(circle at 35% 30%, #ff6b8f, var(--hot)); color:#fff; font-size:clamp(28px,9vw,44px); font-weight:900; letter-spacing:.05em; box-shadow:0 12px 0 #b81f47, 0 16px 34px rgba(255,59,107,.4); transition:transform .05s, box-shadow .05s;}
-  .tapbtn:active{transform:translateY(10px); box-shadow:0 2px 0 #b81f47;}
+  .joinbtn{background:linear-gradient(180deg,#ffe27a,var(--gold) 60%,#f0a92c); color:#241a05; border:none; font-weight:900; font-size:20px; padding:16px 40px; border-radius:99px; cursor:pointer; box-shadow:0 5px 0 #a87d12;}
+  .joinbtn:active{transform:translateY(3px); box-shadow:0 2px 0 #a87d12;}
+  .tapbtn{
+    width:min(72vw,300px); aspect-ratio:1; border-radius:50%; border:none; cursor:pointer;
+    background:radial-gradient(circle at 35% 28%, color-mix(in srgb, var(--mycolor) 55%, #fff), var(--mycolor) 62%, color-mix(in srgb, var(--mycolor) 68%, #000));
+    color:#fff; font-size:clamp(26px,8.6vw,42px); font-weight:900; letter-spacing:.05em;
+    box-shadow:0 12px 0 color-mix(in srgb, var(--mycolor) 52%, #000), 0 18px 40px color-mix(in srgb, var(--mycolor) 45%, transparent), inset 0 4px 10px rgba(255,255,255,.35);
+    transition:transform .05s, box-shadow .05s; text-shadow:0 2px 4px rgba(0,0,0,.4);
+  }
+  .tapbtn:active{transform:translateY(10px); box-shadow:0 2px 0 color-mix(in srgb, var(--mycolor) 52%, #000), inset 0 4px 10px rgba(255,255,255,.35);}
   .tapbtn:disabled{opacity:.3; cursor:default; box-shadow:0 4px 0 #555;}
-  .minusbtn{background:rgba(255,255,255,.12); color:var(--paper); border:2px solid var(--cool); font-weight:900; font-size:16px; padding:12px 26px; border-radius:99px; cursor:pointer; box-shadow:0 4px 0 rgba(59,201,255,.35);}
+  .minusbtn{background:var(--panel); color:var(--paper); border:2px solid var(--cool); font-weight:900; font-size:16px; padding:12px 26px; border-radius:99px; cursor:pointer; box-shadow:0 4px 0 rgba(59,201,255,.35);}
   .minusbtn:active{transform:translateY(3px); box-shadow:0 1px 0 rgba(59,201,255,.35);}
   .minusbtn:disabled{opacity:.3; cursor:default;}
-  .phone-status{font-size:18px; font-weight:800; min-height:26px; text-align:center; padding:0 10px; white-space:pre-line;}
+  .phone-status{
+    font-size:18px; font-weight:800; min-height:26px; text-align:center; padding:12px 18px; white-space:pre-line;
+    background:var(--panel); border:1px solid rgba(255,255,255,.12); border-radius:16px; max-width:min(88vw,360px);
+  }
   .conn-banner{font-size:14px; font-weight:700; opacity:.7; min-height:20px; text-align:center;}
 </style>
 </head>
@@ -151,7 +292,7 @@
 <!-- ============ ホスト画面 ============ -->
 <div id="hostView" class="hidden">
   <div class="hud">
-    <span class="logo">★ オシキング</span>
+    <span class="logo">👑 オシキング</span>
     <span class="round" id="roundLabel"></span>
   </div>
   <div class="stage" id="stage"></div>
@@ -162,8 +303,8 @@
 <!-- ============ コントローラー画面 ============ -->
 <div id="ctrlView" class="hidden">
   <div class="ctrl-top">
-    <div class="label">あなたのコントローラー</div>
-    <div class="me" id="ctrlName">　</div>
+    <div class="label">CONTROLLER</div>
+    <div class="me"><span class="myface" id="ctrlFace"></span><span id="ctrlName">　</span></div>
   </div>
   <div class="name-screen" id="nameScreen">
     <h2>なまえを入れて<br>参加しよう！</h2>
@@ -185,24 +326,28 @@
 // ===== 共通設定 =====
 const COLORS=["#ff3b6b","#3bc9ff","#ffcf3b","#9bff5b","#c77bff","#ff944d","#4dffd0","#ff6b9b",
               "#7bd0ff","#ffd84d","#b6ff6b","#ff7bd0","#6bffe0","#ffa06b","#9b8bff","#ff5b8b"];
-// ミニゲーム定義（ui: tap=1ボタン / cycle=押すたび手が変わる）
+// プレイヤーのアバター顔（参加順に自動割当。色と組み合わせてキャラっぽく見せる）
+const FACES=["😀","😎","🤠","🦊","🐱","🐸","🐼","🦁","👻","🐙","🐥","🦄","🐵","🐯","👽","🐻"];
+// HTMLエスケープ（プレイヤー名などを画面に埋め込むときは必ず通す）
+function esc(s){ return String(s).replace(/[&<>"']/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+// ミニゲーム定義（ui: tap=1ボタン / cycle=押すたび手が変わる。icon/colorは演出用テーマ）
 const GAMES=[
-  {key:"fast",    title:"最速おし",   rule:"GO！が出たら一番早く押せ", ui:"tap"},
-  {key:"slow",    title:"がまん",     rule:"ニセ合図に釣られるな！本物の解除で押せ", ui:"tap"},
-  {key:"just",    title:"ジャスト",   rule:"ゲージがド真ん中で押せ",  ui:"tap"},
-  {key:"sank",    title:"3すくみ",    rule:"押すたび グー→チョキ→パー", ui:"cycle"},
-  {key:"mash",    title:"連打耐久",   rule:"5秒間で一番多く押せ",     ui:"tap"},
-  {key:"chicken", title:"チキンレース", rule:"最後から2・3・4番目が勝ち！ドベと未押下はダメ", ui:"tap"},
-  {key:"daruma",  title:"だるまさんがころんだ", rule:"進めの間だけ連打！止まれで押すと後退", ui:"tap"},
-  {key:"minority", title:"少数決",     rule:"少ない方が生き残る。多数派は道連れ", ui:"cycle"},
-  {key:"maruta",  title:"丸太ジャンプ", rule:"丸太が来た瞬間にジャンプ！早すぎ遅すぎNG", ui:"tap"},
-  {key:"san3",    title:"3の倍数で押すな", rule:"数字でリズム押し。3の倍数と3の付く数は押すな", ui:"tap"},
-  {key:"gunman",  title:"早撃ちガンマン", rule:"標的に選ばれてなければ早押し！標的が押すと負け", ui:"tap"},
-  {key:"clock",   title:"秒数当て",   rule:"指定の秒ピッタリで押せ。途中で時計は消える", ui:"tap"},
-  {key:"evenodd", title:"偶奇投票",   rule:"A/B/Cに投票。人数が指定の偶/奇のグループが生存", ui:"cycle"},
-  {key:"odai",    title:"お題早押し", rule:"お題に合うものが出たら早押し！違うのは押すな", ui:"tap"},
-  {key:"repeat",  title:"最速◯回",   rule:"規定回数を最速連打！ロック中に押すとリセット", ui:"tap"},
-  {key:"fruit",   title:"果物カウント", rule:"次々出る果物を数えて、押した回数で答える", ui:"counter"},
+  {key:"fast",    title:"最速おし",   rule:"GO！が出たら一番早く押せ", ui:"tap", icon:"⚡", color:"#ffcf3b"},
+  {key:"slow",    title:"がまん",     rule:"ニセ合図に釣られるな！本物の解除で押せ", ui:"tap", icon:"🪤", color:"#ff944d"},
+  {key:"just",    title:"ジャスト",   rule:"ゲージがド真ん中で押せ",  ui:"tap", icon:"🎯", color:"#3bc9ff"},
+  {key:"sank",    title:"3すくみ",    rule:"押すたび グー→チョキ→パー", ui:"cycle", icon:"✌️", color:"#c77bff"},
+  {key:"mash",    title:"連打耐久",   rule:"5秒間で一番多く押せ",     ui:"tap", icon:"🔥", color:"#ff3b6b"},
+  {key:"chicken", title:"チキンレース", rule:"最後から2・3・4番目が勝ち！ドベと未押下はダメ", ui:"tap", icon:"🐔", color:"#ffd84d"},
+  {key:"daruma",  title:"だるまさんがころんだ", rule:"進めの間だけ連打！止まれで押すと後退", ui:"tap", icon:"🧸", color:"#ff7bd0"},
+  {key:"minority", title:"少数決",     rule:"少ない方が生き残る。多数派は道連れ", ui:"cycle", icon:"🃏", color:"#9bff5b"},
+  {key:"maruta",  title:"丸太ジャンプ", rule:"丸太が来た瞬間にジャンプ！早すぎ遅すぎNG", ui:"tap", icon:"🪵", color:"#ffa06b"},
+  {key:"san3",    title:"3の倍数で押すな", rule:"数字でリズム押し。3の倍数と3の付く数は押すな", ui:"tap", icon:"🔢", color:"#7bd0ff"},
+  {key:"gunman",  title:"早撃ちガンマン", rule:"標的に選ばれてなければ早押し！標的が押すと負け", ui:"tap", icon:"🤠", color:"#ff944d"},
+  {key:"clock",   title:"秒数当て",   rule:"指定の秒ピッタリで押せ。途中で時計は消える", ui:"tap", icon:"⏱️", color:"#4dffd0"},
+  {key:"evenodd", title:"偶奇投票",   rule:"A/B/Cに投票。人数が指定の偶/奇のグループが生存", ui:"cycle", icon:"🗳️", color:"#9b8bff"},
+  {key:"odai",    title:"お題早押し", rule:"お題に合うものが出たら早押し！違うのは押すな", ui:"tap", icon:"💡", color:"#ffd84d"},
+  {key:"repeat",  title:"最速◯回",   rule:"規定回数を最速連打！ロック中に押すとリセット", ui:"tap", icon:"🔓", color:"#ff6b9b"},
+  {key:"fruit",   title:"果物カウント", rule:"次々出る果物を数えて、押した回数で答える", ui:"counter", icon:"🍎", color:"#b6ff6b"},
 ];
 
 const PARAMS=new URLSearchParams(location.search);
@@ -230,6 +375,21 @@ function tone(freq,dur,type,vol,when){
   g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
   o.connect(g); g.connect(_actx.destination); o.start(t); o.stop(t+dur+0.03);
 }
+// ノイズ音源（拍手・ドラム・スラム用。バッファ生成なのでファイル不要）
+function noise(dur,vol,when,freq){
+  if(!_actx) return;
+  const t=_actx.currentTime+(when||0);
+  const len=Math.max(1,Math.floor(_actx.sampleRate*dur));
+  const buf=_actx.createBuffer(1,len,_actx.sampleRate);
+  const d=buf.getChannelData(0);
+  for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
+  const src=_actx.createBufferSource(); src.buffer=buf;
+  const bp=_actx.createBiquadFilter(); bp.type="bandpass"; bp.frequency.setValueAtTime(freq||1800,t); bp.Q.value=0.8;
+  const g=_actx.createGain();
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(vol||0.15,t+0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  src.connect(bp); bp.connect(g); g.connect(_actx.destination); src.start(t); src.stop(t+dur+0.03);
+}
 function sfx(name){
   if(!_actx) return;
   switch(name){
@@ -242,6 +402,10 @@ function sfx(name){
     case "lose":    { const n=performance.now(); if(n-_lastLose<110) return; _lastLose=n; tone(220,0.26,"sawtooth",0.16); tone(160,0.30,"sawtooth",0.13,0.05); } break;
     case "win":     [523,659,784,1047].forEach((f,i)=>tone(f,0.16,"triangle",0.20,i*0.09)); break;
     case "fanfare": [523,659,784,1047,880,1047,1319].forEach((f,i)=>tone(f,0.20,"square",0.17,i*0.11)); break;
+    case "slam":    tone(90,0.3,"sine",0.3); noise(0.22,0.2,0,300); break;                       // タイトルが「ドン！」と出る音
+    case "whoosh":  noise(0.28,0.13,0,900); noise(0.2,0.1,0.06,2400); break;                     // 画面切り替えの風切り音
+    case "drum":    for(let i=0;i<14;i++) noise(0.05,0.11,i*0.09,700+((i%2)*180)); break;         // ドラムロール（約1.3秒）
+    case "applause":for(let i=0;i<26;i++) noise(0.05,0.07+Math.random()*0.07,Math.random()*1.4,1500+Math.random()*1800); break; // 拍手
   }
 }
 function partyBurst(){
@@ -300,10 +464,10 @@ function handleHostMessage(conn,msg){
   if(msg.type==="join"){
     let p=players.find(x=>x.conn===conn);
     if(!p){
-      p={id:nextId++, name:(msg.name||("P"+nextId)).slice(0,8), color:COLORS[(nextId-1)%COLORS.length], cpu:false, conn:conn, alive:true};
+      p={id:nextId++, name:(msg.name||("P"+nextId)).slice(0,8), color:COLORS[(nextId-1)%COLORS.length], face:FACES[(nextId-1)%FACES.length], cpu:false, conn:conn, alive:true};
       players.push(p); scores[p.id]=0;
     }else{ p.name=(msg.name||p.name).slice(0,8); }
-    sendTo(p,{type:"welcome", color:p.color, name:p.name});
+    sendTo(p,{type:"welcome", color:p.color, name:p.name, face:p.face});
     if(!started) renderLobbyPlayers();
     return;
   }
@@ -332,14 +496,19 @@ function showLobby(urlOrMsg, roomId){
   }
   $("stage").innerHTML=
     '<div class="lobby">'+
-      '<div class="qrbox">'+qrHtml+'</div>'+
-      '<div class="joininfo"><h2>スマホで読んで参加！</h2>'+
-        '<div class="sub" style="text-align:left">カメラでQRを読み取ってね。</div>'+
-        (isUrl?('<div class="url">'+urlOrMsg+'</div>'):('<div class="sub" style="text-align:left">'+(urlOrMsg||"")+'</div>'))+
-        (roomId?('<div class="roomcode">ルームID: '+roomId+'</div>'):'')+
+      '<div class="qr-panel">'+
+        '<div style="text-align:center"><span class="logo-crown">👑</span>'+
+          '<div class="logo-hero">オシキング</div>'+
+          '<div class="logo-tag">— ボタン1つのパーティ大会 —</div></div>'+
+        '<div class="qrbox">'+qrHtml+'</div>'+
+      '</div>'+
+      '<div class="joininfo"><h2>📱 スマホで読んで参加！</h2>'+
+        '<div class="sub" style="text-align:left">カメラでQRを読み取って、なまえを入れるだけ。</div>'+
+        (isUrl?('<div class="url">'+esc(urlOrMsg)+'</div>'):('<div class="sub" style="text-align:left">'+esc(urlOrMsg||"")+'</div>'))+
+        (roomId?('<div class="roomcode">ルームID: '+esc(roomId)+'</div>'):'')+
         '<div class="playerchips" id="playerChips"></div>'+
         '<div class="lobby-actions">'+
-          '<button class="startbtn" id="startBtn" disabled>テストメニューへ</button>'+
+          '<button class="startbtn" id="startBtn" disabled>🎮 ゲームせんたくへ</button>'+
           '<button class="ghostbtn" id="addCpuBtn">＋CPUを追加（テスト用）</button>'+
           '<button class="ghostbtn" id="addHostBtn">＋自分も参加（親機）</button>'+
         '</div>'+
@@ -355,14 +524,14 @@ function showLobby(urlOrMsg, roomId){
 function addCpu(){
   const CPU_NAMES=["CPUタロウ","CPUハナ","CPUケン","CPUミウ","CPUゴロ","CPUリン","CPUダイ","CPUナナ"];
   const c=players.filter(p=>p.cpu).length;
-  const p={id:nextId++, name:CPU_NAMES[c%CPU_NAMES.length], color:COLORS[(nextId-1)%COLORS.length], cpu:true, conn:null, alive:true};
+  const p={id:nextId++, name:CPU_NAMES[c%CPU_NAMES.length], color:COLORS[(nextId-1)%COLORS.length], face:FACES[(nextId-1)%FACES.length], cpu:true, conn:null, alive:true};
   players.push(p); scores[p.id]=0;
   if(started) renderMenu(); else renderLobbyPlayers();
 }
 // 親機プレイ（デバッグ用）：ホストPCの人もプレイヤーとして参加。SPACE/Enter/画面ボタンで押す。
 function addHostPlayer(){
   if(hostPlayerId!=null) return; // 親機プレイヤーは1人だけ
-  const p={id:nextId++, name:"あなた(親機)", color:COLORS[(nextId-1)%COLORS.length], cpu:false, conn:null, host:true, alive:true};
+  const p={id:nextId++, name:"あなた(親機)", color:COLORS[(nextId-1)%COLORS.length], face:FACES[(nextId-1)%FACES.length], cpu:false, conn:null, host:true, alive:true};
   players.push(p); scores[p.id]=0; hostPlayerId=p.id;
   updateHostPlayBtn();
   if(started) renderMenu(); else renderLobbyPlayers();
@@ -380,7 +549,7 @@ function updateHostPlayBtn(){
 }
 function renderLobbyPlayers(){
   const box=$("playerChips"); if(!box) return; box.innerHTML="";
-  players.forEach(p=>{ const c=document.createElement("div"); c.className="pchip"; c.innerHTML='<span class="sw" style="background:'+p.color+'"></span>'+p.name+(p.host?" 🎮":(p.cpu?" 🤖":"")); box.appendChild(c); });
+  players.forEach(p=>{ const c=document.createElement("div"); c.className="pchip"; c.innerHTML='<span class="sw" style="background:'+p.color+'">'+p.face+'</span>'+esc(p.name)+(p.host?" 🎮":(p.cpu?" 🤖":"")); box.appendChild(c); });
   if($("startBtn")) $("startBtn").disabled = players.length<1;
   if($("lobbyHint")) $("lobbyHint").textContent = players.length<1 ? "1人＋CPUでも遊べます" : (players.length+"人 参加中。メニューへ！");
 }
@@ -388,18 +557,18 @@ function renderLobbyPlayers(){
 // --- テストメニュー（ミニゲーム選択式） ---
 function enterMenu(){ sfxInit(); started=true; $("board").classList.remove("hidden"); renderBoard(); renderMenu(); }
 function renderMenu(){
-  $("roundLabel").textContent="テストメニュー";
+  $("roundLabel").textContent="ゲームせんたく";
   let html='<div class="menu-wrap">'+
     '<div class="big-title" style="font-size:clamp(24px,4vw,40px)">どれで遊ぶ？</div>'+
-    '<div class="sub">ゲームを選んでテスト。終わったら☆で評価できるよ（参加 '+players.length+'人）</div>'+
+    '<div class="sub">1つ選んで単発プレイ。王座決定戦は全ゲーム通しの総合優勝バトル！（参加 '+players.length+'人）</div>'+
     '<div class="menu-grid">';
   GAMES.forEach(g=>{ const r=ratings[g.key]||0;
-    html+='<button class="gcard" data-key="'+g.key+'"><div class="gt">'+g.title+'</div>'+
+    html+='<button class="gcard" data-key="'+g.key+'" style="--gc:'+g.color+'"><span class="gi">'+g.icon+'</span><div class="gt">'+g.title+'</div>'+
       '<div class="gs">'+("★".repeat(r)+"☆".repeat(3-r))+'</div>'+
       '<div class="gd">'+g.rule+'</div></button>'; });
   html+='</div>'+
     '<div class="lobby-actions">'+
-      '<button class="startbtn" id="runAllBtn">▶ 通しで全部</button>'+
+      '<button class="startbtn" id="runAllBtn">👑 王座決定戦（全ゲーム通し）</button>'+
       '<button class="ghostbtn" id="addCpuBtn2">＋CPUを追加</button>'+
       '<button class="ghostbtn" id="addHostBtn2">＋自分も参加（親機）</button>'+
     '</div></div>';
@@ -433,9 +602,15 @@ async function runTournament(){
 }
 
 async function showGameIntro(game){
-  $("stage").innerHTML='<div style="text-align:center"><div class="big-title">'+game.title+'</div><div class="rule-chip">'+game.rule+'</div></div>';
-  broadcast({type:"prompt", text:game.rule, ui:"wait"});
-  await sleep(2000);
+  const no=GAMES.indexOf(game)+1;
+  $("stage").innerHTML='<div class="title-card" style="--accent:'+game.color+'">'+
+    '<span class="tc-round">GAME '+(no>0?no:"?")+' / '+GAMES.length+'</span>'+
+    '<span class="tc-icon">'+game.icon+'</span>'+
+    '<div class="tc-title">'+game.title+'</div>'+
+    '<div class="tc-rule">'+game.rule+'</div></div>';
+  sfx("whoosh"); setTimeout(()=>sfx("slam"), 260);
+  broadcast({type:"prompt", text:game.icon+" "+game.title+"\n"+game.rule, ui:"wait"});
+  await sleep(2400);
 }
 async function playGame(game){
   players.forEach(p=>p.alive=true);
@@ -463,10 +638,11 @@ async function playGame(game){
 // 結果リスト用ヘルパー（だれが何をしたか）
 function pname(id){ const p=players.find(x=>x.id===id); return p?p.name:("P"+id); }
 function pcolor(id){ const p=players.find(x=>x.id===id); return p?p.color:"#888"; }
+function pface(id){ const p=players.find(x=>x.id===id); return p?(p.face||""):""; }
 function pmark(id){ const p=players.find(x=>x.id===id); return p?(p.host?" 🎮":(p.cpu?" 🤖":"")):""; }
 function detailRows(rows){ // rows: [{id, val, dead}]
   let h='<div class="detail-list">';
-  rows.forEach(r=>{ h+='<div class="drow'+(r.dead?' dead':'')+'"><span class="dsw" style="background:'+pcolor(r.id)+'"></span><span class="dnm">'+pname(r.id)+pmark(r.id)+'</span><span class="dval">'+r.val+'</span></div>'; });
+  rows.forEach(r=>{ h+='<div class="drow'+(r.dead?' dead':'')+'"><span class="dsw" style="background:'+pcolor(r.id)+'">'+pface(r.id)+'</span><span class="dnm">'+esc(pname(r.id))+pmark(r.id)+'</span><span class="dval">'+r.val+'</span></div>'; });
   return h+'</div>';
 }
 // 投票系（少数決・偶奇投票）：誰がどれに投票したかを選択肢ごとにグルーピングして表示
@@ -474,7 +650,7 @@ function voteTable(entries, labels){ // entries:[{id,choice}], labels:[選択肢
   let h='<div class="detail-list">';
   labels.forEach((lab,idx)=>{
     const ids=entries.filter(e=>e.choice===idx).map(e=>e.id);
-    h+='<div class="drow"><span class="dnm">'+lab+'</span><span class="dval">'+(ids.length? ids.map(id=>pname(id)).join('、') : '（0人）')+'</span></div>';
+    h+='<div class="drow"><span class="dnm">'+lab+'</span><span class="dval">'+(ids.length? ids.map(id=>pface(id)+esc(pname(id))).join('、') : '（0人）')+'</span></div>';
   });
   return h+'</div>';
 }
@@ -708,9 +884,7 @@ async function gameDaruma(){
   const size=Math.max(26,Math.min(44,360/Math.sqrt(n+1)));
   const lanes={};
   players.forEach((p,i)=>{
-    const tok=document.createElement("div"); tok.className="dot"; tok.id="dot"+p.id;
-    tok.style.width=size+"px"; tok.style.height=size+"px"; tok.style.fontSize=Math.max(10,size*0.26)+"px";
-    tok.style.background=p.color; tok.textContent=p.name.slice(0,2);
+    const tok=makeToken(p,size);
     tok.style.left="5%"; tok.style.top=(24+i*step)+"%"; tok.style.transition="left .15s, transform .12s";
     arena.appendChild(tok); lanes[p.id]=tok;
   });
@@ -806,9 +980,7 @@ async function gameMaruta(){
   players.forEach((p,i)=>{
     const x = n<=1 ? 50 : leftM + span*(i/(n-1));
     xs[p.id]=x;
-    const tok=document.createElement("div"); tok.className="dot"; tok.id="dot"+p.id;
-    tok.style.width=size+"px"; tok.style.height=size+"px"; tok.style.fontSize=Math.max(11,size*0.28)+"px";
-    tok.style.background=p.color; tok.textContent=p.name.slice(0,2);
+    const tok=makeToken(p,size);
     tok.style.left="calc("+x+"% - "+(size/2)+"px)"; tok.style.bottom="20%"; tok.style.transition="bottom .16s ease-out";
     arena.appendChild(tok); toks[p.id]=tok;
   });
@@ -927,12 +1099,12 @@ async function gameGunman(){
   await sleep(1100);
   // 3・2・1・標的＆どん！ を一気に：カウントダウンの勢いのまま標的発表＝即スタート
   for(let i=3;i>=1;i--){ cd.textContent=i; cd.style.fontSize="clamp(60px,16vw,150px)"; sfx("count"); await sleep(600); }
-  const targetNames=[...targets].map(id=>pname(id)).join("・");
+  const targetNames=[...targets].map(id=>esc(pname(id))).join("・");
   cd.style.fontSize="clamp(22px,4.2vw,40px)"; cd.style.color="var(--hot)";
   cd.innerHTML="🎯 "+targetNames+"！<br><span style='color:var(--lime)'>どん！🔫</span>";
   sfx("lose"); sfx("go"); screenFlash();
   const times={}; const fouls=new Set(); const goAt=performance.now();
-  players.forEach(p=>{ const tgt=targets.has(p.id); const d=$("dot"+p.id); if(d && tgt) d.textContent="🎯";
+  players.forEach(p=>{ const tgt=targets.has(p.id); const d=$("dot"+p.id); if(d && tgt){ const f=d.querySelector(".face"); if(f) f.textContent="🎯"; }
     sendToId(p.id,{type:"prompt", text: tgt?"🎯あなたは標的！\n撃つな（押すな）":"どん！撃て！🔫", ui:"tap", enable:true}); });
   pressHandler=(id)=>{
     if(targets.has(id)){ if(!fouls.has(id)){ fouls.add(id); flash(id,true); sendToId(id,{type:"prompt",text:"標的なのに撃った…負け",enable:false}); } return; }
@@ -1152,15 +1324,22 @@ function addCountdown(txt){
   cd.style.position="absolute"; cd.style.left="50%"; cd.style.top="50%"; cd.style.transform="translate(-50%,-50%)";
   arena.appendChild(cd); return cd;
 }
+// アバタートークン生成（全ゲーム共通。id="dot"+pid で flash()/badge が効く）
+function makeToken(p,size){
+  const d=document.createElement("div"); d.className="dot"; d.id="dot"+p.id;
+  d.style.width=size+"px"; d.style.height=size+"px";
+  d.style.background="radial-gradient(circle at 35% 28%, color-mix(in srgb, "+p.color+" 55%, #fff), "+p.color+" 68%)";
+  d.innerHTML='<span class="face" style="font-size:'+Math.round(size*0.54)+'px">'+p.face+'</span>'+
+              '<span class="tag">'+esc(p.name.slice(0,6))+'</span>';
+  return d;
+}
 function renderArena(){
   $("stage").innerHTML='<div class="arena"></div>';
   const arena=$("stage").querySelector(".arena"); const n=players.length;
   const size=Math.max(34, Math.min(60, 460/Math.sqrt(n+1)));
-  const rx=n<=1?0:36, ry=n<=1?0:34;
+  const rx=n<=1?0:36, ry=n<=1?0:32;
   players.forEach((p,i)=>{
-    const d=document.createElement("div"); d.className="dot"; d.id="dot"+p.id;
-    d.style.width=size+"px"; d.style.height=size+"px"; d.style.fontSize=Math.max(11,size*0.26)+"px";
-    d.style.background=p.color; d.textContent=p.name.slice(0,3);
+    const d=makeToken(p,size);
     const a=(i/n)*Math.PI*2 - Math.PI/2, cx=50+Math.cos(a)*rx, cy=50+Math.sin(a)*ry;
     d.style.left="calc("+cx+"% - "+(size/2)+"px)"; d.style.top="calc("+cy+"% - "+(size/2)+"px)";
     arena.appendChild(d);
@@ -1169,27 +1348,47 @@ function renderArena(){
 function flash(id,dead){ const d=$("dot"+id); if(!d) return; d.animate([{transform:"scale(1)"},{transform:"scale(1.4)"},{transform:"scale(1)"}],{duration:200}); if(dead){ d.classList.add("dead"); sfx("lose"); } }
 function renderBoard(){
   const sorted=[...players].sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
+  const max=Math.max(1, ...sorted.map(p=>scores[p.id]||0));
   const board=$("board"); board.innerHTML="";
+  const RK=["🥇","🥈","🥉"];
   sorted.forEach((p,i)=>{ const row=document.createElement("div"); row.className="scrow";
-    row.innerHTML='<span class="rk">'+(i+1)+'</span><span class="swatch" style="background:'+p.color+'"></span><span class="nm">'+p.name+(p.host?" 🎮":(p.cpu?" 🤖":""))+'</span><span class="pt">'+(scores[p.id]||0)+' pt</span>';
+    const w=Math.round((scores[p.id]||0)/max*100);
+    row.innerHTML='<span class="scbar" style="width:'+w+'%"></span>'+
+      '<span class="rk">'+(RK[i]||(i+1))+'</span><span class="swatch" style="background:'+p.color+'">'+p.face+'</span><span class="nm">'+esc(p.name)+(p.host?" 🎮":(p.cpu?" 🤖":""))+'</span><span class="pt">'+(scores[p.id]||0)+' pt</span>';
     board.appendChild(row); });
 }
 
-// 結果表示（3・2・1加点）＋ ☆評価
+// 結果表示（3・2・1加点）：表彰台で3位→2位→1位の順にドラムロール発表 ＋ ☆評価
 async function showResult(game, ranking){
   const top=ranking.slice(0,3);
   top.forEach((id,i)=>{ scores[id]=(scores[id]||0)+(3-i); });
   const medals=["🥇","🥈","🥉"];
-  let html='<div style="text-align:center"><div class="sub">'+game.title+' けっか</div>';
+  let html='<div class="result-wrap"><div class="result-head">'+game.icon+' '+game.title+'　RESULT</div>';
   if(top.length){
-    html+='<div class="result-top">';
-    top.forEach((id,i)=>{ const p=players.find(x=>x.id===id); if(p) html+='<div class="rwin" style="color:'+p.color+'">'+medals[i]+' '+p.name+' <small>+'+(3-i)+'</small></div>'; });
+    html+='<div class="podium">';
+    // 表示順は 2位・1位・3位（真ん中が一番高い台）
+    const seat=[1,0,2];
+    seat.forEach(i=>{ const id=top[i]; if(id===undefined){ html+='<div class="pod"></div>'; return; }
+      html+='<div class="pod p'+(i+1)+'" id="pod'+i+'">'+
+        '<div class="pod-face">'+pface(id)+'</div>'+
+        '<div class="pod-name" style="color:'+pcolor(id)+'">'+medals[i]+esc(pname(id))+'</div>'+
+        '<div class="pod-pt">+'+(3-i)+' pt</div>'+
+        '<div class="pod-block">'+(i+1)+'</div></div>';
+    });
     html+='</div>';
   }else{ html+='<div class="winner">勝者なし…</div>'; }
   if(resultDetail) html+='<div class="result-detail">'+resultDetail+'</div>';
   html+='<div class="rate-wrap"><div class="sub">面白さは？（デバッグ評価）</div><div class="rate-row" id="rateRow"></div></div></div>';
   $("stage").innerHTML=html;
-  if(top.length){ sfx("win"); screenFlash(); partyBurst(); }
+  // 3位→2位→1位の順に登場（1位でファンファーレ＋紙吹雪）
+  if(top.length){
+    sfx("drum");
+    for(let i=Math.min(2,top.length-1); i>=0; i--){
+      await sleep(i===0?650:450);
+      const el=$("pod"+i); if(el) el.classList.add("show");
+      if(i===0){ sfx("win"); sfx("applause"); screenFlash(); partyBurst(); } else sfx("good");
+    }
+  }
   top.forEach(id=>{ if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"入賞！🎉",enable:false}); });
   await showRating(game);
 }
@@ -1209,12 +1408,22 @@ async function showFinal(){
   const sorted=[...players].sort((a,b)=>(scores[b.id]||0)-(scores[a.id]||0));
   const champ=sorted[0];
   $("roundLabel").textContent="結果発表";
-  $("stage").innerHTML='<div style="text-align:center"><div class="sub">総合優勝</div>'+
-    '<div class="winner" style="color:'+champ.color+'">👑 '+champ.name+'</div>'+
-    '<div class="sub">'+(scores[champ.id]||0)+' pt</div></div>';
-  sfx("fanfare"); screenFlash(); partyBurst(); setTimeout(partyBurst,700);
-  players.forEach(p=>{ if(!p.cpu) sendTo(p,{type:"prompt", text:(p.id===champ.id?"優勝！！👑":"おつかれさま！"), enable:false}); });
-  renderBoard(); await sleep(2600);
+  // ため（ドラムロール）→ 優勝者ドン！の2段構成
+  $("stage").innerHTML='<div class="final-wrap"><div class="result-head">FINAL</div>'+
+    '<div class="big-title" style="margin-top:16px">今日のオシキングは…</div></div>';
+  sfx("drum"); await sleep(1500);
+  let standings='<div class="final-standings"><div class="detail-list">';
+  sorted.forEach((p,i)=>{ standings+='<div class="drow"><span class="dsw" style="background:'+p.color+'">'+p.face+'</span><span class="dnm">'+(i+1)+'位　'+esc(p.name)+pmark(p.id)+'</span><span class="dval">'+(scores[p.id]||0)+' pt</span></div>'; });
+  standings+='</div></div>';
+  $("stage").innerHTML='<div class="final-wrap"><div class="result-head">CHAMPION</div>'+
+    '<div class="final-spot"><span class="final-crown">👑</span>'+
+      '<div class="final-face">'+champ.face+'</div>'+
+      '<div class="winner" style="color:'+champ.color+'">'+esc(champ.name)+'</div>'+
+      '<div class="sub" style="opacity:1"><b style="color:var(--lime)">'+(scores[champ.id]||0)+' pt</b> で総合優勝！</div></div>'+
+    standings+'</div>';
+  sfx("fanfare"); sfx("applause"); screenFlash(); partyBurst(); setTimeout(partyBurst,700); setTimeout(()=>{ partyBurst(); sfx("applause"); },1500);
+  players.forEach(p=>{ if(!p.cpu) sendTo(p,{type:"prompt", text:(p.id===champ.id?"優勝！！👑":"おつかれさま！\n優勝は "+champ.name), enable:false}); });
+  renderBoard(); await sleep(3400);
 }
 
 /* ============================================================
@@ -1247,11 +1456,18 @@ function ctrl_init(){
     setStatus("スタート待ち…");
   };
   const tap=$("tap");
-  tap.addEventListener("pointerdown", e=>{ e.preventDefault(); sfxInit(); if(myConn&&myConn.open&&!tap.disabled){ sfx("press"); myConn.send({type:"press", t:Date.now()}); } });
+  tap.addEventListener("pointerdown", e=>{ e.preventDefault(); sfxInit(); if(myConn&&myConn.open&&!tap.disabled){ sfx("press"); vibe(18); myConn.send({type:"press", t:Date.now()}); } });
 }
+function vibe(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
 function handleCtrlMessage(msg){
   if(!msg||!msg.type) return;
-  if(msg.type==="welcome"){ if(msg.name) $("ctrlName").textContent=msg.name; return; }
+  if(msg.type==="welcome"){
+    if(msg.name) $("ctrlName").textContent=msg.name;
+    if(msg.face) $("ctrlFace").textContent=msg.face;
+    if(msg.color) $("ctrlView").style.setProperty("--mycolor", msg.color); // 自分の色でボタンをテーマ化
+    vibe(40);
+    return;
+  }
   if(msg.type==="prompt"){
     if(msg.ui) myCurrentUi=msg.ui;
     if(msg.ui==="cycle"){ cycleHand=0; myCycleOptions=(msg.options&&msg.options.length)?msg.options:HANDS; setStatus(msg.text+"\n今："+myCycleOptions[0]); }
