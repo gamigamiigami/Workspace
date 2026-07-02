@@ -60,7 +60,9 @@
   }
 
   /* ============ ホスト画面 ============ */
-  #hostView{min-height:100vh; display:flex; flex-direction:column; position:relative; z-index:1;}
+  /* 高さは100vh固定＋stage内スクロール（min-height:autoのままだと中身が増えるたびページ全体が伸びる） */
+  body.host{overflow:hidden;}
+  #hostView{height:100vh; height:100dvh; display:flex; flex-direction:column; position:relative; z-index:1;}
   .hud{
     display:flex; justify-content:space-between; align-items:center;
     padding:10px 22px; font-weight:800; letter-spacing:.04em;
@@ -81,7 +83,8 @@
     padding:7px 18px; border-radius:99px; backdrop-filter:blur(8px);
   }
   .stage{
-    flex:1; position:relative; display:flex; align-items:center; justify-content:center;
+    flex:1; min-height:0; position:relative; display:flex;
+    align-items:safe center; justify-content:safe center;
     padding:12px 24px; overflow:auto; background:transparent;
   }
   .stage::before{ /* ごく薄い光条 */
@@ -340,7 +343,7 @@
 
   /* ===== スコアボード ===== */
   .board{
-    padding:10px 24px 16px; max-height:32vh; overflow:auto; position:relative; z-index:2;
+    flex:none; padding:10px 24px 16px; max-height:32vh; overflow:auto; position:relative; z-index:2;
     background:rgba(9,11,24,.6); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px);
     border-top:1px solid var(--stroke);
   }
@@ -556,7 +559,7 @@ const GAMES=[
   {key:"fast",    title:"最速おし",   rule:"GO！が出たら一番早く押せ", ui:"tap", icon:"⚡", color:"#ffcf3b"},
   {key:"slow",    title:"がまん",     rule:"ニセ合図に釣られるな！本物の解除で押せ", ui:"tap", icon:"🪤", color:"#ff944d"},
   {key:"just",    title:"ジャスト",   rule:"ゲージがド真ん中で押せ",  ui:"tap", icon:"🎯", color:"#3bc9ff"},
-  {key:"sank",    title:"3すくみ",    rule:"押すたび グー→チョキ→パー", ui:"cycle", icon:"✌️", color:"#c77bff"},
+  {key:"sank",    title:"あと出しじゃんけん", rule:"相手の手を見て「勝て/負けろ」どおりに出せ！だんだん速くなる", ui:"cycle", icon:"✌️", color:"#c77bff"},
   {key:"mash",    title:"連打耐久",   rule:"5秒間で一番多く押せ",     ui:"tap", icon:"🔥", color:"#ff3b6b"},
   {key:"chicken", title:"チキンレース", rule:"最後から2・3・4番目が勝ち！ドベと未押下はダメ", ui:"tap", icon:"🐔", color:"#ffd84d"},
   {key:"daruma",  title:"だるまさんがころんだ", rule:"進めの間だけ連打！止まれで押すと後退", ui:"tap", icon:"🧸", color:"#ff7bd0"},
@@ -565,7 +568,8 @@ const GAMES=[
   {key:"san3",    title:"3の倍数で押すな", rule:"数字でリズム押し。3の倍数と3の付く数は押すな", ui:"tap", icon:"🔢", color:"#7bd0ff"},
   {key:"gunman",  title:"早撃ちガンマン", rule:"標的に選ばれてなければ早押し！標的が押すと負け", ui:"tap", icon:"🤠", color:"#ff944d"},
   {key:"clock",   title:"秒数当て",   rule:"指定の秒ピッタリで押せ。途中で時計は消える", ui:"tap", icon:"⏱️", color:"#4dffd0"},
-  {key:"evenodd", title:"偶奇投票",   rule:"A/B/Cに投票。人数が指定の偶/奇のグループが生存", ui:"cycle", icon:"🗳️", color:"#9b8bff"},
+  {key:"unique",  title:"かぶらずビッグ", rule:"1〜10から選ぶ。かぶらなかった一番大きい数が勝ち", ui:"counter", icon:"🎲", color:"#9b8bff"},
+  {key:"sync",    title:"シンクロ押し", rule:"合図なし！みんなと同じ瞬間に押せ。ズレた人が負け", ui:"tap", icon:"🤝", color:"#66e6c4"},
   {key:"odai",    title:"お題早押し", rule:"お題に合うものが出たら早押し！違うのは押すな", ui:"tap", icon:"💡", color:"#ffd84d"},
   {key:"repeat",  title:"最速◯回",   rule:"規定回数を最速連打！ロック中に押すとリセット", ui:"tap", icon:"🔓", color:"#ff6b9b"},
   {key:"fruit",   title:"果物カウント", rule:"次々出る果物を数えて、押した回数で答える", ui:"counter", icon:"🍎", color:"#b6ff6b"},
@@ -646,6 +650,7 @@ function screenFlash(color){ const f=document.createElement("div"); f.className=
 let players=[];        // {id,name,color,cpu,conn,alive}
 let scores={};
 let round=0;
+let scoreMult=1;       // 得点倍率（王座決定戦の終盤は2倍＝逆転チャンス）
 let nextId=0;
 let started=false;
 let running=false;
@@ -746,7 +751,9 @@ function showLobby(urlOrMsg, roomId){
   renderLobbyPlayers();
 }
 function addCpu(){
-  const CPU_NAMES=["CPUタロウ","CPUハナ","CPUケン","CPUミウ","CPUゴロ","CPUリン","CPUダイ","CPUナナ"];
+  const CPU_NAMES=["CPUタロウ","CPUハナ","CPUケン","CPUミウ","CPUゴロ","CPUリン","CPUダイ","CPUナナ",
+                   "CPUサク","CPUモモ","CPUレン","CPUユイ","CPUカイ","CPUアオ","CPUソラ","CPUヒナ",
+                   "CPUリク","CPUメイ","CPUショウ","CPUツバサ"];
   const c=players.filter(p=>p.cpu).length;
   const p={id:nextId++, name:CPU_NAMES[c%CPU_NAMES.length], color:COLORS[(nextId-1)%COLORS.length], face:(nextId-1)%16, cpu:true, conn:null, alive:true};
   players.push(p); scores[p.id]=0;
@@ -788,7 +795,7 @@ function renderMenu(){
     '<div class="menu-grid">';
   GAMES.forEach(g=>{ const r=ratings[g.key]||0;
     html+='<button class="gcard" data-key="'+g.key+'" style="--gc:'+g.color+'"><span class="gi">'+g.icon+'</span><div class="gt">'+g.title+'</div>'+
-      '<div class="gs">'+("★".repeat(r)+"☆".repeat(3-r))+'</div>'+
+      '<div class="gs">'+(r?("★".repeat(r)+"☆".repeat(3-r)):"&nbsp;")+'</div>'+
       '<div class="gd">'+g.rule+'</div></button>'; });
   html+='</div>'+
     '<div class="lobby-actions">'+
@@ -805,7 +812,7 @@ function renderMenu(){
 
 // --- ラン制御 ---
 async function runSingle(key){
-  if(running) return; running=true; sfxInit();
+  if(running) return; running=true; sfxInit(); scoreMult=1;
   const game=GAMES.find(g=>g.key===key);
   await showGameIntro(game);
   const ranking=await playGame(game);
@@ -815,7 +822,9 @@ async function runSingle(key){
 async function runTournament(){
   if(running) return; running=true; sfxInit();
   for(let i=0;i<GAMES.length;i++){
-    round=i+1; $("roundLabel").textContent="ラウンド "+round+" / "+GAMES.length;
+    round=i+1;
+    scoreMult = (i>=Math.ceil(GAMES.length*2/3)) ? 2 : 1;  // 終盤1/3は得点2倍＝逆転タイム
+    $("roundLabel").textContent="ラウンド "+round+" / "+GAMES.length+(scoreMult>1?"｜⚡得点2倍":"");
     const game=GAMES[i];
     await showGameIntro(game);
     const ranking=await playGame(game);
@@ -828,7 +837,7 @@ async function runTournament(){
 async function showGameIntro(game){
   const no=GAMES.indexOf(game)+1;
   $("stage").innerHTML='<div class="title-card" style="--accent:'+game.color+'">'+
-    '<span class="tc-round">GAME '+(no>0?no:"?")+' / '+GAMES.length+'</span>'+
+    '<span class="tc-round">GAME '+(no>0?no:"?")+' / '+GAMES.length+(scoreMult>1?'　⚡得点2倍':'')+'</span>'+
     '<span class="tc-icon">'+game.icon+'</span>'+
     '<div class="tc-title">'+game.title+'</div>'+
     '<div class="tc-rule">'+game.rule+'</div></div>';
@@ -852,7 +861,8 @@ async function playGame(game){
   if(game.key==="san3")    return await gameSan3();
   if(game.key==="gunman")  return await gameGunman();
   if(game.key==="clock")   return await gameClock();
-  if(game.key==="evenodd") return await gameEvenOdd();
+  if(game.key==="unique")  return await gameUnique();
+  if(game.key==="sync")    return await gameSync();
   if(game.key==="odai")    return await gameOdai();
   if(game.key==="repeat")  return await gameRepeat();
   if(game.key==="fruit")   return await gameFruit();
@@ -986,43 +996,60 @@ async function gameJust(){
   return ranking;
 }
 
-// 3すくみ
+// あと出しじゃんけん：画面の「相手の手」を見て「勝て！/負けろ！」の指示どおりの手を選ぶ。
+// ラウンドごとに制限時間が短くなり、後半は「負けろ」が混ざって脳がバグる。間違えたら脱落。
 async function gameSankume(){
   renderArena();
   const arenaEl=$("stage").querySelector(".arena");
-  const HL=["✊グー","✌チョキ","✋パー"];
-  // 本物のじゃんけんルール：手が2種類だけ出ていれば勝つ方の手が勝ち。1種類or3種類全部出ていれば「あいこ」＝もう一回。
-  let hands={}, best=null, attempt=0;
-  const MAXTRY=4;
-  while(best===null && attempt<MAXTRY){
-    attempt++;
+  const HL=["✊グー","✌チョキ","✋パー"], HE=["✊","✌","✋"];
+  // 手の強弱：a が b に勝つ ⇔ (a+1)%3===b（グー→チョキ→パー→グー）
+  const winHand=o=>(o+2)%3, loseHand=o=>(o+1)%3;
+  const ROUNDS=5;
+  const survived={}; players.forEach(p=>survived[p.id]=0);
+  let alive=new Set(players.map(p=>p.id));
+  broadcast({type:"prompt", text:"あと出しじゃんけん！\n画面の指示どおりの手を出せ", ui:"wait", enable:false});
+  const cd=addCountdown("よーく見て…"); cd.style.fontSize="clamp(26px,5vw,48px)";
+  await sleep(1400);
+  let lastRound=0;
+  for(let r=1; r<=ROUNDS && alive.size>1; r++){
+    lastRound=r;
     if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove());
-    hands={}; players.forEach(p=>hands[p.id]=0);
-    broadcast({type:"prompt", text: attempt===1?"押すたび グー→チョキ→パー":"あいこでしょ！\nもう一回", ui:"cycle", options:HL, enable:true});
-    pressHandler=(id)=>{ hands[id]=((hands[id]||0)+1)%3; flash(id); };
-    players.forEach(p=>{ if(p.cpu){ const taps=Math.floor(Math.random()*4); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 150+Math.random()*(attempt===1?2200:1100)); } });
-    const cd=addCountdown(attempt===1?"3":"せーの");
-    if(attempt===1){ for(let i=3;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(900); } }
-    else{ sfx("count"); await sleep(1000); }
-    cd.textContent="ドン！"; sfx("go"); endInputs();
-    const counts=[0,0,0]; Object.values(hands).forEach(v=>counts[v]++);
-    const present=[0,1,2].filter(h=>counts[h]>0);
-    if(present.length===2){ const [a,b]=present; best = ((a+1)%3===b) ? a : b; } // aがbを倒すなら a が勝ち手
-    if(best===null){ cd.textContent="あいこ！"; cd.style.color="var(--cool)"; await sleep(600); }
+    const oppo=Math.floor(Math.random()*3);
+    const mustWin = r<=2 ? true : Math.random()<0.55;   // 序盤は「勝て」だけ。3ラウンド目から「負けろ」が混ざる
+    const need = mustWin ? winHand(oppo) : loseHand(oppo);
+    const dur=Math.max(1500, 3400 - r*400);              // だんだん短く
+    const hands={}; alive.forEach(id=>hands[id]=0);      // prompt(ui:"cycle")でスマホ側も0にリセットされる＝同期が取れる
+    pressHandler=(id)=>{ if(alive.has(id)){ hands[id]=((hands[id]||0)+1)%3; flash(id); } };
+    broadcast({type:"prompt", text:"相手は "+HL[oppo]+"\n【"+(mustWin?"勝て！":"負けろ！")+"】", ui:"cycle", options:HL, enable:true});
+    const oppoEl=addCountdown(HE[oppo]); oppoEl.style.top="38%";
+    const orderEl=addCountdown(mustWin?"勝て！":"負けろ！"); orderEl.style.top="66%";
+    orderEl.style.fontSize="clamp(30px,6vw,56px)"; orderEl.style.color=mustWin?"var(--lime)":"var(--hot)";
+    sfx(mustWin?"go":"lose");
+    // CPU：正解率はラウンドが進むほど低下。正解の手になるまで押す（押した回数＝手のindex）
+    alive.forEach(id=>{ const p=players.find(x=>x.id===id); if(p&&p.cpu){
+      const acc=Math.max(0.35, 0.92 - r*0.11);
+      const pick=Math.random()<acc ? need : Math.floor(Math.random()*3);
+      for(let k=0;k<pick;k++) ct(()=>{ if(pressHandler) pressHandler(id); }, 250+Math.random()*(dur*0.6));
+    }});
+    await sleep(dur);
+    pressHandler=null; clearCpu(); broadcast({type:"enable", on:false});
+    // 判定：指示どおりの手＝生存、それ以外＝脱落
+    const wrong=[];
+    alive.forEach(id=>{ if(hands[id]===need) survived[id]=r; else wrong.push(id); });
+    wrong.forEach(id=>{ alive.delete(id); flash(id,true); sendToId(id,{type:"prompt",text:"正解は "+HL[need]+"…脱落！",enable:false}); });
+    orderEl.textContent="正解は "+HE[need]+"！（残り"+alive.size+"人）"; orderEl.style.fontSize="clamp(22px,4vw,40px)"; orderEl.style.color="var(--gold)";
+    sfx("good");
+    await sleep(1100);
   }
-  let ranking, headline;
-  if(best===null){
-    ranking=shuffle(players.map(p=>p.id));
-    headline="あいこ続き…引き分け（全員おなじ点）";
-  }else{
-    const winners=players.filter(p=>hands[p.id]===best).map(p=>p.id);
-    const losers=players.filter(p=>hands[p.id]!==best).map(p=>p.id);
-    ranking=[...shuffle(winners), ...shuffle(losers)];
-    headline="みんなの手（勝ち手＝"+HL[best]+"）";
-  }
-  await sleep(600);
-  const rows=ranking.map(id=>({id, val:HL[hands[id]]+(hands[id]===best?" ◎勝ち":""), dead:best!==null&&hands[id]!==best}));
-  resultDetail='<div class="detail-title">'+headline+'</div>'+detailRows(rows);
+  endInputs();
+  // 生き残ったラウンド数が多い順（同数はシャッフル）
+  const groups={};
+  players.forEach(p=>{ const s=alive.has(p.id)?ROUNDS+1:survived[p.id]; (groups[s]=groups[s]||[]).push(p.id); });
+  const ranking=Object.keys(groups).map(Number).sort((a,b)=>b-a).flatMap(s=>shuffle(groups[s]));
+  const rows=ranking.map(id=>({id,
+    val: alive.has(id)?("最後まで生存 👑"):(survived[id]>0?("第"+(survived[id]+1)+"ラウンドで脱落"):"第1ラウンドで脱落"),
+    dead:!alive.has(id)}));
+  resultDetail='<div class="detail-title">'+lastRound+'ラウンド戦（指示どおりの手を出せたか）</div>'+detailRows(rows);
   return ranking;
 }
 
@@ -1376,47 +1403,116 @@ async function gameClock(){
   return ranking;
 }
 
-// 偶奇投票：A/B/Cに投票（cycle）。各グループ人数が指定パリティ(偶/奇)に一致したら生存。脱落の逆順で順位。
-async function gameEvenOdd(){
+// かぶらずビッグ：1〜10から数字を選ぶ（カウンター入力）。誰ともかぶらなかった数字の中で一番大きい人が勝ち。
+// 「大きい数を狙いたい。でもみんなも狙う→かぶって0点」の心理戦。2ラウンドの合計点で勝負。
+async function gameUnique(){
   renderArena();
   const arenaEl=$("stage").querySelector(".arena");
-  const OPTS=["🅰 A","🅱 B","🅲 C"];
-  let alive=players.map(p=>p.id); const elim=[]; let roundNo=0; const log=[];
-  while(alive.length>2 && roundNo<6){
-    roundNo++;
-    if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove()); // 前ラウンドの表示を消してから
-    const parity=Math.random()<0.5?0:1; // 0=偶数,1=奇数
-    const parityLabel=parity===0?"偶数":"奇数";
-    const votes={}; alive.forEach(id=>votes[id]=0);
-    broadcast({type:"prompt", text:"A/B/Cに投票！\n今回は【"+parityLabel+"】が生き残り", ui:"cycle", options:OPTS, enable:true});
-    alive.forEach(id=>{ const d=$("dot"+id); if(d) d.classList.remove("dead"); });
-    pressHandler=(id)=>{ if(!alive.includes(id)) return; votes[id]=((votes[id]||0)+1)%3; flash(id); };
-    alive.forEach(id=>{ const p=players.find(x=>x.id===id); if(p&&p.cpu){ const taps=Math.floor(Math.random()*4); for(let k=0;k<taps;k++) ct(()=>{ if(pressHandler) pressHandler(id); }, 200+Math.random()*2200); } });
-    const parityTag=addCountdown("今回は【"+parityLabel+"】が生き残り！");
-    parityTag.style.top="9%"; parityTag.style.fontSize="clamp(18px,3vw,28px)"; parityTag.style.color= parity===0 ? "var(--cool)" : "var(--hot)";
-    const cd=addCountdown("3");
-    for(let i=3;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(850); }
+  const MAXN=10, ROUNDS=2;
+  const total={}; players.forEach(p=>total[p.id]=0);
+  let dt='';
+  for(let r=1; r<=ROUNDS; r++){
+    if(arenaEl) arenaEl.querySelectorAll(".countdown").forEach(el=>el.remove());
+    const picks={}; players.forEach(p=>picks[p.id]=0);
+    broadcast({type:"prompt", text:"第"+r+"ラウンド！1〜10を押した回数で選べ\nかぶらない一番大きい数が勝ち", ui:"counter", enable:true});
+    pressHandler=(id)=>{ if(picks[id]<MAXN){ picks[id]=(picks[id]||0)+1; } flash(id); };
+    minusHandler=(id)=>{ picks[id]=Math.max(0,(picks[id]||0)-1); };
+    // CPU：大きい数ほど人気（=かぶりやすい）という傾向を再現
+    players.forEach(p=>{ if(p.cpu){
+      const roll=Math.random(); const pick= roll<0.45 ? 7+Math.floor(Math.random()*4) : 1+Math.floor(Math.random()*MAXN);
+      for(let k=0;k<pick;k++) ct(()=>{ if(pressHandler) pressHandler(p.id); }, 400+Math.random()*4200);
+    }});
+    const head=addCountdown("かぶらない一番大きい数字は？"); head.style.top="10%"; head.style.fontSize="clamp(18px,3vw,30px)"; head.style.color="var(--gold)";
+    const cd=addCountdown("8");
+    for(let i=8;i>=1;i--){ cd.textContent=i; sfx("count"); await sleep(1000); }
     cd.textContent="オープン！"; sfx("go"); endInputs();
-    const c=[0,0,0]; alive.forEach(id=>c[votes[id]]++);
-    const okGroup=[0,1,2].filter(g=>c[g]>0 && (c[g]%2)===parity);
-    const voteSnapshot=alive.map(id=>({id, choice:votes[id]}));
-    log.push({r:roundNo, c:[...c], parity, votes:voteSnapshot});
-    await sleep(500);
-    if(okGroup.length===0){ cd.textContent="該当グループなし！全員セーフ"; cd.style.color="var(--cool)"; await sleep(1300); continue; }
-    const survivors=alive.filter(id=>okGroup.includes(votes[id]));
-    const losers=alive.filter(id=>!okGroup.includes(votes[id]));
-    losers.forEach(id=>{ flash(id,true); elim.push(id); if(!players.find(p=>p.id===id).cpu) sendToId(id,{type:"prompt",text:"パリティ外…脱落",enable:false}); });
-    cd.textContent=(parity===0?"偶数":"奇数")+"人数のグループが生存！"; cd.style.color="var(--lime)";
-    alive=survivors; await sleep(1500);
+    await sleep(700);
+    // 10→1の順に発表：かぶり=✗、最初のユニーク=そのラウンドの勝者（数字がそのまま得点）
+    const byNum={}; players.forEach(p=>{ const v=picks[p.id]; if(v>=1){ (byNum[v]=byNum[v]||[]).push(p.id); } });
+    let winner=null, winVal=0;
+    for(let v=MAXN; v>=1; v--){
+      const ids=byNum[v]||[];
+      if(ids.length===0) continue;
+      const nm=ids.slice(0,3).map(id=>pname(id)).join("・")+(ids.length>3?" ほか"+(ids.length-3)+"人":"");
+      cd.textContent=v+"： "+nm+(ids.length===1?" ◎":" ✗かぶり");
+      cd.style.fontSize="clamp(20px,3.6vw,36px)"; cd.style.color=ids.length===1?"var(--lime)":"var(--hot)";
+      sfx(ids.length===1?"good":"lose");
+      if(ids.length===1){ ids.forEach(id=>flash(id)); } else ids.forEach(id=>flash(id,true));
+      await sleep(950);
+      if(ids.length===1 && winner===null){ winner=ids[0]; winVal=v; break; } // 上から最初のユニークで決着
+    }
+    if(winner!==null){
+      total[winner]+=winVal;
+      // ユニークだった人は自分の数字ぶん加点（勝者以外のユニークにも小さな旨みを残す）
+      for(let v=winVal-1; v>=1; v--){ const ids=byNum[v]||[]; if(ids.length===1) total[ids[0]]+=v; }
+      cd.textContent="🏆 "+pname(winner)+" が "+winVal+" でユニーク最大！"; cd.style.color="var(--gold)";
+      screenFlash(); sfx("win");
+    }else{
+      cd.textContent="全部かぶった！勝者なし…"; cd.style.color="var(--cool)"; sfx("lose");
+    }
+    players.forEach(p=>{ const d=$("dot"+p.id); if(d) d.classList.remove("dead"); });
+    const rows=players.map(p=>({id:p.id, val: picks[p.id]>=1 ? (picks[p.id]+((byNum[picks[p.id]]||[]).length===1?"（ユニーク◎）":"（かぶり✗）")) : "未入力", dead:picks[p.id]<1}));
+    dt+='<div class="detail-title">第'+r+'ラウンドの数字</div>'+detailRows(rows);
+    await sleep(1500);
   }
   endInputs();
-  let dt='';
-  log.forEach(L=>{
-    dt+='<div class="detail-title">第'+L.r+'回（'+(L.parity===0?"偶数":"奇数")+'が生存）：A'+L.c[0]+' / B'+L.c[1]+' / C'+L.c[2]+'</div>'+voteTable(L.votes, OPTS);
-  });
-  dt+='<div class="detail-title">最終生存</div>'+detailRows(alive.map(id=>({id, val:"生き残り👑"})));
+  const ranking=shuffle(players.map(p=>p.id)).sort((a,b)=>total[b]-total[a]);
+  dt='<div class="detail-title">合計スコア（ユニークだった数字の合計）</div>'+
+     detailRows(ranking.map(id=>({id, val:total[id]+"点", dead:total[id]===0})))+dt;
   resultDetail=dt;
-  return [...alive, ...elim.reverse()];
+  return ranking;
+}
+
+// シンクロ押し：合図なし。「みんなと同じ瞬間」を狙って1回だけ押す。全員の中央値に近い人が勝ち。
+// 空気の読み合いゲーム。誰かが押すのを待ちすぎても、先走ってもダメ。
+async function gameSync(){
+  renderArena();
+  const cd=addCountdown("心をひとつに…"); cd.style.fontSize="clamp(26px,5vw,48px)";
+  const meter=addCountdown("0 / "+players.length+" 人"); meter.style.top="72%"; meter.style.fontSize="clamp(18px,3vw,30px)"; meter.style.color="var(--cool)";
+  broadcast({type:"prompt", text:"合図はない！\nみんなと同じ瞬間を狙って1回押せ", ui:"tap", enable:true});
+  const t0=performance.now(); const at={}; let n=0;
+  pressHandler=(id)=>{
+    if(at[id]!==undefined) return;
+    at[id]=performance.now()-t0; n++; flash(id); sfx("press");
+    meter.textContent=n+" / "+players.length+" 人";
+    sendToId(id,{type:"prompt",text:"押した！みんなと合ってるかな…",enable:false});
+  };
+  // CPU：グループの「空気」＝共通の中心時刻の周りに集まる（±0.9秒ブレ）
+  const center=2800+Math.random()*2600;
+  players.forEach(p=>{ if(p.cpu) ct(()=>{ if(pressHandler) pressHandler(p.id); }, Math.max(300, center+(Math.random()*1800-900))); });
+  const LIMIT=9000, ts=performance.now();
+  while(performance.now()-ts<LIMIT && n<players.length){ await sleep(120); }
+  endInputs();
+  const pressed=players.map(p=>p.id).filter(id=>at[id]!==undefined).sort((a,b)=>at[a]-at[b]);
+  const noPress=players.map(p=>p.id).filter(id=>at[id]===undefined);
+  let ranking, rows=[], bar='';
+  if(pressed.length===0){ ranking=shuffle(players.map(p=>p.id)); rows=ranking.map(id=>({id,val:"押さず",dead:true})); }
+  else{
+    const times=pressed.map(id=>at[id]);
+    const med=times[Math.floor((times.length-1)/2)]; // 中央値＝「みんなの瞬間」
+    ranking=[...pressed].sort((a,b)=>Math.abs(at[a]-med)-Math.abs(at[b]-med)).concat(noPress);
+    cd.textContent="みんなの瞬間＝"+(med/1000).toFixed(2)+"秒！"; cd.style.fontSize="clamp(22px,4vw,40px)"; cd.style.color="var(--gold)"; sfx("good");
+    // 全員の押した位置をバーで再現（線＝中央値）
+    const lo=Math.min(...times), hi=Math.max(...times), span=Math.max(1,hi-lo);
+    const RANK_ICON=["①","②","③","④","⑤","⑥","⑦","⑧","⑨","⑩"];
+    let marks=''; let lastX=null, tog=1;
+    ranking.filter(id=>at[id]!==undefined).forEach((id,rank)=>{
+      const x=(at[id]-lo)/span*100;
+      let dy=0; if(lastX!==null&&Math.abs(x-lastX)<5){ dy=tog*17; tog=-tog; } else tog=1; lastX=x;
+      marks+='<div class="rb-mark" style="left:'+x+'%; top:calc(50% + '+dy+'px); background:'+pcolor(id)+';">'+(RANK_ICON[rank]||(rank+1))+'</div>';
+    });
+    const medX=(med-lo)/span*100;
+    bar='<div class="result-bar-wrap"><div class="detail-title">押した瞬間（白い線＝みんなの中央値）</div>'+
+      '<div class="result-bar"><div class="rb-center" style="left:'+medX+'%"></div>'+
+      '<div class="rb-scale" style="left:0%">'+(lo/1000).toFixed(1)+'s</div><div class="rb-scale" style="left:100%">'+(hi/1000).toFixed(1)+'s</div>'+
+      marks+'</div></div>';
+    rows=ranking.map(id=>({id,
+      val: at[id]===undefined?"押さず✗":("ズレ "+Math.round(Math.abs(at[id]-med))+"ms"),
+      dead: at[id]===undefined}));
+  }
+  await sleep(1200);
+  resultDetail=bar+detailRows(rows);
+  return ranking;
 }
 
 // お題早押し：お題（赤い/食べ物/動物/丸い）に合うものが出たら早押し。ダミー（非該当）に押すとフライング。
@@ -1558,13 +1654,20 @@ function makeToken(p,size){
 function renderArena(){
   $("stage").innerHTML='<div class="arena"></div>';
   const arena=$("stage").querySelector(".arena"); const n=players.length;
-  const size=Math.max(34, Math.min(60, 460/Math.sqrt(n+1)));
-  const rx=n<=1?0:36, ry=n<=1?0:32;
-  players.forEach((p,i)=>{
-    const d=makeToken(p,size);
-    const a=(i/n)*Math.PI*2 - Math.PI/2, cx=50+Math.cos(a)*rx, cy=50+Math.sin(a)*ry;
-    d.style.left="calc("+cx+"% - "+(size/2)+"px)"; d.style.top="calc("+cy+"% - "+(size/2)+"px)";
-    arena.appendChild(d);
+  const size=Math.max(30, Math.min(60, 460/Math.sqrt(n+1)));
+  // 13人以上は外周＋内周の2重リング（1周に詰め込むと重なって誰が誰だか分からなくなる）
+  const rings = n<=12 ? [{ids:players, rx:36, ry:32}]
+                      : [{ids:players.slice(0,Math.ceil(n/2)), rx:39, ry:35},
+                         {ids:players.slice(Math.ceil(n/2)),   rx:22, ry:19}];
+  if(n<=1){ rings[0].rx=0; rings[0].ry=0; }
+  rings.forEach(ring=>{
+    const m=ring.ids.length;
+    ring.ids.forEach((p,i)=>{
+      const d=makeToken(p,size);
+      const a=(i/m)*Math.PI*2 - Math.PI/2, cx=50+Math.cos(a)*ring.rx, cy=50+Math.sin(a)*ring.ry;
+      d.style.left="calc("+cx+"% - "+(size/2)+"px)"; d.style.top="calc("+cy+"% - "+(size/2)+"px)";
+      arena.appendChild(d);
+    });
   });
 }
 function flash(id,dead){ const d=$("dot"+id); if(!d) return; d.animate([{transform:"scale(1)"},{transform:"scale(1.4)"},{transform:"scale(1)"}],{duration:200}); if(dead){ d.classList.add("dead"); sfx("lose"); } }
@@ -1583,7 +1686,7 @@ function renderBoard(){
 // 結果表示（3・2・1加点）：表彰台で3位→2位→1位の順にドラムロール発表 ＋ ☆評価
 async function showResult(game, ranking){
   const top=ranking.slice(0,3);
-  top.forEach((id,i)=>{ scores[id]=(scores[id]||0)+(3-i); });
+  top.forEach((id,i)=>{ scores[id]=(scores[id]||0)+(3-i)*scoreMult; });
   const medals=["🥇","🥈","🥉"];
   let html='<div class="result-wrap"><div class="result-head">'+game.icon+' '+game.title+'　RESULT</div>';
   if(top.length){
@@ -1594,7 +1697,7 @@ async function showResult(game, ranking){
       html+='<div class="pod p'+(i+1)+'" id="pod'+i+'">'+
         '<div class="pod-face">'+pavatar(id)+'</div>'+
         '<div class="pod-name" style="color:'+pcolor(id)+'">'+esc(pname(id))+'</div>'+
-        '<div class="pod-pt">+'+(3-i)+' pt</div>'+
+        '<div class="pod-pt">+'+((3-i)*scoreMult)+' pt</div>'+
         '<div class="pod-block">'+(i+1)+'</div></div>';
     });
     html+='</div>';
