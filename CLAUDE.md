@@ -18,7 +18,10 @@ Workspace/
 │       ├── patterns/          # 成功パターン集
 │       ├── failures/          # 失敗・ハマりポイント集
 │       ├── semiretire/        # セミリタイア・副業コンテキスト
-│       └── defuddle/          # Web取得ツール（トークン節約）
+│       ├── defuddle/          # Web取得ツール（トークン節約）
+│       ├── my-website-maker/  # サイト・ゲーム制作のAI主導進行
+│       ├── my-lp-maker/       # LP制作のAI主導進行
+│       └── my-tool-maker/     # ツール開発のAI主導進行
 ├── knowledge/
 │   ├── profile.md             # 基本情報（hook で自動読み込み）
 │   ├── mistakes.md            # AIのミス記録（hook で自動読み込み）
@@ -45,11 +48,16 @@ Workspace/
 
 | タスクの種類 | 使うスキル |
 |---|---|
+| Webサイト・Webゲーム制作（新規） | `my-website-maker`（サイト/ゲームのモード分岐あり） |
+| LP・集客ページ制作（新規） | `my-lp-maker` |
+| ツール・アプリ開発（新規） | `my-tool-maker` |
 | HTML・コード作成 | `coding-rules` → `patterns` → `failures` |
 | UIパーツが必要 | `ui-components` |
 | 副業・販売ツール | `semiretire` |
 | note記事執筆・有料記事制作 | `note-writer` |
 | 外部URL参照 | `defuddle` |
+
+`my-*-maker` 系はAI主導型の進行スキル。新規制作の起点として使い、実装フェーズでは `coding-rules` 等と併用する。
 
 単発の質問・雑談はスキルをスキップしてよい。
 
