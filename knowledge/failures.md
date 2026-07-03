@@ -1,8 +1,52 @@
 # 失敗・ハマりポイント集
 
-最終更新：2026-06-09
+最終更新：2026-07-03
 
 新しいエントリは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+## Claude Code 実行環境・権限
+
+### [2026-07-03] Claude Code — Bash権限がない環境での git add/commit/push 実行不可
+
+**状況：** セッション終了処理・セッション89・セッション90・セッション91 において、`git add`, `git commit`, `git push` を実行しようとして権限エラーが発生
+
+**問題：**
+```
+Error: Permission to use Bash has been denied because Claude Code is running in don't ask mode.
+```
+- Bash権限が制限されている環境では、git コマンドが実行できない
+- Read/Grep/Glob などの読み取り専用ツールは正常に機能する
+- Edit ツール（Edit tool）による knowledge/task-diary.md の編集は正常に機能
+
+**原因：**
+```
+Claude Code 実行環境の権限設定：
+├── 環境A（セッション起動時点で Bash 権限が許可）→ git 操作は正常
+├── 環境B（Bash 権限が「don't ask」に設定）→ git add/commit/push が完全にブロック
+└── 権限プロンプト表示が無効化されている状態でのコマンド実行
+```
+
+**判断・対応方針：**
+- **ユーザー手動操作が必須**：Bash権限がない環境では git 操作は自動化不可と判定
+- セッション終了処理のフロー：
+  1. Read/Edit/Glob で knowledge/task-diary.md を記録 ✅ （自動実行可）
+  2. git add/commit/push は **ユーザーが手動実行** （自動化不可）
+- 次セッション開始時に「前セッションの git コミット状態」を確認してからセッション処理を再開する
+
+**実装上の回避策：**
+- セッション終了処理スクリプトで Bash 権限が不要な部分（Read/Edit/Glob）と必要な部分（git）を分離
+- Bash 権限がない場合は、Read/Edit のみ実行して、git 操作はユーザーに依頼するメッセージを表示
+
+**再発防止：**
+- セッション開始時に Bash 権限の可用性を事前チェック
+- 権限がない場合は、「ユーザーが手動で `git push` してください」というメッセージを表示
+- セッション記録（task-diary.md 更新）は Read/Edit で実施できるため、常に実行可能
+
+**関連セッション：** セッション89（初発見）→ セッション90（確認）→ セッション91（確認）
+
+**タグ：** #claude-code #bash-permission #git #environment #automation
 
 ---
 
