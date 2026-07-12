@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-07-13T06:49:22+09:00",
+  "source_article": "projects/rakuda-sensei/articles/2026-07-13-pillarC-0ai.md",
+  "source_title": "教員が0から作るAI共作教育ゲーム入門",
+  "article_url": "",
+  "platforms": [
+    "X-A",
+    "X-B",
+    "X-C",
+    "THREADS",
+    "INSTAGRAM"
+  ],
+  "model": "openai/gpt-4o-mini"
+}
