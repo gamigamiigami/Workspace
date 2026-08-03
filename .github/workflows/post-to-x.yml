@@ -1,20 +1,18 @@
 name: Post Tweet to X
 
-# JST 7:00 と 21:00 に該当スロットのツイートを自動投稿する
-# 事前準備: GitHub Secret に X_USERNAME と X_PASSWORD を登録
-#
-# 既知のリスク: Xは自動化を検知すると一時的にアカウントロックすることがある
-# 失敗時はX native scheduler (公式機能・無料) にフォールバック可能
+# ⚠️ 2026-06-27: シャドウバン対策で自動投稿(schedule)を停止。
+# Playwright自動投稿がX自動化検知でゴーストバンを招いたため、
+# X公式スケジューラー(無料・bot判定なし)への手動セット運用に移行。
+# 週次生成(weekly-content-pipeline)で作ったドラフトを手動で予約投稿する。
+# 緊急時のみ workflow_dispatch で手動実行できる状態は残す。
 
 on:
-  schedule:
-    # 1日3投稿戦略 (2026-06-01)
-    # 22:00 UTC = 07:00 JST 翌日 (朝スロット)
-    - cron: "0 22 * * *"
-    # 04:10 UTC = 13:10 JST 当日 (昼スロット・給食＆掃除終わり・休み時間開始)
-    - cron: "10 4 * * *"
-    # 12:00 UTC = 21:00 JST 当日 (夜スロット)
-    - cron: "0 12 * * *"
+  # 自動投稿は停止中（シャドウバン解除・再発防止のため）。
+  # 再開する場合は下記 schedule のコメントを外す（ただし bot判定リスクあり）。
+  # schedule:
+  #   - cron: "0 22 * * *"   # 07:00 JST 朝
+  #   - cron: "10 4 * * *"   # 13:10 JST 昼
+  #   - cron: "0 12 * * *"   # 21:00 JST 夜
   workflow_dispatch:
     inputs:
       force:
