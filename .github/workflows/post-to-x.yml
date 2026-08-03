@@ -7,12 +7,12 @@ name: Post Tweet to X
 # 緊急時のみ workflow_dispatch で手動実行できる状態は残す。
 
 on:
-  # 自動投稿は停止中（シャドウバン解除・再発防止のため）。
-  # 再開する場合は下記 schedule のコメントを外す（ただし bot判定リスクあり）。
-  # schedule:
-  #   - cron: "0 22 * * *"   # 07:00 JST 朝
-  #   - cron: "10 4 * * *"   # 13:10 JST 昼
-  #   - cron: "0 12 * * *"   # 21:00 JST 夜
+  # 自動投稿を再開（2026-08-03: シャドウバンではなかったため復活）。
+  # 伸びない原因はコンテンツ側 → 生成プロンプトの「注目される鉄則」で対応済み。
+  schedule:
+    - cron: "0 22 * * *"   # 07:00 JST 朝
+    - cron: "10 4 * * *"   # 13:10 JST 昼
+    - cron: "0 12 * * *"   # 21:00 JST 夜
   workflow_dispatch:
     inputs:
       force:
