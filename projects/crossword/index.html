@@ -1566,11 +1566,14 @@
 
     // 1回ぶんの組み上げ
     function tryLayout(items) {
-      // 長い語から置くほうがうまく組める。毎回少しだけ順番を混ぜて別の形にする
-      const order = shuffled(items).sort((a, b) => b.cs.length - a.cs.length);
+      // 長い語から置くほうがうまく組めるが、毎回ゆらぎを加えて別の順番も試す
+      // （順番が変わると入る語の数が変わるので、たくさん試すほどよい形が見つかる）
+      const order = items.map(it => ({ it, k: it.cs.length + (Math.random() - 0.5) * 3 }))
+        .sort((a, b) => b.k - a.k)
+        .map(x => x.it);
       const map = new Map();
       const placed = [];
-      const failed = [];
+      let failed = [];
       const byChar = new Map(); // 文字 -> [{r,c}]（交差できる場所をすぐ引けるようにする）
       const put = (it, r, c, dir) => {
         const dr = dir === 'down' ? 1 : 0;
@@ -1593,8 +1596,8 @@
       let minC = ctr - Math.floor(first.cs.length / 2);
       let maxC = minC + first.cs.length - 1;
 
-      for (let n = 1; n < order.length; n++) {
-        const it = order[n];
+      // 1語を置いてみる（置けたら true）
+      const tryPlaceOne = (it) => {
         const cands = [];
         for (let i = 0; i < it.cs.length; i++) {
           const spots = byChar.get(it.cs[i]);
@@ -1615,17 +1618,30 @@
             }
           }
         }
-        if (cands.length === 0) { failed.push(it.text); continue; }
+        if (cands.length === 0) return false;
         // 上位のなかからランダムに選ぶ → 作り直すたびに違う形になる
         cands.sort((a, b) => b.score - a.score);
         const pick = cands[Math.floor(Math.random() * Math.min(3, cands.length))];
         put(it, pick.r, pick.c, pick.dir);
         minR = Math.min(minR, pick.r); maxR = Math.max(maxR, pick.er);
         minC = Math.min(minC, pick.c); maxC = Math.max(maxC, pick.ec);
+        return true;
+      };
+
+      for (let n = 1; n < order.length; n++) {
+        if (!tryPlaceOne(order[n])) failed.push(order[n]);
       }
+      // 置けなかった語を、盤面が育ったあとでもう一度試す（あとから交差できる文字が増えるため）
+      for (let pass = 0; pass < 3 && failed.length > 0; pass++) {
+        const remain = [];
+        for (const it of shuffled(failed)) if (!tryPlaceOne(it)) remain.push(it);
+        if (remain.length === failed.length) { failed = remain; break; }
+        failed = remain;
+      }
+
       const w = maxC - minC + 1, h = maxR - minR + 1;
       const score = placed.length * 10000 - w * h * 2 - Math.abs(w - h) * 20;
-      return { placed, failed, score, w, h };
+      return { placed, failed: failed.map(x => x.text), score, w, h };
     }
 
     // 何回も試して、いちばんよい形を採用する
