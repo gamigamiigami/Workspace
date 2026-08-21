@@ -342,7 +342,18 @@
       <button id="btnPrintA" class="sub">解答を印刷</button>
       <button id="btnExport" class="sub">ファイルに保存</button>
       <button id="btnImport" class="sub">ファイルを読み込む</button>
+      <button id="btnShowData" class="sub">データを表示（コピー用）</button>
       <input type="file" id="fileInput" accept="application/json" hidden>
+    </div>
+    <!-- ダウンロードが使えない環境（ブラウザ内で開いている場合など）のための保存・復元手段 -->
+    <div id="dataBox" style="display:none;margin-top:10px;">
+      <textarea id="dataText" style="width:100%;min-height:110px;font-size:12px;" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:6px;">
+        <button id="btnCopyData" class="sub small">この文字を全部コピー</button>
+        <button id="btnLoadData" class="sub small">この内容を読み込む</button>
+        <button id="btnCloseData" class="sub small">閉じる</button>
+        <span class="note" style="margin:0;">メモ帳などに貼って保存 → あとでここに貼り戻せば元どおりになります。</span>
+      </div>
     </div>
     <p id="msg" class="note"></p>
   </section>
@@ -1244,15 +1255,35 @@
       return null;
     }
 
-    function exportFile() {
+    async function exportFile() {
       const name = (state.title || 'crossword').replace(/[\\/:*?"<>|]/g, '_');
+      // ブラウザの中で開いている場合（claude.ai のページなど）は、そちらの保存のしくみを使う
+      let saver = null;
+      try {
+        if (window.claude && typeof window.claude.use === 'function') saver = await window.claude.use('downloads');
+      } catch (e) { saver = null; }
+      if (saver) {
+        try {
+          await saver.save({ filename: name + '.json', data: JSON.stringify(serialize(), null, 2) });
+          $('#msg').textContent = 'ファイルに保存しました。';
+        } catch (err) {
+          if (err && err.code === 'declined') {
+            $('#msg').textContent = '保存をやめました。';
+          } else {
+            showDataBox();
+            $('#msg').textContent = 'この画面では保存できませんでした。下の文字をコピーして、メモ帳などに貼って保存してください。';
+          }
+        }
+        return;
+      }
       const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = name + '.json';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-      $('#msg').textContent = 'ファイルに保存しました（ダウンロードフォルダを確認してください）。';
+      $('#msg').textContent = 'ファイルに保存しました（ダウンロードフォルダを確認してください）。'
+        + ' 始まらないときは「データを表示（コピー用）」を使ってください。';
     }
 
     function importFile(file) {
@@ -1266,6 +1297,38 @@
         }
       };
       reader.readAsText(file);
+    }
+
+    // ===== コピー用データ（ダウンロードが使えない環境のための保存・復元） =====
+    function showDataBox() {
+      $('#dataText').value = JSON.stringify(serialize());
+      $('#dataBox').style.display = 'block';
+      $('#dataText').focus();
+      $('#dataText').select();
+    }
+
+    function copyDataText() {
+      const ta = $('#dataText');
+      ta.focus();
+      ta.select();
+      const done = () => { $('#msg').textContent = 'コピーしました。メモ帳などに貼りつけて保存してください。'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(done, () => {
+          $('#msg').textContent = '自動コピーできませんでした。文字を選んで手でコピーしてください。';
+        });
+      } else {
+        $('#msg').textContent = '文字を選んで手でコピーしてください。';
+      }
+    }
+
+    function loadDataText() {
+      try {
+        applyData(JSON.parse($('#dataText').value));
+        $('#dataBox').style.display = 'none';
+        $('#msg').textContent = '読み込みました。';
+      } catch (e) {
+        $('#msg').textContent = 'このデータは読み込めませんでした（コピーもれがないか確認してください）。';
+      }
     }
 
     // ===== 印刷 =====
@@ -1443,6 +1506,10 @@
       $('#btnPrintA').addEventListener('click', () => doPrint(true));
       $('#btnExport').addEventListener('click', exportFile);
       $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#btnShowData').addEventListener('click', showDataBox);
+      $('#btnCopyData').addEventListener('click', copyDataText);
+      $('#btnLoadData').addEventListener('click', loadDataText);
+      $('#btnCloseData').addEventListener('click', () => { $('#dataBox').style.display = 'none'; });
       $('#fileInput').addEventListener('change', (e) => {
         if (e.target.files[0]) importFile(e.target.files[0]);
         e.target.value = '';
