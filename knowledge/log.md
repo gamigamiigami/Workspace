@@ -2239,3 +2239,36 @@
 **学び：**
 - クロスワード自動生成は「総当たり＋スコア＋多数回試行」で十分実用的（patterns.md に記録）
 - 不定形UIは「内部は広く、表示は使っている範囲＋余白」で作ると、サイズ設定UIが丸ごと不要になる（patterns.md に記録）
+
+---
+
+### [2026-08-21] crossword — GitHub Pages で一般公開
+
+**公開URL：**
+- 作品ページ: https://gamigamiigami.github.io/Workspace/projects/crossword/
+- 旧URL形式（後方互換）: https://gamigamiigami.github.io/Workspace/crossword/
+- 作品一覧トップ: https://gamigamiigami.github.io/Workspace/
+
+**作業内容（CLAUDE.md の公開手順どおり）：**
+1. `crossword/` → `projects/crossword/` へ移動（公開ワークフローの対象は projects/ 配下のみのため）
+2. `crossword-supporter.html` → `index.html` にリネーム（フォルダURLで開けるように）
+3. `deploy-pages.yml` の PUBLIC_DIRS に `crossword` を追加（既存の公開サイトの記述は変更なし）
+4. `site/index.html` に作品カードを1枚追加（既存カードは無変更）
+5. 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へ**早送りマージ**して push
+   （運用ブランチにこちらへ未取り込みのコミットは0件だったため、競合なしのff-only）
+
+**確認：**
+- Actions run #25（32468803514）: build ✅ success / deploy ✅ success（09:39:51 完了）
+- 既存の公開サイト7件（kaeriten-quest 含む）は PUBLIC_DIRS も配置ロジックも無変更＝旧URLの404リスクなし
+- knowledge/・CLAUDE.md・rakuda-sensei は従来どおり公開対象外
+
+**あわせて実施：**
+- Artifact 版も公開済み（プライベート）: https://claude.ai/code/artifact/81f2a712-5a3f-4c22-8e2b-f5de588ff151
+- 自動生成の改良：語の並び順にゆらぎを追加＋置けなかった語を盤面が育ったあとに再挑戦（最大3巡）
+
+**次のアクション：**
+- iPad実機テスト待ち（公開URLをSafariで開いての操作感・印刷）
+- 実行環境から github.io へは到達できない（プロキシ403）ため、**表示確認は伊神さんの実機のみ**
+
+**学び：**
+- この環境から公開URLの疎通確認はできない。公開の成否は Actions の run/job の結論で判断する
