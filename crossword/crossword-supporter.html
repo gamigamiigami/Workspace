@@ -154,8 +154,8 @@
     #gridWrap {
       position: relative;
       display: inline-block;
-      background: var(--navy);
-      padding: 3px;
+      background: #cfd6de;   /* マスの区切り線の色（gap から透けて見える） */
+      padding: 1px;
       border-radius: 4px;
       touch-action: none; /* ドラッグ配置のため（スクロールより配置を優先） */
       max-width: 100%;
@@ -163,12 +163,14 @@
     #grid { display: grid; gap: 1px; }
     .cell {
       position: relative;
-      background: #dfe4ea;
+      background: #eef1f5;   /* 使っていないマスは背景になじませる */
       display: flex; align-items: center; justify-content: center;
       font-size: 20px; font-weight: 700;
       user-select: none;
     }
-    .cell.filled { background: var(--paper); }
+    /* 語が入っているマスだけを枠線で浮き上がらせる（クロスワードの形が見えるように） */
+    .cell.filled { background: var(--paper); box-shadow: inset 0 0 0 1px var(--navy); }
+    .cell.blank-black { background: #22282f; }
     .cell.cand { background: #fff2cd; box-shadow: inset 0 0 0 2px var(--accent); cursor: pointer; }
     .cell.selword { background: #fff6e0; }
     .cell.conflict { background: var(--ng-bg); color: var(--ng); }
@@ -228,6 +230,7 @@
         font-size: 17px; font-weight: 700; position: relative;
       }
       .print-grid td.black { background: #000; }
+      .print-grid td.blank { border: none; background: #fff; }
       .print-grid td .m {
         position: absolute; top: 0; left: 2px; font-size: 9px; font-weight: 700;
       }
@@ -282,6 +285,12 @@
   <section class="panel">
     <h2>④ クロスワードを作る</h2>
     <div id="boardTools">
+      <!-- 自動作成：登録したワードを組み合わせて、本物のクロスワードの形（不定形）に並べる -->
+      <div class="row" style="margin-bottom:10px;">
+        <button id="btnGenerate">★ 登録ワードから自動で作る</button>
+        <button id="btnRegenerate" class="sub">別の形で作り直す</button>
+      </div>
+      <p id="genResult" class="note" style="margin-top:0;margin-bottom:10px;"></p>
       <div class="row" style="margin-bottom:8px;">
         <button id="modePlace" class="sub" aria-pressed="true">ワードを置く</button>
         <button id="modeMark" class="sub" aria-pressed="false">記号を入れる（A・1など）</button>
@@ -290,8 +299,6 @@
         <button id="btnUndo" class="sub small" disabled>元に戻す</button>
       </div>
       <div class="row">
-        <label for="sizeW">よこ</label><select id="sizeW"></select>
-        <label for="sizeH">たて</label><select id="sizeH"></select>
         <label class="check"><input type="checkbox" id="freePlace">はなれた場所にも置く</label>
         <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
         <button id="btnClearBoard" class="danger small">盤面を空にする</button>
@@ -327,6 +334,7 @@
     <div class="row" style="margin-bottom:8px;">
       <label class="check"><input type="checkbox" id="hideLetters">文字を隠してマス目だけにする</label>
       <label class="check"><input type="checkbox" id="showNums" checked>クロスワードの番号を表示</label>
+      <label class="check"><input type="checkbox" id="blackFill">使わないマスを黒くぬる</label>
     </div>
     <div class="row">
       <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="flex:1 1 200px;">
@@ -348,8 +356,10 @@
   <script>
     // ===== 定数・設定 =====
     const STORAGE_KEY = 'crossword-supporter-v1';
-    const MIN_SIZE = 5;
-    const MAX_SIZE = 20;
+    const GRID = 41;          // 内部の作業スペース（画面に見せるのは「使っている範囲」だけ）
+    const VIEW_MARGIN = 2;    // 使っている範囲の外側に見せる余白（マス）
+    const VIEW_MIN = 8;       // 盤面が空のときに見せる大きさ
+    const GEN_TRIES = 300;    // 自動作成で試す回数
     const MAX_CELL_PX = 42;   // マスの最大サイズ
     const MIN_CELL_PX = 20;   // マスの最小サイズ（指でタップできる下限）
     const DRAG_THRESHOLD = 6; // これ以上動いたら「ドラッグ」とみなす（px）
@@ -359,13 +369,12 @@
       title: '',
       words: [],      // { id, text }
       keyword: '',
-      w: 13,
-      h: 13,
       placed: [],     // { id, text, r, c, dir }  dir: 'across' | 'down'
       marks: {},      // 'r,c' -> 'A' などの記号（マスごとに手動入力）
       clues: {},      // ワード文字列 -> カギ（ヒント）
       hideLetters: false,
       showNums: true,
+      blackFill: false,
       freePlace: false,
       dir: 'across',
       mode: 'place',  // 'place'（ワードを置く） / 'mark'（記号を入れる）
@@ -383,13 +392,20 @@
     let preview = null;           // ドラッグ中のプレビュー
     let drag = null;              // ドラッグ中の情報
     let history = [];             // 「元に戻す」用
+    let view = { minR: 0, maxR: VIEW_MIN - 1, minC: 0, maxC: VIEW_MIN - 1 }; // 画面に見せている範囲
+    let viewSig = '';
+    let lastGen = null;           // 直前の自動作成の結果
 
     // ===== 小さな道具 =====
     const $ = (sel) => document.querySelector(sel);
     const chars = (t) => Array.from(String(t).normalize('NFC'));
     const key = (r, c) => r + ',' + c;
     const uid = () => Math.random().toString(36).slice(2, 9);
-    const inRange = (r, c) => r >= 0 && r < state.h && c >= 0 && c < state.w;
+    const inRange = (r, c) => r >= 0 && r < GRID && c >= 0 && c < GRID;
+    const idx = (r, c) => r * GRID + c;
+    const viewW = () => view.maxC - view.minC + 1;
+    const viewH = () => view.maxR - view.minR + 1;
+    const cellEl = (r, c) => $('#grid').querySelector('.cell[data-r="' + r + '"][data-c="' + c + '"]');
     const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
       ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 
@@ -435,7 +451,7 @@
     }
 
     // ある置き方ができるかどうかを判定する（本格クロスワード式：濁点・小さい字は別の文字）
-    function validate(text, r, c, dir, ignoreId) {
+    function validate(text, r, c, dir, ignoreId, mapIn) {
       const cs = chars(text);
       if (cs.length < 2) return { ok: false, reason: '2文字以上のワードだけ置けます' };
       if (!inRange(r, c)) return { ok: false, reason: '盤面の外に出ます' };
@@ -443,7 +459,7 @@
       const ec = c + (dir === 'across' ? cs.length - 1 : 0);
       if (!inRange(er, ec)) return { ok: false, reason: '盤面の外に出ます' };
 
-      const { map } = buildBoard(ignoreId);
+      const map = mapIn || buildBoard(ignoreId).map;
       let cross = 0;
       for (let i = 0; i < cs.length; i++) {
         const rr = r + (dir === 'down' ? i : 0);
@@ -469,15 +485,15 @@
 
     // クロスワードの番号を振る（左上から、語の始まりのマスに順番に）
     function computeNumbers() {
-      numbers = new Array(state.w * state.h).fill(0);
+      numbers = new Array(GRID * GRID).fill(0);
       const filled = (r, c) => inRange(r, c) && board.map.has(key(r, c));
       let n = 0;
-      for (let r = 0; r < state.h; r++) {
-        for (let c = 0; c < state.w; c++) {
+      for (let r = 0; r < GRID; r++) {
+        for (let c = 0; c < GRID; c++) {
           if (!filled(r, c)) continue;
           const startsAcross = !filled(r, c - 1) && filled(r, c + 1);
           const startsDown = !filled(r - 1, c) && filled(r + 1, c);
-          if (startsAcross || startsDown) numbers[r * state.w + c] = ++n;
+          if (startsAcross || startsDown) numbers[idx(r, c)] = ++n;
         }
       }
     }
@@ -487,8 +503,8 @@
       badRuns = [];
       const placedSet = new Set(state.placed.map(p => p.dir + ':' + p.r + ':' + p.c + ':' + p.text));
       const scan = (dir) => {
-        const outer = dir === 'across' ? state.h : state.w;
-        const inner = dir === 'across' ? state.w : state.h;
+        const outer = GRID;
+        const inner = GRID;
         for (let o = 0; o < outer; o++) {
           let run = [];
           for (let i = 0; i <= inner; i++) {
@@ -528,12 +544,13 @@
         list.push({ text: word.text, wordId: word.id, r, c, dir });
       };
 
+      const map0 = board.map;
       if (board.map.size === 0 || state.freePlace) {
-        // 盤面が空（またははなれた配置を許可）→ 置ける場所すべてを候補にする
-        for (let r = 0; r < state.h; r++) {
-          for (let c = 0; c < state.w; c++) {
+        // 盤面が空（またははなれた配置を許可）→ 見えている範囲の置ける場所すべてを候補にする
+        for (let r = view.minR; r <= view.maxR; r++) {
+          for (let c = view.minC; c <= view.maxC; c++) {
             for (const dir of ['across', 'down']) {
-              if (validate(word.text, r, c, dir).ok) add(r, c, dir, r, c);
+              if (validate(word.text, r, c, dir, null, map0).ok) add(r, c, dir, r, c);
             }
           }
         }
@@ -547,7 +564,7 @@
             for (const dir of ['across', 'down']) {
               const sr = r - (dir === 'down' ? i : 0);
               const sc = c - (dir === 'across' ? i : 0);
-              if (validate(word.text, sr, sc, dir).ok) add(sr, sc, dir, r, c);
+              if (validate(word.text, sr, sc, dir, null, map0).ok) add(sr, sc, dir, r, c);
             }
           });
         }
@@ -588,9 +605,26 @@
     function clearCycle() { cycle = { key: null, list: null, i: 0, placedId: null }; }
 
     // ===== 画面の組み立て =====
+    // 使っているマスの外側に少し余白を足した範囲を「見せる範囲」にする（四角に固定しない）
+    function computeView() {
+      const bb = boundingBox();
+      if (!bb) {
+        const ctr = Math.floor(GRID / 2);
+        const half = Math.floor(VIEW_MIN / 2);
+        return { minR: ctr - half, maxR: ctr + half - 1, minC: ctr - half, maxC: ctr + half - 1 };
+      }
+      return {
+        minR: Math.max(0, bb.minR - VIEW_MARGIN),
+        maxR: Math.min(GRID - 1, bb.maxR + VIEW_MARGIN),
+        minC: Math.max(0, bb.minC - VIEW_MARGIN),
+        maxC: Math.min(GRID - 1, bb.maxC + VIEW_MARGIN)
+      };
+    }
+
     function calcCellSize() {
       const wrapMax = Math.min(document.body.clientWidth - 40, 900);
-      const fit = Math.floor((wrapMax - state.w) / state.w);
+      const w = viewW();
+      const fit = Math.floor((wrapMax - w) / w);
       return Math.max(MIN_CELL_PX, Math.min(MAX_CELL_PX, fit));
     }
 
@@ -598,10 +632,10 @@
       const grid = $('#grid');
       grid.innerHTML = '';
       const px = calcCellSize();
-      grid.style.gridTemplateColumns = 'repeat(' + state.w + ', ' + px + 'px)';
-      grid.style.gridTemplateRows = 'repeat(' + state.h + ', ' + px + 'px)';
-      for (let r = 0; r < state.h; r++) {
-        for (let c = 0; c < state.w; c++) {
+      grid.style.gridTemplateColumns = 'repeat(' + viewW() + ', ' + px + 'px)';
+      grid.style.gridTemplateRows = 'repeat(' + viewH() + ', ' + px + 'px)';
+      for (let r = view.minR; r <= view.maxR; r++) {
+        for (let c = view.minC; c <= view.maxC; c++) {
           const div = document.createElement('div');
           div.className = 'cell';
           div.dataset.r = r;
@@ -617,6 +651,10 @@
     }
 
     function renderGrid() {
+      // 使っている範囲が変わったら、見せる範囲を作り直す
+      const v = computeView();
+      const sig = v.minR + ',' + v.maxR + ',' + v.minC + ',' + v.maxC;
+      if (sig !== viewSig) { view = v; viewSig = sig; buildGrid(); }
       const cells = $('#grid').children;
       // 選択中の語のマス
       const selCells = new Set();
@@ -631,13 +669,14 @@
 
       for (let i = 0; i < cells.length; i++) {
         const el = cells[i];
-        const r = Math.floor(i / state.w);
-        const c = i % state.w;
+        const r = Number(el.dataset.r);
+        const c = Number(el.dataset.c);
         const k = key(r, c);
         const cell = board.map.get(k);
         const cls = ['cell'];
         let ch = '';
         if (cell) { cls.push('filled'); ch = state.hideLetters ? '' : cell.ch; }
+        else if (state.blackFill) cls.push('blank-black');
         if (cell && selCells.has(k)) cls.push('selword');
         if (board.conflicts.has(k)) cls.push('conflict');
         if (badCells.has(k)) cls.push('badrun');
@@ -650,7 +689,7 @@
         el.querySelector('.ch').textContent = ch;
         el.querySelector('.mark').textContent = cell ? (state.marks[k] || '') : '';
         el.querySelector('.num').textContent =
-          (state.showNums && cell && numbers[i]) ? numbers[i] : '';
+          (state.showNums && cell && numbers[idx(r, c)]) ? numbers[idx(r, c)] : '';
       }
     }
 
@@ -827,7 +866,7 @@
       const box = $('#clueList');
       const words = state.placed.map(p => ({
         p,
-        no: numbers[p.r * state.w + p.c] || 0
+        no: numbers[idx(p.r, p.c)] || 0
       })).sort((a, b) => a.no - b.no);
       const sig = words.map(x => x.no + x.p.dir + x.p.text).join('|');
       if (sig !== clueSig) {
@@ -892,8 +931,9 @@
       const grid = $('#grid');
       const rect = grid.getBoundingClientRect();
       const px = calcCellSize() + 1; // gap 1px ぶん
-      const c = Math.floor((x - rect.left) / px);
-      const r = Math.floor((y - rect.top) / px);
+      const c = view.minC + Math.floor((x - rect.left) / px);
+      const r = view.minR + Math.floor((y - rect.top) / px);
+      if (r < view.minR || r > view.maxR || c < view.minC || c > view.maxC) return null;
       return inRange(r, c) ? { r, c } : null;
     }
 
@@ -1106,10 +1146,11 @@
       }
       state.markSel = { r, c };
       const mi = $('#markInput');
-      const cellEl = $('#grid').children[r * state.w + c];
+      const el = cellEl(r, c);
+      if (!el) return;
       mi.classList.remove('hidden');
-      mi.style.left = cellEl.offsetLeft + 'px';
-      mi.style.top = cellEl.offsetTop + 'px';
+      mi.style.left = el.offsetLeft + 'px';
+      mi.style.top = el.offsetTop + 'px';
       mi.value = state.marks[k] || '';
       mi.focus();
       mi.select();
@@ -1156,9 +1197,9 @@
       return {
         version: 1,
         title: state.title, words: state.words, keyword: state.keyword,
-        w: state.w, h: state.h, placed: state.placed,
+        placed: state.placed,
         marks: state.marks, clues: state.clues,
-        hideLetters: state.hideLetters, showNums: state.showNums
+        hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill
       };
     }
 
@@ -1167,24 +1208,22 @@
       state.title = d.title || '';
       state.words = Array.isArray(d.words) ? d.words : [];
       state.keyword = d.keyword || '';
-      state.w = Math.min(MAX_SIZE, Math.max(MIN_SIZE, d.w || 13));
-      state.h = Math.min(MAX_SIZE, Math.max(MIN_SIZE, d.h || 13));
       state.placed = Array.isArray(d.placed) ? d.placed : [];
       state.marks = d.marks || {};
       state.clues = d.clues || {};
       state.hideLetters = !!d.hideLetters;
       state.showNums = d.showNums !== false;
+      state.blackFill = !!d.blackFill;
       state.selWordId = null;
       state.selPlacedId = null;
       clearCycle();
       clueSig = '';
       $('#title').value = state.title;
       $('#keywordInput').value = state.keyword;
-      $('#sizeW').value = state.w;
-      $('#sizeH').value = state.h;
       $('#hideLetters').checked = state.hideLetters;
       $('#showNums').checked = state.showNums;
-      buildGrid();
+      $('#blackFill').checked = state.blackFill;
+      viewSig = '';
       refresh();
       return true;
     }
@@ -1240,7 +1279,7 @@
     }
 
     function boundingBox() {
-      let minR = state.h, maxR = -1, minC = state.w, maxC = -1;
+      let minR = GRID, maxR = -1, minC = GRID, maxC = -1;
       for (const k of board.map.keys()) {
         const [r, c] = k.split(',').map(Number);
         minR = Math.min(minR, r); maxR = Math.max(maxR, r);
@@ -1265,7 +1304,7 @@
         html += '<tr>';
         for (let c = bb.minC; c <= bb.maxC; c++) {
           const cell = board.map.get(key(r, c));
-          if (!cell) { html += '<td class="black"></td>'; continue; }
+          if (!cell) { html += '<td class="' + (state.blackFill ? 'black' : 'blank') + '"></td>'; continue; }
           const mk = state.marks[key(r, c)];
           const m = mk ? '<span class="m">' + escapeHtml(mk) + '</span>' : '';
           html += '<td>' + m + (withAnswer ? escapeHtml(cell.ch) : '') + '</td>';
@@ -1285,7 +1324,7 @@
       }
 
       // カギ（ヒント）
-      const list = state.placed.map(p => ({ p, no: numbers[p.r * state.w + p.c] || 0 }))
+      const list = state.placed.map(p => ({ p, no: numbers[idx(p.r, p.c)] || 0 }))
         .sort((a, b) => a.no - b.no);
       const col = (label, dir) => {
         const items = list.filter(x => x.p.dir === dir);
@@ -1374,12 +1413,15 @@
         state.placed = []; state.marks = {}; state.selPlacedId = null;
         clearCycle(); refresh();
       });
+      $('#btnGenerate').addEventListener('click', runGenerate);
+      $('#btnRegenerate').addEventListener('click', runGenerate);
+      $('#blackFill').addEventListener('change', (e) => {
+        state.blackFill = e.target.checked; refresh();
+      });
       $('#freePlace').addEventListener('change', (e) => {
         state.freePlace = e.target.checked;
         clearCycle(); refresh();
       });
-      $('#sizeW').addEventListener('change', () => resize());
-      $('#sizeH').addEventListener('change', () => resize());
 
       // 記号の入力
       const mi = $('#markInput');
@@ -1416,46 +1458,161 @@
         refresh();
       });
 
-      window.addEventListener('resize', () => { buildGrid(); renderGrid(); closeMarkInput(); });
+      window.addEventListener('resize', () => { viewSig = ''; renderGrid(); closeMarkInput(); });
     }
 
-    function resize() {
-      const w = Number($('#sizeW').value);
-      const h = Number($('#sizeH').value);
-      // 置いた語が外に出てしまう場合は縮小できない
-      const over = state.placed.some(p => {
-        const cs = chars(p.text).length;
-        const er = p.r + (p.dir === 'down' ? cs - 1 : 0);
-        const ec = p.c + (p.dir === 'across' ? cs - 1 : 0);
-        return er >= h || ec >= w;
-      });
-      if (over) {
-        showMsg('✗ 置いてある語が盤面の外に出てしまうので、この大きさにはできません。', 'ng');
-        $('#sizeW').value = state.w; $('#sizeH').value = state.h;
+    // ===== 自動作成（本物のクロスワードのように、不定形に組み上げる） =====
+    // map: 'r,c' -> 文字 の単純な対応表を使う（速さ優先）
+    // 戻り値：交差の数。置けないときは -1
+    function canPlaceStrict(map, cs, r, c, dir) {
+      const dr = dir === 'down' ? 1 : 0;
+      const dc = dir === 'across' ? 1 : 0;
+      const er = r + dr * (cs.length - 1);
+      const ec = c + dc * (cs.length - 1);
+      if (r < 0 || c < 0 || er >= GRID || ec >= GRID) return -1;
+      // 語のすぐ前後は空いていること
+      if (map.has(key(r - dr, c - dc)) || map.has(key(er + dr, ec + dc))) return -1;
+      let cross = 0;
+      for (let i = 0; i < cs.length; i++) {
+        const rr = r + dr * i;
+        const cc = c + dc * i;
+        const cur = map.get(key(rr, cc));
+        if (cur !== undefined) {
+          if (cur !== cs[i]) return -1;
+          cross++;
+        } else {
+          // 交差しないマスの真横に文字があると、意図しない語ができてしまう
+          if (map.has(key(rr - dc, cc - dr)) || map.has(key(rr + dc, cc + dr))) return -1;
+        }
+      }
+      return cross;
+    }
+
+    function shuffled(arr) {
+      const a = arr.slice();
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    }
+
+    // 1回ぶんの組み上げ
+    function tryLayout(items) {
+      // 長い語から置くほうがうまく組める。毎回少しだけ順番を混ぜて別の形にする
+      const order = shuffled(items).sort((a, b) => b.cs.length - a.cs.length);
+      const map = new Map();
+      const placed = [];
+      const failed = [];
+      const byChar = new Map(); // 文字 -> [{r,c}]（交差できる場所をすぐ引けるようにする）
+      const put = (it, r, c, dir) => {
+        const dr = dir === 'down' ? 1 : 0;
+        const dc = dir === 'across' ? 1 : 0;
+        for (let i = 0; i < it.cs.length; i++) {
+          const rr = r + dr * i, cc = c + dc * i;
+          if (!map.has(key(rr, cc))) {
+            map.set(key(rr, cc), it.cs[i]);
+            if (!byChar.has(it.cs[i])) byChar.set(it.cs[i], []);
+            byChar.get(it.cs[i]).push({ r: rr, c: cc });
+          }
+        }
+        placed.push({ text: it.text, r, c, dir });
+      };
+
+      const ctr = Math.floor(GRID / 2);
+      const first = order[0];
+      put(first, ctr, ctr - Math.floor(first.cs.length / 2), 'across');
+      let minR = ctr, maxR = ctr;
+      let minC = ctr - Math.floor(first.cs.length / 2);
+      let maxC = minC + first.cs.length - 1;
+
+      for (let n = 1; n < order.length; n++) {
+        const it = order[n];
+        const cands = [];
+        for (let i = 0; i < it.cs.length; i++) {
+          const spots = byChar.get(it.cs[i]);
+          if (!spots) continue;
+          for (const sp of spots) {
+            for (const dir of ['across', 'down']) {
+              const sr = sp.r - (dir === 'down' ? i : 0);
+              const sc = sp.c - (dir === 'across' ? i : 0);
+              const cross = canPlaceStrict(map, it.cs, sr, sc, dir);
+              if (cross < 1) continue;
+              // 外枠が広がりすぎず、正方形に近い形になる置き方を高く評価する
+              const er = sr + (dir === 'down' ? it.cs.length - 1 : 0);
+              const ec = sc + (dir === 'across' ? it.cs.length - 1 : 0);
+              const w = Math.max(maxC, ec) - Math.min(minC, sc) + 1;
+              const h = Math.max(maxR, er) - Math.min(minR, sr) + 1;
+              const score = cross * 14 - w * h * 0.06 - Math.abs(w - h) * 1.2;
+              cands.push({ r: sr, c: sc, dir, score, er, ec });
+            }
+          }
+        }
+        if (cands.length === 0) { failed.push(it.text); continue; }
+        // 上位のなかからランダムに選ぶ → 作り直すたびに違う形になる
+        cands.sort((a, b) => b.score - a.score);
+        const pick = cands[Math.floor(Math.random() * Math.min(3, cands.length))];
+        put(it, pick.r, pick.c, pick.dir);
+        minR = Math.min(minR, pick.r); maxR = Math.max(maxR, pick.er);
+        minC = Math.min(minC, pick.c); maxC = Math.max(maxC, pick.ec);
+      }
+      const w = maxC - minC + 1, h = maxR - minR + 1;
+      const score = placed.length * 10000 - w * h * 2 - Math.abs(w - h) * 20;
+      return { placed, failed, score, w, h };
+    }
+
+    // 何回も試して、いちばんよい形を採用する
+    function generateLayout(words) {
+      const items = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
+      if (items.length === 0) return null;
+      let best = null;
+      const t0 = Date.now();
+      for (let t = 0; t < GEN_TRIES; t++) {
+        const r = tryLayout(items);
+        if (!best || r.score > best.score) best = r;
+        if (Date.now() - t0 > 1800) break; // 時間がかかりすぎないように打ち切る
+      }
+      return best;
+    }
+
+    function runGenerate() {
+      const texts = state.words.map(w => w.text);
+      const tooShort = texts.filter(t => chars(t).length < 2);
+      const usable = texts.filter(t => chars(t).length >= 2);
+      if (usable.length < 2) {
+        $('#genResult').innerHTML = '<span style="color:var(--ng)">2文字以上のワードを2つ以上登録してください。</span>';
         return;
       }
+      const res = generateLayout(usable);
+      if (!res) return;
       snapshot();
-      state.w = w; state.h = h;
+      state.placed = res.placed.map(p => ({ id: uid(), text: p.text, r: p.r, c: p.c, dir: p.dir }));
+      state.marks = {};          // 記号はマスの位置に紐づくので、作り直したら消す
+      state.selWordId = null;
+      state.selPlacedId = null;
       clearCycle();
-      buildGrid();
+      viewSig = '';
+      lastGen = res;
       refresh();
+
+      let msg = '<strong>' + res.placed.length + ' 語</strong>を組み上げました（たて' + res.h + '×よこ' + res.w + 'マス）。';
+      const left = res.failed.concat(tooShort);
+      if (left.length) {
+        msg += ' <span style="color:var(--ng)">置けなかったワード：' + escapeHtml(left.join('・'))
+          + '</span>　→「別の形で作り直す」を押すと入ることがあります。'
+          + '共通する文字がない場合は、橋わたしになるワードを足してください。';
+      } else {
+        msg += ' <span style="color:var(--ok);font-weight:700;">全部のワードが入りました！</span>';
+      }
+      $('#genResult').innerHTML = msg;
+      showMsg('○ 自動で作りました。気になるところは手で動かせます（つまんで移動・回転・元に戻す）。', 'ok');
     }
 
     // ===== 初期化 =====
     function init() {
-      for (let n = MIN_SIZE; n <= MAX_SIZE; n++) {
-        $('#sizeW').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
-        $('#sizeH').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
-      }
       const saved = loadLocal();
-      if (saved) {
-        applyData(saved);
-      } else {
-        $('#sizeW').value = state.w;
-        $('#sizeH').value = state.h;
-        buildGrid();
-        refresh();
-      }
+      if (saved) applyData(saved);
+      else { buildGrid(); refresh(); }
       bindEvents();
       setMode('place');
     }
