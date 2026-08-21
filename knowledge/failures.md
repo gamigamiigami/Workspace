@@ -72,6 +72,28 @@ Claude Code のセッション終了メカニズム：
 
 ---
 
+## ブラウザUI・入力
+
+### [2026-08-21] crossword-supporter — pointerdown 内の focus() はブラウザに打ち消される
+
+**症状：** マスをタップしたら記号入力欄（重ねた `<input>`）にフォーカスを当てる実装で、`pointerdown` の中で `input.focus()` を呼んでいるのに、**キー入力がどこにも入らない**（ヘッドレステストでも `state.marks` が空のまま）。
+
+**原因：** `pointerdown` の直後にブラウザが互換の `mousedown` を発火し、その**既定動作がフォーカスを移動させる**（クリックした要素／body へ）。自分で当てたフォーカスがその後に奪われる。
+
+**解決策：** `pointerdown` で `e.preventDefault()` してから `focus()` する。
+```js
+grid.addEventListener('pointerdown', (e) => {
+  e.preventDefault();   // これがないと直後にフォーカスを奪われる
+  openMarkInput(r, c);  // 中で input.focus()
+});
+```
+
+**別解：** `setTimeout(() => input.focus(), 0)` でフォーカス処理を後ろにずらす。ただし preventDefault のほうが確実。
+
+**教訓：** 「重ねた input にフォーカスを当てる」系は、**必ず実際にキー入力まで通して検証する**。focus() が呼ばれたことだけを確認しても動作確認にならない。
+
+---
+
 ## 環境・ネットワーク制限
 
 ### [2026-06-09] Claude Code 実行環境 — 外部サイトアクセスの全面ブロック（WebFetch/WebSearch 非機能）

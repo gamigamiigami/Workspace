@@ -1,0 +1,1468 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クロスワードサポーター</title>
+  <style>
+    /* ===== リセット・基本スタイル ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #1f3a5f;
+      --navy-light: #33587f;
+      --accent: #c8a24a;
+      --paper: #fdfcf8;
+      --line: #b9c3cf;
+      --ok: #1c7a45;
+      --ok-bg: #e3f3e9;
+      --ng: #a12b2b;
+      --ng-bg: #fbe6e6;
+      --gray: #8a949f;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      background: #eef1f5;
+      color: #22282f;
+      padding: 12px;
+      max-width: 960px;
+      margin: 0 auto;
+      -webkit-text-size-adjust: 100%;
+    }
+
+    /* ===== ヘッダー ===== */
+    header {
+      background: var(--navy);
+      color: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border-bottom: 4px solid var(--accent);
+    }
+    header h1 { font-size: 20px; letter-spacing: .04em; }
+    header p { font-size: 13px; opacity: .88; }
+
+    /* ===== パネル共通 ===== */
+    .panel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .panel h2 {
+      font-size: 15px;
+      color: var(--navy);
+      border-left: 5px solid var(--accent);
+      padding-left: 8px;
+      margin-bottom: 10px;
+    }
+    .panel h2 .hint { font-weight: 400; font-size: 12px; color: var(--gray); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .note { font-size: 13px; color: #5c6672; margin-top: 8px; }
+
+    /* ===== ボタン・入力 ===== */
+    button {
+      padding: 9px 14px;
+      font-size: 15px;
+      font-family: inherit;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      min-height: 44px;
+      background: var(--navy);
+      color: #fff;
+    }
+    button.sub { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+    button.danger { background: #fff; color: var(--ng); border: 2px solid var(--ng); }
+    button.small { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+    button:disabled { opacity: .4; cursor: default; }
+    button[aria-pressed="true"] { background: var(--accent); color: #2a2000; border-color: var(--accent); }
+    input[type="text"], select, textarea {
+      font-family: inherit; font-size: 16px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      min-height: 44px;
+      background: #fff;
+    }
+    textarea { min-height: 60px; line-height: 1.5; }
+    label.check {
+      display: inline-flex; align-items: center; gap: 6px;
+      min-height: 44px; font-size: 15px; cursor: pointer;
+    }
+    label.check input { width: 22px; height: 22px; }
+
+    /* ===== ワード一覧（チップ） ===== */
+    #wordList { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    .word-chip {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--paper);
+      border: 2px solid var(--line);
+      border-radius: 8px;
+      padding: 6px 8px;
+      min-height: 44px;
+      cursor: grab;
+      touch-action: none; /* iPadで指のドラッグを拾うため */
+      user-select: none;
+    }
+    .word-chip.sel { border-color: var(--accent); background: #fff6e0; box-shadow: 0 0 0 2px #f0dcae; }
+    .word-chip.placed { opacity: .55; }
+    .word-chip .wtext { font-weight: 700; font-size: 17px; letter-spacing: .05em; }
+    .word-chip .wbadge {
+      font-size: 11px; padding: 1px 6px; border-radius: 10px;
+      background: var(--ok-bg); color: var(--ok); white-space: nowrap;
+    }
+    .word-chip .wbadge.alone { background: var(--ng-bg); color: var(--ng); }
+    .word-chip .wdel {
+      border: none; background: transparent; color: var(--gray);
+      font-size: 18px; min-height: 32px; min-width: 32px; padding: 0; cursor: pointer;
+    }
+
+    /* ===== 診断（つながり） ===== */
+    .diag { padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+    .diag.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #9dcfb3; }
+    .diag.ng { background: var(--ng-bg); color: var(--ng); border: 1px solid #e0a5a5; }
+    #pairList { margin-top: 10px; max-height: 200px; overflow-y: auto; }
+    .pair {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 5px 4px; border-bottom: 1px dashed var(--line); font-size: 14px;
+    }
+    .pair .share {
+      background: var(--accent); color: #2a2000; font-weight: 700;
+      border-radius: 4px; padding: 0 6px;
+    }
+
+    /* ===== キーワード ===== */
+    #kwChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .kw-chip {
+      width: 46px; min-height: 58px;
+      border-radius: 8px; border: 2px solid var(--line);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #f4f6f8; color: var(--gray);
+      font-size: 22px; font-weight: 700;
+    }
+    .kw-chip .st { font-size: 10px; font-weight: 400; line-height: 1; }
+    .kw-chip.used  { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
+    .kw-chip.board { background: var(--ok); color: #fff; border-color: var(--ok); }
+    #kwSummary { margin-top: 10px; font-size: 14px; }
+    #kwMissing { color: var(--ng); font-weight: 700; }
+
+    /* ===== 盤面 ===== */
+    #boardTools { margin-bottom: 10px; }
+    #gridWrap {
+      position: relative;
+      display: inline-block;
+      background: var(--navy);
+      padding: 3px;
+      border-radius: 4px;
+      touch-action: none; /* ドラッグ配置のため（スクロールより配置を優先） */
+      max-width: 100%;
+    }
+    #grid { display: grid; gap: 1px; }
+    .cell {
+      position: relative;
+      background: #dfe4ea;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700;
+      user-select: none;
+    }
+    .cell.filled { background: var(--paper); }
+    .cell.cand { background: #fff2cd; box-shadow: inset 0 0 0 2px var(--accent); cursor: pointer; }
+    .cell.selword { background: #fff6e0; }
+    .cell.conflict { background: var(--ng-bg); color: var(--ng); }
+    .cell.badrun { box-shadow: inset 0 0 0 2px var(--ng); }
+    .cell.preview-ok { background: #cdebd9; box-shadow: inset 0 0 0 2px var(--ok); color: var(--ok); }
+    .cell.preview-ng { background: var(--ng-bg); box-shadow: inset 0 0 0 2px var(--ng); color: var(--ng); }
+    .cell .mark {
+      position: absolute; top: 0; left: 2px;
+      font-size: 10px; font-weight: 700; line-height: 1.2; color: #b1801f;
+    }
+    .cell .num {
+      position: absolute; top: 0; right: 2px;
+      font-size: 9px; font-weight: 400; line-height: 1.2; color: #5a6470;
+    }
+    #markInput {
+      position: absolute; z-index: 5;
+      border: 2px solid var(--accent); border-radius: 3px;
+      background: #fff; text-align: center;
+      font-size: 15px; font-weight: 700; font-family: inherit;
+      padding: 0; min-height: 0; color: #b1801f;
+    }
+    #markInput.hidden { display: none; }
+    /* 指で運んでいる語のゴースト */
+    #dragGhost {
+      position: fixed; z-index: 999; pointer-events: none;
+      background: rgba(31,58,95,.92); color: #fff;
+      padding: 6px 10px; border-radius: 8px; font-weight: 700; font-size: 17px;
+      letter-spacing: .1em; box-shadow: 0 4px 12px rgba(0,0,0,.3);
+    }
+    #dragGhost.hidden { display: none; }
+
+    /* ===== 盤面の警告・メッセージ ===== */
+    #boardMsg { font-size: 14px; min-height: 22px; margin-top: 8px; }
+    #boardMsg.ng { color: var(--ng); font-weight: 700; }
+    #boardMsg.ok { color: var(--ok); }
+    #warnings { margin-top: 8px; font-size: 13px; }
+    #warnings .w { color: var(--ng); }
+    #placedList { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .placed-chip {
+      display: flex; align-items: center; gap: 6px;
+      border: 2px solid var(--line); border-radius: 8px; background: #fff;
+      padding: 4px 8px; min-height: 40px; font-size: 14px; cursor: pointer;
+    }
+    .placed-chip.sel { border-color: var(--accent); background: #fff6e0; }
+
+    /* ===== 印刷用エリア（画面では非表示） ===== */
+    #printArea { display: none; }
+    @media print {
+      body { background: #fff; padding: 0; max-width: none; }
+      header, .panel { display: none !important; }
+      #printArea { display: block !important; }
+      .print-title { text-align: center; font-size: 18px; margin: 8px 0 12px; }
+      .print-grid { border-collapse: collapse; margin: 0 auto 14px; }
+      .print-grid td {
+        width: 30px; height: 30px; border: 1px solid #000;
+        text-align: center; vertical-align: middle;
+        font-size: 17px; font-weight: 700; position: relative;
+      }
+      .print-grid td.black { background: #000; }
+      .print-grid td .m {
+        position: absolute; top: 0; left: 2px; font-size: 9px; font-weight: 700;
+      }
+      .print-kw { margin: 0 auto 12px; text-align: center; }
+      .print-kw table { border-collapse: collapse; margin: 4px auto; }
+      .print-kw td { width: 30px; height: 30px; border: 1px solid #000; text-align: center; font-size: 17px; }
+      .print-kw td.lab { border: none; font-size: 10px; height: 14px; }
+      .print-clues { display: flex; gap: 24px; font-size: 12px; }
+      .print-clues ul { list-style: none; }
+      .print-clues li { margin-bottom: 3px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== ヘッダー ===== -->
+  <header>
+    <h1>クロスワードサポーター</h1>
+    <p>ワードを登録 → 共通文字を調べる → キーワードの進みぐあいを見る → 盤面に置いてクロスワードを作る</p>
+  </header>
+
+  <!-- ===== ① ワード登録 ===== -->
+  <section class="panel">
+    <h2>① ワードを登録する <span class="hint">改行や「、」で区切ればまとめて登録できます</span></h2>
+    <div class="row">
+      <textarea id="wordInput" placeholder="あり&#10;りす&#10;すうち" style="flex:1 1 240px;"></textarea>
+      <button id="btnAddWord">登録する</button>
+      <button id="btnClearWords" class="danger small">ワードを全部消す</button>
+    </div>
+    <div id="wordList"></div>
+    <p class="note">ワードをタップすると選択され、盤面の光ったマスに置けます。指でつまんで盤面へ運ぶ（ドラッグ）こともできます。</p>
+  </section>
+
+  <!-- ===== ② 共通文字の診断 ===== -->
+  <section class="panel">
+    <h2>② 共通する文字を調べる <span class="hint">クロスワードにできるか（全部つながるか）を判定します</span></h2>
+    <div id="diag" class="diag ok">ワードを登録してください。</div>
+    <div id="pairList"></div>
+  </section>
+
+  <!-- ===== ③ キーワード ===== -->
+  <section class="panel">
+    <h2>③ キーワード（答えにしたい言葉）</h2>
+    <div class="row">
+      <input type="text" id="keywordInput" placeholder="例：ありがとう" style="flex:1 1 200px;">
+    </div>
+    <div id="kwChips"></div>
+    <p id="kwSummary"></p>
+  </section>
+
+  <!-- ===== ④ クロスワードづくり ===== -->
+  <section class="panel">
+    <h2>④ クロスワードを作る</h2>
+    <div id="boardTools">
+      <div class="row" style="margin-bottom:8px;">
+        <button id="modePlace" class="sub" aria-pressed="true">ワードを置く</button>
+        <button id="modeMark" class="sub" aria-pressed="false">記号を入れる（A・1など）</button>
+        <button id="btnDir" class="sub">向き：ヨコ →</button>
+        <button id="btnRotate" class="sub small">選んだ語を回転</button>
+        <button id="btnUndo" class="sub small" disabled>元に戻す</button>
+      </div>
+      <div class="row">
+        <label for="sizeW">よこ</label><select id="sizeW"></select>
+        <label for="sizeH">たて</label><select id="sizeH"></select>
+        <label class="check"><input type="checkbox" id="freePlace">はなれた場所にも置く</label>
+        <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
+        <button id="btnClearBoard" class="danger small">盤面を空にする</button>
+      </div>
+    </div>
+    <!-- 盤面。タップ配置とドラッグ配置の両方に対応 -->
+    <div id="gridWrap">
+      <div id="grid"></div>
+      <input id="markInput" class="hidden" type="text" maxlength="2" autocomplete="off"
+             autocapitalize="characters" autocorrect="off" spellcheck="false" aria-label="マスの記号">
+    </div>
+    <p id="boardMsg"></p>
+    <div id="warnings"></div>
+    <div id="placedList"></div>
+    <p class="note">
+      置き方：<strong>①ワードをタップ → 光ったマスをタップ</strong>（同じマスをもう一度タップすると別の置き方に切り替わります）／
+      <strong>②ワードを指でつまんで盤面へ運ぶ</strong>（緑＝置ける／赤＝置けない）。
+      向きの切り替えは「向き」ボタン、または盤面を右クリック・ドラッグ中に R キー。
+      置いた語は盤面上でつまんで動かせます。<br>
+      ※盤面の上は「置く操作」が優先されるため、指でなぞってもページはスクロールしません。スクロールは盤面の外をなぞってください。
+    </p>
+  </section>
+
+  <!-- ===== カギ（ヒント）：盤面に置いた語のぶんだけ自動で並ぶ ===== -->
+  <section class="panel">
+    <h2>カギ（ヒント）を書く <span class="hint">盤面に置いた語のぶんだけ自動で並びます</span></h2>
+    <div id="clueList"></div>
+  </section>
+
+  <!-- ===== ⑤ 仕上げ・保存・印刷 ===== -->
+  <section class="panel">
+    <h2>⑤ 仕上げ・保存・印刷</h2>
+    <div class="row" style="margin-bottom:8px;">
+      <label class="check"><input type="checkbox" id="hideLetters">文字を隠してマス目だけにする</label>
+      <label class="check"><input type="checkbox" id="showNums" checked>クロスワードの番号を表示</label>
+    </div>
+    <div class="row">
+      <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="flex:1 1 200px;">
+      <button id="btnPrintQ">問題を印刷</button>
+      <button id="btnPrintA" class="sub">解答を印刷</button>
+      <button id="btnExport" class="sub">ファイルに保存</button>
+      <button id="btnImport" class="sub">ファイルを読み込む</button>
+      <input type="file" id="fileInput" accept="application/json" hidden>
+    </div>
+    <p id="msg" class="note"></p>
+  </section>
+
+  <!-- 指で運んでいる語のゴースト -->
+  <div id="dragGhost" class="hidden"></div>
+
+  <!-- 印刷用の中身（画面には出ない・印刷時だけ表示） -->
+  <div id="printArea"></div>
+
+  <script>
+    // ===== 定数・設定 =====
+    const STORAGE_KEY = 'crossword-supporter-v1';
+    const MIN_SIZE = 5;
+    const MAX_SIZE = 20;
+    const MAX_CELL_PX = 42;   // マスの最大サイズ
+    const MIN_CELL_PX = 20;   // マスの最小サイズ（指でタップできる下限）
+    const DRAG_THRESHOLD = 6; // これ以上動いたら「ドラッグ」とみなす（px）
+
+    // ===== 状態管理 =====
+    const state = {
+      title: '',
+      words: [],      // { id, text }
+      keyword: '',
+      w: 13,
+      h: 13,
+      placed: [],     // { id, text, r, c, dir }  dir: 'across' | 'down'
+      marks: {},      // 'r,c' -> 'A' などの記号（マスごとに手動入力）
+      clues: {},      // ワード文字列 -> カギ（ヒント）
+      hideLetters: false,
+      showNums: true,
+      freePlace: false,
+      dir: 'across',
+      mode: 'place',  // 'place'（ワードを置く） / 'mark'（記号を入れる）
+      selWordId: null,
+      selPlacedId: null,
+      markSel: null   // { r, c }
+    };
+
+    // 画面の計算結果（状態からその都度作り直す）
+    let board = { map: new Map(), conflicts: new Set() };
+    let numbers = [];
+    let badRuns = [];
+    let candByCell = new Map();   // 'r,c' -> [置き方の候補, ...]
+    let cycle = { key: null, list: null, i: 0, placedId: null }; // 同じマス連続タップ用
+    let preview = null;           // ドラッグ中のプレビュー
+    let drag = null;              // ドラッグ中の情報
+    let history = [];             // 「元に戻す」用
+
+    // ===== 小さな道具 =====
+    const $ = (sel) => document.querySelector(sel);
+    const chars = (t) => Array.from(String(t).normalize('NFC'));
+    const key = (r, c) => r + ',' + c;
+    const uid = () => Math.random().toString(36).slice(2, 9);
+    const inRange = (r, c) => r >= 0 && r < state.h && c >= 0 && c < state.w;
+    const escapeHtml = (s) => String(s).replace(/[&<>"']/g,
+      ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+    function showMsg(text, kind) {
+      const el = $('#boardMsg');
+      el.textContent = text;
+      el.className = kind || '';
+    }
+
+    // ===== 盤面の計算 =====
+    // 置かれた語が占めるマスの座標を返す
+    function wordCells(p) {
+      const list = [];
+      const cs = chars(p.text);
+      for (let i = 0; i < cs.length; i++) {
+        list.push({
+          r: p.r + (p.dir === 'down' ? i : 0),
+          c: p.c + (p.dir === 'across' ? i : 0),
+          ch: cs[i]
+        });
+      }
+      return list;
+    }
+
+    // 盤面のマス → 文字 の対応表を作る（ignoreId の語は無視＝動かしている語を除いて考える）
+    function buildBoard(ignoreId) {
+      const map = new Map();
+      const conflicts = new Set();
+      for (const p of state.placed) {
+        if (ignoreId && p.id === ignoreId) continue;
+        for (const cell of wordCells(p)) {
+          const k = key(cell.r, cell.c);
+          const cur = map.get(k);
+          if (cur) {
+            if (cur.ch !== cell.ch) conflicts.add(k);
+            cur.ids.push(p.id);
+          } else {
+            map.set(k, { ch: cell.ch, ids: [p.id] });
+          }
+        }
+      }
+      return { map, conflicts };
+    }
+
+    // ある置き方ができるかどうかを判定する（本格クロスワード式：濁点・小さい字は別の文字）
+    function validate(text, r, c, dir, ignoreId) {
+      const cs = chars(text);
+      if (cs.length < 2) return { ok: false, reason: '2文字以上のワードだけ置けます' };
+      if (!inRange(r, c)) return { ok: false, reason: '盤面の外に出ます' };
+      const er = r + (dir === 'down' ? cs.length - 1 : 0);
+      const ec = c + (dir === 'across' ? cs.length - 1 : 0);
+      if (!inRange(er, ec)) return { ok: false, reason: '盤面の外に出ます' };
+
+      const { map } = buildBoard(ignoreId);
+      let cross = 0;
+      for (let i = 0; i < cs.length; i++) {
+        const rr = r + (dir === 'down' ? i : 0);
+        const cc = c + (dir === 'across' ? i : 0);
+        const cur = map.get(key(rr, cc));
+        if (cur) {
+          if (cur.ch !== cs[i]) return { ok: false, reason: 'すでにある文字とぶつかります' };
+          cross++;
+        }
+      }
+      // 語の前後がふさがっていないか（続けて読むと別の語になってしまうのを防ぐ）
+      const beforeK = key(r - (dir === 'down' ? 1 : 0), c - (dir === 'across' ? 1 : 0));
+      const afterK = key(er + (dir === 'down' ? 1 : 0), ec + (dir === 'across' ? 1 : 0));
+      if (map.has(beforeK)) return { ok: false, reason: '語のすぐ前に文字が続いています' };
+      if (map.has(afterK)) return { ok: false, reason: '語のすぐ後ろに文字が続いています' };
+
+      const others = state.placed.filter(p => p.id !== ignoreId).length;
+      if (others > 0 && cross === 0 && !state.freePlace) {
+        return { ok: false, reason: 'ほかの語と交差していません（「はなれた場所にも置く」をONにすると置けます）' };
+      }
+      return { ok: true, cross };
+    }
+
+    // クロスワードの番号を振る（左上から、語の始まりのマスに順番に）
+    function computeNumbers() {
+      numbers = new Array(state.w * state.h).fill(0);
+      const filled = (r, c) => inRange(r, c) && board.map.has(key(r, c));
+      let n = 0;
+      for (let r = 0; r < state.h; r++) {
+        for (let c = 0; c < state.w; c++) {
+          if (!filled(r, c)) continue;
+          const startsAcross = !filled(r, c - 1) && filled(r, c + 1);
+          const startsDown = !filled(r - 1, c) && filled(r + 1, c);
+          if (startsAcross || startsDown) numbers[r * state.w + c] = ++n;
+        }
+      }
+    }
+
+    // 意図せずできてしまった語（並べたせいで読めてしまう2文字以上のつながり）を探す
+    function computeBadRuns() {
+      badRuns = [];
+      const placedSet = new Set(state.placed.map(p => p.dir + ':' + p.r + ':' + p.c + ':' + p.text));
+      const scan = (dir) => {
+        const outer = dir === 'across' ? state.h : state.w;
+        const inner = dir === 'across' ? state.w : state.h;
+        for (let o = 0; o < outer; o++) {
+          let run = [];
+          for (let i = 0; i <= inner; i++) {
+            const r = dir === 'across' ? o : i;
+            const c = dir === 'across' ? i : o;
+            const cell = i < inner ? board.map.get(key(r, c)) : null;
+            if (cell) {
+              run.push({ r, c, ch: cell.ch });
+            } else {
+              if (run.length >= 2) {
+                const text = run.map(x => x.ch).join('');
+                const sig = dir + ':' + run[0].r + ':' + run[0].c + ':' + text;
+                if (!placedSet.has(sig)) badRuns.push({ dir, text, cells: run.slice() });
+              }
+              run = [];
+            }
+          }
+        }
+      };
+      scan('across');
+      scan('down');
+    }
+
+    // 選択中のワードを「どこに置けるか」を計算する
+    function computeCandidates() {
+      candByCell = new Map();
+      if (state.mode !== 'place' || !state.selWordId) return;
+      const word = state.words.find(w => w.id === state.selWordId);
+      if (!word) return;
+      const cs = chars(word.text);
+      if (cs.length < 2) return;
+      const add = (r, c, dir, cellR, cellC) => {
+        const k = key(cellR, cellC);
+        if (!candByCell.has(k)) candByCell.set(k, []);
+        const list = candByCell.get(k);
+        if (list.some(x => x.r === r && x.c === c && x.dir === dir)) return;
+        list.push({ text: word.text, wordId: word.id, r, c, dir });
+      };
+
+      if (board.map.size === 0 || state.freePlace) {
+        // 盤面が空（またははなれた配置を許可）→ 置ける場所すべてを候補にする
+        for (let r = 0; r < state.h; r++) {
+          for (let c = 0; c < state.w; c++) {
+            for (const dir of ['across', 'down']) {
+              if (validate(word.text, r, c, dir).ok) add(r, c, dir, r, c);
+            }
+          }
+        }
+      }
+      if (board.map.size > 0) {
+        // すでに置かれた文字と交差する置き方だけを候補にする
+        for (const [k, v] of board.map) {
+          const [r, c] = k.split(',').map(Number);
+          cs.forEach((ch, i) => {
+            if (ch !== v.ch) return;
+            for (const dir of ['across', 'down']) {
+              const sr = r - (dir === 'down' ? i : 0);
+              const sc = c - (dir === 'across' ? i : 0);
+              if (validate(word.text, sr, sc, dir).ok) add(sr, sc, dir, r, c);
+            }
+          });
+        }
+      }
+      // 今えらんでいる向きを先に出す（同じマスを連続タップしたときの順番）
+      for (const list of candByCell.values()) {
+        list.sort((a, b) => (a.dir === state.dir ? -1 : 1) - (b.dir === state.dir ? -1 : 1));
+      }
+    }
+
+    // ===== 盤面の操作 =====
+    function snapshot() {
+      history.push(JSON.stringify(serialize()));
+      if (history.length > 40) history.shift();
+      $('#btnUndo').disabled = history.length === 0;
+    }
+
+    function undo() {
+      const s = history.pop();
+      $('#btnUndo').disabled = history.length === 0;
+      if (!s) return;
+      applyData(JSON.parse(s));
+      showMsg('元に戻しました。');
+    }
+
+    function placeWord(cand) {
+      const p = { id: uid(), text: cand.text, r: cand.r, c: cand.c, dir: cand.dir };
+      state.placed.push(p);
+      state.selPlacedId = p.id;
+      return p;
+    }
+
+    function removePlaced(id) {
+      state.placed = state.placed.filter(p => p.id !== id);
+      if (state.selPlacedId === id) state.selPlacedId = null;
+    }
+
+    function clearCycle() { cycle = { key: null, list: null, i: 0, placedId: null }; }
+
+    // ===== 画面の組み立て =====
+    function calcCellSize() {
+      const wrapMax = Math.min(document.body.clientWidth - 40, 900);
+      const fit = Math.floor((wrapMax - state.w) / state.w);
+      return Math.max(MIN_CELL_PX, Math.min(MAX_CELL_PX, fit));
+    }
+
+    function buildGrid() {
+      const grid = $('#grid');
+      grid.innerHTML = '';
+      const px = calcCellSize();
+      grid.style.gridTemplateColumns = 'repeat(' + state.w + ', ' + px + 'px)';
+      grid.style.gridTemplateRows = 'repeat(' + state.h + ', ' + px + 'px)';
+      for (let r = 0; r < state.h; r++) {
+        for (let c = 0; c < state.w; c++) {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          div.dataset.r = r;
+          div.dataset.c = c;
+          div.innerHTML = '<span class="mark"></span><span class="num"></span><span class="ch"></span>';
+          grid.appendChild(div);
+        }
+      }
+      const mi = $('#markInput');
+      mi.style.width = px + 'px';
+      mi.style.height = Math.round(px * 0.7) + 'px';
+      mi.style.fontSize = Math.max(11, Math.round(px * 0.4)) + 'px';
+    }
+
+    function renderGrid() {
+      const cells = $('#grid').children;
+      // 選択中の語のマス
+      const selCells = new Set();
+      const sel = state.placed.find(p => p.id === state.selPlacedId);
+      if (sel) wordCells(sel).forEach(x => selCells.add(key(x.r, x.c)));
+      // 意図しない語のマス
+      const badCells = new Set();
+      badRuns.forEach(run => run.cells.forEach(x => badCells.add(key(x.r, x.c))));
+      // ドラッグ中のプレビュー
+      const prevMap = new Map();
+      if (preview) preview.cells.forEach(x => prevMap.set(key(x.r, x.c), x.ch));
+
+      for (let i = 0; i < cells.length; i++) {
+        const el = cells[i];
+        const r = Math.floor(i / state.w);
+        const c = i % state.w;
+        const k = key(r, c);
+        const cell = board.map.get(k);
+        const cls = ['cell'];
+        let ch = '';
+        if (cell) { cls.push('filled'); ch = state.hideLetters ? '' : cell.ch; }
+        if (cell && selCells.has(k)) cls.push('selword');
+        if (board.conflicts.has(k)) cls.push('conflict');
+        if (badCells.has(k)) cls.push('badrun');
+        if (candByCell.has(k)) cls.push('cand');
+        if (prevMap.has(k)) {
+          cls.push(preview.ok ? 'preview-ok' : 'preview-ng');
+          ch = prevMap.get(k);
+        }
+        el.className = cls.join(' ');
+        el.querySelector('.ch').textContent = ch;
+        el.querySelector('.mark').textContent = cell ? (state.marks[k] || '') : '';
+        el.querySelector('.num').textContent =
+          (state.showNums && cell && numbers[i]) ? numbers[i] : '';
+      }
+    }
+
+    function renderWords() {
+      const box = $('#wordList');
+      box.innerHTML = '';
+      if (state.words.length === 0) {
+        box.innerHTML = '<p class="note">まだワードがありません。</p>';
+        return;
+      }
+      const shareCount = sharedCounts();
+      const placedTexts = new Set(state.placed.map(p => p.text));
+      state.words.forEach(w => {
+        const chip = document.createElement('div');
+        chip.className = 'word-chip'
+          + (state.selWordId === w.id ? ' sel' : '')
+          + (placedTexts.has(w.text) ? ' placed' : '');
+        chip.dataset.wordId = w.id;
+        const n = shareCount.get(w.id) || 0;
+        const badge = n > 0
+          ? '<span class="wbadge">' + n + '語とつながる</span>'
+          : '<span class="wbadge alone">つながらない</span>';
+        chip.innerHTML =
+          '<span class="wtext">' + escapeHtml(w.text) + '</span>' + badge +
+          '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>';
+        box.appendChild(chip);
+      });
+    }
+
+    // 各ワードが「ほかの何語と共通文字を持つか」
+    function sharedCounts() {
+      const m = new Map();
+      state.words.forEach(a => {
+        let n = 0;
+        state.words.forEach(b => {
+          if (a.id === b.id) return;
+          if (sharedChars(a.text, b.text).length > 0) n++;
+        });
+        m.set(a.id, n);
+      });
+      return m;
+    }
+
+    function sharedChars(a, b) {
+      const sb = new Set(chars(b));
+      return [...new Set(chars(a))].filter(ch => sb.has(ch));
+    }
+
+    // ===== ② 共通文字の診断 =====
+    function renderDiag() {
+      const diag = $('#diag');
+      const list = $('#pairList');
+      list.innerHTML = '';
+      const words = state.words;
+      if (words.length === 0) {
+        diag.className = 'diag ok';
+        diag.textContent = 'ワードを登録してください。';
+        return;
+      }
+      // つながり（共通文字があるか）をたどってグループ分けする
+      const parent = new Map(words.map(w => [w.id, w.id]));
+      const find = (x) => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x))), parent.get(x)));
+      const pairs = [];
+      for (let i = 0; i < words.length; i++) {
+        for (let j = i + 1; j < words.length; j++) {
+          const sh = sharedChars(words[i].text, words[j].text);
+          if (sh.length === 0) continue;
+          pairs.push({ a: words[i], b: words[j], sh });
+          parent.set(find(words[i].id), find(words[j].id));
+        }
+      }
+      const groups = new Set(words.map(w => find(w.id)));
+      const alone = words.filter(w => pairs.every(p => p.a.id !== w.id && p.b.id !== w.id));
+
+      if (words.length === 1) {
+        diag.className = 'diag ok';
+        diag.textContent = 'ワードが1つだけです。あと1つ以上登録すると共通文字を調べられます。';
+      } else if (groups.size === 1) {
+        diag.className = 'diag ok';
+        diag.textContent = '◎ 全部のワードがつながります（' + pairs.length + '組が交差できます）。クロスワードにできます。';
+      } else {
+        diag.className = 'diag ng';
+        let t = '△ ' + groups.size + 'つのグループに分かれています。1つにつなぐには、橋わたしになるワードが必要です。';
+        if (alone.length) t += '　どのワードともつながらない：' + alone.map(w => w.text).join('・');
+        diag.textContent = t;
+      }
+
+      if (pairs.length === 0) {
+        list.innerHTML = '<p class="note">共通する文字を持つ組み合わせはまだありません。</p>';
+        return;
+      }
+      pairs.forEach(p => {
+        const div = document.createElement('div');
+        div.className = 'pair';
+        div.innerHTML =
+          '<span>' + escapeHtml(p.a.text) + '</span><span>×</span><span>' + escapeHtml(p.b.text) + '</span>' +
+          '<span>→</span>' + p.sh.map(ch => '<span class="share">' + escapeHtml(ch) + '</span>').join('');
+        list.appendChild(div);
+      });
+    }
+
+    // ===== ③ キーワード =====
+    function renderKeyword() {
+      const box = $('#kwChips');
+      box.innerHTML = '';
+      const cs = chars(state.keyword);
+      if (cs.length === 0) {
+        box.innerHTML = '<p class="note">キーワードを入れると、登録ワードで使えている文字に色がつきます。</p>';
+        $('#kwSummary').textContent = '';
+        return;
+      }
+      const inWords = new Set();
+      state.words.forEach(w => chars(w.text).forEach(ch => inWords.add(ch)));
+      const onBoard = new Set();
+      for (const v of board.map.values()) onBoard.add(v.ch);
+
+      const missing = [];
+      cs.forEach(ch => {
+        const chip = document.createElement('div');
+        let st = '未使用';
+        let cls = 'kw-chip';
+        if (onBoard.has(ch)) { cls += ' board'; st = '盤面済'; }
+        else if (inWords.has(ch)) { cls += ' used'; st = 'ワード有'; }
+        else missing.push(ch);
+        chip.className = cls;
+        chip.innerHTML = escapeHtml(ch) + '<span class="st">' + st + '</span>';
+        box.appendChild(chip);
+      });
+
+      const done = cs.length - missing.length;
+      let html = 'カバー：' + done + ' / ' + cs.length + ' 文字';
+      if (missing.length) {
+        html += '　<span id="kwMissing">まだ使えていない文字：' + escapeHtml(missing.join('・')) + '</span>'
+          + '<br><span class="note">この文字を含むワードを考えて登録してください。</span>';
+      } else {
+        html += '　<span style="color:var(--ok);font-weight:700;">すべての文字がそろいました！</span>';
+      }
+      $('#kwSummary').innerHTML = html;
+    }
+
+    // ===== 盤面まわりの表示 =====
+    function renderWarnings() {
+      const box = $('#warnings');
+      const items = [];
+      if (board.conflicts.size > 0) {
+        items.push('<p class="w">✗ 文字がぶつかっているマスがあります（赤いマス）。</p>');
+      }
+      badRuns.forEach(run => {
+        const pos = (run.dir === 'across' ? 'ヨコ ' + (run.cells[0].r + 1) + '行目' : 'タテ ' + (run.cells[0].c + 1) + '列目');
+        items.push('<p class="w">△ 意図しない読みができています：「' + escapeHtml(run.text) + '」（' + pos + '）</p>');
+      });
+      box.innerHTML = items.join('');
+    }
+
+    function renderPlaced() {
+      const box = $('#placedList');
+      box.innerHTML = '';
+      if (state.placed.length === 0) {
+        box.innerHTML = '<p class="note">まだ盤面に語がありません。</p>';
+        return;
+      }
+      state.placed.forEach(p => {
+        const chip = document.createElement('div');
+        chip.className = 'placed-chip' + (state.selPlacedId === p.id ? ' sel' : '');
+        chip.dataset.placedId = p.id;
+        chip.textContent = (p.dir === 'across' ? '→ ' : '↓ ') + p.text;
+        box.appendChild(chip);
+      });
+    }
+
+    // カギ（ヒント）欄：盤面に置いた語のぶんだけ自動で並ぶ
+    let clueSig = '';
+    function renderClues() {
+      const box = $('#clueList');
+      const words = state.placed.map(p => ({
+        p,
+        no: numbers[p.r * state.w + p.c] || 0
+      })).sort((a, b) => a.no - b.no);
+      const sig = words.map(x => x.no + x.p.dir + x.p.text).join('|');
+      if (sig !== clueSig) {
+        clueSig = sig;
+        box.innerHTML = '';
+        if (words.length === 0) {
+          box.innerHTML = '<p class="note">盤面に語を置くと、カギの入力欄がここに並びます。</p>';
+        }
+        words.forEach(({ p, no }) => {
+          const item = document.createElement('div');
+          item.className = 'pair';
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.placeholder = 'カギを書く';
+          input.style.flex = '1 1 140px';
+          input.value = state.clues[p.text] || '';
+          input.addEventListener('input', () => { state.clues[p.text] = input.value; saveLocal(); });
+          const label = document.createElement('span');
+          label.innerHTML = '<strong>' + no + '</strong> ' + (p.dir === 'across' ? 'ヨコ' : 'タテ')
+            + ' <span style="color:var(--gray)">' + escapeHtml(p.text) + '</span>';
+          label.style.minWidth = '110px';
+          item.append(label, input);
+          box.appendChild(item);
+        });
+      }
+    }
+
+    // ===== まとめて更新 =====
+    function refresh() {
+      board = buildBoard();
+      computeNumbers();
+      computeBadRuns();
+      computeCandidates();
+      renderGrid();
+      renderWords();
+      renderDiag();
+      renderKeyword();
+      renderWarnings();
+      renderPlaced();
+      renderClues();
+      $('#btnRemoveWord').disabled = !state.selPlacedId;
+      $('#btnRotate').disabled = !state.selPlacedId;
+      saveLocal();
+    }
+
+    // ===== ワードの登録・削除 =====
+    function addWords(raw) {
+      const parts = String(raw).split(/[\n,、,\s]+/).map(s => s.trim()).filter(Boolean);
+      let added = 0, skipped = 0;
+      parts.forEach(text => {
+        const t = text.normalize('NFC');
+        if (state.words.some(w => w.text === t)) { skipped++; return; }
+        state.words.push({ id: uid(), text: t });
+        added++;
+      });
+      showMsg(added + '語を登録しました。' + (skipped ? '（同じ語 ' + skipped + ' 件はとばしました）' : ''), 'ok');
+      refresh();
+    }
+
+    // ===== 座標の計算（ドラッグ用） =====
+    function pointToCell(x, y) {
+      const grid = $('#grid');
+      const rect = grid.getBoundingClientRect();
+      const px = calcCellSize() + 1; // gap 1px ぶん
+      const c = Math.floor((x - rect.left) / px);
+      const r = Math.floor((y - rect.top) / px);
+      return inRange(r, c) ? { r, c } : null;
+    }
+
+    function setPreview(text, r, c, dir, ignoreId) {
+      const res = validate(text, r, c, dir, ignoreId);
+      const cs = chars(text);
+      const cells = [];
+      for (let i = 0; i < cs.length; i++) {
+        const rr = r + (dir === 'down' ? i : 0);
+        const cc = c + (dir === 'across' ? i : 0);
+        if (inRange(rr, cc)) cells.push({ r: rr, c: cc, ch: cs[i] });
+      }
+      preview = { cells, ok: res.ok };
+      renderGrid();
+      showMsg(res.ok ? '○ ここに置けます' : '✗ ' + res.reason, res.ok ? 'ok' : 'ng');
+      return res;
+    }
+
+    function clearPreview() { preview = null; }
+  </script>
+  <script>
+    // ===== 操作（タップ／ドラッグ）の共通処理 =====
+    // pending：指を置いただけの状態。少し動いたら drag に変わる
+    let pending = null;
+
+    function showGhost(text, x, y) {
+      const g = $('#dragGhost');
+      g.textContent = text;
+      g.classList.remove('hidden');
+      g.style.left = (x + 14) + 'px';
+      g.style.top = (y - 14) + 'px';
+    }
+    function hideGhost() { $('#dragGhost').classList.add('hidden'); }
+
+    function beginDrag(info) {
+      drag = info;
+      clearCycle();
+      document.body.style.cursor = 'grabbing';
+    }
+
+    function updateDrag(x, y) {
+      showGhost(drag.text, x, y);
+      const cell = pointToCell(x, y);
+      if (!cell) {
+        clearPreview();
+        renderGrid();
+        showMsg('盤面の外です。盤面の上で指をはなすと置けます。');
+        drag.target = null;
+        return;
+      }
+      // つかんだ位置ぶんだけずらして、語の先頭マスを決める
+      const sr = cell.r - (drag.dir === 'down' ? drag.grab : 0);
+      const sc = cell.c - (drag.dir === 'across' ? drag.grab : 0);
+      const res = setPreview(drag.text, sr, sc, drag.dir, drag.ignoreId);
+      drag.target = res.ok ? { r: sr, c: sc, dir: drag.dir } : null;
+    }
+
+    function endDrag(commit) {
+      const d = drag;
+      drag = null;
+      pending = null;
+      hideGhost();
+      clearPreview();
+      document.body.style.cursor = '';
+      if (!d) return;
+      if (commit && d.target) {
+        snapshot();
+        if (d.ignoreId) {
+          // 盤面にすでにある語を動かした
+          const p = state.placed.find(x => x.id === d.ignoreId);
+          p.r = d.target.r; p.c = d.target.c; p.dir = d.target.dir;
+          state.selPlacedId = p.id;
+          showMsg('○ 動かしました。', 'ok');
+        } else {
+          placeWord({ text: d.text, r: d.target.r, c: d.target.c, dir: d.target.dir });
+          state.selWordId = null;
+          showMsg('○ 「' + d.text + '」を置きました。', 'ok');
+        }
+      } else if (commit) {
+        showMsg('✗ ここには置けませんでした。もとの場所のままです。', 'ng');
+      }
+      refresh();
+    }
+
+    // ===== ワードチップの操作 =====
+    function bindWordList() {
+      const box = $('#wordList');
+      box.addEventListener('pointerdown', (e) => {
+        if (e.target.closest('[data-del]')) return;
+        const chip = e.target.closest('.word-chip');
+        if (!chip) return;
+        const w = state.words.find(x => x.id === chip.dataset.wordId);
+        if (!w) return;
+        pending = { kind: 'word', text: w.text, wordId: w.id, x: e.clientX, y: e.clientY, el: chip, pointerId: e.pointerId };
+        chip.setPointerCapture(e.pointerId);
+      });
+      box.addEventListener('click', (e) => {
+        const del = e.target.closest('[data-del]');
+        if (!del) return;
+        const id = del.dataset.del;
+        const w = state.words.find(x => x.id === id);
+        if (!w) return;
+        if (!confirm('「' + w.text + '」を登録から消します。よろしいですか？')) return;
+        state.words = state.words.filter(x => x.id !== id);
+        if (state.selWordId === id) state.selWordId = null;
+        refresh();
+      });
+    }
+
+    // ===== 盤面の操作 =====
+    function bindGrid() {
+      const grid = $('#grid');
+      grid.addEventListener('pointerdown', (e) => {
+        const cellEl = e.target.closest('.cell');
+        if (!cellEl) return;
+        const r = Number(cellEl.dataset.r);
+        const c = Number(cellEl.dataset.c);
+        const k = key(r, c);
+
+        if (state.mode === 'mark') {
+          // preventDefault しないと、マスをタップした直後にブラウザが記号入力欄からフォーカスを外してしまう
+          e.preventDefault();
+          openMarkInput(r, c);
+          return;
+        }
+        // そのマスにある「置かれた語」の情報（つかんで動かすときに使う）
+        const cell = board.map.get(k);
+        let placedInfo = null;
+        if (cell) {
+          const pid = cell.ids.includes(state.selPlacedId) ? state.selPlacedId : cell.ids[0];
+          const pw = state.placed.find(x => x.id === pid);
+          const grab = wordCells(pw).findIndex(x => x.r === r && x.c === c);
+          placedInfo = { text: pw.text, placedId: pw.id, grab: Math.max(0, grab), dir: pw.dir, ids: cell.ids };
+        }
+        // 「置き方の候補」を優先する（交差するマスはすでに文字が入っているため）
+        const isCycle = cycle.key === k && cycle.list;
+        const selWord = state.words.find(x => x.id === state.selWordId);
+        const canCand = isCycle || (selWord && candByCell.has(k));
+        const tapKind = canCand ? 'cand' : (placedInfo ? 'placed' : null);
+        if (!tapKind && !placedInfo) {
+          pending = null;
+          if (state.selWordId) showMsg('そのマスには置けません。光っているマスを選んでください。');
+          return;
+        }
+        pending = {
+          kind: 'grid', tapKind, k, placedInfo,
+          text: selWord ? selWord.text : '',
+          x: e.clientX, y: e.clientY, pointerId: e.pointerId
+        };
+        grid.setPointerCapture(e.pointerId);
+      });
+
+      // 右クリックで向きを切り替える（ドラッグ中でも使える）
+      $('#gridWrap').addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (drag) { drag.dir = drag.dir === 'across' ? 'down' : 'across'; updateDrag(e.clientX, e.clientY); }
+        else toggleDir();
+      });
+    }
+
+    // 盤面のマスをタップしたとき（ドラッグしなかったとき）の処理
+    function handleTap(p) {
+      if (p.kind === 'word') {
+        state.selWordId = (state.selWordId === p.wordId) ? null : p.wordId;
+        state.selPlacedId = null;
+        clearCycle();
+        showMsg(state.selWordId ? '「' + p.text + '」を選びました。光ったマスをタップすると置けます。' : '');
+        refresh();
+        return;
+      }
+      if (p.tapKind === 'cand') { placeFromCandidate(p.k); return; }
+      if (p.tapKind === 'placed') {
+        // 同じマスに2語が交差しているときは、タップのたびに選ぶ語が切り替わる
+        const ids = p.placedInfo.ids;
+        const i = ids.indexOf(state.selPlacedId);
+        state.selPlacedId = ids[(i + 1) % ids.length];
+        state.selWordId = null;
+        clearCycle();
+        refresh();
+      }
+    }
+
+    // 光ったマスをタップして置く。同じマスを続けてタップすると別の置き方に切り替わる
+    function placeFromCandidate(k) {
+      if (cycle.key === k && cycle.list && cycle.placedId) {
+        removePlaced(cycle.placedId);
+        cycle.i = (cycle.i + 1) % cycle.list.length;
+      } else {
+        const list = candByCell.get(k);
+        if (!list || list.length === 0) return;
+        snapshot();
+        cycle = { key: k, list, i: 0, placedId: null };
+      }
+      const cand = cycle.list[cycle.i];
+      const p = placeWord(cand);
+      cycle.placedId = p.id;
+      state.selWordId = null;
+      const more = cycle.list.length > 1
+        ? '（このマスをもう一度タップすると別の置き方に切り替わります：' + (cycle.i + 1) + '/' + cycle.list.length + '）' : '';
+      showMsg('○ 「' + cand.text + '」を置きました。' + more, 'ok');
+      refresh();
+    }
+
+    // ===== 記号（A・B・1・2 など）の入力 =====
+    function openMarkInput(r, c) {
+      const k = key(r, c);
+      if (!board.map.has(k)) {
+        showMsg('記号は、文字が入っているマスにだけ書けます。', 'ng');
+        return;
+      }
+      state.markSel = { r, c };
+      const mi = $('#markInput');
+      const cellEl = $('#grid').children[r * state.w + c];
+      mi.classList.remove('hidden');
+      mi.style.left = cellEl.offsetLeft + 'px';
+      mi.style.top = cellEl.offsetTop + 'px';
+      mi.value = state.marks[k] || '';
+      mi.focus();
+      mi.select();
+      showMsg('このマスの記号を入力してください（A・B・1・2 など）。消すときは空にします。');
+    }
+
+    function closeMarkInput() {
+      $('#markInput').classList.add('hidden');
+      state.markSel = null;
+    }
+
+    // ===== 各ボタン =====
+    function toggleDir() {
+      state.dir = state.dir === 'across' ? 'down' : 'across';
+      $('#btnDir').textContent = state.dir === 'across' ? '向き：ヨコ →' : '向き：タテ ↓';
+      clearCycle();
+      refresh();
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      $('#modePlace').setAttribute('aria-pressed', String(mode === 'place'));
+      $('#modeMark').setAttribute('aria-pressed', String(mode === 'mark'));
+      if (mode !== 'mark') closeMarkInput();
+      if (mode === 'mark') { state.selWordId = null; showMsg('マスをタップして記号を入力してください。'); }
+      clearCycle();
+      refresh();
+    }
+
+    function rotateSelected() {
+      const p = state.placed.find(x => x.id === state.selPlacedId);
+      if (!p) return;
+      const nd = p.dir === 'across' ? 'down' : 'across';
+      const res = validate(p.text, p.r, p.c, nd, p.id);
+      if (!res.ok) { showMsg('✗ 回転できません：' + res.reason, 'ng'); return; }
+      snapshot();
+      p.dir = nd;
+      showMsg('○ 回転しました。', 'ok');
+      refresh();
+    }
+
+    // ===== 保存・読み込み =====
+    function serialize() {
+      return {
+        version: 1,
+        title: state.title, words: state.words, keyword: state.keyword,
+        w: state.w, h: state.h, placed: state.placed,
+        marks: state.marks, clues: state.clues,
+        hideLetters: state.hideLetters, showNums: state.showNums
+      };
+    }
+
+    function applyData(d) {
+      if (!d) return false;
+      state.title = d.title || '';
+      state.words = Array.isArray(d.words) ? d.words : [];
+      state.keyword = d.keyword || '';
+      state.w = Math.min(MAX_SIZE, Math.max(MIN_SIZE, d.w || 13));
+      state.h = Math.min(MAX_SIZE, Math.max(MIN_SIZE, d.h || 13));
+      state.placed = Array.isArray(d.placed) ? d.placed : [];
+      state.marks = d.marks || {};
+      state.clues = d.clues || {};
+      state.hideLetters = !!d.hideLetters;
+      state.showNums = d.showNums !== false;
+      state.selWordId = null;
+      state.selPlacedId = null;
+      clearCycle();
+      clueSig = '';
+      $('#title').value = state.title;
+      $('#keywordInput').value = state.keyword;
+      $('#sizeW').value = state.w;
+      $('#sizeH').value = state.h;
+      $('#hideLetters').checked = state.hideLetters;
+      $('#showNums').checked = state.showNums;
+      buildGrid();
+      refresh();
+      return true;
+    }
+
+    function saveLocal() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+      } catch (e) {
+        $('#msg').textContent = '自動保存できません（プライベートモードの可能性）。「ファイルに保存」を使ってください。';
+      }
+    }
+
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* 読めなければ新規でよい */ }
+      return null;
+    }
+
+    function exportFile() {
+      const name = (state.title || 'crossword').replace(/[\\/:*?"<>|]/g, '_');
+      const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = name + '.json';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      $('#msg').textContent = 'ファイルに保存しました（ダウンロードフォルダを確認してください）。';
+    }
+
+    function importFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          applyData(JSON.parse(reader.result));
+          $('#msg').textContent = '読み込みました。';
+        } catch (e) {
+          $('#msg').textContent = 'このファイルは読み込めませんでした。';
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== 印刷 =====
+    function markEntries() {
+      const list = Object.entries(state.marks)
+        .filter(([k, v]) => v && board.map.has(k))
+        .map(([k, v]) => ({ k, mark: v, ch: board.map.get(k).ch }));
+      const allNum = list.every(x => /^\d+$/.test(x.mark));
+      list.sort((a, b) => allNum ? Number(a.mark) - Number(b.mark) : a.mark.localeCompare(b.mark, 'ja'));
+      return list;
+    }
+
+    function boundingBox() {
+      let minR = state.h, maxR = -1, minC = state.w, maxC = -1;
+      for (const k of board.map.keys()) {
+        const [r, c] = k.split(',').map(Number);
+        minR = Math.min(minR, r); maxR = Math.max(maxR, r);
+        minC = Math.min(minC, c); maxC = Math.max(maxC, c);
+      }
+      if (maxR < 0) return null;
+      return { minR, maxR, minC, maxC };
+    }
+
+    function buildPrint(withAnswer) {
+      const area = $('#printArea');
+      const bb = boundingBox();
+      const title = state.title || 'クロスワード';
+      let html = '<h2 class="print-title">' + escapeHtml(title) + (withAnswer ? '（解答）' : '') + '</h2>';
+
+      if (!bb) {
+        area.innerHTML = html + '<p>盤面が空です。</p>';
+        return;
+      }
+      html += '<table class="print-grid"><tbody>';
+      for (let r = bb.minR; r <= bb.maxR; r++) {
+        html += '<tr>';
+        for (let c = bb.minC; c <= bb.maxC; c++) {
+          const cell = board.map.get(key(r, c));
+          if (!cell) { html += '<td class="black"></td>'; continue; }
+          const mk = state.marks[key(r, c)];
+          const m = mk ? '<span class="m">' + escapeHtml(mk) + '</span>' : '';
+          html += '<td>' + m + (withAnswer ? escapeHtml(cell.ch) : '') + '</td>';
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+
+      // キーワードの解答欄（記号を並べたもの）
+      const marks = markEntries();
+      if (marks.length) {
+        html += '<div class="print-kw"><strong>キーワード</strong><table><tr>';
+        html += marks.map(x => '<td class="lab">' + escapeHtml(x.mark) + '</td>').join('');
+        html += '</tr><tr>';
+        html += marks.map(x => '<td>' + (withAnswer ? escapeHtml(x.ch) : '') + '</td>').join('');
+        html += '</tr></table></div>';
+      }
+
+      // カギ（ヒント）
+      const list = state.placed.map(p => ({ p, no: numbers[p.r * state.w + p.c] || 0 }))
+        .sort((a, b) => a.no - b.no);
+      const col = (label, dir) => {
+        const items = list.filter(x => x.p.dir === dir);
+        if (!items.length) return '';
+        return '<div><strong>' + label + '</strong><ul>' + items.map(x =>
+          '<li>' + x.no + '. ' + escapeHtml(state.clues[x.p.text] || '')
+          + (withAnswer ? '　【' + escapeHtml(x.p.text) + '】' : '') + '</li>').join('') + '</ul></div>';
+      };
+      html += '<div class="print-clues">' + col('ヨコのカギ', 'across') + col('タテのカギ', 'down') + '</div>';
+      area.innerHTML = html;
+    }
+
+    function doPrint(withAnswer) { buildPrint(withAnswer); window.print(); }
+
+    // ===== イベント登録 =====
+    function bindEvents() {
+      bindWordList();
+      bindGrid();
+
+      // ドラッグ共通（指・マウスどちらも pointer イベントで扱う）
+      window.addEventListener('pointermove', (e) => {
+        if (drag) { updateDrag(e.clientX, e.clientY); return; }
+        if (!pending) return;
+        const dist = Math.hypot(e.clientX - pending.x, e.clientY - pending.y);
+        if (dist < DRAG_THRESHOLD) return;
+        if (pending.placedInfo) {
+          const pi = pending.placedInfo;
+          beginDrag({ text: pi.text, grab: pi.grab, dir: pi.dir, ignoreId: pi.placedId });
+        } else if (pending.text) {
+          beginDrag({ text: pending.text, grab: 0, dir: state.dir, ignoreId: null });
+        } else { pending = null; return; }
+        updateDrag(e.clientX, e.clientY);
+      });
+      window.addEventListener('pointerup', (e) => {
+        if (drag) { endDrag(true); return; }
+        if (pending) { const p = pending; pending = null; handleTap(p); }
+      });
+      window.addEventListener('pointercancel', () => { if (drag) endDrag(false); pending = null; });
+      window.addEventListener('keydown', (e) => {
+        if (drag && (e.key === 'r' || e.key === 'R' || e.key === ' ')) {
+          e.preventDefault();
+          drag.dir = drag.dir === 'across' ? 'down' : 'across';
+          const g = $('#dragGhost');
+          updateDrag(parseFloat(g.style.left) - 14, parseFloat(g.style.top) + 14);
+        }
+        if (e.key === 'Escape' && drag) endDrag(false);
+      });
+
+      // ワード登録
+      $('#btnAddWord').addEventListener('click', () => {
+        const v = $('#wordInput').value;
+        if (!v.trim()) { showMsg('ワードを入力してください。', 'ng'); return; }
+        addWords(v);
+        $('#wordInput').value = '';
+      });
+      $('#btnClearWords').addEventListener('click', () => {
+        if (!confirm('登録したワードを全部消します。よろしいですか？（盤面はそのままです）')) return;
+        state.words = []; state.selWordId = null; refresh();
+      });
+
+      // キーワード
+      $('#keywordInput').addEventListener('input', (e) => {
+        state.keyword = e.target.value.normalize('NFC');
+        board = buildBoard();
+        renderKeyword();
+        saveLocal();
+      });
+
+      // 盤面ツール
+      $('#modePlace').addEventListener('click', () => setMode('place'));
+      $('#modeMark').addEventListener('click', () => setMode('mark'));
+      $('#btnDir').addEventListener('click', toggleDir);
+      $('#btnRotate').addEventListener('click', rotateSelected);
+      $('#btnUndo').addEventListener('click', undo);
+      $('#btnRemoveWord').addEventListener('click', () => {
+        if (!state.selPlacedId) return;
+        snapshot();
+        removePlaced(state.selPlacedId);
+        clearCycle();
+        showMsg('盤面から外しました。');
+        refresh();
+      });
+      $('#btnClearBoard').addEventListener('click', () => {
+        if (!confirm('盤面に置いた語と記号を全部消します。よろしいですか？（登録ワードは残ります）')) return;
+        snapshot();
+        state.placed = []; state.marks = {}; state.selPlacedId = null;
+        clearCycle(); refresh();
+      });
+      $('#freePlace').addEventListener('change', (e) => {
+        state.freePlace = e.target.checked;
+        clearCycle(); refresh();
+      });
+      $('#sizeW').addEventListener('change', () => resize());
+      $('#sizeH').addEventListener('change', () => resize());
+
+      // 記号の入力
+      const mi = $('#markInput');
+      mi.addEventListener('input', () => {
+        if (!state.markSel) return;
+        const k = key(state.markSel.r, state.markSel.c);
+        const v = mi.value.trim();
+        if (v) state.marks[k] = v; else delete state.marks[k];
+        renderGrid();
+        saveLocal();
+      });
+      mi.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Escape') closeMarkInput(); });
+
+      // 仕上げ・保存・印刷
+      $('#hideLetters').addEventListener('change', (e) => { state.hideLetters = e.target.checked; refresh(); });
+      $('#showNums').addEventListener('change', (e) => { state.showNums = e.target.checked; refresh(); });
+      $('#title').addEventListener('input', (e) => { state.title = e.target.value; saveLocal(); });
+      $('#btnPrintQ').addEventListener('click', () => doPrint(false));
+      $('#btnPrintA').addEventListener('click', () => doPrint(true));
+      $('#btnExport').addEventListener('click', exportFile);
+      $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#fileInput').addEventListener('change', (e) => {
+        if (e.target.files[0]) importFile(e.target.files[0]);
+        e.target.value = '';
+      });
+
+      // 盤面に置いた語をチップから選ぶ
+      $('#placedList').addEventListener('click', (e) => {
+        const chip = e.target.closest('.placed-chip');
+        if (!chip) return;
+        state.selPlacedId = chip.dataset.placedId;
+        state.selWordId = null;
+        clearCycle();
+        refresh();
+      });
+
+      window.addEventListener('resize', () => { buildGrid(); renderGrid(); closeMarkInput(); });
+    }
+
+    function resize() {
+      const w = Number($('#sizeW').value);
+      const h = Number($('#sizeH').value);
+      // 置いた語が外に出てしまう場合は縮小できない
+      const over = state.placed.some(p => {
+        const cs = chars(p.text).length;
+        const er = p.r + (p.dir === 'down' ? cs - 1 : 0);
+        const ec = p.c + (p.dir === 'across' ? cs - 1 : 0);
+        return er >= h || ec >= w;
+      });
+      if (over) {
+        showMsg('✗ 置いてある語が盤面の外に出てしまうので、この大きさにはできません。', 'ng');
+        $('#sizeW').value = state.w; $('#sizeH').value = state.h;
+        return;
+      }
+      snapshot();
+      state.w = w; state.h = h;
+      clearCycle();
+      buildGrid();
+      refresh();
+    }
+
+    // ===== 初期化 =====
+    function init() {
+      for (let n = MIN_SIZE; n <= MAX_SIZE; n++) {
+        $('#sizeW').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
+        $('#sizeH').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
+      }
+      const saved = loadLocal();
+      if (saved) {
+        applyData(saved);
+      } else {
+        $('#sizeW').value = state.w;
+        $('#sizeH').value = state.h;
+        buildGrid();
+        refresh();
+      }
+      bindEvents();
+      setMode('place');
+    }
+
+    // ===== 起動 =====
+    init();
+  </script>
+
+</body>
+</html>

@@ -7,6 +7,75 @@
 
 ---
 
+### [汎用] タップ配置とドラッグ配置を1つの pointer イベントで両立させる
+
+**概要：** iPad と PC の両方で「置く」操作を作るとき、タップ用とドラッグ用のコードを分けると二重管理になる。**pointerdown で「保留（pending）」だけ作り、指が一定距離動いたらドラッグに昇格**させると、1本の流れでタップとドラッグを両立できる。
+
+**実装：**
+```js
+let pending = null, drag = null;
+const DRAG_THRESHOLD = 6;               // これ以上動いたらドラッグ
+
+el.addEventListener('pointerdown', e => {
+  pending = { text, grab, x: e.clientX, y: e.clientY };
+  el.setPointerCapture(e.pointerId);     // 指が要素の外へ出ても追える
+});
+window.addEventListener('pointermove', e => {
+  if (drag) { updateDrag(e.clientX, e.clientY); return; }
+  if (!pending) return;
+  if (Math.hypot(e.clientX - pending.x, e.clientY - pending.y) < DRAG_THRESHOLD) return;
+  drag = { ...pending };                 // ドラッグに昇格
+});
+window.addEventListener('pointerup', () => {
+  if (drag) { endDrag(true); return; }   // ドラッグ→確定
+  if (pending) { const p = pending; pending = null; handleTap(p); } // 動いてない→タップ
+});
+window.addEventListener('pointercancel', () => { endDrag(false); pending = null; });
+```
+
+**あわせて必要なこと：**
+- ドラッグする要素と盤面に `touch-action: none`（付けないとiPadでスクロールに取られる。ただし**その領域はページスクロールできなくなる**ので画面設計で逃げ道を作る）
+- ドラッグ中は「置ける／置けない」を色（緑／赤）で常時表示 → **置けない場所で指をはなしても何も起きない**＝操作ミスが起きない
+- 回転はドラッグ中の `contextmenu`（右クリック）と `keydown` の R キーで受ける。タッチには画面上のボタンを別に用意する
+
+**使用例：** crossword/crossword-supporter.html（2026-08-21）
+
+---
+
+### [汎用] 「置ける場所だけ光らせる」候補提示で操作ミスを消す
+
+**概要：** 自由に置かせてから間違いを指摘するのではなく、**先に全パターンを検証して、成立する場所だけを提示**すると、そもそもミスが起きない。マス目に語を置く系のUIで有効。
+
+**実装の流れ：**
+```js
+// 1. 判定関数を1つだけ作る（置けるか／置けない理由）
+function validate(text, r, c, dir, ignoreId) { ... return {ok:false, reason:'...'} }
+
+// 2. 既存の文字と共通する位置だけを総当たりして候補を集める
+for (const [k, v] of board.map) {          // 盤面にある文字
+  chars(text).forEach((ch, i) => {
+    if (ch !== v.ch) return;               // 同じ文字のところで交差させる
+    for (const dir of ['across','down']) {
+      const sr = r - (dir==='down'  ? i : 0);
+      const sc = c - (dir==='across'? i : 0);
+      if (validate(text, sr, sc, dir).ok) add(sr, sc, dir, r, c);
+    }
+  });
+}
+
+// 3. 候補のあるマスにだけ .cand クラス → 光る。タップで確定
+// 4. 同じマスを連続タップ → 候補配列を順ぐりに切り替え（1/2, 2/2 …）
+```
+
+**ポイント：**
+- 判定関数を1つにまとめると、タップ配置・ドラッグ配置・回転・移動の**すべてで同じルール**になる
+- 移動・回転のときは自分自身を除外して判定する（`ignoreId`）
+- 「候補が複数ある同じマス」は連続タップで循環させると、選択ダイアログを出さずに済む
+
+**使用例：** crossword/crossword-supporter.html（2026-08-21）
+
+---
+
 ### [汎用] グリッド上に「浮かせた1個のinput」を重ねてiPadで日本語入力する
 
 **概要：** マス目（クロスワード・パズル・表）へ文字を入れるUIで、マスごとに `<input>` を置くと再描画のたびにフォーカスが飛ぶ。かといって div だけで作るとiPadでソフトキーボードが出ない。解決策は **inputを1個だけ作り、選択中のマスの上に絶対配置で重ねる**。
@@ -41,7 +110,7 @@ fi.addEventListener('input', () => {
 - `.cell` に `position:relative` を付けたら、座標に `#grid` の offset を足してはいけない（二重加算になる）
 - `touch-action: manipulation` を盤面に付けるとiPadのダブルタップ拡大を防げる
 
-**使用例：** crossword/crossword-maker.html（2026-08-21）
+**使用例：** crossword/crossword-supporter.html（2026-08-21）
 
 ---
 
@@ -68,7 +137,7 @@ function renderList() {
 state.clues[r + ',' + c + ',' + dir] = text;  // 番号キーにすると黒マス移動で全部ズレる
 ```
 
-**使用例：** crossword/crossword-maker.html のカギ（ヒント）入力欄（2026-08-21）
+**使用例：** crossword/crossword-supporter.html のカギ（ヒント）入力欄（2026-08-21）
 
 ---
 
