@@ -4,6 +4,43 @@
 
 ---
 
+### [2026-08-21] セッション126 — クロスワード GitHub Pages 完全デプロイ・公開完了
+
+**作業内容：**
+
+- **クロスワードサポーター（crossword）の公開ファイル構成**
+  - `crossword/` → `projects/crossword/` へ移動
+  - `crossword-supporter.html` → `index.html` にリネーム（フォルダURLで開錠）
+  - `deploy-pages.yml` の `PUBLIC_DIRS` に `"crossword"` を追加
+
+- **運用ブランチへのマージ・公開完了**
+  - 開発ブランチから `claude/workspace-knowledge-base-setup-ccVKP`（運用ブランチ）へマージ
+  - マージは早送り（ff-only）で完了 = 競合なし・他の作業への巻き戻しなし
+  - GitHub Actions Run #25：build ✅ / deploy ✅
+
+- **サイト一覧トップへの追加**
+  - `site/index.html` に「🔡 クロスワードサポーター」カードを追加
+  - 公開URL：https://gamigamiigami.github.io/Workspace/projects/crossword/
+
+- **既存サイトへの影響確認**
+  - 古典クエスト・計算クエスト・品詞パニック・オシキング・他3サイト：配置ロジック・URL無変更
+  - `knowledge/`・`CLAUDE.md`・`rakuda-sensei`：従来通り非公開のまま
+
+- **自動生成アルゴリズムの軽微改善**
+  - 語の並び順にゆらぎを持たせ、一度置けなかった語を盤面成長後に再試行（最大3巡）
+  - 孤立語の診断を②で行える設計継続
+
+**制限・確認待ち：**
+- 実行環境から github.io へのアクセスがプロキシで遮断 → 実ページ表示動作の実機確認は不可
+- iPad 実機でのアクセス・表示・操作・印刷の最終確認待ち
+
+**ステータス：**
+- 公開側の実装・デプロイ完了
+- Artifact URL（非公開版）は引き続き運用可
+- 実機テスト結果による微調整の余地あり
+
+---
+
 ### [2026-08-21] セッション125 — セッション終了処理・記録日付修正
 
 **作業内容：**

@@ -36,12 +36,41 @@
       background: var(--navy);
       color: #fff;
       border-radius: 10px;
-      padding: 14px 16px;
+      padding: 12px 16px;
       margin-bottom: 12px;
       border-bottom: 4px solid var(--accent);
     }
-    header h1 { font-size: 20px; letter-spacing: .04em; }
-    header p { font-size: 13px; opacity: .88; }
+    header h1 { font-size: 19px; letter-spacing: .04em; }
+
+    /* ===== 手順タブ ===== */
+    #tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+    .tab-btn {
+      flex: 1; min-height: 52px;
+      display: flex; align-items: center; justify-content: center; gap: 7px;
+      background: #fff; color: var(--navy);
+      border: 2px solid var(--line); border-radius: 10px;
+      font-size: 15px; font-weight: 700;
+    }
+    .tab-btn .no {
+      width: 22px; height: 22px; border-radius: 50%;
+      background: var(--line); color: #fff; font-size: 12px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .tab-btn[aria-pressed="true"] { background: var(--navy); color: #fff; border-color: var(--navy); }
+    .tab-btn[aria-pressed="true"] .no { background: var(--accent); color: #2a2000; }
+    [hidden] { display: none !important; }
+
+    /* ===== 開閉できる補足（ふだんは隠しておく） ===== */
+    details { border-top: 1px solid var(--line); margin-top: 10px; }
+    details summary {
+      cursor: pointer; list-style: none;
+      font-size: 14px; font-weight: 700; color: var(--navy);
+      min-height: 44px; display: flex; align-items: center; gap: 6px;
+    }
+    details summary::-webkit-details-marker { display: none; }
+    details summary::before { content: '▸'; color: var(--accent); font-size: 13px; }
+    details[open] summary::before { content: '▾'; }
+    .hint-line { font-size: 13px; color: #5c6672; margin-top: 6px; }
 
     /* ===== パネル共通 ===== */
     .panel {
@@ -76,7 +105,8 @@
     }
     button.sub { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
     button.danger { background: #fff; color: var(--ng); border: 2px solid var(--ng); }
-    button.small { min-height: 34px; padding: 4px 10px; font-size: 13px; }
+    button.small { min-height: 38px; padding: 4px 10px; font-size: 13px; }
+    button.big { flex: 1 1 220px; min-height: 54px; font-size: 17px; font-weight: 700; }
     button:disabled { opacity: .4; cursor: default; }
     button[aria-pressed="true"] { background: var(--accent); color: #2a2000; border-color: var(--accent); }
     input[type="text"], select, textarea {
@@ -112,16 +142,15 @@
     .word-chip .wtext { font-weight: 700; font-size: 17px; letter-spacing: .05em; }
     .word-chip .wbadge {
       font-size: 11px; padding: 1px 6px; border-radius: 10px;
-      background: var(--ok-bg); color: var(--ok); white-space: nowrap;
+      background: var(--ng-bg); color: var(--ng); white-space: nowrap;
     }
-    .word-chip .wbadge.alone { background: var(--ng-bg); color: var(--ng); }
     .word-chip .wdel {
       border: none; background: transparent; color: var(--gray);
       font-size: 18px; min-height: 32px; min-width: 32px; padding: 0; cursor: pointer;
     }
 
     /* ===== 診断（つながり） ===== */
-    .diag { padding: 8px 10px; border-radius: 8px; font-size: 14px; }
+    .diag { padding: 8px 10px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
     .diag.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid #9dcfb3; }
     .diag.ng { background: var(--ng-bg); color: var(--ng); border: 1px solid #e0a5a5; }
     #pairList { margin-top: 10px; max-height: 200px; overflow-y: auto; }
@@ -150,7 +179,13 @@
     #kwMissing { color: var(--ng); font-weight: 700; }
 
     /* ===== 盤面 ===== */
-    #boardTools { margin-bottom: 10px; }
+    #boardArea { text-align: center; margin-bottom: 14px; }
+    /* 「しあげ」では方眼を消して、できあがりの形だけを見せる */
+    #boardArea.plain #gridWrap { background: transparent; }
+    #boardArea.plain .cell { background: transparent; }
+    #boardArea.plain .cell.filled { background: var(--paper); }
+    #boardArea.plain .cell.blank-black { background: #22282f; }
+    #boardArea #boardMsg, #boardArea #warnings { text-align: center; }
     #gridWrap {
       position: relative;
       display: inline-block;
@@ -220,7 +255,7 @@
     #printArea { display: none; }
     @media print {
       body { background: #fff; padding: 0; max-width: none; }
-      header, .panel { display: none !important; }
+      header, .panel, #tabs, #boardArea { display: none !important; }
       #printArea { display: block !important; }
       .print-title { text-align: center; font-size: 18px; margin: 8px 0 12px; }
       .print-grid { border-collapse: collapse; margin: 0 auto 14px; }
@@ -249,62 +284,17 @@
   <!-- ===== ヘッダー ===== -->
   <header>
     <h1>クロスワードサポーター</h1>
-    <p>ワードを登録 → 共通文字を調べる → キーワードの進みぐあいを見る → 盤面に置いてクロスワードを作る</p>
   </header>
 
-  <!-- ===== ① ワード登録 ===== -->
-  <section class="panel">
-    <h2>① ワードを登録する <span class="hint">改行や「、」で区切ればまとめて登録できます</span></h2>
-    <div class="row">
-      <textarea id="wordInput" placeholder="あり&#10;りす&#10;すうち" style="flex:1 1 240px;"></textarea>
-      <button id="btnAddWord">登録する</button>
-      <button id="btnClearWords" class="danger small">ワードを全部消す</button>
-    </div>
-    <div id="wordList"></div>
-    <p class="note">ワードをタップすると選択され、盤面の光ったマスに置けます。指でつまんで盤面へ運ぶ（ドラッグ）こともできます。</p>
-  </section>
+  <!-- ===== 手順タブ（作業を3つに分けて、画面をすっきりさせる） ===== -->
+  <nav id="tabs" aria-label="作業の手順">
+    <button class="tab-btn" data-go="words" aria-pressed="true"><span class="no">1</span>ことば</button>
+    <button class="tab-btn" data-go="build" aria-pressed="false"><span class="no">2</span>つくる</button>
+    <button class="tab-btn" data-go="finish" aria-pressed="false"><span class="no">3</span>しあげ</button>
+  </nav>
 
-  <!-- ===== ② 共通文字の診断 ===== -->
-  <section class="panel">
-    <h2>② 共通する文字を調べる <span class="hint">クロスワードにできるか（全部つながるか）を判定します</span></h2>
-    <div id="diag" class="diag ok">ワードを登録してください。</div>
-    <div id="pairList"></div>
-  </section>
-
-  <!-- ===== ③ キーワード ===== -->
-  <section class="panel">
-    <h2>③ キーワード（答えにしたい言葉）</h2>
-    <div class="row">
-      <input type="text" id="keywordInput" placeholder="例：ありがとう" style="flex:1 1 200px;">
-    </div>
-    <div id="kwChips"></div>
-    <p id="kwSummary"></p>
-  </section>
-
-  <!-- ===== ④ クロスワードづくり ===== -->
-  <section class="panel">
-    <h2>④ クロスワードを作る</h2>
-    <div id="boardTools">
-      <!-- 自動作成：登録したワードを組み合わせて、本物のクロスワードの形（不定形）に並べる -->
-      <div class="row" style="margin-bottom:10px;">
-        <button id="btnGenerate">★ 登録ワードから自動で作る</button>
-        <button id="btnRegenerate" class="sub">別の形で作り直す</button>
-      </div>
-      <p id="genResult" class="note" style="margin-top:0;margin-bottom:10px;"></p>
-      <div class="row" style="margin-bottom:8px;">
-        <button id="modePlace" class="sub" aria-pressed="true">ワードを置く</button>
-        <button id="modeMark" class="sub" aria-pressed="false">記号を入れる（A・1など）</button>
-        <button id="btnDir" class="sub">向き：ヨコ →</button>
-        <button id="btnRotate" class="sub small">選んだ語を回転</button>
-        <button id="btnUndo" class="sub small" disabled>元に戻す</button>
-      </div>
-      <div class="row">
-        <label class="check"><input type="checkbox" id="freePlace">はなれた場所にも置く</label>
-        <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
-        <button id="btnClearBoard" class="danger small">盤面を空にする</button>
-      </div>
-    </div>
-    <!-- 盤面。タップ配置とドラッグ配置の両方に対応 -->
+  <!-- ===== 盤面（「つくる」「しあげ」のときだけ表示。常に画面の主役にする） ===== -->
+  <div id="boardArea" hidden>
     <div id="gridWrap">
       <div id="grid"></div>
       <input id="markInput" class="hidden" type="text" maxlength="2" autocomplete="off"
@@ -312,50 +302,128 @@
     </div>
     <p id="boardMsg"></p>
     <div id="warnings"></div>
-    <div id="placedList"></div>
-    <p class="note">
-      置き方：<strong>①ワードをタップ → 光ったマスをタップ</strong>（同じマスをもう一度タップすると別の置き方に切り替わります）／
-      <strong>②ワードを指でつまんで盤面へ運ぶ</strong>（緑＝置ける／赤＝置けない）。
-      向きの切り替えは「向き」ボタン、または盤面を右クリック・ドラッグ中に R キー。
-      置いた語は盤面上でつまんで動かせます。<br>
-      ※盤面の上は「置く操作」が優先されるため、指でなぞってもページはスクロールしません。スクロールは盤面の外をなぞってください。
-    </p>
-  </section>
+  </div>
 
-  <!-- ===== カギ（ヒント）：盤面に置いた語のぶんだけ自動で並ぶ ===== -->
-  <section class="panel">
-    <h2>カギ（ヒント）を書く <span class="hint">盤面に置いた語のぶんだけ自動で並びます</span></h2>
-    <div id="clueList"></div>
-  </section>
+  <!-- ===== 1. ことば ===== -->
+  <section class="tab-panel" data-tab="words">
+    <div class="panel">
+      <h2>ワードを登録する</h2>
+      <div class="row">
+        <textarea id="wordInput" rows="3" placeholder="あり&#10;りす&#10;すうち" style="flex:1 1 220px;min-height:86px;"></textarea>
+        <button id="btnAddWord">登録</button>
+      </div>
+      <p class="hint-line">改行・スペース・「、」で区切ると、まとめて登録できます。</p>
+      <div id="wordList"></div>
+      <p id="diag" class="diag"></p>
+      <details id="pairDetails" hidden>
+        <summary>どの語とどの文字でつながるか見る</summary>
+        <div id="pairList"></div>
+      </details>
+    </div>
 
-  <!-- ===== ⑤ 仕上げ・保存・印刷 ===== -->
-  <section class="panel">
-    <h2>⑤ 仕上げ・保存・印刷</h2>
-    <div class="row" style="margin-bottom:8px;">
-      <label class="check"><input type="checkbox" id="hideLetters">文字を隠してマス目だけにする</label>
-      <label class="check"><input type="checkbox" id="showNums" checked>クロスワードの番号を表示</label>
-      <label class="check"><input type="checkbox" id="blackFill">使わないマスを黒くぬる</label>
+    <div class="panel">
+      <h2>キーワード <span class="hint">答えにしたい言葉</span></h2>
+      <input type="text" id="keywordInput" placeholder="例：ありがとう" style="width:100%;">
+      <div id="kwChips"></div>
+      <p id="kwSummary"></p>
     </div>
-    <div class="row">
-      <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="flex:1 1 200px;">
-      <button id="btnPrintQ">問題を印刷</button>
-      <button id="btnPrintA" class="sub">解答を印刷</button>
-      <button id="btnExport" class="sub">ファイルに保存</button>
-      <button id="btnImport" class="sub">ファイルを読み込む</button>
-      <button id="btnShowData" class="sub">データを表示（コピー用）</button>
-      <input type="file" id="fileInput" accept="application/json" hidden>
-    </div>
-    <!-- ダウンロードが使えない環境（ブラウザ内で開いている場合など）のための保存・復元手段 -->
-    <div id="dataBox" style="display:none;margin-top:10px;">
-      <textarea id="dataText" style="width:100%;min-height:110px;font-size:12px;" spellcheck="false"></textarea>
-      <div class="row" style="margin-top:6px;">
-        <button id="btnCopyData" class="sub small">この文字を全部コピー</button>
-        <button id="btnLoadData" class="sub small">この内容を読み込む</button>
-        <button id="btnCloseData" class="sub small">閉じる</button>
-        <span class="note" style="margin:0;">メモ帳などに貼って保存 → あとでここに貼り戻せば元どおりになります。</span>
+
+    <div class="panel">
+      <div class="row">
+        <button id="btnGoBuild" class="big">クロスワードを作る →</button>
+        <button id="btnClearWords" class="danger small">ワードを全部消す</button>
       </div>
     </div>
-    <p id="msg" class="note"></p>
+  </section>
+
+  <!-- ===== 2. つくる ===== -->
+  <section class="tab-panel" data-tab="build" hidden>
+    <div class="panel">
+      <div class="row">
+        <button id="btnGenerate">自動で作る</button>
+        <button id="btnRegenerate" class="sub">別の形にする</button>
+        <button id="btnUndo" class="sub" disabled>元に戻す</button>
+      </div>
+      <p id="genResult" class="hint-line"></p>
+    </div>
+
+    <div class="panel">
+      <h2>手で置く <span class="hint">ワードをタップ → 光ったマスをタップ</span></h2>
+      <div id="placeList"></div>
+      <div class="row" style="margin-top:8px;">
+        <button id="modePlace" class="sub" aria-pressed="true">ワードを置く</button>
+        <button id="btnDir" class="sub">向き：ヨコ →</button>
+        <button id="btnRotate" class="sub" disabled>選んだ語を回転</button>
+      </div>
+      <details>
+        <summary>もっと細かく直す</summary>
+        <div class="row">
+          <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
+          <button id="btnClearBoard" class="danger small">盤面を空にする</button>
+          <label class="check"><input type="checkbox" id="freePlace">はなれた場所にも置く</label>
+        </div>
+        <div id="placedList"></div>
+        <p class="note">
+          指でつまんで盤面へ運ぶこともできます（緑＝置ける／赤＝置けない）。置いた語も、つまんで動かせます。<br>
+          向きの切り替えは「向き」ボタン、盤面を右クリック、ドラッグ中の R キー。<br>
+          ※盤面の上は「置く操作」が優先されるため、指でなぞってもページはスクロールしません。
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <!-- ===== 3. しあげ ===== -->
+  <section class="tab-panel" data-tab="finish" hidden>
+    <div class="panel">
+      <h2>キーワードの記号</h2>
+      <div class="row">
+        <button id="modeMark" class="sub" aria-pressed="false">記号を入れる（A・1など）</button>
+      </div>
+      <p class="hint-line">上の盤面でマスをタップして、A・B・C… を入力します。もう一度ボタンを押すと終わります。</p>
+    </div>
+
+    <div class="panel">
+      <h2>カギ（ヒント）</h2>
+      <div id="clueList"></div>
+    </div>
+
+    <div class="panel">
+      <h2>見た目</h2>
+      <div class="row">
+        <label class="check"><input type="checkbox" id="hideLetters">文字を隠す</label>
+        <label class="check"><input type="checkbox" id="showNums" checked>番号を出す</label>
+        <label class="check"><input type="checkbox" id="blackFill">空きマスを黒く</label>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>印刷・保存</h2>
+      <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="width:100%;margin-bottom:8px;">
+      <div class="row">
+        <button id="btnPrintQ">問題を印刷</button>
+        <button id="btnPrintA" class="sub">解答を印刷</button>
+      </div>
+      <details>
+        <summary>データの保存・読み込み</summary>
+        <div class="row">
+          <button id="btnExport" class="sub small">ファイルに保存</button>
+          <button id="btnImport" class="sub small">ファイルを読み込む</button>
+          <button id="btnShowData" class="sub small">データを表示（コピー用）</button>
+          <input type="file" id="fileInput" accept="application/json" hidden>
+        </div>
+        <div id="dataBox" style="display:none;margin-top:10px;">
+          <textarea id="dataText" style="width:100%;min-height:110px;font-size:12px;" spellcheck="false"></textarea>
+          <div class="row" style="margin-top:6px;">
+            <button id="btnCopyData" class="sub small">全部コピー</button>
+            <button id="btnLoadData" class="sub small">この内容を読み込む</button>
+            <button id="btnCloseData" class="sub small">閉じる</button>
+          </div>
+          <p class="hint-line">メモ帳などに貼って保存 → あとでここに貼り戻せば元どおりです。</p>
+        </div>
+        <p class="hint-line">作った内容は、この端末のブラウザに自動で保存されます。</p>
+      </details>
+      <p id="msg" class="note"></p>
+    </div>
   </section>
 
   <!-- 指で運んでいる語のゴースト -->
@@ -391,6 +459,7 @@
       mode: 'place',  // 'place'（ワードを置く） / 'mark'（記号を入れる）
       selWordId: null,
       selPlacedId: null,
+      tab: 'words',
       markSel: null   // { r, c }
     };
 
@@ -406,6 +475,24 @@
     let view = { minR: 0, maxR: VIEW_MIN - 1, minC: 0, maxC: VIEW_MIN - 1 }; // 画面に見せている範囲
     let viewSig = '';
     let lastGen = null;           // 直前の自動作成の結果
+
+    // ===== 手順タブの切り替え =====
+    function showTab(name) {
+      state.tab = name;
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.setAttribute('aria-pressed', String(b.dataset.go === name));
+      });
+      document.querySelectorAll('.tab-panel').forEach(sec => {
+        sec.hidden = sec.dataset.tab !== name;
+      });
+      // 盤面は「つくる」「しあげ」で表示する
+      const showBoard = (name !== 'words');
+      $('#boardArea').hidden = !showBoard;
+      $('#boardArea').classList.toggle('plain', name === 'finish');
+      if (name === 'words' || name === 'build') setMode('place');
+      if (showBoard) { viewSig = ''; renderGrid(); }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
     // ===== 小さな道具 =====
     const $ = (sel) => document.querySelector(sel);
@@ -624,11 +711,13 @@
         const half = Math.floor(VIEW_MIN / 2);
         return { minR: ctr - half, maxR: ctr + half - 1, minC: ctr - half, maxC: ctr + half - 1 };
       }
+      // 「しあげ」では余白なし＝できあがりの形ぴったりに切り出す
+      const m = (state.tab === 'finish') ? 0 : VIEW_MARGIN;
       return {
-        minR: Math.max(0, bb.minR - VIEW_MARGIN),
-        maxR: Math.min(GRID - 1, bb.maxR + VIEW_MARGIN),
-        minC: Math.max(0, bb.minC - VIEW_MARGIN),
-        maxC: Math.min(GRID - 1, bb.maxC + VIEW_MARGIN)
+        minR: Math.max(0, bb.minR - m),
+        maxR: Math.min(GRID - 1, bb.maxR + m),
+        minC: Math.max(0, bb.minC - m),
+        maxC: Math.min(GRID - 1, bb.maxC + m)
       };
     }
 
@@ -705,29 +794,44 @@
     }
 
     function renderWords() {
-      const box = $('#wordList');
-      box.innerHTML = '';
-      if (state.words.length === 0) {
-        box.innerHTML = '<p class="note">まだワードがありません。</p>';
-        return;
-      }
       const shareCount = sharedCounts();
       const placedTexts = new Set(state.placed.map(p => p.text));
-      state.words.forEach(w => {
+
+      const makeChip = (w, withDelete) => {
         const chip = document.createElement('div');
         chip.className = 'word-chip'
           + (state.selWordId === w.id ? ' sel' : '')
-          + (placedTexts.has(w.text) ? ' placed' : '');
+          + (withDelete && placedTexts.has(w.text) ? ' placed' : '');
         chip.dataset.wordId = w.id;
-        const n = shareCount.get(w.id) || 0;
-        const badge = n > 0
-          ? '<span class="wbadge">' + n + '語とつながる</span>'
-          : '<span class="wbadge alone">つながらない</span>';
-        chip.innerHTML =
-          '<span class="wtext">' + escapeHtml(w.text) + '</span>' + badge +
-          '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>';
-        box.appendChild(chip);
-      });
+        // ふだんはバッジを出さず、「どの語ともつながらない」ときだけ知らせる
+        const alone = (shareCount.get(w.id) || 0) === 0 && state.words.length > 1;
+        chip.innerHTML = '<span class="wtext">' + escapeHtml(w.text) + '</span>'
+          + (alone ? '<span class="wbadge">つながらない</span>' : '')
+          + (withDelete ? '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>' : '');
+        return chip;
+      };
+
+      // ①ことば：登録したワード全部（削除ボタンつき）
+      const box = $('#wordList');
+      box.innerHTML = '';
+      if (state.words.length === 0) {
+        box.innerHTML = '<p class="hint-line">まだワードがありません。</p>';
+      } else {
+        state.words.forEach(w => box.appendChild(makeChip(w, true)));
+      }
+
+      // ②つくる：まだ盤面に置いていないワードだけ
+      const box2 = $('#placeList');
+      if (box2) {
+        box2.innerHTML = '';
+        const rest = state.words.filter(w => !placedTexts.has(w.text));
+        if (rest.length === 0) {
+          box2.innerHTML = '<p class="hint-line">'
+            + (state.words.length ? 'すべてのワードを置きました。' : 'ワードを登録してください。') + '</p>';
+        } else {
+          rest.forEach(w => box2.appendChild(makeChip(w, false)));
+        }
+      }
     }
 
     // 各ワードが「ほかの何語と共通文字を持つか」
@@ -755,11 +859,13 @@
       const list = $('#pairList');
       list.innerHTML = '';
       const words = state.words;
+      const details = $('#pairDetails');
       if (words.length === 0) {
-        diag.className = 'diag ok';
-        diag.textContent = 'ワードを登録してください。';
+        diag.hidden = true;
+        if (details) details.hidden = true;
         return;
       }
+      diag.hidden = false;
       // つながり（共通文字があるか）をたどってグループ分けする
       const parent = new Map(words.map(w => [w.id, w.id]));
       const find = (x) => (parent.get(x) === x ? x : (parent.set(x, find(parent.get(x))), parent.get(x)));
@@ -788,10 +894,8 @@
         diag.textContent = t;
       }
 
-      if (pairs.length === 0) {
-        list.innerHTML = '<p class="note">共通する文字を持つ組み合わせはまだありません。</p>';
-        return;
-      }
+      if (details) details.hidden = pairs.length === 0;
+      if (pairs.length === 0) return;
       pairs.forEach(p => {
         const div = document.createElement('div');
         div.className = 'pair';
@@ -1031,7 +1135,11 @@
 
     // ===== ワードチップの操作 =====
     function bindWordList() {
-      const box = $('#wordList');
+      ['#wordList', '#placeList'].forEach(sel => bindWordBox($(sel)));
+    }
+
+    function bindWordBox(box) {
+      if (!box) return;
       box.addEventListener('pointerdown', (e) => {
         if (e.target.closest('[data-del]')) return;
         const chip = e.target.closest('.word-chip');
@@ -1458,7 +1566,7 @@
 
       // 盤面ツール
       $('#modePlace').addEventListener('click', () => setMode('place'));
-      $('#modeMark').addEventListener('click', () => setMode('mark'));
+      $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#btnDir').addEventListener('click', toggleDir);
       $('#btnRotate').addEventListener('click', rotateSelected);
       $('#btnUndo').addEventListener('click', undo);
@@ -1475,6 +1583,13 @@
         snapshot();
         state.placed = []; state.marks = {}; state.selPlacedId = null;
         clearCycle(); refresh();
+      });
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.addEventListener('click', () => showTab(b.dataset.go));
+      });
+      $('#btnGoBuild').addEventListener('click', () => {
+        showTab('build');
+        runGenerate();
       });
       $('#btnGenerate').addEventListener('click', runGenerate);
       $('#btnRegenerate').addEventListener('click', runGenerate);
@@ -1678,17 +1793,16 @@
       lastGen = res;
       refresh();
 
-      let msg = '<strong>' + res.placed.length + ' 語</strong>を組み上げました（たて' + res.h + '×よこ' + res.w + 'マス）。';
       const left = res.failed.concat(tooShort);
+      let msg = res.placed.length + ' 語 / たて' + res.h + '×よこ' + res.w + 'マス';
       if (left.length) {
-        msg += ' <span style="color:var(--ng)">置けなかったワード：' + escapeHtml(left.join('・'))
-          + '</span>　→「別の形で作り直す」を押すと入ることがあります。'
-          + '共通する文字がない場合は、橋わたしになるワードを足してください。';
+        msg += '　<span style="color:var(--ng)">入らなかった：' + escapeHtml(left.join('・'))
+          + '</span>（「別の形にする」で入ることがあります）';
       } else {
-        msg += ' <span style="color:var(--ok);font-weight:700;">全部のワードが入りました！</span>';
+        msg += '　<span style="color:var(--ok);font-weight:700;">全部入りました！</span>';
       }
       $('#genResult').innerHTML = msg;
-      showMsg('○ 自動で作りました。気になるところは手で動かせます（つまんで移動・回転・元に戻す）。', 'ok');
+      showMsg('自動で作りました。直したいところは手で動かせます。', 'ok');
     }
 
     // ===== 初期化 =====
@@ -1698,6 +1812,7 @@
       else { buildGrid(); refresh(); }
       bindEvents();
       setMode('place');
+      showTab('words');
     }
 
     // ===== 起動 =====

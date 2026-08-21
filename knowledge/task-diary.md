@@ -1,3 +1,36 @@
+### 2026-08-21（セッション126・クロスワード GitHub Pages 公開・完全デプロイ完了）
+
+**うまくいったこと**
+- クロスワードサポーター（crossword）の GitHub Pages 完全公開実装・デプロイ完了
+  - `crossword/` → `projects/crossword/` へ移動（公開ワークフローが `projects/` 配下のみ対応のため）
+  - `crossword-supporter.html` → `index.html` にリネーム（フォルダURLで自動開錠可能に）
+  - `deploy-pages.yml` の `PUBLIC_DIRS` に `crossword` を追加
+  - `site/index.html` 作品一覧トップに「🔡 クロスワードサポーター」カード追加
+  - 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` へのマージで自動公開（早送りマージ・競合なし）
+  - GitHub Actions Run #25 で build ✅ / deploy ✅ 確認
+- 既存7サイト（古典クエスト等）への影響なし
+  - 旧URLの配置ロジック・`PUBLIC_DIRS` 設定は無変更
+  - `knowledge/`・`CLAUDE.md`・`rakuda-sensei` は従来通り非公開のまま
+- 自動生成アルゴリズムの賢化
+  - 語の並び順にゆらぎを持たせ、一度置けなかった語を盤面成長後に再試行（最大3巡）
+  - それでも入らない語は②診断で孤立状況が判明する設計
+
+**うまくいかなかったこと**
+- 実行環境から github.io へのアクセスがプロキシで遮断されている
+  - 実装側の公開完了は確認できたが、実際のページ表示動作は確認不可
+
+**発見**
+- 複数サイト統一公開時に既存配置・ワークフローを無変更で追加可能な設計の有効性
+  - `PUBLIC_DIRS` 配列追加のみで新サイト公開・既存サイト無影響を実現
+- マージが早送りで完了する = 運用ブランチに当方コミットが競合なしで統合される健全性
+
+**次回への申し送り**
+- **実機iPad確認待ち**：公開URL（https://gamigamiigami.github.io/Workspace/projects/crossword/）への実際のアクセス・表示・操作・印刷確認
+- Artifact URL（非公開版）は継続運用可能
+- 公開URL版の方が印刷レイアウトがきれいに出るはず
+
+---
+
 ### 2026-08-21（セッション125・セッション終了処理・日付修正）
 
 **うまくいったこと**
@@ -14,8 +47,8 @@
 - Stop Hook 実行時の ARGUMENTS に session_id, transcript_path, cwd, permission_mode などが引き渡されることを確認
 
 **次回への申し送り**
-- GitHub Pages 公開の判断待ち（前回から継続）
-- iPad 実機テスト待ち（クロスワード各機能の動作確認）
+- GitHub Pages 公開の実機テスト待ち（iPad で表示・操作確認）
+- Artifact 形式の非公開版も継続運用
 
 ---
 
