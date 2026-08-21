@@ -7,6 +7,71 @@
 
 ---
 
+### [汎用] グリッド上に「浮かせた1個のinput」を重ねてiPadで日本語入力する
+
+**概要：** マス目（クロスワード・パズル・表）へ文字を入れるUIで、マスごとに `<input>` を置くと再描画のたびにフォーカスが飛ぶ。かといって div だけで作るとiPadでソフトキーボードが出ない。解決策は **inputを1個だけ作り、選択中のマスの上に絶対配置で重ねる**。
+
+**実装のポイント：**
+```html
+<div id="gridWrap" style="position:relative">
+  <div id="grid"></div>
+  <input id="floatInput" maxlength="1" autocomplete="off"
+         autocapitalize="off" autocorrect="off" spellcheck="false">
+</div>
+```
+```js
+// マスは position:relative にしておく → offsetParent が gridWrap になり、
+// cell.offsetLeft / offsetTop をそのまま input の left/top に使える
+fi.style.left = cellEl.offsetLeft + 'px';
+fi.style.top  = cellEl.offsetTop  + 'px';
+fi.focus();                       // inputは作り直さないのでフォーカスが切れない
+fi.addEventListener('input', () => {
+  const ch = fi.value.slice(-1);  // IME確定後の最後の1文字だけ採用
+  fi.value = '';                  // 空にして次の入力に備える
+  setLetter(ch); advance();       // 盤面に反映して次のマスへ
+});
+```
+
+**効果：**
+- iPadで確実に日本語キーボードが出る（実体のinputにフォーカスがあるため）
+- 盤面の再描画（クラス付け替え）をしてもフォーカスが維持される
+- 矢印キー・Backspace・Enter（方向切替）を1か所の keydown で扱える
+
+**注意：**
+- `.cell` に `position:relative` を付けたら、座標に `#grid` の offset を足してはいけない（二重加算になる）
+- `touch-action: manipulation` を盤面に付けるとiPadのダブルタップ拡大を防げる
+
+**使用例：** crossword/crossword-maker.html（2026-08-21）
+
+---
+
+### [汎用] 再生成されるリスト内の入力欄でカーソルが飛ぶのを防ぐ「署名比較」
+
+**概要：** 状態が変わるたびにリストDOMを作り直すと、そのリスト内の `<input>` に入力中のカーソルが飛ぶ。**構造が変わったときだけ作り直す**ようにすると解決する。
+
+**実装：**
+```js
+let signature = '';
+function renderList() {
+  const items = buildItems();
+  const sig = items.map(i => i.no + i.key + i.length).join('|');
+  if (sig !== signature) {   // 構造が変わったときだけDOMを作り直す
+    signature = sig;
+    rebuildDom(items);
+  }
+  updateTextOnly(items);     // 表示だけの部分は毎回更新
+}
+```
+
+**あわせて：** 入力値を「番号」ではなく「座標などの不変キー」で持つと、番号が振り直されても入力内容が消えない。
+```js
+state.clues[r + ',' + c + ',' + dir] = text;  // 番号キーにすると黒マス移動で全部ズレる
+```
+
+**使用例：** crossword/crossword-maker.html のカギ（ヒント）入力欄（2026-08-21）
+
+---
+
 ## [汎用] ブラウザ版：file:// アクセス時の fetch 制限とローカルファイル同梱による回避
 
 **概要：** HTML5 Canvas ゲーム等をブラウザで「file:// プロトコル」で開く場合、CORS セキュリティポリシーにより外部リソース（CDN 上の JS ライブラリなど）への fetch がブロックされる。MediaPipe Hand Landmarks など大容量ライブラリが必要な場合、ローカルフォルダに同梱して直接参照する回避策。

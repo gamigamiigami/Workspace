@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>クロスワード作成ツール</title>
+  <style>
+    /* ===== リセット・基本スタイル ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --navy: #1f3a5f;
+      --navy-light: #2f5580;
+      --accent: #c8a24a;
+      --paper: #fdfcf8;
+      --line: #b9c3cf;
+    }
+    body {
+      font-family: system-ui, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+      background: #eef1f5;
+      color: #22282f;
+      padding: 12px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    /* ===== ヘッダー ===== */
+    header {
+      background: var(--navy);
+      color: #fff;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 12px;
+      border-bottom: 4px solid var(--accent);
+    }
+    header h1 { font-size: 20px; letter-spacing: .04em; }
+    header p { font-size: 13px; opacity: .85; }
+
+    /* ===== パネル共通 ===== */
+    .panel {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+    .panel h2 {
+      font-size: 15px;
+      color: var(--navy);
+      border-left: 5px solid var(--accent);
+      padding-left: 8px;
+      margin-bottom: 10px;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    /* ===== ボタン共通 ===== */
+    button {
+      padding: 10px 16px;
+      font-size: 15px;
+      font-family: inherit;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      min-height: 44px;
+      background: var(--navy);
+      color: #fff;
+    }
+    button.sub { background: #fff; color: var(--navy); border: 2px solid var(--navy); }
+    button.danger { background: #fff; color: #a12b2b; border: 2px solid #a12b2b; }
+    button:active { opacity: .8; }
+    button[aria-pressed="true"] { background: var(--accent); color: #2a2000; }
+
+    select, input[type="text"], input[type="number"] {
+      font-family: inherit;
+      font-size: 16px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      min-height: 44px;
+      background: #fff;
+    }
+    label.check {
+      display: inline-flex; align-items: center; gap: 6px;
+      min-height: 44px; font-size: 15px; cursor: pointer;
+    }
+    label.check input { width: 22px; height: 22px; }
+
+    /* ===== 盤面 ===== */
+    #gridWrap {
+      position: relative;
+      display: inline-block;
+      background: var(--navy);
+      padding: 3px;
+      border-radius: 4px;
+      touch-action: manipulation; /* iPadでのダブルタップ拡大を抑制 */
+    }
+    #grid { display: grid; gap: 1px; }
+    .cell {
+      position: relative;
+      background: var(--paper);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      font-weight: 700;
+      user-select: none;
+      cursor: pointer;
+    }
+    .cell.black { background: #22282f; }
+    .cell.sel { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 2; }
+    .cell.inword { background: #fdf3d6; }
+    .cell .num {
+      position: absolute;
+      top: 0; left: 2px;
+      font-size: 9px;
+      font-weight: 400;
+      color: #5a6470;
+      line-height: 1.1;
+    }
+    /* 盤面に重ねる入力欄（iPadでキーボードを出すため実体のinputを1つだけ使う） */
+    #floatInput {
+      position: absolute;
+      border: none;
+      background: transparent;
+      text-align: center;
+      font-size: 20px;
+      font-weight: 700;
+      font-family: inherit;
+      color: #22282f;
+      padding: 0;
+      min-height: 0;
+      caret-color: var(--accent);
+      z-index: 3;
+    }
+    #floatInput.hidden { display: none; }
+
+    /* ===== カギ（ヒント）一覧 ===== */
+    .clue-cols { display: flex; gap: 12px; flex-wrap: wrap; }
+    .clue-col { flex: 1 1 300px; min-width: 260px; }
+    .clue-col h3 {
+      font-size: 14px; color: #fff; background: var(--navy-light);
+      padding: 4px 8px; border-radius: 5px; margin-bottom: 6px;
+    }
+    .clue-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 0; border-bottom: 1px dashed var(--line);
+    }
+    .clue-no { width: 26px; text-align: right; font-weight: 700; color: var(--navy); }
+    .clue-ans {
+      font-family: monospace; font-size: 14px; letter-spacing: .1em;
+      color: #6b7683; width: 96px; overflow: hidden; white-space: nowrap;
+    }
+    .clue-item input { flex: 1 1 120px; min-width: 100px; min-height: 40px; }
+    .empty-note { color: #6b7683; font-size: 14px; }
+
+    /* ===== 保存メッセージ ===== */
+    #msg { font-size: 14px; color: #1c6b3a; min-height: 22px; }
+    #msg.warn { color: #a12b2b; }
+
+    /* ===== 印刷用エリア（画面では非表示） ===== */
+    #printArea { display: none; }
+
+    /* ===== 印刷スタイル ===== */
+    @media print {
+      body { background: #fff; padding: 0; max-width: none; }
+      header, .panel, #gridWrap { display: none !important; }
+      #printArea { display: block !important; }
+      .print-grid { border-collapse: collapse; margin: 0 auto 16px; }
+      .print-grid td {
+        width: 28px; height: 28px;
+        border: 1px solid #000;
+        text-align: center; vertical-align: middle;
+        font-size: 16px; font-weight: 700;
+        position: relative;
+      }
+      .print-grid td.black { background: #000; }
+      .print-grid td .n {
+        position: absolute; top: 0; left: 2px;
+        font-size: 8px; font-weight: 400;
+      }
+      .print-clues { display: flex; gap: 24px; font-size: 12px; }
+      .print-clues ul { list-style: none; }
+      .print-clues li { margin-bottom: 3px; }
+      h2.print-title { text-align: center; font-size: 18px; margin: 8px 0 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ===== ヘッダー ===== -->
+  <header>
+    <h1>クロスワード作成ツール</h1>
+    <p>黒マスを置く → 文字を入れる → カギ（ヒント）を書く → 印刷。すべてこの1画面で完結します。</p>
+  </header>
+
+  <!-- ===== 盤面の設定 ===== -->
+  <section class="panel">
+    <h2>1. 盤面をつくる</h2>
+    <div class="row">
+      <label for="sizeW">よこ</label>
+      <select id="sizeW"></select>
+      <label for="sizeH">たて</label>
+      <select id="sizeH"></select>
+      <button id="btnResize" class="sub">この大きさにする</button>
+      <label class="check"><input type="checkbox" id="symmetry" checked>点対称に黒マスを置く</label>
+    </div>
+  </section>
+
+  <!-- ===== 盤面本体 ===== -->
+  <section class="panel">
+    <h2>2. 黒マスと文字を入れる</h2>
+    <div class="row" style="margin-bottom:10px;">
+      <button id="modeBlack" class="sub" aria-pressed="false">黒マスを置く</button>
+      <button id="modeLetter" class="sub" aria-pressed="true">文字を入れる</button>
+      <button id="btnDir" class="sub">入力方向：ヨコ →</button>
+      <button id="btnClearLetters" class="danger">文字だけ消す</button>
+    </div>
+    <!-- 盤面。マスをタップすると選択され、キーボードで1文字ずつ入力できる -->
+    <div id="gridWrap">
+      <div id="grid"></div>
+      <input id="floatInput" class="hidden" type="text" maxlength="1" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="マスの文字">
+    </div>
+    <p class="empty-note" style="margin-top:8px;">
+      マスをタップ → キーボードで1文字入力（ひらがな・カタカナどちらでもOK）。もう一度同じマスをタップすると入力方向が切り替わります。
+    </p>
+  </section>
+
+  <!-- ===== カギ（ヒント）入力 ===== -->
+  <section class="panel">
+    <h2>3. カギ（ヒント）を書く</h2>
+    <div class="clue-cols">
+      <div class="clue-col">
+        <h3>ヨコのカギ</h3>
+        <div id="cluesAcross"></div>
+      </div>
+      <div class="clue-col">
+        <h3>タテのカギ</h3>
+        <div id="cluesDown"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 保存・印刷 ===== -->
+  <section class="panel">
+    <h2>4. 保存・印刷</h2>
+    <div class="row">
+      <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="flex:1 1 220px;">
+      <button id="btnPrintQ">問題を印刷</button>
+      <button id="btnPrintA" class="sub">解答を印刷</button>
+      <button id="btnExport" class="sub">ファイルに保存</button>
+      <button id="btnImport" class="sub">ファイルを読み込む</button>
+      <input type="file" id="fileInput" accept="application/json" hidden>
+      <button id="btnReset" class="danger">全部消してやり直す</button>
+    </div>
+    <p id="msg"></p>
+  </section>
+
+  <!-- ===== 印刷用の中身（画面には出ない・印刷時だけ表示） ===== -->
+  <div id="printArea"></div>
+
+  <script>
+    // ===== 定数・設定 =====
+    const MIN_SIZE = 3;
+    const MAX_SIZE = 15;
+    const STORAGE_KEY = 'crossword-maker-v1';
+    const MAX_CELL_PX = 46;   // マスの最大サイズ
+    const MIN_CELL_PX = 22;   // マスの最小サイズ（タップできる下限）
+
+    // ===== 状態管理 =====
+    // cells[i] = { black: 黒マスかどうか, ch: 入っている文字 }
+    // clues['r,c,across'] = ヒント文字列（番号ではなく座標をキーにするので、黒マスを動かしてもヒントが消えない）
+    const state = {
+      w: 9,
+      h: 9,
+      cells: [],
+      clues: {},
+      mode: 'letter',    // 'letter'（文字入力） / 'black'（黒マス）
+      dir: 'across',     // 'across'（ヨコ） / 'down'（タテ）
+      sel: null,         // { r, c }
+      title: ''
+    };
+    let numbers = [];    // numbers[i] = そのマスの番号（なければ 0）
+    let clueSignature = ''; // カギ一覧を作り直すべきか判定するための署名
+
+    // ===== 小さな道具 =====
+    const $ = (sel) => document.querySelector(sel);
+    const idx = (r, c) => r * state.w + c;
+    const inRange = (r, c) => r >= 0 && r < state.h && c >= 0 && c < state.w;
+    const isBlack = (r, c) => !inRange(r, c) || state.cells[idx(r, c)].black;
+
+    function showMsg(text, isWarn) {
+      const el = $('#msg');
+      el.textContent = text;
+      el.className = isWarn ? 'warn' : '';
+    }
+
+    // ===== 盤面データの作成 =====
+    function createCells(w, h, old, oldW, oldH) {
+      const next = [];
+      for (let r = 0; r < h; r++) {
+        for (let c = 0; c < w; c++) {
+          // 前の盤面があれば、重なる範囲の中身を引き継ぐ
+          if (old && r < oldH && c < oldW) {
+            next.push({ ...old[r * oldW + c] });
+          } else {
+            next.push({ black: false, ch: '' });
+          }
+        }
+      }
+      return next;
+    }
+
+    function resizeGrid(w, h) {
+      state.cells = createCells(w, h, state.cells, state.w, state.h);
+      state.w = w;
+      state.h = h;
+      state.sel = null;
+      buildGrid();
+      refreshAll();
+    }
+
+    // ===== 番号付け（クロスワードの標準ルール） =====
+    // ・そのマスが白で、左が黒（または端）かつ右に続きがある → ヨコの語の始まり
+    // ・そのマスが白で、上が黒（または端）かつ下に続きがある → タテの語の始まり
+    // どちらかに当てはまるマスに、左上から順番に番号を振る
+    function computeNumbers() {
+      numbers = new Array(state.w * state.h).fill(0);
+      let n = 0;
+      for (let r = 0; r < state.h; r++) {
+        for (let c = 0; c < state.w; c++) {
+          if (isBlack(r, c)) continue;
+          const startsAcross = isBlack(r, c - 1) && !isBlack(r, c + 1);
+          const startsDown = isBlack(r - 1, c) && !isBlack(r + 1, c);
+          if (startsAcross || startsDown) {
+            n++;
+            numbers[idx(r, c)] = n;
+          }
+        }
+      }
+    }
+
+    // 指定マスから伸びる語の座標一覧を返す
+    function getWordCells(r, c, dir) {
+      if (isBlack(r, c)) return [];
+      const dr = dir === 'down' ? 1 : 0;
+      const dc = dir === 'across' ? 1 : 0;
+      // 語の先頭までさかのぼる
+      let sr = r, sc = c;
+      while (!isBlack(sr - dr, sc - dc)) { sr -= dr; sc -= dc; }
+      const list = [];
+      let cr = sr, cc = sc;
+      while (!isBlack(cr, cc)) { list.push({ r: cr, c: cc }); cr += dr; cc += dc; }
+      return list;
+    }
+
+    // 語の一覧（カギ一覧の元データ）
+    function listWords(dir) {
+      const out = [];
+      for (let r = 0; r < state.h; r++) {
+        for (let c = 0; c < state.w; c++) {
+          if (isBlack(r, c)) continue;
+          const startsHere = dir === 'across'
+            ? (isBlack(r, c - 1) && !isBlack(r, c + 1))
+            : (isBlack(r - 1, c) && !isBlack(r + 1, c));
+          if (!startsHere) continue;
+          const cells = getWordCells(r, c, dir);
+          out.push({ no: numbers[idx(r, c)], r, c, dir, cells });
+        }
+      }
+      return out;
+    }
+
+    function wordAnswer(word) {
+      return word.cells.map(p => state.cells[idx(p.r, p.c)].ch || '□').join('');
+    }
+
+    // ===== 盤面のDOMを組み立てる（サイズ変更のときだけ実行） =====
+    function buildGrid() {
+      const grid = $('#grid');
+      grid.innerHTML = '';
+      const cellPx = calcCellSize();
+      grid.style.gridTemplateColumns = 'repeat(' + state.w + ', ' + cellPx + 'px)';
+      grid.style.gridTemplateRows = 'repeat(' + state.h + ', ' + cellPx + 'px)';
+      for (let r = 0; r < state.h; r++) {
+        for (let c = 0; c < state.w; c++) {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          div.dataset.r = r;
+          div.dataset.c = c;
+          div.innerHTML = '<span class="num"></span><span class="ch"></span>';
+          grid.appendChild(div);
+        }
+      }
+      const fi = $('#floatInput');
+      fi.style.width = cellPx + 'px';
+      fi.style.height = cellPx + 'px';
+    }
+
+    function calcCellSize() {
+      // 画面幅に収まる範囲でマスを大きくする（iPad縦持ちを想定）
+      const wrapMax = Math.min(document.body.clientWidth - 40, 860);
+      const fit = Math.floor((wrapMax - state.w) / state.w);
+      return Math.max(MIN_CELL_PX, Math.min(MAX_CELL_PX, fit));
+    }
+
+    // ===== 画面の更新 =====
+    function updateCells() {
+      const cells = $('#grid').children;
+      // 選択中の語をうすく光らせる
+      const highlight = new Set();
+      if (state.sel && !isBlack(state.sel.r, state.sel.c)) {
+        getWordCells(state.sel.r, state.sel.c, state.dir)
+          .forEach(p => highlight.add(idx(p.r, p.c)));
+      }
+      for (let i = 0; i < cells.length; i++) {
+        const el = cells[i];
+        const data = state.cells[i];
+        const selected = state.sel && idx(state.sel.r, state.sel.c) === i;
+        el.className = 'cell'
+          + (data.black ? ' black' : '')
+          + (!data.black && highlight.has(i) ? ' inword' : '')
+          + (selected ? ' sel' : '');
+        el.querySelector('.num').textContent = (!data.black && numbers[i]) ? numbers[i] : '';
+        el.querySelector('.ch').textContent = data.black ? '' : data.ch;
+      }
+    }
+
+    function refreshAll() {
+      computeNumbers();
+      updateCells();
+      renderClues();
+      positionInput();
+      saveLocal();
+    }
+
+    // ===== カギ（ヒント）一覧 =====
+    function clueKey(word) { return word.r + ',' + word.c + ',' + word.dir; }
+
+    function renderClues() {
+      const across = listWords('across');
+      const down = listWords('down');
+      const sig = [...across, ...down].map(w => w.no + clueKey(w) + w.cells.length).join('|');
+      if (sig !== clueSignature) {
+        // 語の構成が変わったときだけ作り直す（入力中にヒント欄が作り直されるとカーソルが飛ぶため）
+        clueSignature = sig;
+        buildClueList($('#cluesAcross'), across);
+        buildClueList($('#cluesDown'), down);
+      }
+      // 答えの表示だけは毎回更新する
+      [...across, ...down].forEach(w => {
+        const span = document.querySelector('[data-ans="' + clueKey(w) + '"]');
+        if (span) span.textContent = wordAnswer(w);
+      });
+    }
+
+    function buildClueList(container, words) {
+      container.innerHTML = '';
+      if (words.length === 0) {
+        container.innerHTML = '<p class="empty-note">まだ語がありません。黒マスを置いて語を区切ってください。</p>';
+        return;
+      }
+      words.forEach(w => {
+        const key = clueKey(w);
+        const item = document.createElement('div');
+        item.className = 'clue-item';
+        const no = document.createElement('span');
+        no.className = 'clue-no';
+        no.textContent = w.no;
+        const ans = document.createElement('span');
+        ans.className = 'clue-ans';
+        ans.dataset.ans = key;
+        ans.textContent = wordAnswer(w);
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'カギを書く';
+        input.value = state.clues[key] || '';
+        input.addEventListener('input', () => {
+          state.clues[key] = input.value;
+          saveLocal();
+        });
+        item.append(no, ans, input);
+        container.appendChild(item);
+      });
+    }
+
+    // ===== マスの選択と文字入力 =====
+    function selectCell(r, c) {
+      if (!inRange(r, c)) return;
+      if (state.sel && state.sel.r === r && state.sel.c === c) {
+        // 同じマスをもう一度タップ → 入力方向を切り替える
+        toggleDir();
+        return;
+      }
+      state.sel = { r, c };
+      updateCells();
+      renderClues();
+      positionInput();
+    }
+
+    function positionInput() {
+      const fi = $('#floatInput');
+      if (state.mode !== 'letter' || !state.sel || isBlack(state.sel.r, state.sel.c)) {
+        fi.classList.add('hidden');
+        fi.blur();
+        return;
+      }
+      const cellEl = $('#grid').children[idx(state.sel.r, state.sel.c)];
+      fi.classList.remove('hidden');
+      // .cell は position:relative なので offsetLeft/Top は #gridWrap からの位置になる
+      fi.style.left = cellEl.offsetLeft + 'px';
+      fi.style.top = cellEl.offsetTop + 'px';
+      fi.value = '';
+      fi.focus();
+    }
+
+    function moveSel(dr, dc) {
+      if (!state.sel) return;
+      let r = state.sel.r + dr;
+      let c = state.sel.c + dc;
+      if (!inRange(r, c) || isBlack(r, c)) return;
+      state.sel = { r, c };
+      updateCells();
+      positionInput();
+    }
+
+    function advance() {
+      moveSel(state.dir === 'down' ? 1 : 0, state.dir === 'across' ? 1 : 0);
+    }
+
+    function setLetter(ch) {
+      if (!state.sel) return;
+      state.cells[idx(state.sel.r, state.sel.c)].ch = ch;
+      computeNumbers();
+      updateCells();
+      renderClues();
+      saveLocal();
+    }
+
+    function toggleBlack(r, c) {
+      const cell = state.cells[idx(r, c)];
+      const next = !cell.black;
+      cell.black = next;
+      if (next) cell.ch = '';
+      // 点対称オプション：反対側の同じ位置も一緒に切り替える（クロスワードの定番の形）
+      if ($('#symmetry').checked) {
+        const mr = state.h - 1 - r;
+        const mc = state.w - 1 - c;
+        if (mr !== r || mc !== c) {
+          const m = state.cells[idx(mr, mc)];
+          m.black = next;
+          if (next) m.ch = '';
+        }
+      }
+      refreshAll();
+    }
+
+    function toggleDir() {
+      state.dir = state.dir === 'across' ? 'down' : 'across';
+      $('#btnDir').textContent = state.dir === 'across' ? '入力方向：ヨコ →' : '入力方向：タテ ↓';
+      updateCells();
+      renderClues();
+      positionInput();
+    }
+
+    function setMode(mode) {
+      state.mode = mode;
+      $('#modeBlack').setAttribute('aria-pressed', String(mode === 'black'));
+      $('#modeLetter').setAttribute('aria-pressed', String(mode === 'letter'));
+      positionInput();
+    }
+
+    // ===== 保存（この端末のブラウザに自動保存） =====
+    function saveLocal() {
+      state.title = $('#title').value;
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
+      } catch (e) {
+        // プライベートモードなどで保存できない場合がある
+        showMsg('自動保存できません（プライベートモードの可能性）。「ファイルに保存」を使ってください。', true);
+      }
+    }
+
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* 読めなければ新規作成でよい */ }
+      return null;
+    }
+
+    function serialize() {
+      return {
+        version: 1,
+        title: state.title,
+        w: state.w,
+        h: state.h,
+        cells: state.cells,
+        clues: state.clues
+      };
+    }
+
+    function deserialize(data) {
+      if (!data || !data.w || !data.h || !Array.isArray(data.cells)) return false;
+      if (data.cells.length !== data.w * data.h) return false;
+      state.w = data.w;
+      state.h = data.h;
+      state.cells = data.cells.map(c => ({ black: !!c.black, ch: (c.ch || '').slice(0, 1) }));
+      state.clues = data.clues || {};
+      state.title = data.title || '';
+      state.sel = null;
+      clueSignature = '';
+      $('#title').value = state.title;
+      $('#sizeW').value = state.w;
+      $('#sizeH').value = state.h;
+      buildGrid();
+      refreshAll();
+      return true;
+    }
+
+    // ===== ファイルへの書き出し・読み込み =====
+    function exportFile() {
+      const name = (state.title || 'crossword').replace(/[\\/:*?"<>|]/g, '_');
+      const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name + '.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      showMsg('ファイルに保存しました（ダウンロードフォルダを確認してください）。');
+    }
+
+    function importFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          if (deserialize(JSON.parse(reader.result))) {
+            showMsg('読み込みました。');
+          } else {
+            showMsg('このファイルは読み込めませんでした。', true);
+          }
+        } catch (e) {
+          showMsg('このファイルは読み込めませんでした。', true);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== 印刷 =====
+    function buildPrint(withAnswer) {
+      const area = $('#printArea');
+      const title = state.title || 'クロスワード';
+      let html = '<h2 class="print-title">' + escapeHtml(title) + (withAnswer ? '（解答）' : '') + '</h2>';
+      html += '<table class="print-grid"><tbody>';
+      for (let r = 0; r < state.h; r++) {
+        html += '<tr>';
+        for (let c = 0; c < state.w; c++) {
+          const cell = state.cells[idx(r, c)];
+          if (cell.black) {
+            html += '<td class="black"></td>';
+          } else {
+            const n = numbers[idx(r, c)] ? '<span class="n">' + numbers[idx(r, c)] + '</span>' : '';
+            const ch = withAnswer ? escapeHtml(cell.ch) : '';
+            html += '<td>' + n + ch + '</td>';
+          }
+        }
+        html += '</tr>';
+      }
+      html += '</tbody></table>';
+      html += '<div class="print-clues">'
+        + clueListHtml('ヨコのカギ', listWords('across'), withAnswer)
+        + clueListHtml('タテのカギ', listWords('down'), withAnswer)
+        + '</div>';
+      area.innerHTML = html;
+    }
+
+    function clueListHtml(label, words, withAnswer) {
+      let html = '<div><strong>' + label + '</strong><ul>';
+      words.forEach(w => {
+        const clue = state.clues[clueKey(w)] || '';
+        const ans = withAnswer ? '　【' + wordAnswer(w) + '】' : '';
+        html += '<li>' + w.no + '. ' + escapeHtml(clue) + escapeHtml(ans) + '</li>';
+      });
+      html += '</ul></div>';
+      return html;
+    }
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, ch => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]
+      ));
+    }
+
+    function doPrint(withAnswer) {
+      buildPrint(withAnswer);
+      window.print();
+    }
+
+    // ===== 初期化 =====
+    function init() {
+      // サイズ選択肢を作る
+      for (let n = MIN_SIZE; n <= MAX_SIZE; n++) {
+        $('#sizeW').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
+        $('#sizeH').insertAdjacentHTML('beforeend', '<option value="' + n + '">' + n + '</option>');
+      }
+      $('#sizeW').value = state.w;
+      $('#sizeH').value = state.h;
+
+      const saved = loadLocal();
+      if (!saved || !deserialize(saved)) {
+        state.cells = createCells(state.w, state.h);
+        buildGrid();
+        refreshAll();
+      }
+
+      bindEvents();
+      setMode('letter');
+    }
+
+    // ===== イベント登録 =====
+    function bindEvents() {
+      // 盤面のタップ（1か所でまとめて受ける）
+      $('#grid').addEventListener('click', (e) => {
+        const cellEl = e.target.closest('.cell');
+        if (!cellEl) return;
+        const r = Number(cellEl.dataset.r);
+        const c = Number(cellEl.dataset.c);
+        if (state.mode === 'black') {
+          toggleBlack(r, c);
+        } else {
+          if (isBlack(r, c)) return;
+          selectCell(r, c);
+        }
+      });
+
+      // 文字入力（重ねてあるinputで受け取る）
+      const fi = $('#floatInput');
+      fi.addEventListener('input', () => {
+        const ch = fi.value.slice(-1);
+        fi.value = '';
+        if (!ch) return;
+        setLetter(ch);
+        advance();
+      });
+      fi.addEventListener('keydown', (e) => {
+        const keys = {
+          ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1]
+        };
+        if (keys[e.key]) {
+          e.preventDefault();
+          moveSel(keys[e.key][0], keys[e.key][1]);
+        } else if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (!state.sel) return;
+          const cur = state.cells[idx(state.sel.r, state.sel.c)];
+          if (cur.ch) {
+            setLetter('');
+          } else {
+            moveSel(state.dir === 'down' ? -1 : 0, state.dir === 'across' ? -1 : 0);
+            setLetter('');
+          }
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleDir();
+        }
+      });
+
+      // 各ボタン
+      $('#btnResize').addEventListener('click', () => {
+        resizeGrid(Number($('#sizeW').value), Number($('#sizeH').value));
+        showMsg('盤面の大きさを変えました。');
+      });
+      $('#modeBlack').addEventListener('click', () => setMode('black'));
+      $('#modeLetter').addEventListener('click', () => setMode('letter'));
+      $('#btnDir').addEventListener('click', toggleDir);
+      $('#btnClearLetters').addEventListener('click', () => {
+        if (!confirm('入っている文字をすべて消します。よろしいですか？（黒マスとカギは残ります）')) return;
+        state.cells.forEach(cell => { cell.ch = ''; });
+        refreshAll();
+        showMsg('文字を消しました。');
+      });
+      $('#btnPrintQ').addEventListener('click', () => doPrint(false));
+      $('#btnPrintA').addEventListener('click', () => doPrint(true));
+      $('#btnExport').addEventListener('click', exportFile);
+      $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#fileInput').addEventListener('change', (e) => {
+        if (e.target.files[0]) importFile(e.target.files[0]);
+        e.target.value = '';
+      });
+      $('#btnReset').addEventListener('click', () => {
+        if (!confirm('盤面もカギもすべて消して、まっさらから作り直します。よろしいですか？')) return;
+        state.clues = {};
+        state.title = '';
+        $('#title').value = '';
+        clueSignature = '';
+        state.cells = createCells(state.w, state.h);
+        state.sel = null;
+        buildGrid();
+        refreshAll();
+        showMsg('まっさらにしました。');
+      });
+      $('#title').addEventListener('input', saveLocal);
+
+      // 画面の向きが変わったらマスの大きさを計算し直す（iPadの縦横切り替え対策）
+      window.addEventListener('resize', () => {
+        buildGrid();
+        updateCells();
+        positionInput();
+      });
+    }
+
+    // ===== 起動 =====
+    init();
+  </script>
+
+</body>
+</html>
