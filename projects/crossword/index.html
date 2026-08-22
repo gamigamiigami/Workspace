@@ -690,11 +690,20 @@
       <h2>印刷・保存</h2>
       <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="width:100%;margin-bottom:8px;">
       <div class="row">
+        <button id="btnSaveWork">作品として保存</button>
+        <button id="btnOpenWork" class="sub">保存した作品を開く</button>
+      </div>
+      <div id="workListBox" style="display:none;margin-top:10px;">
+        <div id="workListItems"></div>
+        <button id="btnCloseWorkList" class="sub small" style="margin-top:6px;">閉じる</button>
+      </div>
+      <p class="hint-line">「作品として保存」した内容は、名前つきでこの端末に残ります。あとで一覧から開いて続きができます。</p>
+      <div class="row" style="margin-top:8px;">
         <button id="btnPrintQ">問題を印刷</button>
         <button id="btnPrintA" class="sub">解答を印刷</button>
       </div>
       <details>
-        <summary>データの保存・読み込み</summary>
+        <summary>データの保存・読み込み（ファイル・コピー）</summary>
         <div class="row">
           <button id="btnExport" class="sub small">ファイルに保存</button>
           <button id="btnImport" class="sub small">ファイルを読み込む</button>
@@ -788,6 +797,7 @@
 
     // ===== 状態管理 =====
     const state = {
+      workId: null,   // 「作品として保存」した先のID（未保存ならnull）
       title: '',
       words: [],      // { id, text }
       keyword: '',
@@ -1925,6 +1935,7 @@
 
     function applyData(d) {
       if (!d) return false;
+      state.workId = null;
       state.title = d.title || '';
       state.words = Array.isArray(d.words) ? d.words : [];
       state.keyword = d.keyword || '';
@@ -1967,6 +1978,105 @@
       } catch (e) {
         $('#msg').textContent = '自動保存できません（プライベートモードの可能性）。「ファイルに保存」を使ってください。';
       }
+    }
+
+    // ===== 作品として保存（名前つき・何個でも保存できる） =====
+    const WORKS_KEY = 'crossword-works-v1';
+
+    function loadWorks() {
+      try {
+        const raw = localStorage.getItem(WORKS_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list : [];
+      } catch (e) { return []; }
+    }
+
+    function saveWorks(list) {
+      try {
+        localStorage.setItem(WORKS_KEY, JSON.stringify(list));
+        return true;
+      } catch (e) {
+        $('#msg').textContent = '作品を保存できませんでした（保存できる数の上限かもしれません）。';
+        return false;
+      }
+    }
+
+    function saveAsWork() {
+      const list = loadWorks();
+      const title = state.title || '（無題）';
+      const data = serialize();
+      const now = Date.now();
+      let item = state.workId ? list.find(w => w.id === state.workId) : null;
+      if (item) {
+        item.title = title;
+        item.savedAt = now;
+        item.data = data;
+      } else {
+        item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now, data };
+        list.unshift(item);
+        state.workId = item.id;
+      }
+      if (saveWorks(list)) {
+        showMsg('「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。', 'ok');
+      }
+    }
+
+    function openWork(id) {
+      const list = loadWorks();
+      const item = list.find(w => w.id === id);
+      if (!item) return;
+      applyData(item.data);
+      state.workId = item.id;
+      saveLocal();
+      $('#workListBox').style.display = 'none';
+      showMsg('「' + item.title + '」を開きました。', 'ok');
+    }
+
+    function deleteWork(id) {
+      let list = loadWorks();
+      const item = list.find(w => w.id === id);
+      if (!item) return;
+      if (!confirm('「' + item.title + '」を削除します。よろしいですか？')) return;
+      list = list.filter(w => w.id !== id);
+      saveWorks(list);
+      if (state.workId === id) state.workId = null;
+      renderWorkList();
+    }
+
+    function fmtDate(ts) {
+      const d = new Date(ts);
+      const p = n => String(n).padStart(2, '0');
+      return d.getFullYear() + '/' + p(d.getMonth() + 1) + '/' + p(d.getDate())
+        + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+    }
+
+    function renderWorkList() {
+      const list = loadWorks();
+      const box = $('#workListItems');
+      if (!list.length) {
+        box.innerHTML = '<p class="hint-line">まだ保存した作品はありません。</p>';
+      } else {
+        box.innerHTML = '';
+        list.forEach(item => {
+          const row = document.createElement('div');
+          row.className = 'row';
+          row.style.marginBottom = '4px';
+          const label = document.createElement('button');
+          label.className = 'sub small' + (item.id === state.workId ? ' active' : '');
+          label.style.flex = '1';
+          label.style.textAlign = 'left';
+          label.textContent = (item.title || '（無題）') + '　（' + fmtDate(item.savedAt) + '）';
+          label.addEventListener('click', () => openWork(item.id));
+          const del = document.createElement('button');
+          del.className = 'sub small';
+          del.textContent = '削除';
+          del.addEventListener('click', () => deleteWork(item.id));
+          row.appendChild(label);
+          row.appendChild(del);
+          box.appendChild(row);
+        });
+      }
+      $('#workListBox').style.display = 'block';
     }
 
     function loadLocal() {
@@ -2455,11 +2565,14 @@
       $('#title').addEventListener('input', (e) => { state.title = e.target.value; saveLocal(); });
       $('#btnPrintQ').addEventListener('click', () => doPrint(false));
       $('#btnPrintA').addEventListener('click', () => doPrint(true));
+      $('#btnSaveWork').addEventListener('click', saveAsWork);
+      $('#btnOpenWork').addEventListener('click', renderWorkList);
+      $('#btnCloseWorkList').addEventListener('click', () => { $('#workListBox').style.display = 'none'; });
       $('#btnExport').addEventListener('click', exportFile);
       $('#btnImport').addEventListener('click', () => $('#fileInput').click());
-      $('#btnMakeLink').addEventListener('click', makeShareLink);
-      $('#btnTrySolve').addEventListener('click', () => {
-        const url = makeShareLink();
+      $('#btnMakeLink').addEventListener('click', () => { makeShareLink(); });
+      $('#btnTrySolve').addEventListener('click', async () => {
+        const url = await makeShareLink();
         if (!url) return;
         // 同じページ内で # を変えるだけでは読み込み直されないので、明示的に読み直す
         location.href = url;
@@ -3229,25 +3342,55 @@
       };
     }
 
-    function encodePayload(o) {
-      const bytes = new TextEncoder().encode(JSON.stringify(o));
+    function bytesToB64url(bytes) {
       let bin = '';
       bytes.forEach(b => { bin += String.fromCharCode(b); });
       return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
     }
-
-    function decodePayload(t) {
+    function b64urlToBytes(t) {
       const bin = atob(t.replace(/-/g, '+').replace(/_/g, '/'));
       const bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      return JSON.parse(new TextDecoder().decode(bytes));
+      return bytes;
     }
 
-    function makeShareLink() {
+    // リンクを短くするため、対応ブラウザでは圧縮（gzip）してから文字にする。
+    // 圧縮できない古い環境では、そのまま（無圧縮）にする
+    async function encodeShareHash(o) {
+      const json = JSON.stringify(o);
+      if (window.CompressionStream) {
+        try {
+          const cs = new CompressionStream('gzip');
+          const writer = cs.writable.getWriter();
+          writer.write(new TextEncoder().encode(json));
+          writer.close();
+          const buf = new Uint8Array(await new Response(cs.readable).arrayBuffer());
+          return 'g=' + bytesToB64url(buf);
+        } catch (e) { /* 圧縮に失敗したら無圧縮にする */ }
+      }
+      return 'p=' + bytesToB64url(new TextEncoder().encode(json));
+    }
+
+    // 旧形式（#p=、無圧縮）。すでに配ったリンクとの互換のために残す
+    function decodePayload(t) {
+      return JSON.parse(new TextDecoder().decode(b64urlToBytes(t)));
+    }
+
+    // 新形式（#g=、gzip圧縮）
+    async function decodeShareHashGz(t) {
+      const ds = new DecompressionStream('gzip');
+      const writer = ds.writable.getWriter();
+      writer.write(b64urlToBytes(t));
+      writer.close();
+      const buf = new Uint8Array(await new Response(ds.readable).arrayBuffer());
+      return JSON.parse(new TextDecoder().decode(buf));
+    }
+
+    async function makeShareLink() {
       const data = solvePayload();
       if (!data) { $('#msg').textContent = '盤面が空です。先にクロスワードを作ってください。'; return null; }
       const noClue = state.placed.filter(p => !state.clues[p.text]).length;
-      const url = location.href.split('#')[0] + '#p=' + encodePayload(data);
+      const url = location.href.split('#')[0] + '#' + await encodeShareHash(data);
       $('#linkText').value = url;
       $('#linkBox').style.display = 'block';
       $('#msg').textContent = noClue
@@ -3630,19 +3773,33 @@
     }
 
     // ===== 初期化 =====
-    function init() {
-      // 配布リンク（#p=...）で開かれたときは、解く人のための画面にする
-      if (location.hash.startsWith('#p=')) {
-        const token = location.hash.slice(3);
-        try { startSolve(decodePayload(token), token); return; }
-        catch (e) { /* データが壊れていたら、ふつうの作成画面を出す */ }
-      }
+    function startEditor() {
       const saved = loadLocal();
       if (saved) applyData(saved);
       else { buildGrid(); refresh(); }
       bindEvents();
       setMode('place');
       showTab('words');
+    }
+
+    function init() {
+      // 配布リンク（#g=...圧縮 / #p=...無圧縮）で開かれたときは、解く人のための画面にする
+      const isGz = location.hash.startsWith('#g=');
+      const isPlain = location.hash.startsWith('#p=');
+      if (isGz || isPlain) {
+        const token = location.hash.slice(3);
+        const full = location.hash.slice(1);
+        if (isGz) {
+          decodeShareHashGz(token).then(
+            data => startSolve(data, full),
+            () => startEditor()
+          );
+          return;
+        }
+        try { startSolve(decodePayload(token), full); return; }
+        catch (e) { /* データが壊れていたら、ふつうの作成画面を出す */ }
+      }
+      startEditor();
     }
 
     // ===== 起動 =====

@@ -2019,6 +2019,36 @@ showScreen('screen-quiz');
 
 ---
 
+## 名前つき複数保存（作品リスト）とURL短縮（gzip圧縮）
+
+サーバー無し・単一HTMLの制約下で、「保存して後で編集を再開したい」「配布リンクが長すぎる」を解決したパターン。
+
+**名前つき複数保存：**
+```js
+const WORKS_KEY = 'crossword-works-v1'; // localStorageに配列で保存
+// 保存：state.workId があれば上書き更新、無ければ新規追加してIDを発行
+// 一覧：id/title/savedAt/data を持つ配列を描画し、開く/削除できるようにする
+```
+自動保存（単一スロット）と役割を分ける：自動保存は「作業中の状態を落とさない保険」、
+作品保存は「ユーザーが意図的に名前をつけて残す」もの。両方があると安心感が違う。
+
+**URL短縮（gzip）：**
+```js
+if (window.CompressionStream) {
+  const cs = new CompressionStream('gzip');
+  // TextEncoderでバイト化 → 書き込み → Response(cs.readable).arrayBuffer() で圧縮結果を取得
+  // → base64url化して '#g=' + データ としてURLに埋め込む
+}
+// 非対応ブラウザは '#p=' + 無圧縮base64 にフォールバック（旧形式のまま）
+```
+JSONの構造（漢字・かなの繰り返しパターン）はgzipと相性が良く、実測で長さがかなり縮む。
+**旧リンクとの互換が重要**：ハッシュの接頭辞（`#g=` 新形式／`#p=` 旧形式）で分岐させれば、
+既に配布済みのリンクを壊さずに新形式へ移行できる。
+
+**タグ：** #localStorage #圧縮 #gzip #URL短縮 #保存 #crossword
+
+---
+
 ## 関連リンク
 
 - 失敗・注意点 → [failures.md](./failures.md)
