@@ -150,7 +150,8 @@
     }
 
     /* ===== 辞書の検索結果 ===== */
-    #findResult { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    #findResult, #bridgeBox { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    #bridgeBtns { margin-top: 6px; }
     .find-chip {
       display: flex; flex-direction: column; align-items: flex-start;
       background: #fff; border: 2px solid var(--line); border-radius: 8px;
@@ -430,6 +431,17 @@
         <button id="btnFind">さがす</button>
       </div>
       <div class="row">
+        <label for="findChars">この文字を全部ふくむ</label>
+        <input type="text" id="findChars" placeholder="例：あいさ" style="flex:1 1 110px;">
+        <button id="btnFindChars" class="sub small">この文字でさがす</button>
+      </div>
+      <div class="row">
+        <label for="linkA">2つの語をつなぐ語</label>
+        <select id="linkA"></select>
+        <select id="linkB"></select>
+        <button id="btnLinkWords" class="sub small">つなぐ語をさがす</button>
+      </div>
+      <div class="row">
         <label for="findLevel">むずかしさ</label>
         <select id="findLevel">
           <option value="3000">やさしい（小学生向け）</option>
@@ -479,6 +491,8 @@
         <button id="btnUndo" class="sub" disabled>元に戻す</button>
       </div>
       <p id="genResult" class="hint-line"></p>
+      <div class="row" id="bridgeBtns"></div>
+      <div id="bridgeBox" style="display:none;"></div>
     </div>
 
     <div class="panel">
@@ -699,6 +713,7 @@
       selWordId: null,
       selPlacedId: null,
       tab: 'words',
+      linkPair: null,   // 「2つの語をつなぐ語」をさがしているときの2語
       markSel: null   // { r, c }
     };
 
@@ -1064,6 +1079,16 @@
         state.words.forEach(w => box.appendChild(makeChip(w, true)));
       }
 
+      // 「2つの語をつなぐ語」用の選択肢
+      ['#linkA', '#linkB'].forEach((sel, i) => {
+        const el = $(sel);
+        if (!el) return;
+        const cur = el.value;
+        el.innerHTML = state.words.map(w => '<option>' + escapeHtml(w.text) + '</option>').join('');
+        if ([...el.options].some(o => o.value === cur)) el.value = cur;
+        else if (el.options.length > i) el.selectedIndex = Math.min(i, el.options.length - 1);
+      });
+
       // ②つくる：まだ盤面に置いていないワードだけ
       const box2 = $('#placeList');
       if (box2) {
@@ -1129,8 +1154,25 @@
         diag.className = 'diag ok';
         diag.textContent = 'ワードが1つだけです。あと1つ以上登録すると共通文字を調べられます。';
       } else if (groups.size === 1) {
-        diag.className = 'diag ok';
-        diag.textContent = '◎ 全部のワードがつながります（' + pairs.length + '組が交差できます）。クロスワードにできます。';
+        // 共通文字があっても、実際に置けるとは限らない（クロスワードは形の制約が強い）
+        const weak = words.filter(w => {
+          const kinds = new Set();
+          words.forEach(o => {
+            if (o.id === w.id) return;
+            chars(w.text).forEach(ch => { if (chars(o.text).includes(ch)) kinds.add(ch); });
+          });
+          return kinds.size === 1;
+        });
+        if (weak.length) {
+          diag.className = 'diag ng';
+          diag.textContent = '△ ' + weak.map(w => '「' + w.text + '」').join('')
+            + ' は1種類の文字でしか他の語とつながりません。置けないことがあります'
+            + '（そのときは②つくるで「つなぐ語をさがす」が出ます）。';
+        } else {
+          diag.className = 'diag ok';
+          diag.textContent = '◎ 全部のワードが共通の文字でつながっています（' + pairs.length + '組）。'
+            + '実際に組めるかは②つくるで確かめます。';
+        }
       } else {
         diag.className = 'diag ng';
         let t = '△ ' + groups.size + 'つのグループに分かれています。1つにつなぐには、橋わたしになるワードが必要です。';
@@ -1988,7 +2030,33 @@
       });
 
       // 辞書からさがす
-      $('#btnFind').addEventListener('click', findWords);
+      $('#btnFind').addEventListener('click', () => { state.linkPair = null; findWords(); });
+      $('#btnFindChars').addEventListener('click', () => { state.linkPair = null; findWords(); });
+      $('#findChars').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { state.linkPair = null; findWords(); }
+      });
+      $('#btnLinkWords').addEventListener('click', () => {
+        const a = $('#linkA').value, b = $('#linkB').value;
+        if (!a || !b || a === b) { showMsg('ちがう2つの語を選んでください。', 'ng'); return; }
+        state.linkPair = { a, b };
+        $('#findChars').value = '';
+        findWords();
+      });
+      $('#bridgeBtns').addEventListener('click', (e) => {
+        const b = e.target.closest('[data-bridge]');
+        if (b) showBridges(b.dataset.bridge);
+      });
+      $('#bridgeBox').addEventListener('click', (e) => {
+        const chip = e.target.closest('.find-chip');
+        if (!chip) return;
+        const t = chip.dataset.text;
+        if (!state.words.some(w => w.text === t)) {
+          state.words.push({ id: uid(), text: t });
+          rememberWord(t, chip.dataset.meta);
+        }
+        $('#bridgeBox').style.display = 'none';
+        runGenerate();
+      });
       ['#findLevel', '#findKyoiku', '#findKw', '#findCross', '#findLen'].forEach(sel => {
         $(sel).addEventListener('change', () => { if ($('#findResult').children.length) findWords(); });
       });
@@ -2179,6 +2247,7 @@
       const useCross = $('#findCross').checked;
       const level = Number($('#findLevel').value) || 10000;   // よく使う語ほど上位＝やさしい
       const onlyKyoiku = $('#findKyoiku').checked;
+      const link = state.linkPair;
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
 
@@ -2189,6 +2258,10 @@
       const haveChars = new Set();
       state.words.forEach(w => chars(w.text).forEach(ch => haveChars.add(ch)));
       const missing = missingKeywordChars().map(ch => conv(ch));
+      // 「この文字を全部ふくむ」（例：あいさ → あ・い・さ をすべて含む語）
+      const needChars = [...new Set(chars(conv($('#findChars').value.trim())))];
+      const linkA = link ? chars(conv(link.a)) : null;
+      const linkB = link ? chars(conv(link.b)) : null;
       const wantKw = useKw && missing.length > 0;
 
       // マイ辞書（過去に登録した語）→ 国語辞書 の順にしらべる
@@ -2206,13 +2279,22 @@
         if (len && cs.length !== len) continue;
         if (cs.length < 2) continue;
         if (q && text.indexOf(q) < 0 && toKata(text).indexOf(toKata(q)) < 0 && item.s.indexOf(q) < 0) continue;
+        if (needChars.length && !needChars.every(ch => cs.includes(ch))) continue;
+        if (link && (!cs.some(ch => linkA.includes(ch)) || !cs.some(ch => linkB.includes(ch)))) continue;
         const kwHit = missing.filter(ch => cs.includes(ch)).length;
         if (wantKw && kwHit === 0) continue;
         const crossable = haveChars.size === 0 || cs.some(ch => haveChars.has(ch));
         if (useCross && !crossable) continue;
         seen.add(text);
         // 未使用文字を多く含む語をいちばん上に。次に交差できる語、次によく使う語
-        const score = kwHit * 1000 + (crossable ? 200 : 0) + (item.mine ? 150 : 0)
+        // 2語をつなぐ検索では、両方に「別々の文字で」つながる語を上位にする
+        let linkBonus = 0;
+        if (link) {
+          const onlyA = cs.some(ch => linkA.includes(ch) && !linkB.includes(ch));
+          const onlyB = cs.some(ch => linkB.includes(ch) && !linkA.includes(ch));
+          linkBonus = (onlyA && onlyB) ? 2000 : (onlyA || onlyB) ? 500 : 0;
+        }
+        const score = kwHit * 1000 + linkBonus + (crossable ? 200 : 0) + (item.mine ? 150 : 0)
           + Math.max(0, 100 - item.rank / 100);
         hits.push({ text, meta: item.s, mine: item.mine, score, kwHit });
         if (hits.length > 4000) break;
@@ -2233,7 +2315,9 @@
       head.className = 'hint-line';
       head.style.width = '100%';
       const lv = $('#findLevel').selectedOptions[0].textContent;
-      head.innerHTML = lv + '／' + total + ' 語の候補から ' + list.length + ' 語を表示（タップで登録）'
+      const cond = state.linkPair
+        ? '「' + escapeHtml(state.linkPair.a) + '」と「' + escapeHtml(state.linkPair.b) + '」をつなぐ語／' : '';
+      head.innerHTML = cond + lv + '／' + total + ' 語の候補から ' + list.length + ' 語を表示（タップで登録）'
         + (missing.length ? '　<span style="color:var(--ng)">未使用の文字：'
             + escapeHtml(missing.join('・')) + '</span>' : '');
       box.appendChild(head);
@@ -2308,13 +2392,32 @@
       return a;
     }
 
+    // 各語が「他の語と何種類の文字でつながれるか」を数える（少ないほど置きにくい）
+    function connectivity(items) {
+      const m = new Map();
+      items.forEach(a => {
+        const kinds = new Set();
+        items.forEach(b => {
+          if (a === b) return;
+          a.cs.forEach(ch => { if (b.cs.includes(ch)) kinds.add(ch); });
+        });
+        m.set(a.text, kinds.size);
+      });
+      return m;
+    }
+
     // 1回ぶんの組み上げ
-    function tryLayout(items) {
-      // 長い語から置くほうがうまく組めるが、毎回ゆらぎを加えて別の順番も試す
-      // （順番が変わると入る語の数が変わるので、たくさん試すほどよい形が見つかる）
-      const order = items.map(it => ({ it, k: it.cs.length + (Math.random() - 0.5) * 3 }))
-        .sort((a, b) => b.k - a.k)
-        .map(x => x.it);
+    function tryLayout(items, conn) {
+      // 並べる順番を2通り試す：
+      //  ・長い語から置く（ふつうはこれがうまくいく）
+      //  ・つながりにくい語から置く（1文字でしかつながらない語は、後回しにすると置き場所が無くなる）
+      const hardFirst = Math.random() < 0.5;
+      const order = items.map(it => ({
+        it,
+        k: hardFirst
+          ? (12 - Math.min(11, conn.get(it.text))) * 3 + it.cs.length * 0.2 + Math.random() * 2
+          : it.cs.length + (Math.random() - 0.5) * 3
+      })).sort((a, b) => b.k - a.k).map(x => x.it);
       const map = new Map();
       const placed = [];
       let failed = [];
@@ -2389,17 +2492,87 @@
     }
 
     // 何回も試して、いちばんよい形を採用する
-    function generateLayout(words) {
+    function generateLayout(words, tries, budgetMs) {
       const items = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
       if (items.length === 0) return null;
       let best = null;
+      const conn = connectivity(items);
+      const limit = tries || GEN_TRIES;
+      const budget = budgetMs || 1800;
       const t0 = Date.now();
-      for (let t = 0; t < GEN_TRIES; t++) {
-        const r = tryLayout(items);
+      for (let t = 0; t < limit; t++) {
+        const r = tryLayout(items, conn);
         if (!best || r.score > best.score) best = r;
-        if (Date.now() - t0 > 1800) break; // 時間がかかりすぎないように打ち切る
+        if (best.failed.length === 0 && tries) break;   // 検証用：全部入ればすぐ切り上げる
+        if (Date.now() - t0 > budget) break; // 時間がかかりすぎないように打ち切る
       }
       return best;
+    }
+
+    // 入らなかった語と盤面の両方につながる語を辞書からさがし、実際に組めるか検証する
+    function findBridges(failedText) {
+      const mode = kanaMode();
+      const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
+      const level = Number($('#findLevel').value) || 10000;
+      const onlyKyoiku = $('#findKyoiku').checked;
+      const target = new Set(chars(failedText));
+      const boardChars = new Set();
+      state.words.forEach(w => { if (w.text !== failedText) chars(w.text).forEach(ch => boardChars.add(ch)); });
+      // 「すでにつながっている文字」以外でつながれる語を高く評価する（新しい足がかりになるため）
+      const already = new Set([...target].filter(ch => boardChars.has(ch)));
+
+      const cands = [];
+      for (const d of loadDict()) {
+        if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) continue;
+        const text = conv(d.r);
+        if (state.words.some(w => w.text === text)) continue;
+        const cs = chars(text);
+        if (cs.length < 2 || cs.length > 6) continue;
+        const hitT = cs.filter(ch => target.has(ch)).length;
+        const hitB = cs.filter(ch => boardChars.has(ch)).length;
+        if (!hitT || !hitB) continue;
+        const fresh = cs.some(ch => target.has(ch) && !already.has(ch)) ? 400 : 0;
+        cands.push({ text, meta: d.s, score: fresh + hitT * 60 + hitB * 30 + Math.max(0, 100 - d.rank / 100) });
+      }
+      cands.sort((a, b) => b.score - a.score);
+
+      // 上位の候補について「これを足せば全部入るか」を実際に試す
+      const t0 = Date.now();
+      const words = state.words.map(w => w.text);
+      const okList = [], maybe = [];
+      for (const c of cands.slice(0, 40)) {
+        if (okList.length >= 6 || Date.now() - t0 > 2500) { maybe.push(c); continue; }
+        const res = generateLayout(words.concat([c.text]), 120, 260);
+        if (res && res.failed.length === 0) okList.push(c); else maybe.push(c);
+      }
+      return { ok: okList, maybe: maybe.slice(0, 10) };
+    }
+
+    function showBridges(failedText) {
+      const box = $('#bridgeBox');
+      box.innerHTML = '<p class="hint-line">さがしています…</p>';
+      box.style.display = 'block';
+      setTimeout(() => {
+        const { ok, maybe } = findBridges(failedText);
+        box.innerHTML = '';
+        const head = document.createElement('p');
+        head.className = 'hint-line';
+        head.style.width = '100%';
+        head.innerHTML = ok.length
+          ? '<strong>「' + escapeHtml(failedText) + '」をつなぐ語</strong>　◎印は、足すと全部入ることを確かめた語です。タップで追加して作り直します。'
+          : '<strong>「' + escapeHtml(failedText) + '」をつなぐ語</strong>　※全部入る組み合わせは見つかりませんでした。下の語を足すと近づきます。';
+        box.appendChild(head);
+        [...ok.map(c => ({ ...c, sure: true })), ...maybe].forEach(c => {
+          const chip = document.createElement('button');
+          chip.type = 'button';
+          chip.className = 'find-chip' + (c.sure ? ' mine' : '');
+          chip.dataset.text = c.text;
+          chip.dataset.meta = c.meta || '';
+          chip.innerHTML = '<span class="fr">' + (c.sure ? '◎ ' : '') + escapeHtml(c.text) + '</span>'
+            + '<span class="fs">' + escapeHtml(c.meta && c.meta !== c.text ? c.meta : '') + '</span>';
+          box.appendChild(chip);
+        });
+      }, 30);
     }
 
     function runGenerate() {
@@ -2431,6 +2604,16 @@
         msg += '　<span style="color:var(--ok);font-weight:700;">全部入りました！</span>';
       }
       $('#genResult').innerHTML = msg;
+      $('#bridgeBox').style.display = 'none';
+      const btnBox = $('#bridgeBtns');
+      btnBox.innerHTML = '';
+      res.failed.forEach(t => {
+        const b = document.createElement('button');
+        b.className = 'sub small';
+        b.dataset.bridge = t;
+        b.textContent = '「' + t + '」をつなぐ語をさがす';
+        btnBox.appendChild(b);
+      });
       showMsg('自動で作りました。直したいところは手で動かせます。', 'ok');
     }
 
