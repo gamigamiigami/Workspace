@@ -1,6 +1,6 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-05-23
+最終更新：2026-08-22
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
 
@@ -966,6 +966,370 @@ function showAnalysis(state) {
 - **ローカルストレージ：** try-catch で保護し、システム設定・プライベートモード下での例外に対応
 - **アイテムアニメーション：** `animation-duration` を変数化し、レベル上げで速度加速可能
 - **正答率バー：** `width: ${percent}%` で CSS を動的生成（チャート機能を追加実装可能）
+
+---
+
+## 作品保存・一覧ダイアログ（複数保存管理）
+
+**用途：** クロスワード・スケルトンなど作品を複数保存して、名前つきで管理・再開する。IndexedDB で永続化。
+
+**HTML例：**
+```html
+<!-- 保存ボタン -->
+<button id="saveWorkBtn" class="save-work-btn">作品として保存</button>
+<button id="loadWorkBtn" class="load-work-btn">保存した作品を開く</button>
+
+<!-- 保存ダイアログ -->
+<div id="saveWorkModal" class="modal">
+  <div class="modal-content work-modal">
+    <h3>作品として保存</h3>
+    <input id="workTitle" type="text" placeholder="作品の名前を入力…" class="work-title-input">
+    <div class="modal-buttons">
+      <button onclick="saveWork()">保存</button>
+      <button onclick="closeModal('saveWorkModal')">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<!-- 一覧ダイアログ -->
+<div id="loadWorkModal" class="modal">
+  <div class="modal-content work-modal">
+    <h3>保存した作品</h3>
+    <div id="workList" class="work-list"></div>
+    <div class="modal-buttons">
+      <button onclick="closeModal('loadWorkModal')">閉じる</button>
+    </div>
+  </div>
+</div>
+```
+
+**CSS：**
+```css
+.save-work-btn, .load-work-btn {
+  padding: 10px 20px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+  margin: 4px;
+}
+
+.save-work-btn:hover, .load-work-btn:hover {
+  background: #45a049;
+}
+
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 200;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal.open { display: flex; }
+
+.modal-content.work-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+}
+
+.modal-content.work-modal h3 {
+  margin: 0 0 16px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.work-title-input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  margin-bottom: 16px;
+  box-sizing: border-box;
+}
+
+.work-title-input:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.work-list {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 16px;
+}
+
+.work-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  background: #f9f9f9;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.work-item:hover {
+  background: #f0f0f0;
+}
+
+.work-item-name {
+  flex: 1;
+  font-weight: 500;
+  color: #333;
+  word-break: break-all;
+}
+
+.work-item-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 12px;
+}
+
+.work-item-btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.work-item-open {
+  background: #4CAF50;
+  color: white;
+}
+
+.work-item-open:hover {
+  background: #45a049;
+}
+
+.work-item-delete {
+  background: #f44336;
+  color: white;
+}
+
+.work-item-delete:hover {
+  background: #da190b;
+}
+
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.modal-buttons button {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background 0.2s;
+}
+
+.modal-buttons button:first-child {
+  background: #4CAF50;
+  color: white;
+}
+
+.modal-buttons button:first-child:hover {
+  background: #45a049;
+}
+
+.modal-buttons button:last-child {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.modal-buttons button:last-child:hover {
+  background: #d0d0d0;
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  .modal-content.work-modal {
+    background: #2a2a2a;
+    color: #fff;
+  }
+  
+  .modal-content.work-modal h3 {
+    color: #fff;
+  }
+  
+  .work-title-input {
+    background: #3a3a3a;
+    border-color: #555;
+    color: #fff;
+  }
+  
+  .work-item {
+    background: #3a3a3a;
+    border-color: #555;
+  }
+  
+  .work-item:hover {
+    background: #454545;
+  }
+  
+  .work-item-name {
+    color: #fff;
+  }
+  
+  .modal-buttons button:last-child {
+    background: #555;
+    color: #fff;
+  }
+}
+```
+
+**JavaScript（IndexedDB 使用）：**
+```javascript
+const DB_NAME = 'WorkWorks';
+const STORE_NAME = 'works';
+let db = null;
+
+// DB 初期化
+async function initDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onsuccess = () => { db = req.result; resolve(db); };
+    req.onerror = () => reject(req.error);
+    req.onupgradeneeded = (e) => {
+      const objStore = e.target.result.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+      objStore.createIndex('timestamp', 'timestamp', { unique: false });
+    };
+  });
+}
+
+// 作品保存
+async function saveWork() {
+  const title = document.getElementById('workTitle').value.trim();
+  if (!title) {
+    alert('名前を入力してください');
+    return;
+  }
+
+  const workData = {
+    title,
+    timestamp: Date.now(),
+    data: getWorkData() // アプリケーション固有の保存関数
+  };
+
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  const store = tx.objectStore(STORE_NAME);
+  
+  // 同名の作品がある場合は上書き確認
+  const existing = await new Promise((res) => {
+    store.getAll().onsuccess = (e) => {
+      res(e.target.result.find(w => w.title === title));
+    };
+  });
+
+  if (existing) {
+    if (!confirm(`「${title}」は既に存在します。上書きしますか？`)) return;
+    store.put({ ...workData, id: existing.id });
+  } else {
+    store.add(workData);
+  }
+
+  document.getElementById('workTitle').value = '';
+  closeModal('saveWorkModal');
+  alert('保存しました！');
+}
+
+// 作品一覧表示
+async function loadWorkList() {
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const store = tx.objectStore(STORE_NAME);
+  
+  const works = await new Promise((res) => {
+    store.getAll().onsuccess = (e) => res(e.target.result);
+  });
+
+  // 新しい順にソート
+  works.sort((a, b) => b.timestamp - a.timestamp);
+
+  const listEl = document.getElementById('workList');
+  if (works.length === 0) {
+    listEl.innerHTML = '<p style="color:#999;">保存した作品がありません</p>';
+    return;
+  }
+
+  listEl.innerHTML = works.map(w => `
+    <div class="work-item">
+      <div class="work-item-name">${escapeHtml(w.title)}</div>
+      <div class="work-item-actions">
+        <button class="work-item-btn work-item-open" onclick="openWork(${w.id})">開く</button>
+        <button class="work-item-btn work-item-delete" onclick="deleteWork(${w.id})">削除</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+// 作品を開く
+async function openWork(id) {
+  const tx = db.transaction(STORE_NAME, 'readonly');
+  const work = await new Promise((res) => {
+    tx.objectStore(STORE_NAME).get(id).onsuccess = (e) => res(e.target.result);
+  });
+
+  if (work) {
+    loadWorkData(work.data); // アプリケーション固有の復元関数
+    closeModal('loadWorkModal');
+  }
+}
+
+// 作品削除
+async function deleteWork(id) {
+  if (!confirm('この作品を削除しますか？')) return;
+
+  const tx = db.transaction(STORE_NAME, 'readwrite');
+  tx.objectStore(STORE_NAME).delete(id);
+  
+  await loadWorkList();
+}
+
+// イベントバインディング
+initDB().then(() => {
+  document.getElementById('saveWorkBtn').addEventListener('click', () => {
+    openModal('saveWorkModal');
+    document.getElementById('workTitle').focus();
+  });
+
+  document.getElementById('loadWorkBtn').addEventListener('click', () => {
+    openModal('loadWorkModal');
+    loadWorkList();
+  });
+});
+
+function escapeHtml(text) {
+  const map = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' };
+  return text.replace(/[&<>"']/g, m => map[m]);
+}
+```
+
+**活用ポイント：**
+- **IndexedDB：** ローカルストレージ（5MB制限）より容量が大きい（ブラウザ仕様で 20〜50MB+）
+- **上書き保存：** 同名作品検出時に確認ダイアログ
+- **タイムスタンプ：** 新しい順に並び替え
+- **HTML エスケープ：** XSS対策で `escapeHtml()` 使用
+- **ダークモード対応：** `@media (prefers-color-scheme: dark)` で自動対応
 
 ---
 

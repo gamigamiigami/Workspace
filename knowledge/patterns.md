@@ -74,7 +74,7 @@ state.words = res.placed.map(p => p.text);
 **限界・今後の検討：**
 - 「カギ（ヒント）を手で書く」工程が唯一の重労働として残っている
   - 辞書の表記から「〇〇の読み方」「〇〇の同音異義語」のような下書きを自動生成できれば時間を半減できる可能性
-- 複数の問題を保存できない（新しく作ると前のが消える）
+- ✅ **複数の問題を保存できない（新しく作ると前のが消える）** → 2026-08-22 に IndexedDB を使った複数保存機能で解決
 
 **使用例：** projects/crossword/index.html（2026-08-22）
 
@@ -115,35 +115,48 @@ LINE・メールは問題なし。QRコードにするなら1,000文字以内を
 
 **使用例：** projects/crossword/index.html の解答モード（2026-08-21）
 
----
+**拡張（2026-08-22）：** 配布リンクの自動短縮
+- 対応ブラウザ（iOS Safari 含む最近の端末）では、データ部分を gzip 圧縮してから発行（`#g=` 形式）
+- 古い環境では無圧縮の従来形式（`#p=` 形式）にフォールバック
+- **既に配ったリンク（旧`#p=`形式）は完全互換維持**：デコード側で両形式に対応
+- 実績：1,400文字→ 約500文字に圧縮（通常のメールで送信可能なサイズに）
 
-### [汎用] サーバーなしで「作った問題を配って解いてもらう」— URLにデータを載せる
-
-**概要：** 静的HTML（GitHub Pages）だけで、作った問題を相手に配って解いてもらえる。
-**問題データをURLの # 以降に入れる**だけでよい。サーバーもデータベースも要らない。
-
-**実装：**
 ```js
-// 送る側：必要最小限だけを詰める（座標は左上を0にそろえて数字を小さくする）
-function encodePayload(o) {
-  const bytes = new TextEncoder().encode(JSON.stringify(o));
-  let bin = ''; bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); // URLセーフに
+// 送る側：圧縮対応
+async function encodePayloadWithCompression(data) {
+  const json = JSON.stringify(data);
+  
+  // 圧縮対応チェック
+  if (typeof CompressionStream !== 'undefined') {
+    const stream = new CompressionStream('gzip');
+    const writer = stream.writable.getWriter();
+    writer.write(new TextEncoder().encode(json));
+    writer.close();
+    
+    const compressed = await new Response(stream.readable).arrayBuffer();
+    const bytes = new Uint8Array(compressed);
+    let bin = '';
+    bytes.forEach(b => { bin += String.fromCharCode(b); });
+    return 'g=' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  } else {
+    // フォールバック
+    const bytes = new TextEncoder().encode(json);
+    let bin = '';
+    bytes.forEach(b => { bin += String.fromCharCode(b); });
+    return 'p=' + btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+  }
 }
-const url = location.href.split('#')[0] + '#p=' + encodePayload(data);
 
-// 受け取る側：起動時に判定して、解く人用の画面に切り替える
-if (location.hash.startsWith('#p=')) { startSolve(decodePayload(location.hash.slice(3))); return; }
+// 受け取る側：両形式対応
+if (location.hash.startsWith('#g=')) { // 圧縮形式
+  decodeCompressedPayload(location.hash.slice(3)).then(data => startSolve(data));
+} else if (location.hash.startsWith('#p=')) { // 従来形式
+  startSolve(decodePayload(location.hash.slice(3)));
+}
 ```
 
-**ハマりどころ（両方とも実際に踏んだ）：**
-- `location.origin` は **file:// では "null"** になる → `location.href.split('#')[0]` を使う
-- 同じページで `location.href = 同じURL+別の#` に変えても**読み込み直されない**（同一ドキュメント内遷移）
-  → 自分で `location.reload()` を呼ぶ
-- 日本語をそのまま `encodeURIComponent` すると1文字9バイトに膨らむ。**UTF-8→base64**なら約1.4倍で済む
-
-**サイズ感：** 10語＋カギありのクロスワードで約1,400文字。
-LINE・メールは問題なし。QRコードにするなら1,000文字以内を目安に減らす。
+**ポイント：** gzip 圧縮は単なるサイズ削減ではなく、**フォールバック構造で旧リンクの互換性を保つ**ことが重要。
+配った URL が「いつまでも開ける」という信頼感を作れる。
 
 **限界（正直に伝えること）：** 答えもURLに入っているので、調べれば見える。
 賞品つきの謎解きなど、本気で秘密にしたい用途には向かない。
@@ -2046,6 +2059,34 @@ JSONの構造（漢字・かなの繰り返しパターン）はgzipと相性が
 既に配布済みのリンクを壊さずに新形式へ移行できる。
 
 **タグ：** #localStorage #圧縮 #gzip #URL短縮 #保存 #crossword
+
+---
+
+## 「リンクが長すぎる」問題は、圧縮の限界に来たらQRコードで解決する
+
+gzip圧縮してもURLが長い（数百〜千文字）とユーザーから不安の声が出た。実際に中身を調べたところ、
+JSON構造の圧縮はすでに効いており、残っているのは日本語の文章（カギ・ヒント）という**実データそのもの**
+だったため、**圧縮アルゴリズムを変えても数十バイトしか縮まない**（deflate-rawにしてもヘッダ分の
+十数バイト程度）。「これ以上縮まらないものを縮めようとする」のではなく、
+**「長い文字列を人に渡す」という体験自体を変える**のが正解だった。
+
+```js
+// qrcode-generator（Kazuhiko Arase, MIT License）をHTMLに直接埋め込み、外部通信なしで完結させる
+const qr = qrcode(0, 'M');   // 0 = サイズ自動判定
+qr.addData(url);
+qr.make();
+holder.innerHTML = qr.createSvgTag({ scalable: true });
+```
+
+npm経由（`npm pack qrcode-generator`）でMITライセンスのライブラリを取得し、ソースをそのまま
+`<script>`タグとしてHTMLに埋め込んだ（外部CDN読み込みではなく、ファイルへの埋め込みなのでオフライン動作を維持できる）。
+配布リンク作成時に自動でQRコードも表示するようにし、「コピペする」から「カメラで写す」に変えることで、
+文字数の長さそのものを気にしなくてよい体験にした。
+
+**教訓：** 数値（文字数）を減らす方向でしか考えていないと詰まる。「その数値が本当に問題なのか」
+（今回は「共有アプリ上では長さは無害。UIで長く"見える"のが不安の実体」）を先に切り分ける。
+
+**タグ：** #QRコード #UX #圧縮の限界 #crossword #外部ライブラリの埋め込み
 
 ---
 

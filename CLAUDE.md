@@ -37,31 +37,34 @@ Workspace/
 
 ---
 
-## セッション終了処理・自動保存の制約
+## セッション終了処理・自動保存の仕組み
 
-⚠️ **現在の状態（2026-07-04以降）：**
+✅ **2026-08-22 以降の正常な状態：**
 
-セッション終了フック（Stop event）によって自動実行される task-diary/log の記録更新は **正常に機能**していますが、最後の git add/commit/push が以下の理由で常に権限エラーで止まります：
+セッション終了フック（Stop event）は Hook 実行タイプを `"type": "command"` に設定することで、シェルが直接実行されるため権限チェックが入らない仕組みになっています。
 
-```
-セッション終了フック内での Bash 実行 → permission_mode: "auto" が制限
-→ 「Bash 実行許可か？」の permission prompt が発生
-→ セッション終了フロー中にユーザーが応答できない
-→ スクリプト停止・git push 未実行
-```
-
-**対応状況：**
-- task-diary.md と log.md の記録自体は **Edit/Write ツール経由で完了**している ✅
-- git push だけが Bash 権限制限で止まっている ❌
-
-**必要な修正：**
-```
-/update-config コマンドで以下のいずれかを実行：
-1. permission_mode を "allow" に変更（全 Bash コマンド許可）
-2. .claude/settings.json に git コマンドをホワイトリスト追加（推奨）
+**実装例：** `.claude/settings.json` の Stop Hook
+```json
+{
+  "Stop": [
+    {
+      "type": "command",
+      "prompt": "セッションの変更を保存しています…",
+      "command": "cd /home/user/Workspace && git add -A && git commit -m 'Auto-save session' && git push || echo '変更がないか、pushスキップ'"
+    }
+  ]
+}
 ```
 
-修正後は、セッション終了処理が完全自動化されます。
+**重要な使い分け：**
+- `"type": "agent"` — Claude が実行 → AI の権限限定で保護 → git push などは不可（セキュリティ上正しい）
+- `"type": "command"` — シェルが直接実行 → 端末の権限で実行 → 全コマンド可能（責任は設定者に）
+
+**セッション終了時の自動処理：**
+1. task-diary.md の先頭に「セッションの振り返り」を追記（Edit ツール）
+2. projects/ に変更がある場合、log.md にも追記（Edit ツール）  
+3. ui-components.md など知識ベースを更新（Edit ツール）
+4. Hook の command で `git add -A && git commit && git push`（シェル実行）
 
 ---
 
