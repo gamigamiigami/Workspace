@@ -421,6 +421,13 @@
   <!-- ===== 1. ことば ===== -->
   <section class="tab-panel" data-tab="words">
     <div class="panel">
+      <div class="row">
+        <button id="btnNewWork2" class="sub">＋ 新しく作る</button>
+      </div>
+      <p class="hint-line">まっさらな状態から作りなおします。
+        保存していない内容があるときは、消す前に確認します。</p>
+    </div>
+    <div class="panel">
       <h2>作る大きさ <span class="hint">先に決めると、この枠に入る語だけを集められます</span></h2>
       <div class="row">
         <label for="genSize2">盤面</label>
@@ -736,6 +743,8 @@
   <div id="solveApp" hidden>
     <header>
       <h1 id="solveTitle">クロスワード</h1>
+      <!-- 作る人が「解答モードを試す」で来たときだけ出るボタン（解く人の画面には出さない） -->
+      <button id="btnBackToEdit" class="sub small" hidden style="margin-top:8px;">← 作る画面にもどる</button>
     </header>
     <div id="solveBoardWrap">
       <div id="solveGrid"></div>
@@ -4951,6 +4960,7 @@ var qrcode = function() {
       $('#btnSaveWork').addEventListener('click', saveAsWork);
       $('#btnOpenWork').addEventListener('click', renderWorkList);
       $('#btnNewWork').addEventListener('click', newWork);
+      $('#btnNewWork2').addEventListener('click', newWork);   // ①ことば画面の上にも置いてある
       $('#btnCloseWorkList').addEventListener('click', () => { $('#workListBox').style.display = 'none'; });
       $('#btnExport').addEventListener('click', exportFile);
       $('#btnImport').addEventListener('click', () => $('#fileInput').click());
@@ -5896,6 +5906,25 @@ var qrcode = function() {
       $('#solveApp').hidden = false;
       $('#solveTitle').textContent = data.t || 'クロスワード';
       document.title = (data.t || 'クロスワード');
+
+      // この端末でクロスワードを作ったことがある＝作る人の画面なので、戻るボタンを出す。
+      // 生徒が配布リンクを開いただけの端末には作りかけのデータが無いので、ボタンは出ない
+      let isMaker = false;
+      try { isMaker = !!localStorage.getItem(STORAGE_KEY); } catch (e) { isMaker = false; }
+      if (isMaker) {
+        const back = $('#btnBackToEdit');
+        back.hidden = false;
+        back.addEventListener('click', () => {
+          // # や ?q= を外した「素のアドレス」に戻れば、作る画面が開く。
+          // location.href への代入はすぐには反映されず、直後の reload() が
+          // 古いアドレス（#つき）を読み直してしまうため、replaceState で先に消しておく
+          // （このツールでは history という名前を「元に戻す」用の配列に使っているので、
+          //   ブラウザ側のものは window.history と書いて取り違えないようにする）
+          const clean = location.href.split('#')[0].split('?')[0];
+          window.history.replaceState(null, '', clean);
+          location.reload();
+        });
+      }
 
       solve.words = data.w.map(([r, c, d, text]) => ({ r, c, dir: d ? 'down' : 'across', text }));
       solve.clues = data.c || {};
