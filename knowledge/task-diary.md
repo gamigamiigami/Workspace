@@ -1,3 +1,25 @@
+### 2026-08-22（セッション138・公開サイト一覧の確認）
+
+**うまくいったこと**
+- `/projects/` 配下の全10個プロジェクトを確認
+- PUBLIC_DIRS と site/index.html の情報を一致させて、公開サイト一覧をまとめた
+- 8個の Web 公開サイト（GitHub Pages）と 2個の非公開プロジェクト（Python/自動化）を明確に分類
+- トップページ・各プロジェクトの URL を正確に列挙
+
+**うまくいかなかったこと**
+- なし
+
+**発見**
+- 公開サイト構成：
+  - Web 公開（GitHub Pages）: travel-planner, toy-story-modoki-web, hinshi-panic, kaeriten-quest, keisan-quest, rough, oshiking, crossword（8個）
+  - 非公開: toy-story-modoki（Python 版・ZIP 配布向け）, rakuda-sensei（自動化ツール群）
+- 後方互換性対応: kaeriten-quest は `/Workspace/kaeriten-quest/` の旧 URL も動作
+
+**次回への申し送り**
+- なし
+
+---
+
 ### 2026-08-22（セッション137・セッション終了処理の手順書作成・Hook 設定説明の実装）
 
 **うまくいったこと**
