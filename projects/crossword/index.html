@@ -406,9 +406,14 @@
           <option value="12">12×12まで</option>
           <option value="15">15×15まで</option>
         </select>
-        <button id="btnFitWords" class="big">この枠に入る語を集めて作る →</button>
+        <button id="btnFitWords" class="big">自動で作る（登録した語は全部使う）→</button>
       </div>
       <p id="fitResult" class="hint-line"></p>
+      <p class="hint-line">
+        ①枠を決める → ②使いたいワードを登録 → ③キーワードを決める → ④このボタン、の順で使えます。<br>
+        登録した語は<strong>必ず全部使い</strong>、つながらないところや足りないキーワードの文字は、
+        辞書から語を足して埋めます。
+      </p>
     </div>
 
     <div class="panel">
@@ -1741,12 +1746,13 @@
       const kw = chars(state.keyword);
       if (kw.length < 2) { showMsg('先にキーワードを入れてください。', 'ng'); return; }
       // 枠の大きさが決まっているときは、枠に入ることを確かめながら集める方に任せる
-      if (state.maxSize) { collectWordsToFit(); return; }
+      if (state.maxSize || state.words.length) { buildWithRequired(); return; }
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
       const level = Number($('#findLevel').value) || 10000;
       const onlyKyoiku = $('#findKyoiku').checked;
-      const dict = loadDict().filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku));
+      const dict = loadDict().filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
+        && !(mode === 'hira' && isLoanword(d)));
 
       // キーワードそのものを盤面に置くと答えが丸見えになるので候補から外す
       const kwSelf = new Set([state.keyword, toHira(state.keyword), toKata(state.keyword)]);
@@ -2213,7 +2219,9 @@
       });
       $('#btnFitWords').addEventListener('click', () => {
         $('#btnFitWords').disabled = true;
-        collectWordsToFit().finally(() => { $('#btnFitWords').disabled = false; });
+        // 登録した語があれば「必ず全部使う」方式、無ければ辞書から集める方式
+        const run = state.words.length ? buildWithRequired() : collectWordsToFit();
+        run.finally(() => { $('#btnFitWords').disabled = false; });
       });
       const syncSize = (v) => {
         state.maxSize = Number(v) || 0;
@@ -2311,6 +2319,11 @@
       return DICT;
     }
 
+    // カタカナで書くのがふつうの語（外来語）かどうか。ひらがなで作るときは避ける
+    // （「アート」を「あーと」と出すと不自然なため。「ヒト」「モノ」のような2文字語は除く）
+    const LOANWORD = /^[ァ-ヴー]{3,}$/;
+    const isLoanword = (d) => LOANWORD.test(d.s.split('/')[0]);
+
     // かなの変換（クロスワードは「カ」と「か」を別の文字として扱うため）
     const toHira = (t) => String(t).replace(/[ァ-ヴ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60));
     const toKata = (t) => String(t).replace(/[ぁ-ゔ]/g, c => String.fromCharCode(c.charCodeAt(0) + 0x60));
@@ -2363,7 +2376,8 @@
       // マイ辞書（過去に登録した語）→ 国語辞書 の順にしらべる
       const pool = state.myDict.map(m => ({ r: m.text, s: m.meta || '', rank: -1, mine: true, kyoiku: true }))
         .concat(loadDict()
-          .filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku))
+          .filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
+            && !(mode === 'hira' && isLoanword(d)))
           .map(d => ({ r: conv(d.r), s: d.s, rank: d.rank, mine: false, kyoiku: d.kyoiku })));
 
       const seen = new Set();
@@ -2483,6 +2497,139 @@
       return pool;
     }
 
+    // 足りないもの（必須語がつながらない／キーワードの文字が足りない）を埋める語を1つ選ぶ
+    function pickHelper(pool, missReq, missKw, dict, conv, kwSelf) {
+      const poolChars = new Set();
+      pool.forEach(t => chars(t).forEach(ch => poolChars.add(ch)));
+      const targetChars = new Set();
+      missReq.forEach(t => chars(t).forEach(ch => targetChars.add(ch)));
+      const cands = [];
+      for (const d of dict) {
+        const text = conv(d.r);
+        if (pool.includes(text) || kwSelf.has(text)) continue;
+        const cs = chars(text);
+        // 盤面（プール）のどれかとつながらない語は、足しても意味がない
+        const share = cs.filter(ch => poolChars.has(ch)).length;
+        if (!share) continue;
+        const hitReq = missReq.length ? cs.filter(ch => targetChars.has(ch)).length : 0;
+        const hitKw = missKw.filter(ch => cs.includes(ch)).length;
+        if (missReq.length && !hitReq && !hitKw) continue;
+        const score = hitReq * 800 + hitKw * 1000 + share * 30
+          + Math.max(0, 100 - d.rank / 100) + Math.random() * 60;
+        cands.push({ text, meta: d.s, score });
+      }
+      if (!cands.length) return null;
+      cands.sort((a, b) => b.score - a.score);
+      // 上位からランダムに選ぶ（押すたびに違う組み合わせになる）
+      return cands[Math.floor(Math.random() * Math.min(4, cands.length))];
+    }
+
+    // 登録した語を必ず全部使いつつ、枠に収め、キーワードの文字もそろえる
+    async function buildWithRequired() {
+      const N = state.maxSize;
+      const out = $('#fitResult');
+      const mode = kanaMode();
+      const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
+      const level = Number($('#findLevel').value) || 10000;
+      const onlyKyoiku = $('#findKyoiku').checked;
+      const hira = mode === 'hira';
+      const dict = loadDict().filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
+        && d.r.length >= 2 && (!N || d.r.length <= N)
+        && !(hira && isLoanword(d)));   // ひらがなで作るときは外来語を避ける
+      const kwChars = [...new Set(chars(state.keyword))];
+      const kwSelf = new Set([state.keyword, toHira(state.keyword), toKata(state.keyword)]);
+      const all = state.words.map(w => w.text);
+      const tooLong = N ? all.filter(t => chars(t).length > N) : [];
+      const req = all.filter(t => chars(t).length >= 2 && (!N || chars(t).length <= N));
+      const reqSet = new Set(req);
+
+      const t0 = Date.now();
+      const BUDGET = 9000;
+      let best = null, bestAdded = null;
+
+      for (let round = 0; round < 4 && Date.now() - t0 < BUDGET; round++) {
+        let pool = req.slice();
+        const added = [];
+        let res = generateLayout(pool, 300, 700, reqSet);
+        for (let iter = 0; iter < 12 && Date.now() - t0 < BUDGET; iter++) {
+          const missReq = res ? res.failed.filter(t => reqSet.has(t)) : req.slice();
+          const onBoard = new Set();
+          if (res) res.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
+          const missKw = kwChars.filter(ch => !onBoard.has(ch));
+          if (!missReq.length && !missKw.length) break;          // 完成
+          const helper = pickHelper(pool, missReq, missKw, dict, conv, kwSelf);
+          if (!helper) break;
+          pool.push(helper.text);
+          added.push(helper);
+          res = generateLayout(pool, 300, 700, reqSet);
+          out.textContent = '足りない語をさがしています… （' + (round + 1) + '巡目 / '
+            + added.length + '語ためしました）';
+          await tick();
+        }
+        if (res) {
+          const onBoard = new Set();
+          res.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
+          res._missReq = res.failed.filter(t => reqSet.has(t)).length;
+          res._missKw = kwChars.filter(ch => !onBoard.has(ch)).length;
+          // 必須語の不足 → キーワードの不足 → 余計な語の少なさ、の順に良さを比べる
+          const rank = (x, n) => -x._missReq * 1000 - x._missKw * 100 - n;
+          if (!best || rank(res, added.length) > rank(best, bestAdded.length)) {
+            best = res; bestAdded = added;
+          }
+          if (res._missReq === 0 && res._missKw === 0) break;
+        }
+        await tick();
+      }
+
+      if (!best || best.placed.length === 0) {
+        out.innerHTML = '<span style="color:var(--ng)">組み合わせが見つかりませんでした。'
+          + '枠を大きくするか、むずかしさを「ふつう」にしてみてください。</span>';
+        return;
+      }
+
+      // 盤面に入った語だけを登録する（足した語のうち使われなかったものは登録しない）
+      snapshot();
+      const placedTexts = new Set(best.placed.map(p => p.text));
+      const known = new Set(state.words.map(w => w.text));
+      bestAdded.forEach(h => {
+        if (placedTexts.has(h.text) && !known.has(h.text)) {
+          state.words.push({ id: uid(), text: h.text });
+          rememberWord(h.text, h.meta);
+        }
+      });
+      state.placed = best.placed.map(p => ({ id: uid(), text: p.text, r: p.r, c: p.c, dir: p.dir }));
+      state.marks = {};
+      state.selWordId = null; state.selPlacedId = null;
+      clearCycle(); viewSig = '';
+      refresh();
+      showTab('build');
+      if (kwChars.length) autoMark();
+
+      const usedAdded = bestAdded.filter(h => placedTexts.has(h.text)).map(h => h.text);
+      const missReq = best.failed.filter(t => reqSet.has(t));
+      const onBoard = new Set();
+      best.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
+      const missKw = kwChars.filter(ch => !onBoard.has(ch));
+
+      let msg = '<strong>' + best.placed.length + ' 語</strong>で組みました'
+        + '（たて' + best.h + '×よこ' + best.w + 'マス' + (N ? ' / ' + N + '×' + N + 'まで' : '') + '）。';
+      msg += missReq.length
+        ? ' <span style="color:var(--ng)">登録した「' + escapeHtml(missReq.join('・')) + '」が入りませんでした</span>'
+          + (N ? '（枠を大きくすると入ることがあります）' : '')
+        : ' <span style="color:var(--ok);font-weight:700;">登録した語'
+          + (tooLong.length ? '（枠に入る長さのもの）' : '') + 'はすべて使いました。</span>';
+      if (kwChars.length) {
+        msg += missKw.length
+          ? ' <span style="color:var(--ng)">キーワードの「' + escapeHtml(missKw.join('・')) + '」が盤面にありません</span>'
+          : ' <span style="color:var(--ok);font-weight:700;">キーワードの文字もすべて入りました。</span>';
+      }
+      if (usedAdded.length) msg += ' 足した語：' + escapeHtml(usedAdded.join('・')) + '。';
+      if (tooLong.length) msg += ' ※' + escapeHtml(tooLong.join('・')) + ' は ' + N + '文字をこえるので使えません。';
+      if (missReq.length || missKw.length) msg += ' もう一度押すと別の組み合わせを試します。';
+      out.innerHTML = msg;
+      $('#genResult').innerHTML = msg;
+    }
+
     async function collectWordsToFit() {
       const N = state.maxSize;
       const out = $('#fitResult');
@@ -2495,7 +2642,8 @@
       const level = Number($('#findLevel').value) || 10000;
       const onlyKyoiku = $('#findKyoiku').checked;
       const dict = loadDict().filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
-        && d.r.length >= 2 && d.r.length <= N);
+        && d.r.length >= 2 && d.r.length <= N
+        && !(mode === 'hira' && isLoanword(d)));
       if (dict.length === 0) {
         out.innerHTML = '<span style="color:var(--ng)">この条件に合う語が辞書にありません。</span>';
         return;
@@ -2620,17 +2768,19 @@
       return m;
     }
 
-    // 1回ぶんの組み上げ（limit＝盤面の大きさの上限。0なら制限なし）
-    function tryLayout(items, conn, limit) {
+    // 1回ぶんの組み上げ（limit＝盤面の大きさの上限。0なら制限なし／req＝必ず使いたい語）
+    function tryLayout(items, conn, limit, req) {
       // 並べる順番を2通り試す：
       //  ・長い語から置く（ふつうはこれがうまくいく）
       //  ・つながりにくい語から置く（1文字でしかつながらない語は、後回しにすると置き場所が無くなる）
       const hardFirst = Math.random() < 0.5;
       const order = items.map(it => ({
         it,
-        k: hardFirst
-          ? (12 - Math.min(11, conn.get(it.text))) * 3 + it.cs.length * 0.2 + Math.random() * 2
-          : it.cs.length + (Math.random() - 0.5) * 3
+        // 必ず使いたい語は先に置く（あとに回すと置き場所が無くなるため）
+        k: (req && req.has(it.text) ? 100 : 0)
+          + (hardFirst
+            ? (12 - Math.min(11, conn.get(it.text))) * 3 + it.cs.length * 0.2 + Math.random() * 2
+            : it.cs.length + (Math.random() - 0.5) * 3)
       })).sort((a, b) => b.k - a.k).map(x => x.it);
       const map = new Map();
       const placed = [];
@@ -2705,13 +2855,15 @@
       }
 
       const w = maxC - minC + 1, h = maxR - minR + 1;
-      const score = placed.length * 10000
+      // 「必ず使いたい語が何語入ったか」を最優先で評価する
+      const reqPlaced = req ? placed.filter(p => req.has(p.text)).length : 0;
+      const score = reqPlaced * 200000 + placed.length * 10000
         - w * h * (limit ? 0.4 : 2) - Math.abs(w - h) * (limit ? 4 : 20);
-      return { placed, failed: failed.map(x => x.text), score, w, h };
+      return { placed, failed: failed.map(x => x.text), score, w, h, reqPlaced };
     }
 
     // 何回も試して、いちばんよい形を採用する
-    function generateLayout(words, tries, budgetMs) {
+    function generateLayout(words, tries, budgetMs, req) {
       const all = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
       // 上限をこえる長さの語は、そもそも入らない
       const tooLong = state.maxSize ? all.filter(x => x.cs.length > state.maxSize) : [];
@@ -2727,9 +2879,10 @@
       const budget = budgetMs || 1800;
       const t0 = Date.now();
       for (let t = 0; t < limit; t++) {
-        const r = tryLayout(items, conn, state.maxSize);
+        const r = tryLayout(items, conn, state.maxSize, req);
         if (!best || r.score > best.score) best = r;
         if (best.failed.length === 0 && !tooLong.length && tries) break;   // 検証用：全部入ればすぐ切り上げる
+        if (req && tries && best.failed.every(t => !req.has(t))) break;    // 必要な語が全部入ったら切り上げ
         if (Date.now() - t0 > budget) break; // 時間がかかりすぎないように打ち切る
       }
       if (best && tooLong.length) best.failed = best.failed.concat(tooLong.map(x => x.text));
