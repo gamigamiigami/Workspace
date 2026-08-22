@@ -6,6 +6,43 @@
 
 ---
 
+### [汎用] サーバーなしで「作った問題を配って解いてもらう」— URLにデータを載せる
+
+**概要：** 静的HTML（GitHub Pages）だけで、作った問題を相手に配って解いてもらえる。
+**問題データをURLの # 以降に入れる**だけでよい。サーバーもデータベースも要らない。
+
+**実装：**
+```js
+// 送る側：必要最小限だけを詰める（座標は左上を0にそろえて数字を小さくする）
+function encodePayload(o) {
+  const bytes = new TextEncoder().encode(JSON.stringify(o));
+  let bin = ''; bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); // URLセーフに
+}
+const url = location.href.split('#')[0] + '#p=' + encodePayload(data);
+
+// 受け取る側：起動時に判定して、解く人用の画面に切り替える
+if (location.hash.startsWith('#p=')) { startSolve(decodePayload(location.hash.slice(3))); return; }
+```
+
+**ハマりどころ（両方とも実際に踏んだ）：**
+- `location.origin` は **file:// では "null"** になる → `location.href.split('#')[0]` を使う
+- 同じページで `location.href = 同じURL+別の#` に変えても**読み込み直されない**（同一ドキュメント内遷移）
+  → 自分で `location.reload()` を呼ぶ
+- 日本語をそのまま `encodeURIComponent` すると1文字9バイトに膨らむ。**UTF-8→base64**なら約1.4倍で済む
+
+**サイズ感：** 10語＋カギありのクロスワードで約1,400文字。
+LINE・メールは問題なし。QRコードにするなら1,000文字以内を目安に減らす。
+
+**限界（正直に伝えること）：** 答えもURLに入っているので、調べれば見える。
+賞品つきの謎解きなど、本気で秘密にしたい用途には向かない。
+
+**おまけ：** 印刷で二重枠を出すなら `border: 3px double` が確実（box-shadow は印刷で消えることがある）。
+
+**使用例：** projects/crossword/index.html の解答モード（2026-08-21）
+
+---
+
 ### [教育] 教育向けコンテンツの難易度判定：「漢字難易度」と「語彙難易度」は別軸
 
 **背景：** 初期計画では「小学校配当漢字で書ける語に限定」して難易度を判定しようとした。しかし実装検証で、小学生が日常的に知っている語（「ちがう・ふつう・むすめ」など）が、たまたま配当漢字の範囲外の漢字で書かれるという理由だけで落ちていることが判明。
