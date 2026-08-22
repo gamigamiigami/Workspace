@@ -682,8 +682,6 @@
         <textarea id="linkText" style="width:100%;min-height:80px;font-size:12px;" spellcheck="false"></textarea>
         <div class="row" style="margin-top:6px;">
           <button id="btnCopyLink" class="sub small">リンクをコピー</button>
-          <button id="btnShorten" class="sub small">短いリンクにする（無料）</button>
-          <button id="btnLongLink" class="sub small" style="display:none;">長いリンクに戻す</button>
           <button id="btnCloseLink" class="sub small">閉じる</button>
         </div>
         <p id="shortMsg" class="hint-line"></p>
@@ -700,6 +698,7 @@
       <div class="row">
         <button id="btnSaveWork">作品として保存</button>
         <button id="btnOpenWork" class="sub">保存した作品を開く</button>
+        <button id="btnNewWork" class="sub">新しく作る</button>
       </div>
       <div id="workListBox" style="display:none;margin-top:10px;">
         <div id="workListItems"></div>
@@ -3097,6 +3096,12 @@ var qrcode = function() {
 
   <script>
     // ===== 定数・設定 =====
+
+    // 短い配布リンクを使うためのサーバーのアドレス。
+    // 空のままなら、今まで通り「問題データを全部URLに入れた長いリンク」になる（外部に一切つながらない）。
+    // 設定のしかたは server/README.md を参照。
+    const SHARE_API = '';
+
     const STORAGE_KEY = 'crossword-supporter-v1';
     const GRID = 41;          // 内部の作業スペース（画面に見せるのは「使っている範囲」だけ）
     const VIEW_MARGIN = 2;    // 使っている範囲の外側に見せる余白（マス）
@@ -3108,7 +3113,9 @@ var qrcode = function() {
 
     // ===== 状態管理 =====
     const state = {
-      workId: null,   // 「作品として保存」した先のID（未保存ならnull）
+      workId: null,      // 「作品として保存」した先のID（未保存ならnull）
+      shareId: null,     // 配布リンクの合言葉（サーバーに保存したときだけ入る）
+      shareToken: '',    // その問題を書き換えるための合鍵
       title: '',
       words: [],      // { id, text }
       keyword: '',
@@ -4240,13 +4247,16 @@ var qrcode = function() {
         marks: state.marks, colors: state.colors, borders: state.borders, clues: state.clues,
         hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill,
         maxSize: state.maxSize,
-        puzzleType: state.puzzleType, hintCount: state.hintCount, hints: state.hints
+        puzzleType: state.puzzleType, hintCount: state.hintCount, hints: state.hints,
+        shareId: state.shareId, shareToken: state.shareToken
       };
     }
 
     function applyData(d) {
       if (!d) return false;
       state.workId = null;
+      state.shareId = d.shareId || null;
+      state.shareToken = d.shareToken || '';
       state.title = d.title || '';
       state.words = Array.isArray(d.words) ? d.words : [];
       state.keyword = d.keyword || '';
@@ -4312,6 +4322,55 @@ var qrcode = function() {
       }
     }
 
+    // ===== 「保存していない変更があるか」の判定 =====
+    // 最後に保存（または読み込み）した時点の内容を覚えておき、今の内容と見くらべる
+    let savedSig = '';
+
+    function workSignature() {
+      const d = serialize();
+      // 配布リンクの合言葉は作品の中身ではないので、変更の判定からは外す
+      delete d.shareId;
+      delete d.shareToken;
+      return JSON.stringify(d);
+    }
+
+    function markSaved() { savedSig = workSignature(); }
+
+    function hasUnsavedChanges() {
+      // まっさらな状態（まだ何も作っていない）なら、確認する必要はない
+      const empty = !state.placed.length && !state.words.length && !state.title && !state.keyword;
+      if (empty) return false;
+      return workSignature() !== savedSig;
+    }
+
+    // ===== 新しく作りなおす =====
+    function newWork() {
+      if (hasUnsavedChanges()) {
+        const name = state.title ? '「' + state.title + '」' : 'いまの内容';
+        const ok = confirm(
+          name + 'は、まだ保存されていません。\n\n' +
+          'このまま新しく作ると、いまの内容は消えます。よろしいですか？\n\n' +
+          '※残したいときは「キャンセル」を押して、「作品として保存」をしてから、もう一度この操作をしてください。'
+        );
+        if (!ok) return;
+      }
+      applyData({
+        title: '', words: [], keyword: '',
+        // マイ辞書（登録してきた語彙）と盤面の大きさの設定は、育ててきたものなので引き継ぐ
+        myDict: state.myDict, meta: state.meta, maxSize: state.maxSize,
+        placed: [], marks: {}, colors: {}, borders: {}, clues: {},
+        hideLetters: false, showNums: true, blackFill: false,
+        puzzleType: state.puzzleType, hintCount: state.hintCount, hints: []
+      });
+      history = [];
+      $('#linkBox').style.display = 'none';
+      $('#workListBox').style.display = 'none';
+      markSaved();
+      saveLocal();
+      showTab('words');
+      showMsg('新しく作りはじめます。マイ辞書と盤面の大きさの設定はそのまま残しています。', 'ok');
+    }
+
     function saveAsWork() {
       const list = loadWorks();
       const title = state.title || '（無題）';
@@ -4328,6 +4387,7 @@ var qrcode = function() {
         state.workId = item.id;
       }
       if (saveWorks(list)) {
+        markSaved();
         showMsg('「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。', 'ok');
       }
     }
@@ -4336,10 +4396,22 @@ var qrcode = function() {
       const list = loadWorks();
       const item = list.find(w => w.id === id);
       if (!item) return;
+      if (item.id !== state.workId && hasUnsavedChanges()) {
+        const name = state.title ? '「' + state.title + '」' : 'いまの内容';
+        const ok = confirm(
+          name + 'は、まだ保存されていません。\n\n' +
+          '「' + (item.title || '（無題）') + '」を開くと、いまの内容は消えます。よろしいですか？\n\n' +
+          '※残したいときは「キャンセル」を押して、「作品として保存」をしてください。'
+        );
+        if (!ok) return;
+      }
       applyData(item.data);
       state.workId = item.id;
+      history = [];
+      markSaved();
       saveLocal();
       $('#workListBox').style.display = 'none';
+      $('#linkBox').style.display = 'none';
       showMsg('「' + item.title + '」を開きました。', 'ok');
     }
 
@@ -4878,6 +4950,7 @@ var qrcode = function() {
       $('#btnPrintA').addEventListener('click', () => doPrint(true));
       $('#btnSaveWork').addEventListener('click', saveAsWork);
       $('#btnOpenWork').addEventListener('click', renderWorkList);
+      $('#btnNewWork').addEventListener('click', newWork);
       $('#btnCloseWorkList').addEventListener('click', () => { $('#workListBox').style.display = 'none'; });
       $('#btnExport').addEventListener('click', exportFile);
       $('#btnImport').addEventListener('click', () => $('#fileInput').click());
@@ -4900,8 +4973,6 @@ var qrcode = function() {
           $('#msg').textContent = '文字を選んで手でコピーしてください。';
         }
       });
-      $('#btnShorten').addEventListener('click', shortenLink);
-      $('#btnLongLink').addEventListener('click', restoreLongLink);
       $('#btnCloseLink').addEventListener('click', () => { $('#linkBox').style.display = 'none'; });
       $('#btnShowData').addEventListener('click', showDataBox);
       $('#btnCopyData').addEventListener('click', copyDataText);
@@ -5703,101 +5774,96 @@ var qrcode = function() {
       const data = solvePayload();
       if (!data) { $('#msg').textContent = '盤面が空です。先にクロスワードを作ってください。'; return null; }
       const noClue = state.placed.filter(p => !state.clues[p.text]).length;
-      const url = location.href.split('#')[0] + '#' + await encodeShareHash(data);
-      $('#linkText').value = url;
+      const clueWarn = noClue ? '　※カギが空の語が ' + noClue + ' 個あります（解く人が困ります）。' : '';
+      const pageUrl = location.href.split('#')[0].split('?')[0];
+
+      // 長いリンクは、短いリンクが作れなかったときの受け皿として必ず用意しておく
+      longLinkUrl = pageUrl + '#' + await encodeShareHash(data);
+
       $('#linkBox').style.display = 'block';
-      longLinkUrl = url;
       $('#shortMsg').textContent = '';
-      $('#btnLongLink').style.display = 'none';
-      $('#btnShorten').style.display = '';
-      showQrCode(url);
-      $('#msg').textContent = noClue
-        ? 'リンクを作りました。ただしカギが空の語が ' + noClue + ' 個あります（解く人が困ります）。'
-        : 'リンクを作りました。QRコードを写すか、リンクをコピーして配ってください。';
-      return url;
-    }
 
-    // 「長いリンク」は常に手元に残しておく（短縮に失敗しても、いつでも戻せるようにするため）
-    let longLinkUrl = '';
+      const useLong = (url, note) => {
+        $('#linkText').value = url;
+        showQrCode(url);
+        $('#msg').textContent = 'リンクを作りました。' + (note || '') + clueWarn;
+        return url;
+      };
 
-    // 短いリンクにする（is.gd＝無料・登録不要の短縮サービス）
-    //
-    // ここだけは外部のサービスを使う。理由：問題データ（カギの文章）そのものが長さの正体なので、
-    // どれだけ圧縮してもURLは数百文字になる。100文字級にするには、データをどこかに預けて
-    // URLには合言葉だけを入れるしかない。
-    //
-    // ただし外部サービスは「学校のネットで弾かれる」「将来サービスが終わる」危険があるため、
-    // 長いリンクは必ず残し、失敗したらそのまま長いリンクで使えるようにしてある。
-    // is.gd に短縮をお願いする。
-    // fetch ではなく <script> タグで呼ぶ（JSONP という古くからの方式）。
-    // 理由：is.gd は CORS に対応していないため、fetch だとブラウザ側が通信を止めてしまい
-    //       「Failed to fetch」になる。<script> での読み込みは CORS の対象外なので通る。
-    function requestShortUrl(longUrl, timeoutMs) {
-      return new Promise((resolve, reject) => {
-        const cbName = 'cwShortCb' + Date.now() + Math.floor(Math.random() * 10000);
-        const script = document.createElement('script');
-        let finished = false;
-        const cleanup = () => {
-          clearTimeout(timer);
-          if (script.parentNode) script.parentNode.removeChild(script);
-          try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
-        };
-        const timer = setTimeout(() => {
-          if (finished) return;
-          finished = true; cleanup();
-          reject(new Error('応答がありません（時間切れ）'));
-        }, timeoutMs || 15000);
-        window[cbName] = (data) => {
-          if (finished) return;
-          finished = true; cleanup();
-          if (data && data.shorturl) resolve(data.shorturl);
-          else reject(new Error(data && data.errormessage ? data.errormessage : '短縮できませんでした'));
-        };
-        script.onerror = () => {
-          if (finished) return;
-          finished = true; cleanup();
-          reject(new Error('サービスにつながりません'));
-        };
-        script.src = 'https://is.gd/create.php?format=json&callback=' + cbName
-          + '&url=' + encodeURIComponent(longUrl);
-        document.body.appendChild(script);
-      });
-    }
+      // サーバーが未設定なら、今まで通り長いリンク（外部に一切つながらない）
+      if (!SHARE_API) return useLong(longLinkUrl, 'QRコードを写すか、リンクをコピーして配ってください。');
 
-    async function shortenLink() {
-      if (!longLinkUrl) return;
-      const btn = $('#btnShorten');
-      const msg = $('#shortMsg');
-      btn.disabled = true;
-      msg.textContent = '短くしています…（少し待ってください）';
+      $('#msg').textContent = '短いリンクを作っています…';
       try {
-        const shortUrl = await requestShortUrl(longLinkUrl, 15000);
+        const id = await saveToServer(data);
+        const shortUrl = pageUrl + '?q=' + id;
         $('#linkText').value = shortUrl;
         showQrCode(shortUrl);
-        $('#btnLongLink').style.display = '';
-        btn.style.display = 'none';
-        msg.innerHTML = '短くしました（<b>' + shortUrl.length + '文字</b>）。QRコードも短いリンクのものに変わりました。<br>'
-          + '※このリンクは is.gd という外部サービスが中継します。学校のネットが短縮リンクを'
-          + 'ブロックしている場合は開けないことがあるので、<b>配る前に一度お試しください</b>。'
-          + 'うまくいかないときは「長いリンクに戻す」を押せば元に戻ります。';
+        $('#shortMsg').innerHTML = '<b>' + shortUrl.length + '文字</b>の短いリンクです。'
+          + 'このあとカギの誤字などを直して作り直しても、<b>同じリンクのまま</b>中身が新しくなります。';
+        $('#msg').textContent = 'リンクを作りました。QRコードを写すか、リンクをコピーして配ってください。' + clueWarn;
+        return shortUrl;
       } catch (e) {
-        msg.innerHTML = '<span style="color:var(--ng)">短くできませんでした</span>（'
+        $('#shortMsg').innerHTML = '<span style="color:var(--ng)">短いリンクは作れませんでした</span>（'
           + escapeHtml(String(e.message || e)) + '）。<br>'
-          + '短縮サービス（is.gd）につながらないだけで、<b>ネットの不調とは限りません</b>。'
-          + '学校や職場のネットがブロックしていることもあります。<br>'
-          + '上の<b>長いリンクとQRコードはそのまま使えます</b>ので、そちらを配ってください。';
+          + '代わりに<b>長いリンク</b>を出しました。こちらはサーバーを使わないので確実に開けます。';
+        return useLong(longLinkUrl, 'QRコードを写すか、リンクをコピーして配ってください。');
       }
-      btn.disabled = false;
+    }
+    // 「長いリンク」は常に手元に残しておく（短いリンクが作れなくても必ず配れるようにするため）
+    let longLinkUrl = '';
+
+    // ===== 短い配布リンク =====
+    //
+    // 問題データ（とくにカギの文章）そのものが長さの正体なので、圧縮しても数百文字になる。
+    // そこで、問題データはサーバーにあずけ、URLには短い合言葉だけを入れる。
+    //
+    // サーバー（SHARE_API）が未設定のときは、今まで通り長いリンクを使う＝外部に一切つながらない。
+
+    // 保存した問題は「合言葉(id)」と「書き換え用の合鍵(token)」で管理する。
+    // 合鍵を持っている間は、同じリンクのまま中身を直せる（配ったあとの誤字修正ができる）。
+    async function saveToServer(payload) {
+      const base = SHARE_API.replace(/\/+$/, '');
+      const body = JSON.stringify(payload);
+
+      // すでに保存したことがある問題なら、同じ合言葉のまま上書きする
+      if (state.shareId && state.shareToken) {
+        const res = await fetch(base + '/p/' + encodeURIComponent(state.shareId), {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'x-token': state.shareToken },
+          body
+        });
+        if (res.ok) return state.shareId;
+        // 合鍵が合わない・問題が消えているなどのときは、新しく作り直す
+        if (res.status !== 403 && res.status !== 404) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || ('保存に失敗しました（' + res.status + '）'));
+        }
+      }
+
+      const res = await fetch(base + '/p', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || ('保存に失敗しました（' + res.status + '）'));
+      }
+      const out = await res.json();
+      if (!out || !out.id) throw new Error('サーバーの応答が読めませんでした。');
+      state.shareId = out.id;
+      state.shareToken = out.token || '';
+      saveLocal();
+      return out.id;
     }
 
-    // 短いリンクをやめて、元の長いリンクに戻す
-    function restoreLongLink() {
-      if (!longLinkUrl) return;
-      $('#linkText').value = longLinkUrl;
-      showQrCode(longLinkUrl);
-      $('#btnLongLink').style.display = 'none';
-      $('#btnShorten').style.display = '';
-      $('#shortMsg').textContent = '長いリンクに戻しました。このリンクは外部サービスを使わないので、必ず開けます。';
+    // 合言葉から問題を取り出す（配布リンクを開いた人の側で動く）
+    async function loadFromServer(id) {
+      const base = SHARE_API.replace(/\/+$/, '');
+      const res = await fetch(base + '/p/' + encodeURIComponent(id));
+      if (!res.ok) throw new Error('この問題は見つかりませんでした（' + res.status + '）');
+      return await res.json();
     }
 
     // リンクをQRコードにして表示する（外部通信なし・ブラウザ内だけで生成）
@@ -6196,9 +6262,45 @@ var qrcode = function() {
       bindEvents();
       setMode('place');
       showTab('words');
+      markSaved();   // 今の内容を「保存済み」の基準にする（開いた直後にいきなり確認が出ないように）
+    }
+
+    // 短いリンク（?q=合言葉）で読み込んでいる間に出す画面。
+    // 本体のHTMLは壊さずに、上にかぶせるだけにする（読み込めたら消して、解く画面をそのまま使う）
+    function showOverlay(text) {
+      let el = document.getElementById('loadOverlay');
+      if (!el) {
+        el = document.createElement('div');
+        el.id = 'loadOverlay';
+        el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#fff;display:flex;'
+          + 'align-items:center;justify-content:center;padding:24px;text-align:center;'
+          + 'font-size:16px;line-height:1.8;color:#5c6672;white-space:pre-wrap;';
+        document.body.appendChild(el);
+      }
+      el.textContent = text;
+    }
+
+    function hideOverlay() {
+      const el = document.getElementById('loadOverlay');
+      if (el) el.remove();
     }
 
     function init() {
+      // 短い配布リンク（?q=合言葉）で開かれたときは、サーバーから問題を取り出して解く画面にする
+      const q = new URLSearchParams(location.search).get('q');
+      if (q && SHARE_API) {
+        showOverlay('問題を読み込んでいます…');
+        loadFromServer(q).then(
+          data => { hideOverlay(); startSolve(data, 'q=' + q); },
+          err => {
+            showOverlay('この問題を開けませんでした。\n'
+              + (err && err.message ? err.message : '')
+              + '\n\nリンクが正しいか、作った先生に確認してください。');
+          }
+        );
+        return;
+      }
+
       // 配布リンク（#g=...圧縮 / #p=...無圧縮）で開かれたときは、解く人のための画面にする
       const isGz = location.hash.startsWith('#g=');
       const isPlain = location.hash.startsWith('#p=');
