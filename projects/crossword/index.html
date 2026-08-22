@@ -490,6 +490,21 @@
         <button id="btnRegenerate" class="sub">別の形にする</button>
         <button id="btnUndo" class="sub" disabled>元に戻す</button>
       </div>
+      <div class="row">
+        <label for="genSize">盤面の大きさ</label>
+        <select id="genSize">
+          <option value="0">制限なし</option>
+          <option value="5">5×5まで</option>
+          <option value="6">6×6まで</option>
+          <option value="7">7×7まで</option>
+          <option value="8">8×8まで</option>
+          <option value="9">9×9まで</option>
+          <option value="10">10×10まで</option>
+          <option value="12">12×12まで</option>
+          <option value="15">15×15まで</option>
+        </select>
+        <span class="hint">手で置くときも、この大きさを守ります</span>
+      </div>
       <p id="genResult" class="hint-line"></p>
       <div class="row" id="bridgeBtns"></div>
       <div id="bridgeBox" style="display:none;"></div>
@@ -707,6 +722,7 @@
       hideLetters: false,
       showNums: true,
       blackFill: false,
+      maxSize: 0,     // 盤面の大きさの上限（0＝制限なし）
       freePlace: false,
       dir: 'across',
       mode: 'place',  // 'place'（ワードを置く） / 'mark'（記号を入れる）
@@ -802,6 +818,22 @@
       return { map, conflicts };
     }
 
+    // 盤面の外枠を求める（同じ map なら計算し直さない）
+    let _boundsCache = { map: null, b: null };
+    function boundsOf(map) {
+      if (_boundsCache.map === map) return _boundsCache.b;
+      let minR = Infinity, maxR = -Infinity, minC = Infinity, maxC = -Infinity;
+      for (const k of map.keys()) {
+        const i = k.indexOf(',');
+        const r = +k.slice(0, i), c = +k.slice(i + 1);
+        if (r < minR) minR = r; if (r > maxR) maxR = r;
+        if (c < minC) minC = c; if (c > maxC) maxC = c;
+      }
+      const b = map.size ? { minR, maxR, minC, maxC } : null;
+      _boundsCache = { map, b };
+      return b;
+    }
+
     // ある置き方ができるかどうかを判定する（本格クロスワード式：濁点・小さい字は別の文字）
     function validate(text, r, c, dir, ignoreId, mapIn) {
       const cs = chars(text);
@@ -828,6 +860,19 @@
       if (map.has(beforeK)) return { ok: false, reason: '語のすぐ前に文字が続いています' };
       if (map.has(afterK)) return { ok: false, reason: '語のすぐ後ろに文字が続いています' };
 
+      // 盤面の大きさの上限を守る
+      if (state.maxSize) {
+        if (cs.length > state.maxSize) {
+          return { ok: false, reason: '「' + text + '」は ' + cs.length + ' 文字なので、'
+            + state.maxSize + '×' + state.maxSize + ' の盤面に入りません' };
+        }
+        const bb = boundsOf(map);
+        const w2 = bb ? Math.max(bb.maxC, ec) - Math.min(bb.minC, c) + 1 : cs.length;
+        const h2 = bb ? Math.max(bb.maxR, er) - Math.min(bb.minR, r) + 1 : 1;
+        if (w2 > state.maxSize || h2 > state.maxSize) {
+          return { ok: false, reason: '盤面が ' + state.maxSize + '×' + state.maxSize + ' をこえてしまいます' };
+        }
+      }
       const others = state.placed.filter(p => p.id !== ignoreId).length;
       if (others > 0 && cross === 0 && !state.freePlace) {
         return { ok: false, reason: 'ほかの語と交差していません（「はなれた場所にも置く」をONにすると置けます）' };
@@ -1523,6 +1568,11 @@
         clearCycle();
         showMsg(state.selWordId ? '「' + p.text + '」を選びました。光ったマスをタップすると置けます。' : '');
         refresh();
+        if (state.selWordId && candByCell.size === 0) {
+          showMsg('「' + p.text + '」を置ける場所がありません。'
+            + (state.maxSize ? '盤面の大きさ（' + state.maxSize + '×' + state.maxSize + 'まで）を広げるか、' : '')
+            + '②つくるで「つなぐ語をさがす」を使ってください。', 'ng');
+        }
         return;
       }
       if (p.tapKind === 'cand') { placeFromCandidate(p.k); return; }
@@ -1779,7 +1829,8 @@
         myDict: state.myDict, meta: state.meta,
         placed: state.placed,
         marks: state.marks, colors: state.colors, borders: state.borders, clues: state.clues,
-        hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill
+        hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill,
+        maxSize: state.maxSize
       };
     }
 
@@ -1798,6 +1849,8 @@
       state.hideLetters = !!d.hideLetters;
       state.showNums = d.showNums !== false;
       state.blackFill = !!d.blackFill;
+      state.maxSize = Number(d.maxSize) || 0;
+      $('#genSize').value = String(state.maxSize);
       state.selWordId = null;
       state.selPlacedId = null;
       clearCycle();
@@ -2135,6 +2188,15 @@
       $('#blackFill').addEventListener('change', (e) => {
         state.blackFill = e.target.checked; refresh();
       });
+      $('#genSize').addEventListener('change', (e) => {
+        state.maxSize = Number(e.target.value) || 0;
+        clearCycle(); refresh();
+        const bb = boundingBox();
+        if (state.maxSize && bb
+            && (bb.maxC - bb.minC + 1 > state.maxSize || bb.maxR - bb.minR + 1 > state.maxSize)) {
+          showMsg('今の盤面は決めた大きさをこえています。「自動で作る」を押すと入れ直します。', 'ng');
+        }
+      });
       $('#freePlace').addEventListener('change', (e) => {
         state.freePlace = e.target.checked;
         clearCycle(); refresh();
@@ -2406,8 +2468,8 @@
       return m;
     }
 
-    // 1回ぶんの組み上げ
-    function tryLayout(items, conn) {
+    // 1回ぶんの組み上げ（limit＝盤面の大きさの上限。0なら制限なし）
+    function tryLayout(items, conn, limit) {
       // 並べる順番を2通り試す：
       //  ・長い語から置く（ふつうはこれがうまくいく）
       //  ・つながりにくい語から置く（1文字でしかつながらない語は、後回しにすると置き場所が無くなる）
@@ -2460,7 +2522,11 @@
               const ec = sc + (dir === 'across' ? it.cs.length - 1 : 0);
               const w = Math.max(maxC, ec) - Math.min(minC, sc) + 1;
               const h = Math.max(maxR, er) - Math.min(minR, sr) + 1;
-              const score = cross * 14 - w * h * 0.06 - Math.abs(w - h) * 1.2;
+              if (limit && (w > limit || h > limit)) continue;   // 決めた大きさをこえない
+              // 上限があるときは、その中いっぱいに使ってよいので「小さくまとめる」評価を弱める
+              const areaPenalty = limit ? 0.008 : 0.06;
+              const shapePenalty = limit ? 0.2 : 1.2;
+              const score = cross * 14 - w * h * areaPenalty - Math.abs(w - h) * shapePenalty;
               cands.push({ r: sr, c: sc, dir, score, er, ec });
             }
           }
@@ -2487,25 +2553,34 @@
       }
 
       const w = maxC - minC + 1, h = maxR - minR + 1;
-      const score = placed.length * 10000 - w * h * 2 - Math.abs(w - h) * 20;
+      const score = placed.length * 10000
+        - w * h * (limit ? 0.4 : 2) - Math.abs(w - h) * (limit ? 4 : 20);
       return { placed, failed: failed.map(x => x.text), score, w, h };
     }
 
     // 何回も試して、いちばんよい形を採用する
     function generateLayout(words, tries, budgetMs) {
-      const items = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
-      if (items.length === 0) return null;
+      const all = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
+      // 上限をこえる長さの語は、そもそも入らない
+      const tooLong = state.maxSize ? all.filter(x => x.cs.length > state.maxSize) : [];
+      const items = state.maxSize ? all.filter(x => x.cs.length <= state.maxSize) : all;
+      if (items.length === 0) {
+        return tooLong.length
+          ? { placed: [], failed: tooLong.map(x => x.text), score: -1, w: 0, h: 0 }
+          : null;
+      }
       let best = null;
       const conn = connectivity(items);
       const limit = tries || GEN_TRIES;
       const budget = budgetMs || 1800;
       const t0 = Date.now();
       for (let t = 0; t < limit; t++) {
-        const r = tryLayout(items, conn);
+        const r = tryLayout(items, conn, state.maxSize);
         if (!best || r.score > best.score) best = r;
-        if (best.failed.length === 0 && tries) break;   // 検証用：全部入ればすぐ切り上げる
+        if (best.failed.length === 0 && !tooLong.length && tries) break;   // 検証用：全部入ればすぐ切り上げる
         if (Date.now() - t0 > budget) break; // 時間がかかりすぎないように打ち切る
       }
+      if (best && tooLong.length) best.failed = best.failed.concat(tooLong.map(x => x.text));
       return best;
     }
 
@@ -2596,10 +2671,12 @@
       refresh();
 
       const left = res.failed.concat(tooShort);
-      let msg = res.placed.length + ' 語 / たて' + res.h + '×よこ' + res.w + 'マス';
+      let msg = res.placed.length + ' 語 / たて' + res.h + '×よこ' + res.w + 'マス'
+        + (state.maxSize ? '（' + state.maxSize + '×' + state.maxSize + 'まで）' : '');
       if (left.length) {
         msg += '　<span style="color:var(--ng)">入らなかった：' + escapeHtml(left.join('・'))
-          + '</span>（「別の形にする」で入ることがあります）';
+          + '</span>（「別の形にする」で入ることがあります'
+          + (state.maxSize ? '。盤面の大きさを広げると入りやすくなります' : '') + '）';
       } else {
         msg += '　<span style="color:var(--ok);font-weight:700;">全部入りました！</span>';
       }
