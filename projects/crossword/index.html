@@ -200,7 +200,7 @@
     /* 「しあげ」では方眼を消して、できあがりの形だけを見せる */
     #boardArea.plain #gridWrap { background: transparent; }
     #boardArea.plain .cell { background: transparent; }
-    #boardArea.plain .cell.filled { background: var(--paper); }
+    #boardArea.plain .cell.filled { background: var(--cellbg, var(--paper)); }
     #boardArea.plain .cell.blank-black { background: #22282f; }
     #boardArea #boardMsg, #boardArea #warnings { text-align: center; }
     #gridWrap {
@@ -221,7 +221,8 @@
       user-select: none;
     }
     /* 語が入っているマスだけを枠線で浮き上がらせる（クロスワードの形が見えるように） */
-    .cell.filled { background: var(--paper); box-shadow: inset 0 0 0 1px var(--navy); }
+    /* 色は --cellbg で渡す（しあげタブの指定に打ち消されないようにするため） */
+    .cell.filled { background: var(--cellbg, var(--paper)); box-shadow: inset 0 0 0 1px var(--navy); }
     .cell.blank-black { background: #22282f; }
     .cell.cand { background: #fff2cd; box-shadow: inset 0 0 0 2px var(--accent); cursor: pointer; }
     .cell.selword { background: #fff6e0; }
@@ -230,12 +231,12 @@
     .cell.preview-ok { background: #cdebd9; box-shadow: inset 0 0 0 2px var(--ok); color: var(--ok); }
     .cell.preview-ng { background: var(--ng-bg); box-shadow: inset 0 0 0 2px var(--ng); color: var(--ng); }
     /* マスの色（謎解きの「赤いマスの文字を読む」などに使う） */
-    .cell.c-y { background: #fff3bf; }
-    .cell.c-r { background: #ffd9d9; }
-    .cell.c-b { background: #d8e6ff; }
-    .cell.c-g { background: #d6f0dd; }
-    .cell.c-p { background: #f0dcf5; }
-    .cell.c-k { background: #dde2e8; }
+    .cell.c-y { --cellbg: #fff3bf; background: var(--cellbg); }
+    .cell.c-r { --cellbg: #ffd9d9; background: var(--cellbg); }
+    .cell.c-b { --cellbg: #d8e6ff; background: var(--cellbg); }
+    .cell.c-g { --cellbg: #d6f0dd; background: var(--cellbg); }
+    .cell.c-p { --cellbg: #f0dcf5; background: var(--cellbg); }
+    .cell.c-k { --cellbg: #dde2e8; background: var(--cellbg); }
     /* 記号を付けたマスは二重マスにして、拾うマスをはっきりさせる */
     .cell.marked { border: 3px double var(--navy); box-shadow: none; }
     .cell.b-none   { border: none; box-shadow: inset 0 0 0 1px var(--navy); }
@@ -328,18 +329,31 @@
       padding: 4px 8px 16px; line-height: 1.6;
     }
 
+    /* ===== 語群（スケルトン） ===== */
+    .wordbank { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .wordbank .row-len { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+    .wordbank .len { font-size: 12px; color: var(--gray); min-width: 56px; }
+    .wordbank .w {
+      background: var(--paper); border: 1px solid var(--line); border-radius: 5px;
+      padding: 2px 8px; font-size: 15px; font-weight: 700; letter-spacing: .06em;
+    }
+    .cell.hintcell { --cellbg: #eef6ff; background: var(--cellbg); }
+
     /* ===== 印刷用エリア（画面では非表示） ===== */
     #printArea { display: none; }
+    @page { size: A4 portrait; margin: 12mm; }
     @media print {
       body { background: #fff; padding: 0; max-width: none; }
+      /* A4 1枚に収める（マスの大きさと文字の大きさは印刷時に計算して入れる） */
+      #printArea { font-size: var(--pfont, 10pt); line-height: 1.35; }
       header, .panel, #tabs, #boardArea, #credit { display: none !important; }
       #printArea { display: block !important; }
       .print-title { text-align: center; font-size: 18px; margin: 8px 0 12px; }
       .print-grid { border-collapse: collapse; margin: 0 auto 14px; }
       .print-grid td {
-        width: 30px; height: 30px; border: 1px solid #000;
+        width: var(--pcell, 8mm); height: var(--pcell, 8mm); border: 1px solid #000;
         text-align: center; vertical-align: middle;
-        font-size: 17px; font-weight: 700; position: relative;
+        font-size: calc(var(--pcell, 8mm) * 0.60); font-weight: 700; position: relative;
       }
       .print-grid td.black { background: #000; }
       .print-grid td.blank { border: none; background: #fff; }
@@ -352,15 +366,30 @@
       .print-grid td.c-b { background: #d8e6ff; } .print-grid td.c-g { background: #d6f0dd; }
       .print-grid td.c-p { background: #f0dcf5; } .print-grid td.c-k { background: #dde2e8; }
       .print-grid td .m {
-        position: absolute; top: 0; left: 2px; font-size: 9px; font-weight: 700;
+        position: absolute; top: 0; left: 1px;
+        font-size: calc(var(--pcell, 8mm) * 0.30); font-weight: 700; line-height: 1;
       }
       .print-kw { margin: 0 auto 12px; text-align: center; }
       .print-kw table { border-collapse: collapse; margin: 4px auto; }
-      .print-kw td { width: 30px; height: 30px; border: 1px solid #000; text-align: center; font-size: 17px; }
-      .print-kw td.lab { border: none; font-size: 10px; height: 14px; }
-      .print-clues { display: flex; gap: 24px; font-size: 12px; }
+      .print-kw td {
+        width: var(--pcell, 8mm); height: var(--pcell, 8mm); border: 1px solid #000;
+        text-align: center; font-size: calc(var(--pcell, 8mm) * 0.60);
+      }
+      .print-kw td.lab { border: none; font-size: calc(var(--pcell, 8mm) * 0.32); height: 4mm; }
+      .print-title { margin: 0 0 3mm; }
+      .print-clues { column-count: 2; column-gap: 8mm; font-size: var(--pfont, 10pt); }
+      .print-clues > div { break-inside: avoid; margin-bottom: 2mm; }
       .print-clues ul { list-style: none; }
-      .print-clues li { margin-bottom: 3px; }
+      .print-clues li { margin-bottom: 0.6mm; break-inside: avoid; }
+      .print-clues strong { display: block; border-bottom: 1px solid #000; margin-bottom: 1mm; }
+      .print-bank { font-size: var(--pfont, 10pt); }
+      .print-bank .bank-row { margin-bottom: 1.2mm; break-inside: avoid; }
+      .print-bank .bank-len { font-weight: 700; margin-right: 2mm; }
+      .print-bank .bank-w {
+        display: inline-block; border: 1px solid #000; border-radius: 1mm;
+        padding: 0.3mm 1.6mm; margin: 0 1.2mm 1.2mm 0; font-weight: 700;
+      }
+      .print-note { font-size: var(--pfont, 10pt); margin-bottom: 2mm; }
     }
   </style>
 </head>
@@ -563,6 +592,27 @@
   <!-- ===== 3. しあげ ===== -->
   <section class="tab-panel" data-tab="finish" hidden>
     <div class="panel">
+      <h2>問題の種類</h2>
+      <div class="row">
+        <button id="typeCross" class="sub" aria-pressed="true">クロスワード<span class="hint">カギを読んで埋める</span></button>
+        <button id="typeSkel" class="sub" aria-pressed="false">スケルトン<span class="hint">語群を当てはめる</span></button>
+      </div>
+      <div class="row" id="skelOptions" hidden>
+        <label for="hintCount">最初から見せるマス</label>
+        <select id="hintCount">
+          <option value="0">なし</option>
+          <option value="1">1マス</option>
+          <option value="2">2マス</option>
+          <option value="3">3マス</option>
+          <option value="4">4マス</option>
+        </select>
+        <button id="btnRepickHint" class="sub small">別のマスにする</button>
+      </div>
+      <p id="typeNote" class="hint-line"></p>
+      <div id="skelPreview"></div>
+    </div>
+
+    <div class="panel">
       <h2>キーワードの記号 <span class="hint">二重マスの文字を記号の順に読むとキーワードになります</span></h2>
       <div class="row">
         <button id="btnAutoMark">キーワードに合わせて自動でふる</button>
@@ -603,7 +653,7 @@
         白黒印刷では色が濃さの違いになります（1色だけ使うのがおすすめ）。</p>
     </div>
 
-    <div class="panel">
+    <div class="panel" id="cluePanel">
       <h2>カギ（ヒント）</h2>
       <div id="clueList"></div>
     </div>
@@ -673,8 +723,9 @@
     </header>
     <div id="solveBoardWrap">
       <div id="solveGrid"></div>
-      <input id="solveInput" class="hidden" type="text" maxlength="1" autocomplete="off"
-             autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="マスの文字">
+      <input id="solveInput" class="hidden" type="text" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false"
+             enterkeyhint="next" aria-label="マスの文字">
     </div>
     <p id="solveMsg"></p>
     <div class="panel">
@@ -691,12 +742,16 @@
       <div id="solveKwRow"></div>
       <p id="solveKwMsg"></p>
     </div>
-    <div class="panel">
+    <div class="panel" id="solveCluePanel">
       <h2>カギ（ヒント）</h2>
       <div class="clue-cols">
         <div class="clue-col"><h3>ヨコのカギ</h3><div id="solveAcross"></div></div>
         <div class="clue-col"><h3>タテのカギ</h3><div id="solveDown"></div></div>
       </div>
+    </div>
+    <div class="panel" id="solveBankPanel" hidden>
+      <h2>語群 <span class="hint">このことばを、マスに当てはめます</span></h2>
+      <div id="solveBank"></div>
     </div>
   </div>
 
@@ -748,6 +803,9 @@
       showNums: true,
       blackFill: false,
       maxSize: 0,     // 盤面の大きさの上限（0＝制限なし）
+      puzzleType: 'crossword',  // 'crossword'＝カギから語を埋める／'skeleton'＝語群を当てはめる
+      hintCount: 1,   // スケルトンで最初から見せるマスの数
+      hints: [],      // 最初から見せるマス 'r,c'
       freePlace: false,
       dir: 'across',
       mode: 'place',  // 'place'（ワードを置く） / 'mark'（記号を入れる）
@@ -1101,6 +1159,7 @@
         let ch = '';
         if (cell) { cls.push('filled'); ch = state.hideLetters ? '' : cell.ch; }
         else if (state.blackFill) cls.push('blank-black');
+        if (cell && state.puzzleType === 'skeleton' && state.hints.includes(k)) cls.push('hintcell');
         if (cell && state.colors[k]) cls.push('c-' + state.colors[k]);
         if (cell && state.borders[k]) cls.push('b-' + state.borders[k]);
         else if (cell && state.marks[k]) cls.push('marked');
@@ -1379,6 +1438,7 @@
       renderPlaced();
       renderClues();
       renderMarkCheck();
+      renderTypeInfo();
       $('#btnRemoveWord').disabled = !state.selPlacedId;
       $('#btnRotate').disabled = !state.selPlacedId;
       saveLocal();
@@ -1858,7 +1918,8 @@
         placed: state.placed,
         marks: state.marks, colors: state.colors, borders: state.borders, clues: state.clues,
         hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill,
-        maxSize: state.maxSize
+        maxSize: state.maxSize,
+        puzzleType: state.puzzleType, hintCount: state.hintCount, hints: state.hints
       };
     }
 
@@ -1877,6 +1938,12 @@
       state.hideLetters = !!d.hideLetters;
       state.showNums = d.showNums !== false;
       state.blackFill = !!d.blackFill;
+      state.puzzleType = d.puzzleType === 'skeleton' ? 'skeleton' : 'crossword';
+      state.hintCount = d.hintCount === undefined ? 1 : Number(d.hintCount);
+      state.hints = Array.isArray(d.hints) ? d.hints : [];
+      $('#typeCross').setAttribute('aria-pressed', String(state.puzzleType === 'crossword'));
+      $('#typeSkel').setAttribute('aria-pressed', String(state.puzzleType === 'skeleton'));
+      $('#hintCount').value = String(state.hintCount);
       state.maxSize = Number(d.maxSize) || 0;
       $('#genSize').value = String(state.maxSize);
       $('#genSize2').value = String(state.maxSize);
@@ -1986,6 +2053,68 @@
       }
     }
 
+    // ===== 問題の種類（クロスワード／スケルトン） =====
+    // 盤面に置いた語を、文字数ごとにまとめた「語群」
+    function wordBank() {
+      const seen = new Set();
+      const list = [];
+      state.placed.forEach(p => { if (!seen.has(p.text)) { seen.add(p.text); list.push(p.text); } });
+      const byLen = new Map();
+      list.forEach(t => {
+        const n = chars(t).length;
+        if (!byLen.has(n)) byLen.set(n, []);
+        byLen.get(n).push(t);
+      });
+      return [...byLen.entries()].sort((a, b) => a[0] - b[0])
+        .map(([n, ws]) => ({ n, ws: ws.sort((a, b) => a.localeCompare(b, 'ja')) }));
+    }
+
+    // 最初から見せるマスを選ぶ（語の先頭マスから、なるべく散らして選ぶ）
+    function pickHints(n) {
+      state.hints = [];
+      if (!n || board.map.size === 0) return;
+      const starts = state.placed.map(p => key(p.r, p.c));
+      const pool = [...new Set(starts)].filter(k => board.map.has(k));
+      if (pool.length === 0) return;
+      const shuffledPool = pool.map(k => ({ k, s: Math.random() })).sort((a, b) => a.s - b.s).map(x => x.k);
+      state.hints = shuffledPool.slice(0, Math.min(n, shuffledPool.length));
+    }
+
+    function setPuzzleType(t) {
+      state.puzzleType = t;
+      $('#typeCross').setAttribute('aria-pressed', String(t === 'crossword'));
+      $('#typeSkel').setAttribute('aria-pressed', String(t === 'skeleton'));
+      $('#skelOptions').hidden = t !== 'skeleton';
+      $('#cluePanel').hidden = t === 'skeleton';
+      if (t === 'skeleton' && state.hints.length !== state.hintCount) pickHints(state.hintCount);
+      refresh();
+    }
+
+    function renderTypeInfo() {
+      const note = $('#typeNote');
+      const prev = $('#skelPreview');
+      if (state.puzzleType === 'skeleton') {
+        note.textContent = '語群を見て、どのマスに入るかを考える問題です。カギ（ヒント）は使いません。';
+        const bank = wordBank();
+        prev.innerHTML = '';
+        if (bank.length) {
+          const box = document.createElement('div');
+          box.className = 'wordbank';
+          bank.forEach(({ n, ws }) => {
+            const row = document.createElement('div');
+            row.className = 'row-len';
+            row.innerHTML = '<span class="len">' + n + '文字</span>'
+              + ws.map(w => '<span class="w">' + escapeHtml(w) + '</span>').join('');
+            box.appendChild(row);
+          });
+          prev.appendChild(box);
+        }
+      } else {
+        note.textContent = 'カギ（ヒント）を読んで、マスに言葉を書き込む問題です。';
+        prev.innerHTML = '';
+      }
+    }
+
     // ===== 印刷 =====
     function markEntries() {
       const list = Object.entries(state.marks)
@@ -2010,20 +2139,63 @@
     function buildPrint(withAnswer) {
       const area = $('#printArea');
       const bb = boundingBox();
-      const title = state.title || 'クロスワード';
-      let html = '<h2 class="print-title">' + escapeHtml(title) + (withAnswer ? '（解答）' : '') + '</h2>';
-
+      const title = state.title || (state.puzzleType === 'skeleton' ? 'スケルトン' : 'クロスワード');
       if (!bb) {
-        area.innerHTML = html + '<p>盤面が空です。</p>';
+        area.innerHTML = '<h2 class="print-title">' + escapeHtml(title) + '</h2><p>盤面が空です。</p>';
         return;
       }
+      const gw = bb.maxC - bb.minC + 1;
+      const gh = bb.maxR - bb.minR + 1;
+      const skeleton = state.puzzleType === 'skeleton';
+      const marks = markEntries();
+      const bank = skeleton ? wordBank() : null;
+      const clueList = state.placed.map(p => ({ p, no: numbers[idx(p.r, p.c)] || 0 }))
+        .sort((a, b) => a.no - b.no);
+
+      // --- A4 1枚に収まるように、マスと文字の大きさを決める ---
+      // A4 は 210×297mm。余白 12mm なので、使えるのは 186×273mm
+      const AVAIL_W = 186, AVAIL_H = 273;
+      const titleH = 9;
+      const noteH = skeleton ? 6 : 0;
+      const kwH = marks.length ? 16 : 0;
+      let cell = Math.min(10, (AVAIL_W - 2) / gw);
+      let fontPt = 10;
+      for (let i = 0; i < 30; i++) {
+        const gridH = cell * gh + 4;
+        const rest = AVAIL_H - titleH - noteH - gridH - kwH - 6;
+        const lineMm = fontPt * 0.3528 * 1.5;
+        let needMm;
+        if (skeleton) {
+          // 語群：文字数ごとに1行。長い行は折り返すぶんを見込む
+          needMm = bank.reduce((sum, g) => {
+            const perLine = Math.max(1, Math.floor((AVAIL_W - 20) / ((g.n + 1.6) * fontPt * 0.3528)));
+            return sum + Math.ceil(g.ws.length / perLine) * lineMm + 1;
+          }, 0) + 6;
+        } else {
+          // カギ：2段組。見出し2行ぶんを足す
+          needMm = (Math.ceil(clueList.length / 2) + 2) * lineMm + 4;
+        }
+        if (needMm <= rest) break;
+        if (fontPt > 6.5) fontPt -= 0.5;
+        else if (cell > 4.5) cell -= 0.4;
+        else break;
+      }
+      area.style.setProperty('--pcell', cell.toFixed(2) + 'mm');
+      area.style.setProperty('--pfont', fontPt.toFixed(1) + 'pt');
+
+      let html = '<h2 class="print-title">' + escapeHtml(title) + (withAnswer ? '（解答）' : '') + '</h2>';
+      if (skeleton && !withAnswer) {
+        html += '<p class="print-note">下の語群のことばを、マスに当てはめましょう。'
+          + (state.hints.length ? '色のついたマスは、はじめから入っています。' : '') + '</p>';
+      }
+
       html += '<table class="print-grid"><tbody>';
       for (let r = bb.minR; r <= bb.maxR; r++) {
         html += '<tr>';
         for (let c = bb.minC; c <= bb.maxC; c++) {
-          const cell = board.map.get(key(r, c));
-          if (!cell) { html += '<td class="' + (state.blackFill ? 'black' : 'blank') + '"></td>'; continue; }
           const k2 = key(r, c);
+          const cell2 = board.map.get(k2);
+          if (!cell2) { html += '<td class="' + (state.blackFill ? 'black' : 'blank') + '"></td>'; continue; }
           const mk = state.marks[k2];
           const m = mk ? '<span class="m">' + escapeHtml(mk) + '</span>' : '';
           const cls = [];
@@ -2032,15 +2204,17 @@
           if (bd === 'double') cls.push('dbl');
           else if (bd === 'bold') cls.push('bold');
           else if (bd === 'none') cls.push('plain');
-          html += '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' + m
-            + (withAnswer ? escapeHtml(cell.ch) : '') + '</td>';
+          // スケルトンでは、はじめから見せるマスは問題用紙にも文字を出す
+          const isHint = skeleton && state.hints.includes(k2);
+          if (isHint && !state.colors[k2]) cls.push('c-b');
+          const ch = (withAnswer || isHint) ? escapeHtml(cell2.ch) : '';
+          html += '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' + m + ch + '</td>';
         }
         html += '</tr>';
       }
       html += '</tbody></table>';
 
-      // キーワードの解答欄（記号を並べたもの）
-      const marks = markEntries();
+      // キーワードの解答欄
       if (marks.length) {
         html += '<div class="print-kw"><strong>キーワード</strong><table><tr>';
         html += marks.map(x => '<td class="lab">' + escapeHtml(x.mark) + '</td>').join('');
@@ -2049,17 +2223,24 @@
         html += '</tr></table></div>';
       }
 
-      // カギ（ヒント）
-      const list = state.placed.map(p => ({ p, no: numbers[idx(p.r, p.c)] || 0 }))
-        .sort((a, b) => a.no - b.no);
-      const col = (label, dir) => {
-        const items = list.filter(x => x.p.dir === dir);
-        if (!items.length) return '';
-        return '<div><strong>' + label + '</strong><ul>' + items.map(x =>
-          '<li>' + x.no + '. ' + escapeHtml(state.clues[x.p.text] || '')
-          + (withAnswer ? '　【' + escapeHtml(x.p.text) + '】' : '') + '</li>').join('') + '</ul></div>';
-      };
-      html += '<div class="print-clues">' + col('ヨコのカギ', 'across') + col('タテのカギ', 'down') + '</div>';
+      if (skeleton) {
+        // 語群（文字数ごと）
+        html += '<div class="print-bank"><strong>語群</strong>';
+        bank.forEach(g => {
+          html += '<div class="bank-row"><span class="bank-len">' + g.n + '文字</span>'
+            + g.ws.map(w => '<span class="bank-w">' + escapeHtml(w) + '</span>').join('') + '</div>';
+        });
+        html += '</div>';
+      } else {
+        const col = (label, dir) => {
+          const items = clueList.filter(x => x.p.dir === dir);
+          if (!items.length) return '';
+          return '<div><strong>' + label + '</strong><ul>' + items.map(x =>
+            '<li>' + x.no + '. ' + escapeHtml(state.clues[x.p.text] || '')
+            + (withAnswer ? '　【' + escapeHtml(x.p.text) + '】' : '') + '</li>').join('') + '</ul></div>';
+        };
+        html += '<div class="print-clues">' + col('ヨコのカギ', 'across') + col('タテのカギ', 'down') + '</div>';
+      }
       area.innerHTML = html;
     }
 
@@ -2167,6 +2348,14 @@
 
       // 盤面ツール
       $('#modePlace').addEventListener('click', () => setMode('place'));
+      $('#typeCross').addEventListener('click', () => setPuzzleType('crossword'));
+      $('#typeSkel').addEventListener('click', () => setPuzzleType('skeleton'));
+      $('#hintCount').addEventListener('change', (e) => {
+        state.hintCount = Number(e.target.value);
+        pickHints(state.hintCount);
+        refresh();
+      });
+      $('#btnRepickHint').addEventListener('click', () => { pickHints(state.hintCount); refresh(); });
       $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
@@ -2246,7 +2435,11 @@
 
       // 記号の入力
       const mi = $('#markInput');
-      mi.addEventListener('input', () => {
+      let markComposing = false;
+      mi.addEventListener('compositionstart', () => { markComposing = true; });
+      mi.addEventListener('compositionend', () => { markComposing = false; mi.dispatchEvent(new Event('input')); });
+      mi.addEventListener('input', (e) => {
+        if (markComposing || (e && e.isComposing)) return;
         if (!state.markSel) return;
         const k = key(state.markSel.r, state.markSel.c);
         const v = mi.value.trim();
@@ -2357,7 +2550,11 @@
       const level = Number($('#findLevel').value) || 10000;   // よく使う語ほど上位＝やさしい
       const onlyKyoiku = $('#findKyoiku').checked;
       const link = state.linkPair;
-      const mode = kanaMode();
+      // 検索欄にひらがな／カタカナが入っていたら、その種類に合わせて結果を返す
+      // （「あいつ」と入れたのに「アイサツ」が返ると、探しているものと違って見えるため）
+      const typed = $('#findChars').value + $('#findText').value;
+      const mode = /[ぁ-ゖ]/.test(typed) ? 'hira'
+        : /[ァ-ヶ]/.test(typed) ? 'kata' : kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
 
       // すでに登録した語は出さない。交差判定は登録ワードの文字で行う
@@ -2602,6 +2799,7 @@
       state.selWordId = null; state.selPlacedId = null;
       clearCycle(); viewSig = '';
       refresh();
+      pickHints(state.hintCount);
       showTab('build');
       if (kwChars.length) autoMark();
 
@@ -2968,6 +3166,7 @@
       snapshot();
       state.placed = res.placed.map(p => ({ id: uid(), text: p.text, r: p.r, c: p.c, dir: p.dir }));
       state.marks = {};          // 記号はマスの位置に紐づくので、作り直したら消す
+      state.hints = [];
       state.selWordId = null;
       state.selPlacedId = null;
       clearCycle();
@@ -3019,7 +3218,15 @@
           const [r, cc] = k.split(',').map(Number);
           return [r - bb.minR, cc - bb.minC, v];
         });
-      return { t: state.title || 'クロスワード', w, m, c, co: rel(state.colors), bo: rel(state.borders) };
+      const hi = (state.puzzleType !== 'skeleton' ? [] : state.hints).filter(k => board.map.has(k)).map(k => {
+        const [r, cc] = k.split(',').map(Number);
+        return [r - bb.minR, cc - bb.minC];
+      });
+      return {
+        t: state.title || (state.puzzleType === 'skeleton' ? 'スケルトン' : 'クロスワード'),
+        w, m, c, co: rel(state.colors), bo: rel(state.borders),
+        ty: state.puzzleType === 'skeleton' ? 's' : 'c', hi
+      };
     }
 
     function encodePayload(o) {
@@ -3053,7 +3260,7 @@
     const solve = {
       w: 0, h: 0, words: [], answer: new Map(), input: new Map(),
       marks: [], clues: {}, numbers: new Map(), sel: null, dir: 'across', saveKey: '',
-      colors: new Map(), borders: new Map()
+      colors: new Map(), borders: new Map(), type: 'crossword', hints: new Set()
     };
     const sKey = (r, c) => r + ',' + c;
 
@@ -3080,6 +3287,8 @@
       });
       solve.h = maxR + 1; solve.w = maxC + 1;
       solve.marks = (data.m || []).map(([r, c, m]) => ({ r, c, m }));
+      solve.type = data.ty === 's' ? 'skeleton' : 'crossword';
+      solve.hints = new Set(data.ty === 's' ? (data.hi || []).map(([r, c]) => sKey(r, c)) : []);
       solve.colors = new Map((data.co || []).map(([r, c, v]) => [sKey(r, c), v]));
       solve.borders = new Map((data.bo || []).map(([r, c, v]) => [sKey(r, c), v]));
       const allNum = solve.marks.every(x => /^\d+$/.test(x.m));
@@ -3103,6 +3312,12 @@
         const saved = JSON.parse(localStorage.getItem(solve.saveKey) || '{}');
         Object.keys(saved).forEach(k => solve.input.set(k, saved[k]));
       } catch (e) { /* 読めなければ最初から */ }
+      // はじめから見せるマスは、必ず正しい文字を入れておく
+      solve.hints.forEach(k => { if (solve.answer.has(k)) solve.input.set(k, solve.answer.get(k)); });
+
+      // スケルトンではカギを出さず、語群を出す
+      $('#solveCluePanel').hidden = solve.type === 'skeleton';
+      $('#solveBankPanel').hidden = solve.type !== 'skeleton';
 
       solveBuildGrid();
       solveRenderClues();
@@ -3170,6 +3385,7 @@
         const has = solve.answer.has(k);
         const cls = ['cell'];
         if (has) cls.push('filled');
+        if (has && solve.hints.has(k)) cls.push('hintcell');
         if (has && solve.colors.has(k)) cls.push('c-' + solve.colors.get(k));
         if (has && solve.borders.has(k)) cls.push('b-' + solve.borders.get(k));
         else if (has && markMap.has(k)) cls.push('marked');
@@ -3212,16 +3428,18 @@
     }
 
     function solveMove(dr, dc) {
-      if (!solve.sel) return;
+      if (!solve.sel) return false;
       const r = solve.sel.r + dr, c = solve.sel.c + dc;
-      if (!solve.answer.has(sKey(r, c))) return;
+      if (!solve.answer.has(sKey(r, c))) return false;   // 行き先がなければ動かない
       solve.sel = { r, c };
       solveRender();
+      return true;
     }
 
     function solveSetLetter(ch) {
       if (!solve.sel) return;
       const k = sKey(solve.sel.r, solve.sel.c);
+      if (solve.hints.has(k)) return;   // はじめから入っているマスは変えられない
       solve.input.set(k, ch);
       const el = $('#solveGrid').querySelector('.cell[data-r="' + solve.sel.r + '"][data-c="' + solve.sel.c + '"]');
       if (el) delete el.dataset.judge;
@@ -3251,7 +3469,42 @@
         : '二重マスを埋めると、ここにキーワードが出ます。';
     }
 
+    function solveRenderBank() {
+      const box = $('#solveBank');
+      if (!box) return;
+      const seen = new Set();
+      const list = [];
+      solve.words.forEach(p => { if (!seen.has(p.text)) { seen.add(p.text); list.push(p.text); } });
+      const byLen = new Map();
+      list.forEach(t => {
+        const n = chars(t).length;
+        if (!byLen.has(n)) byLen.set(n, []);
+        byLen.get(n).push(t);
+      });
+      // すでに盤面に正しく入っている語には印をつける
+      const doneSet = new Set();
+      solve.words.forEach(p => {
+        const ok = solveWordCells(p).every(x =>
+          (solve.input.get(sKey(x.r, x.c)) || '') === solve.answer.get(sKey(x.r, x.c)));
+        if (ok) doneSet.add(p.text);
+      });
+      box.innerHTML = '';
+      const wrap = document.createElement('div');
+      wrap.className = 'wordbank';
+      [...byLen.entries()].sort((a, b) => a[0] - b[0]).forEach(([n, ws]) => {
+        const row = document.createElement('div');
+        row.className = 'row-len';
+        row.innerHTML = '<span class="len">' + n + '文字</span>'
+          + ws.sort((a, b) => a.localeCompare(b, 'ja')).map(w =>
+            '<span class="w"' + (doneSet.has(w) ? ' style="opacity:.4;text-decoration:line-through"' : '')
+            + '>' + escapeHtml(w) + '</span>').join('');
+        wrap.appendChild(row);
+      });
+      box.appendChild(wrap);
+    }
+
     function solveRenderClues() {
+      if (solve.type === 'skeleton') { solveRenderBank(); return; }
       const cur = solveCurrentWord();
       const build = (box, dir) => {
         box.innerHTML = '';
@@ -3307,12 +3560,34 @@
         solveSelect(Number(el.dataset.r), Number(el.dataset.c));
       });
       const si = $('#solveInput');
-      si.addEventListener('input', () => {
-        const ch = si.value.slice(-1);
+
+      // 確定した文字をマスに入れる（変換で「たけ」のように2文字以上出たら、続けて入れる）
+      const commitText = (text) => {
+        const cs = chars(text || '');
+        for (const ch of cs) {
+          if (!/\S/.test(ch)) continue;
+          solveSetLetter(ch);
+          // 次のマスが無ければ、残りの文字は入れない（最後のマスを上書きしないため）
+          if (!solveMove(solve.dir === 'down' ? 1 : 0, solve.dir === 'across' ? 1 : 0)) break;
+        }
+      };
+
+      // 日本語入力（IME）は変換中にも input が起きる。
+      // 「た」と打つ途中の「t」まで入ってしまうので、変換が終わるまで待つ
+      let composing = false;
+      si.addEventListener('compositionstart', () => { composing = true; });
+      si.addEventListener('compositionupdate', () => { composing = true; });
+      si.addEventListener('compositionend', (e) => {
+        composing = false;
+        const text = (e.data !== undefined && e.data !== null && e.data !== '') ? e.data : si.value;
         si.value = '';
-        if (!ch) return;
-        solveSetLetter(ch);
-        solveMove(solve.dir === 'down' ? 1 : 0, solve.dir === 'across' ? 1 : 0);
+        commitText(text);
+      });
+      si.addEventListener('input', (e) => {
+        if (composing || e.isComposing) return;   // 変換中は何もしない
+        const text = si.value;
+        si.value = '';
+        commitText(text);
       });
       si.addEventListener('keydown', (e) => {
         const keys = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };

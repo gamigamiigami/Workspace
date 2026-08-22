@@ -6,6 +6,39 @@
 
 ---
 
+### [2026-08-22] crossword — 日本語入力（IME）の変換中の文字が1マスずつ確定されてしまう
+
+**症状：** 配布リンクの解答モードで、PCで「た」と打つと1マス目に「t」、2マス目に「た」が入る。
+スマホでは同じ文字が繰り返し入る。
+
+**原因：** 1マス1文字の入力欄で `input` イベントを見て即座に確定していた。
+日本語入力は**変換中にも `input` が発火する**ため、ローマ字の途中（t）や予測変換の途中（こ→こく→こくご）が
+そのまま確定されてしまう。`maxlength="1"` も変換の文字数を制限してじゃまをしていた。
+
+**対応：**
+```js
+let composing = false;
+si.addEventListener('compositionstart',  () => { composing = true; });
+si.addEventListener('compositionupdate', () => { composing = true; });
+si.addEventListener('compositionend', (e) => {
+  composing = false;
+  commitText(e.data || si.value);   // 変換が終わった文字だけを確定する
+  si.value = '';
+});
+si.addEventListener('input', (e) => {
+  if (composing || e.isComposing) return;   // 変換中は何もしない
+  commitText(si.value); si.value = '';
+});
+```
+- `maxlength="1"` は**外す**（変換のじゃまになる）。文字数は自分で扱う
+- 確定が2文字以上（「たけ」）なら、続けて次のマスに入れる → かえって入力が速くなる
+- 次のマスが無ければ残りは捨てる（最後のマスを上書きしないため）
+
+**教訓：** 日本語を1文字ずつ受け取るUIは、必ず `compositionstart` / `compositionend` で
+変換中を除外する。`input` だけを見ていると、日本語環境でのみ壊れる。
+
+---
+
 ## パズル生成・アルゴリズム
 
 ### [2026-08-22] crossword — 新しい制約を足したら既存の「最適化」が逆効果になった
