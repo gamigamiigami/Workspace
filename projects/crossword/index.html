@@ -5728,6 +5728,42 @@ var qrcode = function() {
     //
     // ただし外部サービスは「学校のネットで弾かれる」「将来サービスが終わる」危険があるため、
     // 長いリンクは必ず残し、失敗したらそのまま長いリンクで使えるようにしてある。
+    // is.gd に短縮をお願いする。
+    // fetch ではなく <script> タグで呼ぶ（JSONP という古くからの方式）。
+    // 理由：is.gd は CORS に対応していないため、fetch だとブラウザ側が通信を止めてしまい
+    //       「Failed to fetch」になる。<script> での読み込みは CORS の対象外なので通る。
+    function requestShortUrl(longUrl, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const cbName = 'cwShortCb' + Date.now() + Math.floor(Math.random() * 10000);
+        const script = document.createElement('script');
+        let finished = false;
+        const cleanup = () => {
+          clearTimeout(timer);
+          if (script.parentNode) script.parentNode.removeChild(script);
+          try { delete window[cbName]; } catch (e) { window[cbName] = undefined; }
+        };
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true; cleanup();
+          reject(new Error('応答がありません（時間切れ）'));
+        }, timeoutMs || 15000);
+        window[cbName] = (data) => {
+          if (finished) return;
+          finished = true; cleanup();
+          if (data && data.shorturl) resolve(data.shorturl);
+          else reject(new Error(data && data.errormessage ? data.errormessage : '短縮できませんでした'));
+        };
+        script.onerror = () => {
+          if (finished) return;
+          finished = true; cleanup();
+          reject(new Error('サービスにつながりません'));
+        };
+        script.src = 'https://is.gd/create.php?format=json&callback=' + cbName
+          + '&url=' + encodeURIComponent(longUrl);
+        document.body.appendChild(script);
+      });
+    }
+
     async function shortenLink() {
       if (!longLinkUrl) return;
       const btn = $('#btnShorten');
@@ -5735,21 +5771,20 @@ var qrcode = function() {
       btn.disabled = true;
       msg.textContent = '短くしています…（少し待ってください）';
       try {
-        const res = await fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(longLinkUrl));
-        const data = await res.json();
-        if (!data || !data.shorturl) throw new Error(data && data.errormessage ? data.errormessage : '短縮できませんでした');
-        $('#linkText').value = data.shorturl;
-        showQrCode(data.shorturl);
+        const shortUrl = await requestShortUrl(longLinkUrl, 15000);
+        $('#linkText').value = shortUrl;
+        showQrCode(shortUrl);
         $('#btnLongLink').style.display = '';
         btn.style.display = 'none';
-        msg.innerHTML = '短くしました（<b>' + data.shorturl.length + '文字</b>）。QRコードも短いリンクのものに変わりました。<br>'
+        msg.innerHTML = '短くしました（<b>' + shortUrl.length + '文字</b>）。QRコードも短いリンクのものに変わりました。<br>'
           + '※このリンクは is.gd という外部サービスが中継します。学校のネットが短縮リンクを'
           + 'ブロックしている場合は開けないことがあるので、<b>配る前に一度お試しください</b>。'
           + 'うまくいかないときは「長いリンクに戻す」を押せば元に戻ります。';
       } catch (e) {
         msg.innerHTML = '<span style="color:var(--ng)">短くできませんでした</span>（'
           + escapeHtml(String(e.message || e)) + '）。<br>'
-          + 'ネットにつながっていないか、学校のネットが外部サービスをブロックしている可能性があります。'
+          + '短縮サービス（is.gd）につながらないだけで、<b>ネットの不調とは限りません</b>。'
+          + '学校や職場のネットがブロックしていることもあります。<br>'
           + '上の<b>長いリンクとQRコードはそのまま使えます</b>ので、そちらを配ってください。';
       }
       btn.disabled = false;

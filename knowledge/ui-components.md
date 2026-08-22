@@ -1,8 +1,109 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-08-22
+最終更新：2026-08-22（セッション140・長いリンク維持フォールバック設計を追加）
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## 外部サービス依存機能でのフォールバック設計（「短いリンク」ボタン）
+
+**用途：** 短縮URLサービス（is.gd など）を使うが、ネットワークブロック・サービス終了時のリスクに対応したい場合
+
+**設計方針：**
+- **長いリンク＝本体（常に表示・必ず動作）**
+- **短いリンク＝おまけ（追加ボタンで展開・失敗してもOK）**
+- 失敗時のメッセージに「元に戻す・代替手段（QRコード）」を明記
+
+```html
+<!-- 配布リンク表示パネル -->
+<div class="panel">
+  <h2>配布用リンク</h2>
+  
+  <!-- 長いリンク（常に表示・本体） -->
+  <div id="longLinkBox">
+    <input type="text" id="longLink" readonly />
+    <button onclick="copyToClipboard('longLink')">コピー</button>
+  </div>
+  
+  <!-- 短いリンク化ボタン -->
+  <button id="btnMakeShort" onclick="makeShortLink()">
+    短いリンクにする
+  </button>
+  
+  <!-- 短いリンク表示（ボタン押下後のみ表示） -->
+  <div id="shortLinkBox" style="display:none;">
+    <input type="text" id="shortLink" readonly />
+    <button onclick="copyToClipboard('shortLink')">コピー</button>
+    <button id="btnLongLink" onclick="backToLongLink()">
+      長いリンクに戻す
+    </button>
+    <p id="shortMsg" style="font-size:13px; color:#666;">
+      ⚠️ 学校のネットが短縮リンクをブロックしていないか確認してください
+    </p>
+  </div>
+  
+  <!-- QRコード -->
+  <div id="qrBox">
+    <canvas id="qr" width="200" height="200"></canvas>
+    <p style="font-size:12px;">↑ スマホで撮影して開く（最も確実）</p>
+  </div>
+</div>
+```
+
+**JavaScriptロジック例：**
+```javascript
+async function makeShortLink() {
+  const longUrl = document.getElementById('longLink').value;
+  
+  try {
+    // 短縮サービスを呼び出し
+    const res = await fetch(
+      'https://is.gd/create.php?format=json&url=' + 
+      encodeURIComponent(longUrl)
+    );
+    const data = await res.json();
+    
+    if (!data || !data.shorturl) {
+      throw new Error(data?.errormessage || '短縮に失敗');
+    }
+    
+    // 成功時：短いリンクを表示
+    document.getElementById('shortLink').value = data.shorturl;
+    document.getElementById('shortLinkBox').style.display = 'block';
+    document.getElementById('btnMakeShort').style.display = 'none';
+    document.getElementById('shortMsg').innerHTML = 
+      '✅ 短縮成功（279文字 → 20文字）。<br/>' +
+      '上の<b>長いリンクとQRコードはそのまま使えます</b>ので、' +
+      '短縮リンクが開けないときはそちらを配ってください。';
+  } catch (err) {
+    // 失敗時：フォールバック（長いリンク・QRコード維持）
+    document.getElementById('shortMsg').innerHTML = 
+      '⚠️ 短縮に失敗しました。<br/>' +
+      '上の<b>長いリンクとQRコードはそのまま使えます</b>ので、' +
+      'そちらを配ってください。';
+  }
+}
+
+function backToLongLink() {
+  document.getElementById('shortLinkBox').style.display = 'none';
+  document.getElementById('btnMakeShort').style.display = 'block';
+  document.getElementById('shortMsg').textContent = '';
+}
+```
+
+**重要なポイント：**
+1. **長いリンク（本体）は必ず表示し続ける** — ユーザーが「何が本当の手段か」を迷わない
+2. **失敗時のメッセージに代替手段（QRコード）を明記** — ネットワークブロック時の対応を明記
+3. **「戻す」ボタンで短いリンク化を取り消し可能にする** — 試行錯誤を容易に
+4. **UI上で「外部サービス依存」であることを開示** — ユーザーが判断できるように
+
+**応用例：**
+- 動画配信サービスの再生時の代替CDN（失敗時は本家を使用）
+- API呼び出しの失敗時フォールバック（複数サービスの切り替え）
+- キャッシュ活用（高速・低容量を試した後、失敗時はオリジナルを使用）
+
+**プロジェクト実装例：** `/Workspace/projects/crossword/index.html` セッション140
 
 ---
 
