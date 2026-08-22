@@ -228,6 +228,8 @@
     .cell.badrun { box-shadow: inset 0 0 0 2px var(--ng); }
     .cell.preview-ok { background: #cdebd9; box-shadow: inset 0 0 0 2px var(--ok); color: var(--ok); }
     .cell.preview-ng { background: var(--ng-bg); box-shadow: inset 0 0 0 2px var(--ng); color: var(--ng); }
+    /* 記号を付けたマスは二重マスにして、拾うマスをはっきりさせる */
+    .cell.marked { border: 3px double var(--navy); box-shadow: none; }
     .cell .mark {
       position: absolute; top: 0; left: 2px;
       font-size: 10px; font-weight: 700; line-height: 1.2; color: #b1801f;
@@ -267,6 +269,39 @@
     }
     .placed-chip.sel { border-color: var(--accent); background: #fff6e0; }
 
+    /* ===== 解答モード ===== */
+    #solveBoardWrap {
+      position: relative; display: inline-block;
+      background: #cfd6de; padding: 1px; border-radius: 4px;
+      touch-action: manipulation; max-width: 100%;
+    }
+    #solveApp { text-align: center; }
+    #solveApp .panel, #solveApp p { text-align: left; }
+    #solveGrid { display: grid; gap: 1px; }
+    #solveInput {
+      position: absolute; z-index: 5; border: none; background: transparent;
+      text-align: center; font-size: 20px; font-weight: 700; font-family: inherit;
+      color: #22282f; padding: 0; min-height: 0; caret-color: var(--accent);
+    }
+    #solveInput.hidden { display: none; }
+    .cell.ok { color: var(--ok); }
+    .cell.ng { background: var(--ng-bg); color: var(--ng); }
+    #solveMsg { font-size: 15px; font-weight: 700; min-height: 24px; margin: 8px 0; }
+    #solveMsg.ok { color: var(--ok); }
+    #solveMsg.ng { color: var(--ng); }
+    #solveKwRow { display: flex; flex-wrap: wrap; gap: 5px; }
+    .kwbox {
+      width: 40px; height: 48px; border: 2px solid var(--navy); border-radius: 6px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 20px; font-weight: 700; background: var(--paper);
+    }
+    .kwbox .lb { font-size: 10px; font-weight: 400; color: #b1801f; }
+    .kwbox.done { background: var(--ok-bg); border-color: var(--ok); color: var(--ok); }
+    .solve-clue { padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 14px; cursor: pointer; }
+    .solve-clue.sel { background: #fff6e0; }
+    .solve-clue .no { font-weight: 700; color: var(--navy); margin-right: 6px; }
+    .solve-clue .done { color: var(--ok); font-size: 12px; margin-left: 4px; }
+
     #credit {
       font-size: 11px; color: var(--gray); text-align: center;
       padding: 4px 8px 16px; line-height: 1.6;
@@ -287,6 +322,7 @@
       }
       .print-grid td.black { background: #000; }
       .print-grid td.blank { border: none; background: #fff; }
+      .print-grid td.dbl { border: 3px double #000; }
       .print-grid td .m {
         position: absolute; top: 0; left: 2px; font-size: 9px; font-weight: 700;
       }
@@ -464,6 +500,25 @@
     </div>
 
     <div class="panel">
+      <h2>スマホで解いてもらう</h2>
+      <div class="row">
+        <button id="btnMakeLink">配布用リンクを作る</button>
+        <button id="btnTrySolve" class="sub">解答モードを試す</button>
+      </div>
+      <div id="linkBox" style="display:none;margin-top:10px;">
+        <textarea id="linkText" style="width:100%;min-height:80px;font-size:12px;" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:6px;">
+          <button id="btnCopyLink" class="sub small">リンクをコピー</button>
+          <button id="btnCloseLink" class="sub small">閉じる</button>
+        </div>
+        <p class="hint-line">
+          このリンクを開くと、スマホやiPadでそのまま解けます（アプリ不要）。<br>
+          ※答えもリンクの中に入っています。本気で調べれば見えるので、賞品つきの謎解きなどでは注意してください。
+        </p>
+      </div>
+    </div>
+
+    <div class="panel">
       <h2>印刷・保存</h2>
       <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="width:100%;margin-bottom:8px;">
       <div class="row">
@@ -492,6 +547,40 @@
       <p id="msg" class="note"></p>
     </div>
   </section>
+
+  <!-- ===== 解答モード（配布リンクを開いたときだけ表示。解く人のための画面） ===== -->
+  <div id="solveApp" hidden>
+    <header>
+      <h1 id="solveTitle">クロスワード</h1>
+    </header>
+    <div id="solveBoardWrap">
+      <div id="solveGrid"></div>
+      <input id="solveInput" class="hidden" type="text" maxlength="1" autocomplete="off"
+             autocapitalize="off" autocorrect="off" spellcheck="false" aria-label="マスの文字">
+    </div>
+    <p id="solveMsg"></p>
+    <div class="panel">
+      <div class="row">
+        <button id="solveCheck">答え合わせ</button>
+        <button id="solveDir" class="sub">向き：ヨコ →</button>
+        <button id="solveClear" class="danger small">全部消す</button>
+      </div>
+      <p class="hint-line">マスをタップして、キーボードで1文字ずつ入れてください。
+        同じマスをもう一度タップすると、入力の向きが変わります。</p>
+    </div>
+    <div class="panel" id="solveKwPanel" hidden>
+      <h2>キーワード <span class="hint">二重マスの文字を記号の順に読みます</span></h2>
+      <div id="solveKwRow"></div>
+      <p id="solveKwMsg"></p>
+    </div>
+    <div class="panel">
+      <h2>カギ（ヒント）</h2>
+      <div class="clue-cols">
+        <div class="clue-col"><h3>ヨコのカギ</h3><div id="solveAcross"></div></div>
+        <div class="clue-col"><h3>タテのカギ</h3><div id="solveDown"></div></div>
+      </div>
+    </div>
+  </div>
 
   <footer id="credit">
     辞書データ：IPADIC（© 2000-2007 奈良先端科学技術大学院大学／修正BSDライセンス）
@@ -860,6 +949,7 @@
         let ch = '';
         if (cell) { cls.push('filled'); ch = state.hideLetters ? '' : cell.ch; }
         else if (state.blackFill) cls.push('blank-black');
+        if (cell && state.marks[k]) cls.push('marked');
         if (cell && selCells.has(k)) cls.push('selword');
         if (board.conflicts.has(k)) cls.push('conflict');
         if (badCells.has(k)) cls.push('badrun');
@@ -1576,7 +1666,8 @@
           if (!cell) { html += '<td class="' + (state.blackFill ? 'black' : 'blank') + '"></td>'; continue; }
           const mk = state.marks[key(r, c)];
           const m = mk ? '<span class="m">' + escapeHtml(mk) + '</span>' : '';
-          html += '<td>' + m + (withAnswer ? escapeHtml(cell.ch) : '') + '</td>';
+          html += '<td' + (mk ? ' class="dbl"' : '') + '>' + m
+            + (withAnswer ? escapeHtml(cell.ch) : '') + '</td>';
         }
         html += '</tr>';
       }
@@ -1739,6 +1830,26 @@
       $('#btnPrintA').addEventListener('click', () => doPrint(true));
       $('#btnExport').addEventListener('click', exportFile);
       $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#btnMakeLink').addEventListener('click', makeShareLink);
+      $('#btnTrySolve').addEventListener('click', () => {
+        const url = makeShareLink();
+        if (!url) return;
+        // 同じページ内で # を変えるだけでは読み込み直されないので、明示的に読み直す
+        location.href = url;
+        location.reload();
+      });
+      $('#btnCopyLink').addEventListener('click', () => {
+        const ta = $('#linkText');
+        ta.focus(); ta.select();
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(ta.value).then(
+            () => { $('#msg').textContent = 'リンクをコピーしました。'; },
+            () => { $('#msg').textContent = '自動コピーできませんでした。文字を選んで手でコピーしてください。'; });
+        } else {
+          $('#msg').textContent = '文字を選んで手でコピーしてください。';
+        }
+      });
+      $('#btnCloseLink').addEventListener('click', () => { $('#linkBox').style.display = 'none'; });
       $('#btnShowData').addEventListener('click', showDataBox);
       $('#btnCopyData').addEventListener('click', copyDataText);
       $('#btnLoadData').addEventListener('click', loadDataText);
@@ -2059,8 +2170,358 @@
       showMsg('自動で作りました。直したいところは手で動かせます。', 'ok');
     }
 
+    // ===== 解答モード（配布リンクを開いた人が解くための画面） =====
+    // 問題データをURLに入れて配る。サーバーは不要（リンクを開けばその場で解ける）
+    function solvePayload() {
+      const bb = boundingBox();
+      if (!bb) return null;
+      const w = state.placed.map(p => [p.r - bb.minR, p.c - bb.minC, p.dir === 'down' ? 1 : 0, p.text]);
+      const m = Object.entries(state.marks)
+        .filter(([k, v]) => v && board.map.has(k))
+        .map(([k, v]) => {
+          const [r, c] = k.split(',').map(Number);
+          return [r - bb.minR, c - bb.minC, v];
+        });
+      const c = {};
+      state.placed.forEach(p => { if (state.clues[p.text]) c[p.text] = state.clues[p.text]; });
+      return { t: state.title || 'クロスワード', w, m, c };
+    }
+
+    function encodePayload(o) {
+      const bytes = new TextEncoder().encode(JSON.stringify(o));
+      let bin = '';
+      bytes.forEach(b => { bin += String.fromCharCode(b); });
+      return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    }
+
+    function decodePayload(t) {
+      const bin = atob(t.replace(/-/g, '+').replace(/_/g, '/'));
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+
+    function makeShareLink() {
+      const data = solvePayload();
+      if (!data) { $('#msg').textContent = '盤面が空です。先にクロスワードを作ってください。'; return null; }
+      const noClue = state.placed.filter(p => !state.clues[p.text]).length;
+      const url = location.href.split('#')[0] + '#p=' + encodePayload(data);
+      $('#linkText').value = url;
+      $('#linkBox').style.display = 'block';
+      $('#msg').textContent = noClue
+        ? 'リンクを作りました。ただしカギが空の語が ' + noClue + ' 個あります（解く人が困ります）。'
+        : 'リンクを作りました。コピーして配ってください。';
+      return url;
+    }
+
+    // --- ここから、解く人の画面 ---
+    const solve = {
+      w: 0, h: 0, words: [], answer: new Map(), input: new Map(),
+      marks: [], clues: {}, numbers: new Map(), sel: null, dir: 'across', saveKey: ''
+    };
+    const sKey = (r, c) => r + ',' + c;
+
+    function startSolve(data, token) {
+      document.querySelectorAll('.tab-panel').forEach(el => { el.hidden = true; });
+      ['#tabs', '#boardArea'].forEach(sel => { $(sel).hidden = true; });
+      document.querySelector('body > header').hidden = true;
+      $('#solveApp').hidden = false;
+      $('#solveTitle').textContent = data.t || 'クロスワード';
+      document.title = (data.t || 'クロスワード');
+
+      solve.words = data.w.map(([r, c, d, text]) => ({ r, c, dir: d ? 'down' : 'across', text }));
+      solve.clues = data.c || {};
+      solve.answer = new Map();
+      let maxR = 0, maxC = 0;
+      solve.words.forEach(p => {
+        const cs = chars(p.text);
+        cs.forEach((ch, i) => {
+          const r = p.r + (p.dir === 'down' ? i : 0);
+          const c = p.c + (p.dir === 'across' ? i : 0);
+          solve.answer.set(sKey(r, c), ch);
+          maxR = Math.max(maxR, r); maxC = Math.max(maxC, c);
+        });
+      });
+      solve.h = maxR + 1; solve.w = maxC + 1;
+      solve.marks = (data.m || []).map(([r, c, m]) => ({ r, c, m }));
+      const allNum = solve.marks.every(x => /^\d+$/.test(x.m));
+      solve.marks.sort((a, b) => allNum ? Number(a.m) - Number(b.m) : a.m.localeCompare(b.m, 'ja'));
+
+      // 番号付け（クロスワードの標準ルール）
+      solve.numbers = new Map();
+      const filled = (r, c) => solve.answer.has(sKey(r, c));
+      let n = 0;
+      for (let r = 0; r < solve.h; r++) {
+        for (let c = 0; c < solve.w; c++) {
+          if (!filled(r, c)) continue;
+          if ((!filled(r, c - 1) && filled(r, c + 1)) || (!filled(r - 1, c) && filled(r + 1, c))) {
+            solve.numbers.set(sKey(r, c), ++n);
+          }
+        }
+      }
+      // 途中まで解いた内容を残す
+      solve.saveKey = 'crossword-solve-' + (token || '').slice(0, 24);
+      try {
+        const saved = JSON.parse(localStorage.getItem(solve.saveKey) || '{}');
+        Object.keys(saved).forEach(k => solve.input.set(k, saved[k]));
+      } catch (e) { /* 読めなければ最初から */ }
+
+      solveBuildGrid();
+      solveRenderClues();
+      solveRender();
+      bindSolve();
+    }
+
+    function solveSaveInput() {
+      try {
+        const o = {};
+        solve.input.forEach((v, k) => { if (v) o[k] = v; });
+        localStorage.setItem(solve.saveKey, JSON.stringify(o));
+      } catch (e) { /* 保存できなくても解ける */ }
+    }
+
+    function solveCellSize() {
+      const wrapMax = Math.min(document.body.clientWidth - 30, 900);
+      return Math.max(MIN_CELL_PX, Math.min(MAX_CELL_PX, Math.floor((wrapMax - solve.w) / solve.w)));
+    }
+
+    function solveBuildGrid() {
+      const grid = $('#solveGrid');
+      grid.innerHTML = '';
+      const px = solveCellSize();
+      grid.style.gridTemplateColumns = 'repeat(' + solve.w + ', ' + px + 'px)';
+      grid.style.gridTemplateRows = 'repeat(' + solve.h + ', ' + px + 'px)';
+      for (let r = 0; r < solve.h; r++) {
+        for (let c = 0; c < solve.w; c++) {
+          const div = document.createElement('div');
+          div.className = 'cell';
+          div.dataset.r = r; div.dataset.c = c;
+          div.innerHTML = '<span class="mark"></span><span class="num"></span><span class="ch"></span>';
+          grid.appendChild(div);
+        }
+      }
+      const si = $('#solveInput');
+      si.style.width = px + 'px';
+      si.style.height = px + 'px';
+    }
+
+    function solveWordCells(word) {
+      const out = [];
+      chars(word.text).forEach((ch, i) => {
+        out.push({ r: word.r + (word.dir === 'down' ? i : 0), c: word.c + (word.dir === 'across' ? i : 0) });
+      });
+      return out;
+    }
+
+    function solveCurrentWord() {
+      if (!solve.sel) return null;
+      return solve.words.find(p => p.dir === solve.dir
+        && solveWordCells(p).some(x => x.r === solve.sel.r && x.c === solve.sel.c));
+    }
+
+    function solveRender() {
+      const cells = $('#solveGrid').children;
+      const hl = new Set();
+      const cur = solveCurrentWord();
+      if (cur) solveWordCells(cur).forEach(x => hl.add(sKey(x.r, x.c)));
+      const markMap = new Map(solve.marks.map(x => [sKey(x.r, x.c), x.m]));
+      for (let i = 0; i < cells.length; i++) {
+        const el = cells[i];
+        const r = Number(el.dataset.r), c = Number(el.dataset.c);
+        const k = sKey(r, c);
+        const has = solve.answer.has(k);
+        const cls = ['cell'];
+        if (has) cls.push('filled');
+        if (has && markMap.has(k)) cls.push('marked');
+        if (has && hl.has(k)) cls.push('inword');
+        if (solve.sel && solve.sel.r === r && solve.sel.c === c) cls.push('sel');
+        if (has && el.dataset.judge) cls.push(el.dataset.judge);
+        el.className = cls.join(' ');
+        el.querySelector('.ch').textContent = has ? (solve.input.get(k) || '') : '';
+        el.querySelector('.num').textContent = has && solve.numbers.has(k) ? solve.numbers.get(k) : '';
+        el.querySelector('.mark').textContent = has ? (markMap.get(k) || '') : '';
+      }
+      solveRenderKeyword();
+      solvePositionInput();
+    }
+
+    function solvePositionInput() {
+      const si = $('#solveInput');
+      if (!solve.sel || !solve.answer.has(sKey(solve.sel.r, solve.sel.c))) {
+        si.classList.add('hidden'); return;
+      }
+      const el = $('#solveGrid').querySelector('.cell[data-r="' + solve.sel.r + '"][data-c="' + solve.sel.c + '"]');
+      if (!el) return;
+      si.classList.remove('hidden');
+      si.style.left = el.offsetLeft + 'px';
+      si.style.top = el.offsetTop + 'px';
+      si.value = '';
+      si.focus();
+    }
+
+    function solveSelect(r, c) {
+      if (!solve.answer.has(sKey(r, c))) return;
+      if (solve.sel && solve.sel.r === r && solve.sel.c === c) {
+        solve.dir = solve.dir === 'across' ? 'down' : 'across';
+        $('#solveDir').textContent = solve.dir === 'across' ? '向き：ヨコ →' : '向き：タテ ↓';
+      } else {
+        solve.sel = { r, c };
+      }
+      solveRender();
+      solveRenderClues();
+    }
+
+    function solveMove(dr, dc) {
+      if (!solve.sel) return;
+      const r = solve.sel.r + dr, c = solve.sel.c + dc;
+      if (!solve.answer.has(sKey(r, c))) return;
+      solve.sel = { r, c };
+      solveRender();
+    }
+
+    function solveSetLetter(ch) {
+      if (!solve.sel) return;
+      const k = sKey(solve.sel.r, solve.sel.c);
+      solve.input.set(k, ch);
+      const el = $('#solveGrid').querySelector('.cell[data-r="' + solve.sel.r + '"][data-c="' + solve.sel.c + '"]');
+      if (el) delete el.dataset.judge;
+      solveSaveInput();
+      solveRender();
+    }
+
+    function solveRenderKeyword() {
+      if (solve.marks.length === 0) { $('#solveKwPanel').hidden = true; return; }
+      $('#solveKwPanel').hidden = false;
+      const row = $('#solveKwRow');
+      row.innerHTML = '';
+      let done = true, word = '';
+      solve.marks.forEach(mk => {
+        const k = sKey(mk.r, mk.c);
+        const ch = solve.input.get(k) || '';
+        const right = ch && ch === solve.answer.get(k);
+        if (!right) done = false;
+        word += ch || '□';
+        const box = document.createElement('div');
+        box.className = 'kwbox' + (right ? ' done' : '');
+        box.innerHTML = '<span class="lb">' + escapeHtml(mk.m) + '</span>' + escapeHtml(ch);
+        row.appendChild(box);
+      });
+      $('#solveKwMsg').innerHTML = done
+        ? '<span style="color:var(--ok);font-weight:700;font-size:17px;">キーワードは「' + escapeHtml(word) + '」！　正解です 🎉</span>'
+        : '二重マスを埋めると、ここにキーワードが出ます。';
+    }
+
+    function solveRenderClues() {
+      const cur = solveCurrentWord();
+      const build = (box, dir) => {
+        box.innerHTML = '';
+        const list = solve.words.filter(p => p.dir === dir)
+          .map(p => ({ p, no: solve.numbers.get(sKey(p.r, p.c)) || 0 }))
+          .sort((a, b) => a.no - b.no);
+        if (!list.length) { box.innerHTML = '<p class="hint-line">なし</p>'; return; }
+        list.forEach(({ p, no }) => {
+          const cells = solveWordCells(p);
+          const filledAll = cells.every(x => (solve.input.get(sKey(x.r, x.c)) || '') === solve.answer.get(sKey(x.r, x.c)));
+          const div = document.createElement('div');
+          div.className = 'solve-clue' + (cur === p ? ' sel' : '');
+          div.dataset.r = p.r; div.dataset.c = p.c; div.dataset.dir = p.dir;
+          div.innerHTML = '<span class="no">' + no + '</span>'
+            + escapeHtml(solve.clues[p.text] || '（カギなし）')
+            + '<span class="hint">（' + chars(p.text).length + '文字）</span>'
+            + (filledAll ? '<span class="done">✓</span>' : '');
+          box.appendChild(div);
+        });
+      };
+      build($('#solveAcross'), 'across');
+      build($('#solveDown'), 'down');
+    }
+
+    function solveDoCheck() {
+      let right = 0, wrong = 0, blank = 0;
+      $('#solveGrid').querySelectorAll('.cell').forEach(el => {
+        const k = sKey(Number(el.dataset.r), Number(el.dataset.c));
+        if (!solve.answer.has(k)) return;
+        const v = solve.input.get(k) || '';
+        if (!v) { blank++; delete el.dataset.judge; }
+        else if (v === solve.answer.get(k)) { right++; el.dataset.judge = 'ok'; }
+        else { wrong++; el.dataset.judge = 'ng'; }
+      });
+      const msg = $('#solveMsg');
+      if (wrong === 0 && blank === 0) {
+        msg.textContent = '全部正解です！おめでとう 🎉';
+        msg.className = 'ok';
+      } else {
+        msg.textContent = '正解 ' + right + ' マス／まちがい ' + wrong + ' マス／空 ' + blank + ' マス'
+          + (wrong ? '（赤いマスを直してください）' : '');
+        msg.className = wrong ? 'ng' : '';
+      }
+      solveRender();
+      solveRenderClues();
+    }
+
+    function bindSolve() {
+      $('#solveGrid').addEventListener('pointerdown', (e) => {
+        const el = e.target.closest('.cell');
+        if (!el) return;
+        e.preventDefault();   // これがないと直後にフォーカスを奪われる
+        solveSelect(Number(el.dataset.r), Number(el.dataset.c));
+      });
+      const si = $('#solveInput');
+      si.addEventListener('input', () => {
+        const ch = si.value.slice(-1);
+        si.value = '';
+        if (!ch) return;
+        solveSetLetter(ch);
+        solveMove(solve.dir === 'down' ? 1 : 0, solve.dir === 'across' ? 1 : 0);
+      });
+      si.addEventListener('keydown', (e) => {
+        const keys = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
+        if (keys[e.key]) { e.preventDefault(); solveMove(keys[e.key][0], keys[e.key][1]); }
+        else if (e.key === 'Backspace') {
+          e.preventDefault();
+          if (!solve.sel) return;
+          const k = sKey(solve.sel.r, solve.sel.c);
+          if (solve.input.get(k)) solveSetLetter('');
+          else { solveMove(solve.dir === 'down' ? -1 : 0, solve.dir === 'across' ? -1 : 0); solveSetLetter(''); }
+        } else if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          if (solve.sel) solveSelect(solve.sel.r, solve.sel.c);
+        }
+      });
+      $('#solveDir').addEventListener('click', () => {
+        solve.dir = solve.dir === 'across' ? 'down' : 'across';
+        $('#solveDir').textContent = solve.dir === 'across' ? '向き：ヨコ →' : '向き：タテ ↓';
+        solveRender(); solveRenderClues();
+      });
+      $('#solveCheck').addEventListener('click', solveDoCheck);
+      $('#solveClear').addEventListener('click', () => {
+        if (!confirm('入れた文字を全部消します。よろしいですか？')) return;
+        solve.input.clear();
+        $('#solveGrid').querySelectorAll('.cell').forEach(el => { delete el.dataset.judge; });
+        $('#solveMsg').textContent = ''; $('#solveMsg').className = '';
+        solveSaveInput(); solveRender(); solveRenderClues();
+      });
+      [$('#solveAcross'), $('#solveDown')].forEach(box => {
+        box.addEventListener('click', (e) => {
+          const el = e.target.closest('.solve-clue');
+          if (!el) return;
+          solve.dir = el.dataset.dir;
+          $('#solveDir').textContent = solve.dir === 'across' ? '向き：ヨコ →' : '向き：タテ ↓';
+          solve.sel = { r: Number(el.dataset.r), c: Number(el.dataset.c) };
+          solveRender(); solveRenderClues();
+        });
+      });
+      window.addEventListener('resize', () => { solveBuildGrid(); solveRender(); });
+    }
+
     // ===== 初期化 =====
     function init() {
+      // 配布リンク（#p=...）で開かれたときは、解く人のための画面にする
+      if (location.hash.startsWith('#p=')) {
+        const token = location.hash.slice(3);
+        try { startSolve(decodePayload(token), token); return; }
+        catch (e) { /* データが壊れていたら、ふつうの作成画面を出す */ }
+      }
       const saved = loadLocal();
       if (saved) applyData(saved);
       else { buildGrid(); refresh(); }
