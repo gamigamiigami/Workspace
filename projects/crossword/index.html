@@ -682,8 +682,11 @@
         <textarea id="linkText" style="width:100%;min-height:80px;font-size:12px;" spellcheck="false"></textarea>
         <div class="row" style="margin-top:6px;">
           <button id="btnCopyLink" class="sub small">リンクをコピー</button>
+          <button id="btnShorten" class="sub small">短いリンクにする（無料）</button>
+          <button id="btnLongLink" class="sub small" style="display:none;">長いリンクに戻す</button>
           <button id="btnCloseLink" class="sub small">閉じる</button>
         </div>
+        <p id="shortMsg" class="hint-line"></p>
         <p class="hint-line">
           このリンクを開くと、スマホやiPadでそのまま解けます（アプリ不要）。<br>
           ※答えもリンクの中に入っています。本気で調べれば見えるので、賞品つきの謎解きなどでは注意してください。
@@ -4897,6 +4900,8 @@ var qrcode = function() {
           $('#msg').textContent = '文字を選んで手でコピーしてください。';
         }
       });
+      $('#btnShorten').addEventListener('click', shortenLink);
+      $('#btnLongLink').addEventListener('click', restoreLongLink);
       $('#btnCloseLink').addEventListener('click', () => { $('#linkBox').style.display = 'none'; });
       $('#btnShowData').addEventListener('click', showDataBox);
       $('#btnCopyData').addEventListener('click', copyDataText);
@@ -5701,11 +5706,63 @@ var qrcode = function() {
       const url = location.href.split('#')[0] + '#' + await encodeShareHash(data);
       $('#linkText').value = url;
       $('#linkBox').style.display = 'block';
+      longLinkUrl = url;
+      $('#shortMsg').textContent = '';
+      $('#btnLongLink').style.display = 'none';
+      $('#btnShorten').style.display = '';
       showQrCode(url);
       $('#msg').textContent = noClue
         ? 'リンクを作りました。ただしカギが空の語が ' + noClue + ' 個あります（解く人が困ります）。'
         : 'リンクを作りました。QRコードを写すか、リンクをコピーして配ってください。';
       return url;
+    }
+
+    // 「長いリンク」は常に手元に残しておく（短縮に失敗しても、いつでも戻せるようにするため）
+    let longLinkUrl = '';
+
+    // 短いリンクにする（is.gd＝無料・登録不要の短縮サービス）
+    //
+    // ここだけは外部のサービスを使う。理由：問題データ（カギの文章）そのものが長さの正体なので、
+    // どれだけ圧縮してもURLは数百文字になる。100文字級にするには、データをどこかに預けて
+    // URLには合言葉だけを入れるしかない。
+    //
+    // ただし外部サービスは「学校のネットで弾かれる」「将来サービスが終わる」危険があるため、
+    // 長いリンクは必ず残し、失敗したらそのまま長いリンクで使えるようにしてある。
+    async function shortenLink() {
+      if (!longLinkUrl) return;
+      const btn = $('#btnShorten');
+      const msg = $('#shortMsg');
+      btn.disabled = true;
+      msg.textContent = '短くしています…（少し待ってください）';
+      try {
+        const res = await fetch('https://is.gd/create.php?format=json&url=' + encodeURIComponent(longLinkUrl));
+        const data = await res.json();
+        if (!data || !data.shorturl) throw new Error(data && data.errormessage ? data.errormessage : '短縮できませんでした');
+        $('#linkText').value = data.shorturl;
+        showQrCode(data.shorturl);
+        $('#btnLongLink').style.display = '';
+        btn.style.display = 'none';
+        msg.innerHTML = '短くしました（<b>' + data.shorturl.length + '文字</b>）。QRコードも短いリンクのものに変わりました。<br>'
+          + '※このリンクは is.gd という外部サービスが中継します。学校のネットが短縮リンクを'
+          + 'ブロックしている場合は開けないことがあるので、<b>配る前に一度お試しください</b>。'
+          + 'うまくいかないときは「長いリンクに戻す」を押せば元に戻ります。';
+      } catch (e) {
+        msg.innerHTML = '<span style="color:var(--ng)">短くできませんでした</span>（'
+          + escapeHtml(String(e.message || e)) + '）。<br>'
+          + 'ネットにつながっていないか、学校のネットが外部サービスをブロックしている可能性があります。'
+          + '上の<b>長いリンクとQRコードはそのまま使えます</b>ので、そちらを配ってください。';
+      }
+      btn.disabled = false;
+    }
+
+    // 短いリンクをやめて、元の長いリンクに戻す
+    function restoreLongLink() {
+      if (!longLinkUrl) return;
+      $('#linkText').value = longLinkUrl;
+      showQrCode(longLinkUrl);
+      $('#btnLongLink').style.display = 'none';
+      $('#btnShorten').style.display = '';
+      $('#shortMsg').textContent = '長いリンクに戻しました。このリンクは外部サービスを使わないので、必ず開けます。';
     }
 
     // リンクをQRコードにして表示する（外部通信なし・ブラウザ内だけで生成）
