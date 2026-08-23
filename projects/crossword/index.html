@@ -3109,8 +3109,8 @@ var qrcode = function() {
     // 短い配布リンクを使うためのサーバーのアドレス。
     // 空のままなら、今まで通り「問題データを全部URLに入れた長いリンク」になる（外部に一切つながらない）。
     // 設定のしかたは server/README.md を参照。
-    const SHARE_API = '';
-
+    const SHARE_API = 'https://crossword-store.igamiigamiigami.workers.dev';
+    
     const STORAGE_KEY = 'crossword-supporter-v1';
     const GRID = 41;          // 内部の作業スペース（画面に見せるのは「使っている範囲」だけ）
     const VIEW_MARGIN = 2;    // 使っている範囲の外側に見せる余白（マス）
