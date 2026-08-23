@@ -14,48 +14,47 @@
       --sub: #5c6672;
       --main: #2f6fb2;
       --main-dark: #245a92;
-      --ok: #1d8a4e;
       --ng: #c0392b;
       --soft: #eef4fa;
       --from: #ffe9a8;        /* もとの文字の印（黄） */
       --from-line: #e0a800;
-      --to: #cfe6ff;          /* 動かした先の印（青） */
-      --to-line: #2f6fb2;
+      --to-line: #2f6fb2;     /* ずらした先の印（青わく） */
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 16px;
-      line-height: 1.7;
+      line-height: 1.6;
       color: var(--text);
       background: var(--bg);
-      padding: 16px;
-      max-width: 820px;
+      padding: 10px 12px;
+      max-width: 1100px;
       margin: 0 auto;
     }
 
-    header { text-align: center; margin-bottom: 14px; }
-    header h1 { font-size: 22px; letter-spacing: .02em; }
-    header p { color: var(--sub); font-size: 14px; margin-top: 4px; }
+    header { text-align: center; margin-bottom: 8px; }
+    header h1 { font-size: 19px; letter-spacing: .02em; }
+    header h1 .sub-title { font-size: 12px; font-weight: 400; color: var(--sub); margin-left: 8px; }
 
     /* ===== モード切り替えタブ ===== */
-    .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 8px; }
     .tab-btn {
       flex: 1;
       background: #e7edf4;
       color: var(--text);
       border-radius: 10px 10px 0 0;
       font-size: 15px;
-      padding: 12px 8px;
+      padding: 9px 8px;
+      min-height: 44px;
     }
     .tab-btn[aria-pressed="true"] { background: var(--main); color: #fff; font-weight: 700; }
     .tab-btn .no {
       display: inline-block;
-      width: 22px; height: 22px; line-height: 22px;
+      width: 21px; height: 21px; line-height: 21px;
       border-radius: 50%;
       background: rgba(0,0,0,.12);
       margin-right: 6px;
-      font-size: 13px;
+      font-size: 12px;
     }
     .tab-btn[aria-pressed="true"] .no { background: rgba(255,255,255,.28); }
 
@@ -63,13 +62,13 @@
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px;
-      margin-bottom: 14px;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 10px;
     }
     .panel h2 {
-      font-size: 16px;
-      margin-bottom: 10px;
+      font-size: 15px;
+      margin-bottom: 8px;
       display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
     }
     .panel h2 .hint { font-size: 12px; font-weight: 400; color: var(--sub); }
@@ -77,7 +76,7 @@
     /* ===== 部品 ===== */
     .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
     button {
-      padding: 12px 18px;
+      padding: 10px 16px;
       font-size: 16px;
       font-family: inherit;
       border: none;
@@ -90,172 +89,160 @@
     button:hover { background: var(--main-dark); }
     button.sub { background: #e7edf4; color: var(--text); }
     button.sub:hover { background: #d8e2ee; }
-    /* 小さめのボタンでも、指でタップできる44pxは下回らないようにする */
-    button.small { padding: 8px 14px; font-size: 14px; min-height: 44px; }
+    button.small { padding: 8px 12px; font-size: 14px; min-height: 44px; }
     button.danger { background: #f3dedb; color: var(--ng); }
     button:disabled { opacity: .45; cursor: default; }
     textarea {
-      font-family: inherit;
-      font-size: 16px;
+      font-family: inherit; font-size: 16px;
       padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: #fff;
-      color: var(--text);
-      width: 100%;
-      min-height: 90px;
-      resize: vertical;
-      line-height: 1.8;
+      border: 1px solid var(--line); border-radius: 10px;
+      background: #fff; color: var(--text);
+      width: 100%; min-height: 80px; resize: vertical; line-height: 1.8;
     }
-    .hint-line { font-size: 13px; color: var(--sub); margin-top: 8px; }
+    .hint-line { font-size: 12px; color: var(--sub); margin-top: 6px; }
 
-    /* ===== 五十音表 ===== */
-    #gojuonWrap { overflow-x: auto; padding-bottom: 4px; }
-    .gojuon {
-      display: grid;
-      grid-template-columns: repeat(10, minmax(52px, 1fr));
-      gap: 4px;
-      min-width: 540px;
+    /* ===== 2つの表（清音の表・濁音半濁音の表） ===== */
+    /* 画面の幅に合わせてマスが縮むので、横スクロールは出ない */
+    /* 画面が横に広いとマスが大きくなりすぎて縦にはみ出すので、幅に上限をつける */
+    .tables { display: flex; gap: 14px; align-items: flex-start; max-width: 880px; margin: 0 auto; }
+    .tbl { display: grid; gap: 3px; }
+    .tbl-daku { flex: 5 1 0; grid-template-columns: repeat(5, 1fr); }
+    .tbl-sei  { flex: 10 1 0; grid-template-columns: repeat(10, 1fr); }
+    .tbl .head {
+      text-align: center;
+      font-size: clamp(9px, 1.3vw, 12px);
+      color: var(--sub);
+      padding-bottom: 2px;
+      white-space: nowrap;
     }
-    .gojuon .head { text-align: center; font-size: 12px; color: var(--sub); padding: 2px 0; }
     .kana {
       position: relative;
       aspect-ratio: 1 / 1;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px;
+      font-size: clamp(13px, 2.3vw, 22px);
       background: #fff;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 6px;
       cursor: pointer;
       user-select: none;
-      min-height: 44px;
+      min-height: 0;            /* 表のマスは画面の幅に合わせて縮ませる */
       padding: 0;
       color: var(--text);
+      line-height: 1;
     }
     .kana:hover { background: var(--soft); }
     .kana.blank { background: #f0f3f6; border-style: dashed; cursor: default; color: transparent; }
     .kana.blank:hover { background: #f0f3f6; }
-    /* もとの文字の印 */
     .kana.from { background: var(--from); border-color: var(--from-line); font-weight: 700; }
-    /* 動かした先の印 */
     .kana.to { box-shadow: inset 0 0 0 3px var(--to-line); }
     .kana.from.to { background: #ffe0b0; }
     .kana .badge {
-      position: absolute; top: 2px; right: 3px;
-      font-size: 11px; font-weight: 700; color: #8a6100; line-height: 1;
+      position: absolute; top: 1px; right: 2px;
+      font-size: clamp(8px, 1.1vw, 11px);
+      font-weight: 700; color: #8a6100; line-height: 1;
     }
 
-    .extra-group { margin-top: 12px; }
-    .extra-group h3 { font-size: 13px; color: var(--sub); font-weight: 600; margin-bottom: 6px; }
-    .extra-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 4px; }
-    .extra-row .kana { font-size: 20px; }
+    /* 表の下（「ん」と凡例） */
+    .under-tables { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .n-cell { width: clamp(28px, 4.4vw, 46px); }
+    .legend { font-size: 12px; color: var(--sub); }
+    .legend .sw-from { background: var(--from); padding: 1px 7px; border-radius: 4px; }
+    .legend .sw-to { box-shadow: inset 0 0 0 2px var(--to-line); padding: 1px 7px; border-radius: 4px; }
 
-    /* ===== ずらし方の操作（十字ボタン） ===== */
+    /* ===== 操作エリア（表モードでは横並びにして1画面に収める） ===== */
+    #app[data-mode="table"] .ctrl-wrap { display: flex; gap: 10px; align-items: stretch; }
+    #app[data-mode="table"] .ctrl-wrap > .panel { flex: 1; margin-bottom: 0; }
+    #app[data-mode="table"] #pairs { display: none; }   /* 1文字ずつの対応は文字列モードだけ */
+
     .pad {
       display: grid;
-      grid-template-columns: repeat(3, 52px);
-      grid-template-rows: repeat(3, 52px);
-      gap: 6px;
+      grid-template-columns: repeat(3, 48px);
+      grid-template-rows: repeat(3, 48px);
+      gap: 5px;
       justify-content: center;
     }
-    .pad button { padding: 0; font-size: 20px; min-height: 52px; }
-    .pad .center {
-      background: #e7edf4; color: var(--sub);
-      font-size: 12px; line-height: 1.3;
-    }
-    .shift-info {
-      text-align: center;
-      font-size: 15px;
-      margin-top: 10px;
-      color: var(--text);
-    }
+    .pad button { padding: 0; font-size: 19px; min-height: 48px; }
+    .pad .center { background: #e7edf4; color: var(--sub); font-size: 12px; line-height: 1.2; }
+    .shift-info { text-align: center; font-size: 14px; margin-top: 8px; color: var(--text); }
     .shift-info b { color: var(--main); font-size: 18px; }
+
+    /* ===== 法則を数で入れる欄（文字列モード） ===== */
+    .rule-input { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 10px; }
+    .rule-item { display: flex; align-items: center; gap: 6px; }
+    .rule-item select, .rule-item input[type="number"] {
+      font-family: inherit; font-size: 16px;
+      min-height: 44px; padding: 10px 8px;
+      border: 1px solid var(--line); border-radius: 10px;
+      background: #fff; color: var(--text);
+    }
+    .rule-item input[type="number"] { width: 74px; text-align: center; }
 
     /* ===== 結果の表示 ===== */
     .word-line {
-      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      font-size: 22px; letter-spacing: .1em;
-      padding: 12px 14px;
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 20px; letter-spacing: .08em;
+      padding: 10px 12px;
       background: var(--soft);
       border: 1px solid var(--line);
       border-radius: 10px;
       word-break: break-all;
-      min-height: 56px;
+      min-height: 48px;
     }
-    .word-line .arrow { color: var(--sub); font-size: 18px; letter-spacing: normal; }
+    .word-line .arrow { color: var(--sub); font-size: 16px; letter-spacing: normal; }
     .word-line .result { font-weight: 700; color: var(--main-dark); }
-    .word-line.empty { color: var(--sub); font-size: 15px; letter-spacing: normal; }
+    .word-line.empty { color: var(--sub); font-size: 14px; letter-spacing: normal; }
 
-    /* 1文字ずつの対応表 */
-    #pairs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
-    .pair { text-align: center; font-size: 13px; color: var(--sub); }
+    #pairs { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+    .pair { text-align: center; }
     .pair .a, .pair .b {
-      width: 42px; height: 42px; line-height: 42px;
-      border-radius: 8px; font-size: 20px; color: var(--text);
+      width: 38px; height: 38px; line-height: 38px;
+      border-radius: 7px; font-size: 19px; color: var(--text);
     }
     .pair .a { background: var(--from); border: 1px solid var(--from-line); }
-    .pair .b { background: var(--to); border: 1px solid var(--to-line); margin-top: 3px; font-weight: 700; }
+    .pair .b { background: #cfe6ff; border: 1px solid var(--to-line); margin-top: 3px; font-weight: 700; }
     .pair .b.none { background: #f3dedb; color: var(--ng); }
 
-    /* ===== 法則を数で入れる欄 ===== */
-    .rule-input {
-      display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
-      margin-top: 12px;
-    }
-    .rule-item { display: flex; align-items: center; gap: 6px; }
-    .rule-item select {
-      font-family: inherit; font-size: 16px;
-      padding: 10px 8px; min-height: 44px;
-      border: 1px solid var(--line); border-radius: 10px;
-      background: #fff; color: var(--text);
-    }
-    .rule-item input[type="number"] {
-      font-family: inherit; font-size: 16px;
-      width: 74px; min-height: 44px;
-      padding: 10px; text-align: center;
-      border: 1px solid var(--line); border-radius: 10px;
-      background: #fff; color: var(--text);
-    }
-
     /* ===== 提案された言葉の一覧 ===== */
-    #suggestList { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+    #suggestList { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 340px; overflow-y: auto; }
     .sug {
       display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
       width: 100%; text-align: left;
       background: #fff; color: var(--text);
       border: 1px solid var(--line); border-radius: 10px;
-      padding: 10px 12px; min-height: 44px;
-      font-size: 15px;
+      padding: 9px 12px; min-height: 44px; font-size: 15px;
     }
     .sug:hover { background: var(--soft); }
-    .sug .word { font-size: 20px; font-weight: 700; letter-spacing: .08em; }
+    .sug .word { font-size: 19px; font-weight: 700; letter-spacing: .08em; }
     .sug .kanji { color: var(--sub); font-size: 14px; }
     .sug .rule { margin-left: auto; color: var(--main-dark); font-size: 14px; }
 
     .rule-note {
-      font-size: 13px; color: var(--sub); margin-top: 10px;
+      font-size: 12px; color: var(--sub); margin-top: 8px;
       background: #fafbfc; border: 1px solid var(--line);
-      border-radius: 10px; padding: 10px 12px;
+      border-radius: 10px; padding: 8px 10px;
     }
 
-    footer {
-      text-align: center; color: var(--sub); font-size: 12px;
-      margin-top: 24px; padding-bottom: 24px;
-    }
+    footer { text-align: center; color: var(--sub); font-size: 11px; margin-top: 10px; }
     footer a { color: var(--main); }
 
-    @media (max-width: 520px) {
-      body { padding: 12px; }
-      .panel { padding: 14px; }
-      .tab-btn { font-size: 14px; }
+    /* せまい画面では操作エリアを縦に積む（それでも表は縮んで収まる） */
+    @media (max-width: 640px) {
+      body { padding: 8px; }
+      .tables { gap: 8px; }
+      .panel { padding: 9px; }
+      .pad { grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px); gap: 4px; }
+      .pad button { min-height: 44px; font-size: 17px; }
+      .word-line { font-size: 17px; padding: 8px 10px; min-height: 42px; }
+      .legend { font-size: 11px; }
+      header h1 { font-size: 17px; }
+      header h1 .sub-title { display: none; }
     }
   </style>
 </head>
 <body>
 
   <header>
-    <h1>🔤 文字ずらし君</h1>
-    <p>謎解き・脱出ゲームの問題づくりのための道具</p>
+    <h1>🔤 文字ずらし君<span class="sub-title">謎解き・脱出ゲームの問題づくり</span></h1>
   </header>
 
   <!-- ===== モード切り替え ===== -->
@@ -264,31 +251,22 @@
     <button class="tab-btn" data-mode="text" aria-pressed="false"><span class="no">2</span>文字列</button>
   </div>
 
-  <main id="app">
+  <main id="app" data-mode="table">
 
     <!-- ===== ① 五十音表モード ===== -->
     <section class="mode-panel" data-mode="table">
       <div class="panel">
-        <h2>五十音表 <span class="hint">文字をタップすると登録されます</span></h2>
-        <div id="gojuonWrap">
-          <div class="gojuon" id="gojuon"></div>
-          <div class="extra-row" id="nRow" style="margin-top:8px;"></div>
+        <div class="tables">
+          <div class="tbl tbl-daku" id="tblDaku"></div>
+          <div class="tbl tbl-sei" id="tblSei"></div>
         </div>
-
-        <div class="extra-group">
-          <h3>濁音・半濁音</h3>
-          <div class="extra-row" id="dakuon"></div>
+        <div class="under-tables">
+          <div class="n-cell" id="nCell"></div>
+          <span class="legend">
+            <span class="sw-from">黄</span>＝もとの文字　<span class="sw-to">青わく</span>＝ずらした先　／
+            左の濁音・半濁音の表と右の清音の表は<b>べつの表</b>です
+          </span>
         </div>
-
-        <div class="extra-group">
-          <h3>小さい文字・のばす音</h3>
-          <div class="extra-row" id="youon"></div>
-        </div>
-
-        <p class="hint-line">
-          <span style="background:var(--from);padding:1px 8px;border-radius:4px;">黄色</span>＝もとの文字
-          <span style="box-shadow:inset 0 0 0 2px var(--to-line);padding:1px 8px;border-radius:4px;">青わく</span>＝ずらした先
-        </p>
       </div>
     </section>
 
@@ -297,10 +275,30 @@
       <div class="panel">
         <h2>文字列を入れる <span class="hint">キーボードで直接入力します</span></h2>
         <textarea id="srcText" placeholder="例：あい" spellcheck="false"></textarea>
-        <p class="hint-line">入れた文字がそのまま「もとの文字」になります。ずらし方は下の「ずらす」で決めます。</p>
+
+        <div class="rule-input">
+          <div class="rule-item">
+            <select id="dirH" aria-label="左右の向き">
+              <option value="left">左に</option>
+              <option value="right">右に</option>
+            </select>
+            <input type="number" id="numH" value="0" step="1" aria-label="左右にずらす数">
+          </div>
+          <div class="rule-item">
+            <select id="dirV" aria-label="上下の向き">
+              <option value="down">下に</option>
+              <option value="up">上に</option>
+            </select>
+            <input type="number" id="numV" value="0" step="1" aria-label="上下にずらす数">
+          </div>
+        </div>
+        <p class="hint-line">
+          基本は「左に◯・下に◯」で考えます。数の欄に <b>−1</b> のようにマイナスを入れるか、
+          プルダウンを「右」「上」に変えると、反対向きにずらせます。
+        </p>
       </div>
 
-      <!-- ===== 提案機能：どんな法則にすれば実在の言葉になるか ===== -->
+      <!-- 提案機能：どんな法則にすれば実在の言葉になるか -->
       <div class="panel">
         <h2>どんな言葉にできる？ <span class="hint">文字の位置関係を保ったまま探します</span></h2>
         <button id="btnSuggest">この言葉から作れる言葉をさがす</button>
@@ -315,73 +313,44 @@
       </div>
     </section>
 
-    <!-- ===== 登録した文字（両モード共通） ===== -->
-    <div class="panel">
-      <h2>もとの文字 <span class="hint" id="pickedCount"></span></h2>
-      <div id="picked" class="word-line empty">まだ何も登録されていません。</div>
-      <div class="row" style="margin-top:10px;">
-        <button id="btnUndo" class="sub small">最後の1文字を消す</button>
-        <button id="btnClearChars" class="danger small">全部消す</button>
-      </div>
-    </div>
-
-    <!-- ===== ずらし方 ===== -->
-    <div class="panel">
-      <h2>ずらす <span class="hint">印のかたまりごと動かします</span></h2>
-      <div class="pad">
-        <div></div>
-        <button id="up" class="sub" aria-label="上へ1つずらす">↑</button>
-        <div></div>
-        <button id="left" class="sub" aria-label="左へ1つずらす">←</button>
-        <button id="reset" class="center" aria-label="もとに戻す">もどす</button>
-        <button id="right" class="sub" aria-label="右へ1つずらす">→</button>
-        <div></div>
-        <button id="down" class="sub" aria-label="下へ1つずらす">↓</button>
-        <div></div>
-      </div>
-      <p class="shift-info" id="shiftInfo">ずらしていません</p>
-
-      <!-- 数を打ち込んで指定する（マイナスを入れると反対向きになります） -->
-      <div class="rule-input">
-        <div class="rule-item">
-          <select id="dirH" aria-label="左右の向き">
-            <option value="left">左に</option>
-            <option value="right">右に</option>
-          </select>
-          <input type="number" id="numH" value="0" step="1" aria-label="左右にずらす数">
+    <!-- ===== 操作エリア（両モード共通） ===== -->
+    <div class="ctrl-wrap">
+      <div class="panel">
+        <h2>ずらす <span class="hint">印のかたまりごと動かします</span></h2>
+        <div class="pad">
+          <div></div>
+          <button id="up" class="sub" aria-label="上へ1つずらす">↑</button>
+          <div></div>
+          <button id="left" class="sub" aria-label="左へ1つずらす">←</button>
+          <button id="reset" class="center" aria-label="もとに戻す">もどす</button>
+          <button id="right" class="sub" aria-label="右へ1つずらす">→</button>
+          <div></div>
+          <button id="down" class="sub" aria-label="下へ1つずらす">↓</button>
+          <div></div>
         </div>
-        <div class="rule-item">
-          <select id="dirV" aria-label="上下の向き">
-            <option value="down">下に</option>
-            <option value="up">上に</option>
-          </select>
-          <input type="number" id="numV" value="0" step="1" aria-label="上下にずらす数">
-        </div>
+        <p class="shift-info" id="shiftInfo">ずらしていません</p>
       </div>
-      <p class="hint-line" style="text-align:center;">
-        キーボードの矢印キーでも動かせます。表のはしまで行くと、反対がわに回り込みます。<br>
-        数の欄に <b>−1</b> のようにマイナスを入れると、反対向きにずらせます。
-      </p>
-    </div>
 
-    <!-- ===== できあがり ===== -->
-    <div class="panel">
-      <h2>できあがり <span class="hint">もとの文字 → ずらした文字</span></h2>
-      <div id="result" class="word-line empty">まだ何も登録されていません。</div>
-      <div id="pairs"></div>
-      <div class="row" style="margin-top:10px;">
-        <button id="btnCopy" class="sub small">ずらした文字をコピー</button>
-        <button id="btnSwap" class="sub small">ずらした文字を「もとの文字」にする</button>
+      <div class="panel">
+        <h2>できあがり <span class="hint" id="pickedCount"></span></h2>
+        <div id="result" class="word-line empty">表の文字をタップすると、ここに出ます。</div>
+        <div id="pairs"></div>
+        <div class="row" style="margin-top:8px;">
+          <button id="btnUndo" class="sub small">1文字消す</button>
+          <button id="btnClearChars" class="danger small">全部消す</button>
+          <button id="btnCopy" class="sub small">コピー</button>
+          <button id="btnSwap" class="sub small">結果をもとにする</button>
+        </div>
+        <p id="msg" class="hint-line"></p>
+        <div class="rule-note" id="ruleNote" hidden></div>
       </div>
-      <p id="msg" class="hint-line"></p>
-      <div class="rule-note" id="ruleNote"></div>
     </div>
 
   </main>
 
   <footer>
-    文字ずらし君 ｜ 外部の通信は使っていないので、ネットがなくても動きます<br>
-    <a href="../../">← 作品一覧にもどる</a>
+    外部の通信は使っていないので、ネットがなくても動きます ｜
+    <a href="../../">作品一覧にもどる</a>
   </footer>
 
   <!-- ===== 国語辞書（提案機能で「実在する言葉か」を調べるために使う） =====
@@ -394,9 +363,13 @@
   </script>
 
   <script>
-    // ===== 五十音表のデータ =====
-    // 国語の教科書と同じ並び（画面の右はしが「あ行」）。空欄は今の国語では使わないところ
-    const COLUMNS = [
+    // ===== 表のデータ =====
+    // 表は2つある。清音の表と、濁音・半濁音の表。
+    // 画面では左右に並べているが **べつの表** なので、はしまで行くとその表の中で回り込む。
+    // （例：清音の表のわ行を左にずらすと、同じ表の反対がわ＝あ行に回り込む）
+
+    // 清音の表：国語の教科書と同じ並び（画面の右はしが「あ行」）
+    const SEI = [
       { name: 'わ', kana: ['わ', '', '', '', 'を'] },
       { name: 'ら', kana: ['ら', 'り', 'る', 'れ', 'ろ'] },
       { name: 'や', kana: ['や', '', 'ゆ', '', 'よ'] },
@@ -408,32 +381,27 @@
       { name: 'か', kana: ['か', 'き', 'く', 'け', 'こ'] },
       { name: 'あ', kana: ['あ', 'い', 'う', 'え', 'お'] }
     ];
-    const COLS = COLUMNS.length;   // 10行（あ行〜わ行）
-    const DANS = 5;                // 5段（あ段〜お段）
-    const N_KANA = 'ん';           // 「ん」は五十音表の外
 
-    // 濁点・半濁点の対応
-    const DAKU = {
-      か:'が', き:'ぎ', く:'ぐ', け:'げ', こ:'ご',
-      さ:'ざ', し:'じ', す:'ず', せ:'ぜ', そ:'ぞ',
-      た:'だ', ち:'ぢ', つ:'づ', て:'で', と:'ど',
-      は:'ば', ひ:'び', ふ:'ぶ', へ:'べ', ほ:'ぼ'
-    };
-    const HANDAKU = { は:'ぱ', ひ:'ぴ', ふ:'ぷ', へ:'ぺ', ほ:'ぽ' };
-    const YOUON = ['ゃ','ゅ','ょ','っ','ぁ','ぃ','ぅ','ぇ','ぉ','ー'];
+    // 濁音・半濁音の表：清音の表の左どなりに置く。右はしが「が行」になる並び
+    const DAKU = [
+      { name: 'ぱ', kana: ['ぱ', 'ぴ', 'ぷ', 'ぺ', 'ぽ'] },
+      { name: 'ば', kana: ['ば', 'び', 'ぶ', 'べ', 'ぼ'] },
+      { name: 'だ', kana: ['だ', 'ぢ', 'づ', 'で', 'ど'] },
+      { name: 'ざ', kana: ['ざ', 'じ', 'ず', 'ぜ', 'ぞ'] },
+      { name: 'が', kana: ['が', 'ぎ', 'ぐ', 'げ', 'ご'] }
+    ];
 
-    // もとの清音を引くための逆引き表をつくる
-    const UNDAKU = {};
-    Object.entries(DAKU).forEach(([base, d]) => { UNDAKU[d] = { base, mark: 'daku' }; });
-    Object.entries(HANDAKU).forEach(([base, d]) => { UNDAKU[d] = { base, mark: 'handaku' }; });
+    const TABLES = { sei: SEI, daku: DAKU };
+    const DANS = 5;          // どちらの表も5段（あ段〜お段）
+    const N_KANA = 'ん';     // 「ん」はどちらの表にも入らない
 
-    // 文字 → 表の位置（何行目・何段目か）
+    // 文字 → どの表の何行目・何段目か
     const POS = {};
-    COLUMNS.forEach((col, ci) => {
-      col.kana.forEach((ch, di) => { if (ch) POS[ch] = { col: ci, dan: di }; });
+    Object.entries(TABLES).forEach(([id, cols]) => {
+      cols.forEach((col, ci) => {
+        col.kana.forEach((ch, di) => { if (ch) POS[ch] = { table: id, col: ci, dan: di }; });
+      });
     });
-
-    const DAKUON_LIST = Object.values(DAKU).concat(Object.values(HANDAKU));
 
     // ===== 状態管理 =====
     const state = {
@@ -447,58 +415,36 @@
     const $$ = (sel) => document.querySelectorAll(sel);
 
     // ===== 1文字をずらす =====
-    // 返り値：ずらした文字。五十音表に文字がないところに来たら null
+    // 返り値：ずらした文字。表に文字がないところに来たら null
     function shiftChar(ch, dCol, dDan) {
-      // 「ん」と小さい文字・のばす音は五十音表の中にないので、動かさずそのまま残す
-      if (ch === N_KANA || YOUON.includes(ch)) return ch;
+      const pos = POS[ch];
+      // 「ん」など、どちらの表にもない文字は動かさずそのまま残す
+      if (!pos) return ch;
 
-      // 濁点・半濁点つきの文字は、もとの清音の位置で動かす（ぱ →「は」の位置で動かす）
-      let base = ch;
-      let mark = null;
-      if (UNDAKU[ch]) { base = UNDAKU[ch].base; mark = UNDAKU[ch].mark; }
-
-      const pos = POS[base];
-      if (!pos) return ch;   // 五十音表にない文字（漢字など）はそのまま
-
-      // はしまで行ったら反対がわに回り込む
-      const nc = ((pos.col + dCol) % COLS + COLS) % COLS;
+      const cols = TABLES[pos.table];
+      const n = cols.length;                       // 清音は10、濁音は5
+      const nc = ((pos.col + dCol) % n + n) % n;   // その表の中だけで回り込む
       const nd = ((pos.dan + dDan) % DANS + DANS) % DANS;
-      const dest = COLUMNS[nc].kana[nd];
-      if (!dest) return null;   // 空欄（や行の「い」など）に来てしまった
-
-      // 動かした先でも濁点・半濁点が付けられるなら付け直す
-      if (mark === 'daku' && DAKU[dest]) return DAKU[dest];
-      if (mark === 'handaku' && HANDAKU[dest]) return HANDAKU[dest];
-      return dest;
+      return cols[nc].kana[nd] || null;            // 空欄（や行の「い」など）なら null
     }
 
-    // 登録した文字を全部ずらした結果を返す
     function shiftedChars() {
       return state.chars.map(ch => shiftChar(ch, state.dCol, state.dDan));
     }
 
-    // ===== 五十音表を組み立てる =====
-    function buildGojuon() {
-      const grid = $('#gojuon');
+    // ===== 表を組み立てる =====
+    function buildTable(sel, cols) {
+      const grid = $(sel);
       grid.innerHTML = '';
-      COLUMNS.forEach(col => {
+      cols.forEach(col => {
         const h = document.createElement('div');
         h.className = 'head';
         h.textContent = col.name + '行';
         grid.appendChild(h);
       });
       for (let dan = 0; dan < DANS; dan++) {
-        COLUMNS.forEach(col => grid.appendChild(makeKanaCell(col.kana[dan])));
+        cols.forEach(col => grid.appendChild(makeKanaCell(col.kana[dan])));
       }
-      fillRow('#nRow', [N_KANA]);
-      fillRow('#dakuon', DAKUON_LIST);
-      fillRow('#youon', YOUON);
-    }
-
-    function fillRow(sel, list) {
-      const box = $(sel);
-      box.innerHTML = '';
-      list.forEach(ch => box.appendChild(makeKanaCell(ch)));
     }
 
     function makeKanaCell(ch) {
@@ -529,36 +475,55 @@
     }
 
     // ===== ずらす操作 =====
+    // 表ごとに行の数がちがう（10と5）ので、ずれの数は10でひとまわりとして持つ
+    const COL_CYCLE = 10;
+
     function moveBy(dCol, dDan) {
-      state.dCol = ((state.dCol + dCol) % COLS + COLS) % COLS;
+      state.dCol = ((state.dCol + dCol) % COL_CYCLE + COL_CYCLE) % COL_CYCLE;
       state.dDan = ((state.dDan + dDan) % DANS + DANS) % DANS;
       render();
     }
 
     function resetShift() { state.dCol = 0; state.dDan = 0; render(); }
 
-    // ===== 法則を数で指定する =====
-    // 基本は「左に◯・下に◯」。マイナスを入れるか、プルダウンを変えると反対向きになる
+    // 「右に7」より「左に3」のほうが近ければ、そちらの言い方にする
+    function signedCol(dCol) { return dCol > COL_CYCLE / 2 ? dCol - COL_CYCLE : dCol; }
+    function signedDan(dDan) { return dDan > DANS / 2 ? dDan - DANS : dDan; }
+
+    function describeShift() {
+      if (!state.dCol && !state.dDan) return 'ずらしていません';
+      const parts = [];
+      const down = signedDan(state.dDan);
+      const right = signedCol(state.dCol);
+      if (down) parts.push(down > 0 ? '下に <b>' + down + '</b>' : '上に <b>' + (-down) + '</b>');
+      if (right) parts.push(right > 0 ? '右に <b>' + right + '</b>' : '左に <b>' + (-right) + '</b>');
+      return parts.join('　／　');
+    }
+
+    function ruleText(dCol, dDan) {
+      const parts = [];
+      const right = signedCol(dCol), down = signedDan(dDan);
+      if (right) parts.push(right > 0 ? '右に' + right : '左に' + (-right));
+      if (down) parts.push(down > 0 ? '下に' + down : '上に' + (-down));
+      return parts.length ? parts.join('・') : 'ずらさない';
+    }
+
+    // ===== 法則を数で指定する（文字列モード） =====
     function applyRuleInput() {
       const h = Number($('#numH').value) || 0;
       const v = Number($('#numV').value) || 0;
-      // 左に1 ＝ 表の上では「左へ1マス」なので、内部では右向きプラスの数に直す
       const right = $('#dirH').value === 'right' ? h : -h;
       const down = $('#dirV').value === 'down' ? v : -v;
-      state.dCol = ((right % COLS) + COLS) % COLS;
+      state.dCol = ((right % COL_CYCLE) + COL_CYCLE) % COL_CYCLE;
       state.dDan = ((down % DANS) + DANS) % DANS;
       render();
     }
 
-    // 今のずれを、選ばれている向きに合わせた数にして欄に書き戻す
     function syncRuleInput() {
-      const dirH = $('#dirH').value;   // 'left' なら左向きを正の数として表示する
-      const dirV = $('#dirV').value;
-      // 右にいくつ動いたか（0〜9）を、-5〜5 くらいの近い言い方に直す
-      let right = state.dCol > COLS / 2 ? state.dCol - COLS : state.dCol;
-      let down = state.dDan > DANS / 2 ? state.dDan - DANS : state.dDan;
-      $('#numH').value = dirH === 'right' ? right : -right;
-      $('#numV').value = dirV === 'down' ? down : -down;
+      const right = signedCol(state.dCol);
+      const down = signedDan(state.dDan);
+      $('#numH').value = $('#dirH').value === 'right' ? right : -right;
+      $('#numV').value = $('#dirV').value === 'down' ? down : -down;
     }
 
     // ===== 辞書（提案機能で使う） =====
@@ -571,50 +536,34 @@
         const sep = entry.indexOf(':');
         const yomi = sep < 0 ? entry : entry.slice(0, sep);
         const kanji = sep < 0 ? '' : entry.slice(sep + 1);
-        // 同じ読みが複数あれば、頻度の高い（先に出てきた）ほうを残す
         if (!map.has(yomi)) map.set(yomi, { kanji, rank: i });
       });
       DICT = map;
       return DICT;
     }
 
-    // ずらし方を日本語の一文にする（「左に1・下に1」）
-    function ruleText(dCol, dDan) {
-      const parts = [];
-      const right = dCol > COLS / 2 ? dCol - COLS : dCol;
-      const down = dDan > DANS / 2 ? dDan - DANS : dDan;
-      if (right) parts.push(right > 0 ? '右に' + right : '左に' + (-right));
-      if (down) parts.push(down > 0 ? '下に' + down : '上に' + (-down));
-      return parts.length ? parts.join('・') : 'ずらさない';
-    }
-
     // ===== 提案：どんな法則にすれば実在の言葉になるか =====
     function findWords() {
       const src = state.chars.join('');
-      const box = $('#suggestBox');
       const list = $('#suggestList');
-      box.hidden = false;
+      $('#suggestBox').hidden = false;
       list.innerHTML = '';
 
-      if (!src) {
-        $('#suggestMsg').textContent = '先にもとの言葉を入れてください。';
-        return;
-      }
+      if (!src) { $('#suggestMsg').textContent = '先にもとの言葉を入れてください。'; return; }
 
       const dict = loadDict();
       const found = [];
-      // 五十音表のずらし方は 10行 × 5段 ＝ 50通りしかないので、全部試せる
-      for (let dCol = 0; dCol < COLS; dCol++) {
+      // ずらし方は 10通り × 5段 ＝ 50通りしかないので、全部ためせる
+      for (let dCol = 0; dCol < COL_CYCLE; dCol++) {
         for (let dDan = 0; dDan < DANS; dDan++) {
-          if (dCol === 0 && dDan === 0) continue;   // ずらさないのは除く
+          if (dCol === 0 && dDan === 0) continue;
           const out = state.chars.map(ch => shiftChar(ch, dCol, dDan));
-          if (out.some(c => c === null)) continue;  // 空欄に来たものは使えない
+          if (out.some(c => c === null)) continue;
           const word = out.join('');
           const hit = dict.get(word);
           if (hit) found.push({ word, kanji: hit.kanji, rank: hit.rank, dCol, dDan });
         }
       }
-
       found.sort((a, b) => a.rank - b.rank);   // よく使う言葉から先に出す
 
       if (!found.length) {
@@ -649,27 +598,12 @@
       ));
     }
 
-    // ずれ方を日本語で説明する（「右に3」より「左に7」のほうが近ければそちらで言う）
-    function describeShift() {
-      if (!state.dCol && !state.dDan) return 'ずらしていません';
-      const parts = [];
-      if (state.dDan) {
-        const down = state.dDan, up = DANS - state.dDan;
-        parts.push(down <= up ? '下に <b>' + down + '</b>' : '上に <b>' + up + '</b>');
-      }
-      if (state.dCol) {
-        const right = state.dCol, left = COLS - state.dCol;
-        parts.push(right <= left ? '右に <b>' + right + '</b>' : '左に <b>' + left + '</b>');
-      }
-      return parts.join('　／　');
-    }
-
-    // ===== ずらした文字を「もとの文字」にする =====
+    // ===== 結果を出発点にする =====
     function swapToResult() {
       const out = shiftedChars();
       if (!out.length) { showMsg('先に文字を登録してください。'); return; }
       if (out.some(c => c === null)) {
-        showMsg('五十音表にない場所（・）があるので、そのままでは移せません。ずらし方を変えてください。');
+        showMsg('表に文字がないところ（・）があるので、そのままでは移せません。ずらし方を変えてください。');
         return;
       }
       state.chars = out;
@@ -687,17 +621,13 @@
       const outText = out.map(c => c === null ? '・' : c).join('');
       const moved = state.dCol !== 0 || state.dDan !== 0;
 
-      // もとの文字
-      const picked = $('#picked');
-      if (src) { picked.textContent = src; picked.classList.remove('empty'); }
-      else { picked.textContent = 'まだ何も登録されていません。'; picked.classList.add('empty'); }
-      $('#pickedCount').textContent = state.chars.length ? state.chars.length + '文字' : '';
-
       // できあがり（もとの文字の右となりに、ずらした文字を並べる）
       const res = $('#result');
       res.innerHTML = '';
       if (!src) {
-        res.textContent = 'まだ何も登録されていません。';
+        res.textContent = state.mode === 'table'
+          ? '表の文字をタップすると、ここに出ます。'
+          : '文字を入れると、ここに出ます。';
         res.classList.add('empty');
       } else {
         res.classList.remove('empty');
@@ -711,16 +641,16 @@
         b.textContent = outText;
         res.append(a, arrow, b);
       }
+      $('#pickedCount').textContent = state.chars.length ? state.chars.length + '文字' : '';
 
-      // 1文字ずつの対応
+      // 1文字ずつの対応（文字列モードだけに出す）
       const pairs = $('#pairs');
       pairs.innerHTML = '';
       state.chars.forEach((ch, i) => {
         const wrap = document.createElement('div');
         wrap.className = 'pair';
         const a = document.createElement('div');
-        a.className = 'a';
-        a.textContent = ch;
+        a.className = 'a'; a.textContent = ch;
         const b = document.createElement('div');
         b.className = 'b' + (out[i] === null ? ' none' : '');
         b.textContent = out[i] === null ? '・' : out[i];
@@ -728,7 +658,7 @@
         pairs.appendChild(wrap);
       });
 
-      // 五十音表の印（もとの文字＝黄、ずらした先＝青わく）
+      // 表の印（もとの文字＝黄、ずらした先＝青わく）
       const fromCount = {};
       state.chars.forEach(c => { fromCount[c] = (fromCount[c] || 0) + 1; });
       const toSet = new Set(moved ? out.filter(c => c !== null) : []);
@@ -757,8 +687,6 @@
       $('#btnCopy').disabled = !state.chars.length;
 
       if (state.mode === 'table') $('#srcText').value = src;
-
-      // 数で指定する欄も、今のずれに合わせておく（十字ボタンと食いちがわないように）
       if (document.activeElement !== $('#numH') && document.activeElement !== $('#numV')) {
         syncRuleInput();
       }
@@ -769,21 +697,15 @@
     // 特別なあつかいをした文字について、その場で説明する
     function updateRuleNote(out) {
       const notes = [];
-      if (state.chars.some(c => c === N_KANA)) {
-        notes.push('「ん」は五十音表の外にあるので、ずらさずそのまま残します。');
-      }
-      if (state.chars.some(c => YOUON.includes(c))) {
-        notes.push('小さい文字（ゃゅょっ）と「ー」も、ずらさずそのまま残します。');
-      }
-      if (state.chars.some(c => UNDAKU[c])) {
-        notes.push('濁点・半濁点つきの文字は、もとの清音の場所で動かして、動かした先でも点を付け直します（付けられないときは点なしになります）。');
+      if (state.chars.some(c => !POS[c])) {
+        notes.push('「ん」など表にない文字は、ずらさずそのまま残します。');
       }
       if (out.some(c => c === null)) {
-        notes.push('<span style="color:var(--ng)">「・」は五十音表に文字がないところです。</span>ずらし方を変えると消えます。');
+        notes.push('<span style="color:var(--ng)">「・」は表に文字がないところです。</span>ずらし方を変えると消えます。');
       }
-      $('#ruleNote').innerHTML = notes.length
-        ? notes.map(n => '・' + n).join('<br>')
-        : '「ん」や濁点つきの文字を使うと、ここに扱い方の説明が出ます。';
+      const note = $('#ruleNote');
+      note.hidden = !notes.length;
+      note.innerHTML = notes.map(n => '・' + n).join('<br>');
     }
 
     function showMsg(text) { $('#msg').textContent = text; }
@@ -791,6 +713,7 @@
     // ===== モードの切り替え =====
     function setMode(mode) {
       state.mode = mode;
+      $('#app').dataset.mode = mode;
       $$('.tab-btn').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode)));
       $$('.mode-panel').forEach(p => { p.hidden = p.dataset.mode !== mode; });
       showMsg('');
@@ -814,7 +737,6 @@
 
     // ===== 操作の割り当て =====
     function bindEvents() {
-      // 五十音表のタップ（1マスずつではなく、まとめて受け取る）
       $('#app').addEventListener('click', (e) => {
         const cell = e.target.closest('.kana[data-kana]');
         if (!cell) return;
@@ -834,17 +756,10 @@
       $('#right').addEventListener('click', () => moveBy(1, 0));
       $('#reset').addEventListener('click', resetShift);
 
-      // 法則を数で指定する欄
-      ['#numH', '#numV'].forEach(sel => {
-        $(sel).addEventListener('input', applyRuleInput);
-      });
-      // 向き（左右・上下）を変えたときは、今のずれを新しい向きの言い方に直すだけ
-      ['#dirH', '#dirV'].forEach(sel => {
-        $(sel).addEventListener('change', syncRuleInput);
-      });
+      ['#numH', '#numV'].forEach(sel => $(sel).addEventListener('input', applyRuleInput));
+      ['#dirH', '#dirV'].forEach(sel => $(sel).addEventListener('change', syncRuleInput));
 
       $('#btnSuggest').addEventListener('click', findWords);
-
       $('#btnUndo').addEventListener('click', undoChar);
       $('#btnClearChars').addEventListener('click', clearChars);
       $('#btnCopy').addEventListener('click', copyResult);
@@ -863,7 +778,9 @@
 
     // ===== 初期化 =====
     function init() {
-      buildGojuon();
+      buildTable('#tblDaku', DAKU);
+      buildTable('#tblSei', SEI);
+      $('#nCell').appendChild(makeKanaCell(N_KANA));
       bindEvents();
       setMode('table');
     }
