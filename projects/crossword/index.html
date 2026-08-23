@@ -733,12 +733,18 @@
         <button id="btnOpenWork" class="sub">保存した作品を開く</button>
         <button id="btnNewWork" class="sub">新しく作る</button>
       </div>
+      <div id="altBox" style="display:none;margin-top:10px;">
+        <p id="altMsg" class="hint-line"></p>
+        <div id="altList"></div>
+        <button id="btnCloseAlt" class="sub small" style="margin-top:6px;">閉じる</button>
+      </div>
       <div id="workListBox" style="display:none;margin-top:10px;">
         <div id="workListItems"></div>
         <button id="btnCloseWorkList" class="sub small" style="margin-top:6px;">閉じる</button>
       </div>
       <p class="hint-line">「作品として保存」した内容は、名前つきでこの端末に残ります。あとで一覧から開いて続きができます。</p>
       <div class="row" style="margin-top:8px;">
+        <button id="btnCheckAlt" class="sub">別の答えがないか調べる</button>
         <button id="btnPrintQ">問題を印刷</button>
         <button id="btnPrintA" class="sub">解答を印刷</button>
       </div>
@@ -5078,6 +5084,8 @@ var qrcode = function() {
       $('#hideLetters').addEventListener('change', (e) => { state.hideLetters = e.target.checked; refresh(); });
       $('#showNums').addEventListener('change', (e) => { state.showNums = e.target.checked; refresh(); });
       $('#title').addEventListener('input', (e) => { state.title = e.target.value; saveLocal(); });
+      $('#btnCheckAlt').addEventListener('click', checkAlternatives);
+      $('#btnCloseAlt').addEventListener('click', () => { $('#altBox').style.display = 'none'; });
       $('#btnPrintQ').addEventListener('click', () => doPrint(false));
       $('#btnPrintA').addEventListener('click', () => doPrint(true));
       $('#btnSaveWork').addEventListener('click', saveAsWork);
@@ -5094,8 +5102,10 @@ var qrcode = function() {
         // 「試しに解いてみる」で来たという印を残す。
         // これがある時だけ「作る画面にもどる」を出すので、配布リンクを開いた人には出ない
         try { sessionStorage.setItem(TRY_KEY, '1'); } catch (e) { /* 使えなくても支障はない */ }
-        // 同じページ内で # を変えるだけでは読み込み直されないので、明示的に読み直す
-        location.href = url;
+        // location.href への代入はすぐには反映されないので、直後の reload() が
+        // 古いアドレスを読み直してしまう（短いリンク ?q=… にすると特に顕著）。
+        // replaceState はその場でアドレスを書きかえるので、続けて reload できる
+        window.history.replaceState(null, '', url);
         location.reload();
       });
       $('#btnCopyLink').addEventListener('click', () => {
@@ -5829,6 +5839,163 @@ var qrcode = function() {
         btnBox.appendChild(b);
       });
       showMsg('自動で作りました。直したいところは手で動かせます。', 'ok');
+    }
+
+    // ===== 別の答えがないか調べる =====
+    //
+    // スケルトン（語群を当てはめる問題）では、語の組み合わせを入れかえても
+    // 成立してしまうことがある。そうなると答えが1つに決まらないので、
+    // 「語をマスの並びに入れる」総当たりで、成立する組み合わせが何通りあるかを数える。
+    //
+    // クロスワード（カギを読む問題）でも、同じ長さの語が入れかわる場所があると
+    // カギ次第では紛れが起きるので、同じ調べ方で知らせる。
+
+    // 盤面のマスの形から「語が入る並び」をすべて求める
+    function boardSlots() {
+      const has = (r, c) => board.map.has(key(r, c));
+      const slots = [];
+      state.placed.forEach(() => {});
+      const bb = boundingBox();
+      if (!bb) return slots;
+      for (let r = bb.minR; r <= bb.maxR; r++) {
+        for (let c = bb.minC; c <= bb.maxC; c++) {
+          if (!has(r, c)) continue;
+          if (!has(r, c - 1)) {
+            let len = 0;
+            while (has(r, c + len)) len++;
+            if (len >= 2) slots.push({ r, c, dir: 'across', len });
+          }
+          if (!has(r - 1, c)) {
+            let len = 0;
+            while (has(r + len, c)) len++;
+            if (len >= 2) slots.push({ r, c, dir: 'down', len });
+          }
+        }
+      }
+      return slots;
+    }
+
+    function slotCells(sl) {
+      const out = [];
+      for (let i = 0; i < sl.len; i++) {
+        out.push({ r: sl.r + (sl.dir === 'down' ? i : 0), c: sl.c + (sl.dir === 'across' ? i : 0) });
+      }
+      return out;
+    }
+
+    // 語を並びに割りあてる総当たり。見つかった答えを最大 limit 通りまで集める
+    function solveArrangements(slots, words, limit) {
+      const found = [];
+      const used = new Array(words.length).fill(false);
+      const grid = new Map();       // 'r,c' -> 文字
+      const assign = new Array(slots.length).fill(null);
+
+      // 埋まっているマスが多い並びから決めていくと、はやく枝刈りできる
+      const order = slots.map((sl, i) => i);
+
+      const rec = (depth) => {
+        if (found.length >= limit) return;
+        if (depth === slots.length) {
+          found.push(assign.slice());
+          return;
+        }
+        const si = order[depth];
+        const sl = slots[si];
+        const cells = slotCells(sl);
+        for (let wi = 0; wi < words.length; wi++) {
+          if (used[wi]) continue;
+          const cs = chars(words[wi]);
+          if (cs.length !== sl.len) continue;
+          // すでに置いた語と、交わるマスの文字が合うか
+          let ok = true;
+          for (let i = 0; i < cs.length; i++) {
+            const k = key(cells[i].r, cells[i].c);
+            const cur = grid.get(k);
+            if (cur !== undefined && cur !== cs[i]) { ok = false; break; }
+          }
+          if (!ok) continue;
+          // 置く
+          const wrote = [];
+          for (let i = 0; i < cs.length; i++) {
+            const k = key(cells[i].r, cells[i].c);
+            if (!grid.has(k)) { grid.set(k, cs[i]); wrote.push(k); }
+          }
+          used[wi] = true;
+          assign[si] = wi;
+          rec(depth + 1);
+          // もどす
+          used[wi] = false;
+          assign[si] = null;
+          wrote.forEach(k => grid.delete(k));
+          if (found.length >= limit) return;
+        }
+      };
+      rec(0);
+      return found;
+    }
+
+    function checkAlternatives() {
+      const box = $('#altBox');
+      const list = $('#altList');
+      const msg = $('#altMsg');
+      box.style.display = 'block';
+      list.innerHTML = '';
+
+      if (state.placed.length < 2) {
+        msg.textContent = '先に2つ以上の語を盤面に置いてください。';
+        return;
+      }
+
+      const slots = boardSlots();
+      const words = state.placed.map(p => p.text);
+
+      if (slots.length !== state.placed.length) {
+        msg.innerHTML = '<span style="color:var(--ng)">盤面の形と語の数が合いません</span>（並び '
+          + slots.length + '／語 ' + state.placed.length + '）。'
+          + '交差していない語がある場合などに起きます。';
+        return;
+      }
+
+      msg.textContent = '調べています…';
+      const found = solveArrangements(slots, words, 6);
+
+      if (found.length <= 1) {
+        msg.innerHTML = '<span style="color:var(--ok);font-weight:700;">答えは1通りだけです。</span>'
+          + '語を入れかえて成立してしまう並びはありません。安心して出題できます。';
+        return;
+      }
+
+      // 今の置き方を基準にして、どこが入れかわったのかを出す
+      const cur = new Array(slots.length).fill(-1);
+      slots.forEach((sl, si) => {
+        const p = state.placed.find(x => x.r === sl.r && x.c === sl.c && x.dir === sl.dir);
+        if (p) cur[si] = words.indexOf(p.text);
+      });
+
+      msg.innerHTML = '<span style="color:var(--ng);font-weight:700;">答えが '
+        + (found.length >= 6 ? '6通り以上' : found.length + '通り') + 'あります。</span><br>'
+        + 'スケルトンでは答えが1つに決まりません。'
+        + 'クロスワードでも、カギの書き方によっては別の答えが通ってしまいます。'
+        + '入れかわる語を、ちがう文字数の語に変えると解消します。';
+
+      const num = (sl) => {
+        const n = numbers[idx(sl.r, sl.c)] || 0;
+        return (n ? n : '?') + (sl.dir === 'across' ? 'ヨコ' : 'タテ');
+      };
+
+      found.forEach((a, idx) => {
+        const diff = [];
+        slots.forEach((sl, si) => {
+          if (a[si] !== cur[si]) diff.push(num(sl) + '＝' + escapeHtml(words[a[si]]));
+        });
+        const div = document.createElement('div');
+        div.className = 'hint-line';
+        div.style.cssText = 'padding:6px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:4px;';
+        div.innerHTML = diff.length
+          ? '<b>別の答え' + idx + '：</b>' + diff.join('　／　')
+          : '<b>今の置き方</b>（これも成立します）';
+        if (diff.length) list.appendChild(div);
+      });
     }
 
     // ===== 解答モード（配布リンクを開いた人が解くための画面） =====
