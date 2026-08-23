@@ -4457,6 +4457,16 @@ var qrcode = function() {
     function storeWork(mode, isFirst) {
       const list = loadWorks();
       const now = Date.now();
+
+      // 「別の作品として保存」＝もとの作品からの枝分かれなので、配布リンクは引き継がない。
+      // 引き継いでしまうと、新しい作品でリンクを作ったときに
+      // もとの作品のリンクの中身が書きかわってしまう（同じリンクになってしまう）
+      const isCopy = mode === 'new' && !isFirst;
+      if (isCopy) {
+        state.shareId = null;
+        state.shareToken = '';
+      }
+
       const data = serialize();
 
       if (mode === 'overwrite') {
@@ -4467,7 +4477,8 @@ var qrcode = function() {
         item.data = data;
         if (saveWorks(list)) {
           markSaved();
-          showMsg('「' + item.title + '」を上書き保存しました。', 'ok');
+          showMsg('「' + item.title + '」を上書き保存しました。'
+            + (state.shareId ? '配布リンクは今までのままです。' : ''), 'ok');
         }
         return;
       }
@@ -4480,7 +4491,8 @@ var qrcode = function() {
         markSaved();
         showMsg(isFirst
           ? '「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。'
-          : '「' + title + '」を新しい作品として保存しました。（前の作品もそのまま残っています）', 'ok');
+          : '「' + title + '」を新しい作品として保存しました。前の作品はそのまま残ります。'
+            + 'この作品の配布リンクは、次に作るときに<b>新しいリンク</b>になります。', 'ok');
       }
     }
 
@@ -4494,8 +4506,9 @@ var qrcode = function() {
       const choice = await askChoice(
         'どちらに保存しますか？',
         '「' + name + '」は保存ずみです。\n\n'
-        + '・上書き保存 … 前の内容は消えて、今の内容に置きかわります\n'
-        + '・別の作品として保存 … 前の内容を残したまま、もう1つ増やします（作り直しのとき）',
+        + '・上書き保存 … 前の内容に置きかわります。配布リンクは今までのまま\n'
+        + '・別の作品として保存 … 前の作品を残して、もう1つ増やします。'
+        + '配布リンクは新しく作り直しになります（前のリンクは前の作品のまま残ります）',
         [
           { label: '上書き保存する', value: 'overwrite', kind: '' },
           { label: '別の作品として保存する', value: 'new', kind: 'sub' },
@@ -5943,7 +5956,7 @@ var qrcode = function() {
           headers: { 'Content-Type': 'application/json', 'x-token': state.shareToken },
           body
         });
-        if (res.ok) return state.shareId;
+        if (res.ok) { persistShareToWork(); return state.shareId; }
         // 合鍵が合わない・問題が消えているなどのときは、新しく作り直す
         if (res.status !== 403 && res.status !== 404) {
           const err = await res.json().catch(() => ({}));
@@ -5965,7 +5978,20 @@ var qrcode = function() {
       state.shareId = out.id;
       state.shareToken = out.token || '';
       saveLocal();
+      persistShareToWork();
       return out.id;
+    }
+
+    // 配布リンクの合言葉を、保存ずみの作品にも覚えさせる。
+    // これがないと、作品を開き直すたびに新しいリンクができてしまう
+    function persistShareToWork() {
+      if (!state.workId) return;
+      const list = loadWorks();
+      const item = list.find(w => w.id === state.workId);
+      if (!item || !item.data) return;
+      item.data.shareId = state.shareId;
+      item.data.shareToken = state.shareToken;
+      saveWorks(list);
     }
 
     // 合言葉から問題を取り出す（配布リンクを開いた人の側で動く）
