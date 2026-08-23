@@ -2,11 +2,16 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ことばかける君</title>
   <style>
     /* ===== リセット・基本スタイル ===== */
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ===== 画面のズームを固定する =====
+       ダブルタップでの拡大を止める。iPad では拡大されると盤面がずれて操作しづらくなるため。
+       （盤面など、指のドラッグを拾うところは下で touch-action: none を別に指定している） */
+    html, body { touch-action: manipulation; }
+
     :root {
       --navy: #1f3a5f;
       --navy-light: #33587f;
@@ -3872,6 +3877,16 @@ var qrcode = function() {
     function clearPreview() { preview = null; }
   </script>
   <script>
+    // ===== ズームを固定する =====
+    // iOS Safari は viewport の user-scalable=no を無視するので、
+    // ピンチ（2本指の拡大縮小）とダブルタップ拡大をここで止める
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => {
+      document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+    });
+    // ※ touchend で二度目のタップを止める書き方もあるが、
+    //   「五十音表を続けてタップする」ような速い連続タップまで潰してしまうので使わない。
+    //   ダブルタップ拡大は上の touch-action: manipulation で止まる。
+
     // ===== 操作（タップ／ドラッグ）の共通処理 =====
     // pending：指を置いただけの状態。少し動いたら drag に変わる
     let pending = null;

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>文字ずらし君</title>
   <style>
     /* ===== 配色・基本 ===== */
@@ -21,6 +21,11 @@
       --to-line: #2f6fb2;     /* ずらした先の印（青わく） */
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* ===== 画面のズームを固定する =====
+       ダブルタップでの拡大を止める。iPad では拡大されると盤面がずれて操作しづらくなるため。
+       （盤面など、指のドラッグを拾うところは下で touch-action: none を別に指定している） */
+    html, body { touch-action: manipulation; }
+
     body {
       font-family: system-ui, -apple-system, sans-serif;
       font-size: 16px;
@@ -569,6 +574,16 @@
   </script>
 
   <script>
+    // ===== ズームを固定する =====
+    // iOS Safari は viewport の user-scalable=no を無視するので、
+    // ピンチ（2本指の拡大縮小）とダブルタップ拡大をここで止める
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev => {
+      document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
+    });
+    // ※ touchend で二度目のタップを止める書き方もあるが、
+    //   「五十音表を続けてタップする」ような速い連続タップまで潰してしまうので使わない。
+    //   ダブルタップ拡大は上の touch-action: manipulation で止まる。
+
     // ===== 表のデータ =====
     // 表は2つ。清音の表と、濁音・半濁音の表。**べつの表**なので、ずらしても表をまたがない。
 
