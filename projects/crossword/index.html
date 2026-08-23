@@ -329,6 +329,14 @@
       padding: 4px 8px 16px; line-height: 1.6;
     }
 
+    /* 語群のことばは押してえらべる */
+    .wordbank .w { cursor: pointer; }
+    .wordbank .w.picked {
+      background: var(--main); color: #fff; font-weight: 700;
+      box-shadow: 0 0 0 3px rgba(47,111,178,.25);
+    }
+    .wordbank .w.done { opacity: .4; text-decoration: line-through; }
+
     /* ===== 語群（スケルトン） ===== */
     .wordbank { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
     .wordbank .row-len { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
@@ -795,6 +803,11 @@
     <div class="panel" id="solveBankPanel" hidden>
       <h2>語群 <span class="hint">このことばを、マスに当てはめます</span></h2>
       <div id="solveBank"></div>
+      <p class="hint-line">
+        <b>ことばをタップ → 入れたい場所のマスをタップ</b>で、まとめて入れられます。<br>
+        タテヨコどちらにも入る場所では、<b>同じマスをもう一度タップ</b>すると向きが切りかわります。
+        1文字ずつ手で入れることもできます。
+      </p>
     </div>
   </div>
 
@@ -6021,7 +6034,9 @@ var qrcode = function() {
     const solve = {
       w: 0, h: 0, words: [], answer: new Map(), input: new Map(),
       marks: [], clues: {}, numbers: new Map(), sel: null, dir: 'across', saveKey: '',
-      colors: new Map(), borders: new Map(), type: 'crossword', hints: new Set()
+      colors: new Map(), borders: new Map(), type: 'crossword', hints: new Set(),
+      pickedWord: null,      // 語群からえらんだことば（スケルトンのとき）
+      lastPlaceKey: ''       // 同じマスを続けて押したときに、タテヨコを切りかえるための覚え書き
     };
     const sKey = (r, c) => r + ',' + c;
 
@@ -6250,6 +6265,136 @@ var qrcode = function() {
         : '二重マスを埋めると、ここにキーワードが出ます。';
     }
 
+    // 盤面のマスの形から「ことばが入る並び」（2マス以上のつながり）をすべて求める。
+    // 答えの語そのものは見ずに、マスの形だけから求めるので、ヒントにはならない
+    function solveSlots() {
+      if (solve._slots) return solve._slots;
+      const has = (r, c) => solve.answer.has(sKey(r, c));
+      const slots = [];
+      for (let r = 0; r < solve.h; r++) {
+        for (let c = 0; c < solve.w; c++) {
+          if (!has(r, c)) continue;
+          // ヨコの並び：左どなりが無いところが始まり
+          if (!has(r, c - 1)) {
+            let len = 0;
+            while (has(r, c + len)) len++;
+            if (len >= 2) slots.push({ r, c, dir: 'across', len });
+          }
+          // タテの並び：上どなりが無いところが始まり
+          if (!has(r - 1, c)) {
+            let len = 0;
+            while (has(r + len, c)) len++;
+            if (len >= 2) slots.push({ r, c, dir: 'down', len });
+          }
+        }
+      }
+      solve._slots = slots;
+      return slots;
+    }
+
+    // そのマスを通り、長さがぴったり合う並びをさがす
+    function slotsThrough(r, c, len) {
+      return solveSlots().filter(sl => sl.len === len && (
+        sl.dir === 'across' ? (sl.r === r && c >= sl.c && c < sl.c + sl.len)
+                            : (sl.c === c && r >= sl.r && r < sl.r + sl.len)));
+    }
+
+    // えらんだことばを、その並びに書き入れる
+    function placeWordAt(word, slot) {
+      const cs = chars(word);
+      for (let i = 0; i < cs.length; i++) {
+        const r = slot.r + (slot.dir === 'down' ? i : 0);
+        const c = slot.c + (slot.dir === 'across' ? i : 0);
+        const k = sKey(r, c);
+        if (solve.hints.has(k)) continue;   // はじめから入っているマスは変えない
+        solve.input.set(k, cs[i]);
+        const el = $('#solveGrid').querySelector('.cell[data-r="' + r + '"][data-c="' + c + '"]');
+        if (el) delete el.dataset.judge;
+      }
+      solve.sel = { r: slot.r, c: slot.c };
+      solve.dir = slot.dir;
+      solve.pickedWord = null;
+      solveSaveInput();
+      solveRender();
+      solveRenderClues();
+      $('#solveMsg').textContent = '「' + word + '」を入れました。'
+        + (slot.dir === 'across' ? 'ヨコ' : 'タテ') + 'の並びです。';
+    }
+
+    // 語群のことばを押したとき／マスを押したときの受け口
+    function pickBankWord(word) {
+      solve.pickedWord = (solve.pickedWord === word) ? null : word;
+      solveRenderBank();
+      $('#solveMsg').textContent = solve.pickedWord
+        ? '「' + word + '」を入れたい場所のマスを押してください。'
+        : '';
+    }
+
+    // えらんだことばがあるとき、押されたマスに入れられるか試す。入れたら true
+    function tryPlacePicked(r, c) {
+      const word = solve.pickedWord;
+      if (!word) return false;
+      const len = chars(word).length;
+      const cand = slotsThrough(r, c, len);
+      if (!cand.length) {
+        $('#solveMsg').textContent = '「' + word + '」（' + len + '文字）が入る場所ではありません。'
+          + '別のマスを押してください。';
+        return true;   // ことばはえらんだままにして、押し直せるようにする
+      }
+      // タテヨコどちらにも入るときは、すでに入っている文字と食いちがわないほうをえらぶ。
+      // （交わっているマスの文字が合う置き方を優先し、他の語を消してしまわないようにする）
+      const cs = chars(word);
+      const score = (sl) => {
+        let sc = 0;
+        for (let i = 0; i < cs.length; i++) {
+          const rr = sl.r + (sl.dir === 'down' ? i : 0);
+          const cc = sl.c + (sl.dir === 'across' ? i : 0);
+          const k = sKey(rr, cc);
+          const cur = solve.input.get(k) || '';
+          if (!cur) continue;
+          if (solve.hints.has(k)) {
+            if (cur !== cs[i]) return -Infinity;   // はじめから入っているマスと合わないので置けない
+            sc += 5;
+          } else if (cur === cs[i]) {
+            sc += 2;                                // すでに入っている文字と合う＝たぶんここが正しい
+          } else {
+            sc -= 3;                                // 他の語を消してしまう置き方は避ける
+          }
+        }
+        return sc;
+      };
+      const ranked = cand
+        .map(sl => ({ sl, sc: score(sl) }))
+        .filter(x => x.sc !== -Infinity)
+        .sort((a, b) => b.sc - a.sc
+          || ((a.sl.dir === solve.dir ? -1 : 0) - (b.sl.dir === solve.dir ? -1 : 0)))
+        .map(x => x.sl);
+
+      if (!ranked.length) {
+        $('#solveMsg').textContent = '「' + word + '」は、はじめから入っている文字と合いません。';
+        return true;
+      }
+
+      let idx = 0;
+      const key = r + ',' + c + ',' + word;
+      if (ranked.length > 1) {
+        if (solve.lastPlaceKey.startsWith(key + ',')) {
+          idx = (Number(solve.lastPlaceKey.split(',').pop()) + 1) % ranked.length;
+        }
+        solve.lastPlaceKey = key + ',' + idx;
+      } else {
+        solve.lastPlaceKey = '';
+      }
+      const cand2 = ranked;
+      placeWordAt(word, cand2[idx]);
+      if (cand2.length > 1) {
+        solve.pickedWord = word;    // 切りかえられるよう、えらんだままにしておく
+        solveRenderBank();
+        $('#solveMsg').textContent += '　同じマスをもう一度押すと、タテヨコを切りかえます。';
+      }
+      return true;
+    }
+
     function solveRenderBank() {
       const box = $('#solveBank');
       if (!box) return;
@@ -6277,8 +6422,9 @@ var qrcode = function() {
         row.className = 'row-len';
         row.innerHTML = '<span class="len">' + n + '文字</span>'
           + ws.sort((a, b) => a.localeCompare(b, 'ja')).map(w =>
-            '<span class="w"' + (doneSet.has(w) ? ' style="opacity:.4;text-decoration:line-through"' : '')
-            + '>' + escapeHtml(w) + '</span>').join('');
+            '<span class="w' + (doneSet.has(w) ? ' done' : '')
+            + (solve.pickedWord === w ? ' picked' : '') + '" data-word="' + escapeHtml(w) + '"'
+            + ' role="button" tabindex="0">' + escapeHtml(w) + '</span>').join('');
         wrap.appendChild(row);
       });
       box.appendChild(wrap);
@@ -6334,11 +6480,30 @@ var qrcode = function() {
     }
 
     function bindSolve() {
+      // 語群のことばを押してえらぶ（スケルトンのとき）
+      const bank = $('#solveBank');
+      if (bank) {
+        bank.addEventListener('click', (e) => {
+          const w = e.target.closest('.w[data-word]');
+          if (!w) return;
+          pickBankWord(w.dataset.word);
+        });
+        bank.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          const w = e.target.closest('.w[data-word]');
+          if (!w) return;
+          e.preventDefault();
+          pickBankWord(w.dataset.word);
+        });
+      }
+
       $('#solveGrid').addEventListener('pointerdown', (e) => {
         const el = e.target.closest('.cell');
         if (!el) return;
         e.preventDefault();   // これがないと直後にフォーカスを奪われる
-        solveSelect(Number(el.dataset.r), Number(el.dataset.c));
+        const r = Number(el.dataset.r), c = Number(el.dataset.c);
+        if (tryPlacePicked(r, c)) return;   // 語群からことばをえらんでいるときは、そちらを優先
+        solveSelect(r, c);
       });
       const si = $('#solveInput');
 
