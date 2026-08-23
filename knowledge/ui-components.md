@@ -1434,6 +1434,305 @@ function escapeHtml(text) {
 
 ---
 
+---
+
+## タブ切り替え＋パネルレイアウト（複数モード UI）
+
+**用途：** 2つ以上の異なるモード（表示形式・操作方式）を切り替えて使用する場合。五十音表モード ↔ 文字列入力モード など。各モードで共通設定（ずらし方）を保有。
+
+**設計思想：**
+- **タブ：** モード選択ボタン（アクティブ時は濃い背景）
+- **パネル：** 各モード固有の操作エリア（タブ押下時のみ表示）
+- **共通設定エリア：** ずらし方・ループ設定など、全モード共通の制御を常時表示
+
+**HTML例（文字ずらし君）：**
+
+```html
+<header>
+  <h1>文字ずらし君 <span class="sub-title">謎解き作問ツール</span></h1>
+</header>
+
+<!-- モード切り替えタブ -->
+<div class="tabs">
+  <button class="tab-btn" aria-pressed="true" onclick="switchMode('table')">
+    <span class="no">①</span>五十音表
+  </button>
+  <button class="tab-btn" onclick="switchMode('text')">
+    <span class="no">②</span>文字列入力
+  </button>
+</div>
+
+<!-- 五十音表モード -->
+<div class="mode-panel" id="mode-table" style="display: block;">
+  <!-- キャンバス：五十音表・九九マス -->
+  <canvas id="canvas" width="400" height="300" style="border: 1px solid #ddd;"></canvas>
+  
+  <!-- 十字ボタン（上下左右移動） -->
+  <div class="control-pad">
+    <button onclick="moveChar('up')">↑</button>
+    <button onclick="moveChar('left')">←</button>
+    <button onclick="moveChar('down')">↓</button>
+    <button onclick="moveChar('right')">→</button>
+  </div>
+  
+  <!-- 現在の文字・対応先表示 -->
+  <p id="tableResult">あ → き (左1・下1)</p>
+</div>
+
+<!-- 文字列入力モード -->
+<div class="mode-panel" id="mode-text" style="display: none;">
+  <div class="text-input-group">
+    <textarea id="inputText" placeholder="ここに日本語を入力…" rows="4"></textarea>
+    <button onclick="processText()">ずらしを反映</button>
+  </div>
+  
+  <div id="textResult" style="margin-top: 16px; padding: 12px; background: #f0f0f0; border-radius: 8px;">
+    結果がここに表示されます
+  </div>
+</div>
+
+<!-- 共通設定パネル（全モード共通） -->
+<div class="panel">
+  <h2>ずらし方を選ぶ</h2>
+  
+  <!-- ずらし方選択 -->
+  <div class="row">
+    <label>
+      <input type="radio" name="shiftType" value="grid" checked> たて・よこにずらす
+    </label>
+    <label>
+      <input type="radio" name="shiftType" value="sequence"> あいうえお順で送る
+    </label>
+  </div>
+  
+  <!-- はしの扱い -->
+  <div class="row">
+    <label>
+      <input type="checkbox" id="loopEdge" checked> はしで回り込む
+    </label>
+    <small>(チェック外すと、はみ出しで ×表示)</small>
+  </div>
+  
+  <!-- 数値入力（グリッドモード時） -->
+  <div class="row" id="gridInputs">
+    <label>左右: <input type="number" id="shiftX" value="0" min="-4" max="4" style="width: 60px;"></label>
+    <label>上下: <input type="number" id="shiftY" value="0" min="-4" max="4" style="width: 60px;"></label>
+  </div>
+  
+  <!-- 数値入力（シーケンスモード時） -->
+  <div class="row" id="sequenceInputs" style="display: none;">
+    <label>送る数: <input type="number" id="shiftSeq" value="1" min="-50" max="50" style="width: 80px;"></label>
+  </div>
+</div>
+
+<!-- 提案機能パネル -->
+<div class="panel" id="proposalPanel">
+  <h2>さがす（提案機能）</h2>
+  <div class="row">
+    <input type="text" id="searchWord" placeholder="例：あい" maxlength="20" style="flex: 1;">
+    <button onclick="searchProposals()">検索</button>
+  </div>
+  
+  <div id="proposalList" style="margin-top: 12px; max-height: 300px; overflow-y: auto;">
+    <!-- 検索結果がここに動的生成される -->
+  </div>
+</div>
+```
+
+**CSS（スタイル例）：**
+
+```css
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.tab-btn {
+  flex: 1;
+  background: #e7edf4;
+  border: none;
+  border-radius: 10px 10px 0 0;
+  padding: 12px 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.tab-btn[aria-pressed="true"] {
+  background: #2f6fb2;
+  color: white;
+  font-weight: 700;
+}
+
+.tab-btn .no {
+  display: inline-block;
+  width: 21px;
+  height: 21px;
+  line-height: 21px;
+  border-radius: 50%;
+  background: rgba(0,0,0,.12);
+  font-size: 12px;
+  text-align: center;
+}
+
+.tab-btn[aria-pressed="true"] .no {
+  background: rgba(255,255,255,.28);
+}
+
+.mode-panel {
+  background: white;
+  border: 1px solid #d9e0e8;
+  border-radius: 0 0 12px 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+}
+
+.control-pad {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 6px;
+  margin: 12px 0;
+  width: fit-content;
+}
+
+.control-pad button {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.text-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+textarea {
+  font-family: monospace;
+  padding: 12px;
+  border: 1px solid #d9e0e8;
+  border-radius: 8px;
+  font-size: 14px;
+  resize: vertical;
+}
+```
+
+**JavaScript（モード切り替え）：**
+
+```javascript
+// モード切り替え処理
+function switchMode(mode) {
+  // タブの状態更新
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.setAttribute('aria-pressed', false);
+  });
+  event.target.closest('.tab-btn').setAttribute('aria-pressed', true);
+  
+  // パネルの表示・非表示
+  document.querySelectorAll('.mode-panel').forEach(panel => {
+    panel.style.display = 'none';
+  });
+  document.getElementById(`mode-${mode}`).style.display = 'block';
+  
+  // ずらし方の入力欄を切り替え
+  const gridInputs = document.getElementById('gridInputs');
+  const sequenceInputs = document.getElementById('sequenceInputs');
+  if (mode === 'table') {
+    document.querySelector('input[name="shiftType"][value="grid"]').checked = true;
+    gridInputs.style.display = 'flex';
+    sequenceInputs.style.display = 'none';
+  }
+}
+
+// ずらし方の選択変更時
+document.querySelectorAll('input[name="shiftType"]').forEach(input => {
+  input.addEventListener('change', (e) => {
+    const gridInputs = document.getElementById('gridInputs');
+    const sequenceInputs = document.getElementById('sequenceInputs');
+    if (e.target.value === 'grid') {
+      gridInputs.style.display = 'flex';
+      sequenceInputs.style.display = 'none';
+    } else {
+      gridInputs.style.display = 'none';
+      sequenceInputs.style.display = 'flex';
+    }
+  });
+});
+
+// テキスト入力モード用処理
+function processText() {
+  const text = document.getElementById('inputText').value;
+  const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+  const loopEdge = document.getElementById('loopEdge').checked;
+  
+  // ずらし方パラメータを取得
+  let shiftParams;
+  if (shiftType === 'grid') {
+    shiftParams = {
+      x: parseInt(document.getElementById('shiftX').value) || 0,
+      y: parseInt(document.getElementById('shiftY').value) || 0
+    };
+  } else {
+    shiftParams = {
+      seq: parseInt(document.getElementById('shiftSeq').value) || 0
+    };
+  }
+  
+  // 各文字をずらす処理（実装は省略）
+  const result = shiftText(text, shiftType, shiftParams, loopEdge);
+  document.getElementById('textResult').textContent = result;
+}
+
+// 提案機能
+async function searchProposals() {
+  const word = document.getElementById('searchWord').value.trim();
+  if (!word) return;
+  
+  const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+  const loopEdge = document.getElementById('loopEdge').checked;
+  
+  // 辞書データを検索（IPADIC 1万語）
+  const proposals = await findShiftPatterns(word, shiftType, loopEdge);
+  
+  const listEl = document.getElementById('proposalList');
+  listEl.innerHTML = proposals.map(p => `
+    <div style="padding: 8px; border-bottom: 1px solid #eee;">
+      <strong>${p.result}</strong> 
+      <span style="color: #999; font-size: 12px;">
+        ${shiftType === 'grid' 
+          ? `(左${p.dx} 下${p.dy})`
+          : `(${p.steps}送る)`
+        }
+      </span>
+      <br>
+      <small style="color: #666;">使用頻度: ${p.frequency}位</small>
+    </div>
+  `).join('');
+}
+```
+
+**活用ポイント：**
+- **タブ `aria-pressed` 属性：** スクリーンリーダー対応（アクセシビリティ）
+- **共通設定を常時表示：** モード選択後も設定値を即座に反映可能
+- **ずらし方の入力欄を動的に切り替え：** グリッドモード（上下左右数値）とシーケンスモード（送る数）で異なる操作体系
+- **提案機能の辞書検索：** 外部通信ゼロ（データはクライアント側に埋込）
+- **レスポンシブ対応：** タブが縦積みになる場合、`flex-direction: column` で対応
+
+**プロジェクト実装例：** `/Workspace/projects/moji-zurashi/index.html` セッション145
+
+---
+
 ## 関連リンク
 
 - 成功パターン集 → [patterns.md](./patterns.md)
