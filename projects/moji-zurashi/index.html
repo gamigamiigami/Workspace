@@ -156,13 +156,25 @@
     .kana.from { background: var(--from); border-color: var(--from-line); font-weight: 700; }
     .kana.to { box-shadow: inset 0 0 0 3px var(--to-line); }
     .kana.from.to { background: #ffe0b0; }
-    /* どの文字がどの文字になったかを示す番号（もと＝茶・左上／先＝青・右下） */
-    .kana .badge {
-      position: absolute; font-size: clamp(7px, 1.05vw, 10px);
-      font-weight: 700; line-height: 1; letter-spacing: -.02em;
+    /* どの文字がどの文字になったかを示す番号。
+       ずらす前後で見くらべやすいよう、どちらも **マスの左上** に出す。
+       枠線に重なって読みにくくならないよう、白い下じきを敷いて少し内側に置く */
+    .kana .nums {
+      position: absolute; top: 2px; left: 2px;
+      display: flex; gap: 2px; align-items: center;
+      pointer-events: none;
     }
-    .kana .badge-from { top: 1px; left: 2px; color: #8a6100; }
-    .kana .badge-to { bottom: 1px; right: 2px; color: var(--to-line); }
+    .kana .nums span {
+      display: inline-block;
+      font-size: clamp(9px, 1.5vw, 13px);
+      font-weight: 800; line-height: 1.15;
+      padding: 0 3px;
+      border-radius: 4px;
+      background: #fff;
+      box-shadow: 0 0 0 1.5px currentColor;
+    }
+    .kana .nums .n-from { color: #b46a00; }
+    .kana .nums .n-to { color: var(--to-line); }
 
     /* 表の下（「ん」と凡例） */
     .under-tables { display: flex; align-items: center; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
@@ -203,7 +215,12 @@
     .batch-row .arrow2 { color: var(--sub); flex: 0 0 auto; }
     .batch-row .find { flex: 0 0 auto; padding: 8px 10px; font-size: 13px; }
 
-    /* ===== 操作エリア（表モードでは横並びにして1画面に収める） ===== */
+    /* ===== 操作エリア ===== */
+    #app { display: flex; flex-direction: column; }
+    /* 文字列モードでは「ずらす」を入力欄のすぐ上に持ってくる（法則を見ながら打てるように） */
+    #app[data-mode="text"] .ctrl-wrap { order: -1; }
+    #app[data-mode="text"] .pad { display: none; }        /* 十字ボタンは表モード用 */
+    #app[data-mode="text"] #outPanel { display: none; }   /* 結果は各行に出るので不要 */
     #app[data-mode="table"] .ctrl-wrap { display: flex; gap: 10px; align-items: stretch; }
     #app[data-mode="table"] .ctrl-wrap > .panel { flex: 1; margin-bottom: 0; }
     #app[data-mode="table"] #pairs { display: none; }   /* 1文字ずつの対応は文字列モードだけ */
@@ -319,9 +336,11 @@
         <div class="under-tables">
           <div class="n-cell" id="nCell"></div>
           <span class="legend">
-            <span class="sw-from">黄</span>＝もとの文字（左上の茶色い番号）　
-            <span class="sw-to">青わく</span>＝ずらした先（右下の青い番号）<br>
-            同じ番号どうしが対応しています。左の濁音・半濁音の表と右の清音の表は<b>べつの表</b>です。
+            マスの<b>左上の番号</b>で対応が分かります。
+            <span style="color:#b46a00;font-weight:800;">オレンジ＝もとの文字</span>／
+            <span style="color:var(--to-line);font-weight:800;">青＝ずらした先</span>。
+            同じ番号どうしが対応しています。<br>
+            左の濁音・半濁音の表と右の清音の表は<b>べつの表</b>です。
           </span>
         </div>
       </div>
@@ -337,9 +356,13 @@
           <button id="btnClearRows" class="danger small">全部消す</button>
           <button id="btnCopyAll" class="sub small">結果をまとめてコピー</button>
         </div>
+        <div class="row" style="margin-top:8px;">
+          <button id="btnFindCommon">入れた言葉ぜんぶに使える法則をさがす</button>
+        </div>
         <p class="hint-line">
-          各行の「さがす」を押すと、その言葉から<b>実際にある言葉</b>になる法則をさがします
-          （今えらんでいるずらし方・はしの扱いに合わせて調べます）。
+          各行の「さがす」＝その1つの言葉だけで調べます。<br>
+          <b>「ぜんぶに使える法則をさがす」＝入れた言葉すべてが同時に別の言葉になる法則</b>だけを見つけます
+          （謎解きの問題づくり向き）。どちらも、今えらんでいるずらし方・はしの扱いに合わせて調べます。
         </p>
         <div id="suggestBox" hidden>
           <p id="suggestMsg" class="hint-line"></p>
@@ -404,7 +427,7 @@
         <p class="shift-info" id="shiftInfo">ずらしていません</p>
       </div>
 
-      <div class="panel">
+      <div class="panel" id="outPanel">
         <h2>できあがり <span class="hint" id="pickedCount"></span></h2>
         <div id="result" class="word-line empty">表の文字をタップすると、ここに出ます。</div>
         <div id="pairs"></div>
@@ -571,7 +594,17 @@
     }
 
     // ===== 登録・削除（五十音表モード） =====
-    function addChar(ch) { state.chars.push(ch); render(); }
+    function addChar(ch) {
+      state.chars.push(ch);
+      // 「回り込まない」設定で、足した文字が今のずれ方だとはみ出す場合は元に戻す
+      const bad = blockedBy({ method: state.method, dCol: state.dCol, dDan: state.dDan, step: state.step });
+      if (bad) {
+        resetShift();
+        showMsg('「' + bad + '」は今のずらし方だとはみ出すので、ずらし方を元に戻しました。');
+        return;
+      }
+      render();
+    }
 
     function undoChar() {
       if (!state.chars.length) return;
@@ -587,14 +620,55 @@
     }
 
     // ===== ずらす操作 =====
-    function moveBy(dCol, dDan) {
-      state.dCol += dCol;
-      state.dDan += dDan;
-      if (state.loop) {   // 回り込む設定のときは、数が大きくなりすぎないよう畳んでおく
+
+    // 今えらんでいる文字ぜんぶを集める（表モードは登録した文字、まとめてモードは全部の欄）
+    function targetChars() {
+      if (state.mode === 'table') return state.chars;
+      const list = [];
+      state.rows.forEach(t => { if (t) list.push(...Array.from(t)); });
+      return list;
+    }
+
+    // 「回り込まない」設定のとき、その法則で全部の文字が動かせるかを調べる。
+    // 動かせない文字があれば、その文字と理由を返す
+    function blockedBy(rule) {
+      if (state.loop) return null;
+      const keep = { method: state.method, dCol: state.dCol, dDan: state.dDan, step: state.step };
+      Object.assign(state, rule);
+      let bad = null;
+      for (const ch of targetChars()) {
+        if (shiftChar(ch) === OUT) { bad = ch; break; }
+      }
+      Object.assign(state, keep);
+      return bad;
+    }
+
+    // 動かせないときのお知らせ文をつくる
+    function blockedMessage(ch, rule) {
+      const dir = rule.method === 'seq'
+        ? (rule.step > state.step ? 'これ以上うしろ' : 'これ以上まえ')
+        : (rule.dDan > state.dDan ? 'これ以上下' : rule.dDan < state.dDan ? 'これ以上上'
+          : rule.dCol > state.dCol ? 'これ以上右' : 'これ以上左');
+      return '「' + ch + '」が' + dir + 'に動けないので、ずらせません。'
+        + '（「はしで回り込む」にすると動かせます）';
+    }
+
+    // 法則を変える。「回り込まない」で動かせないときは、変えずにお知らせを出す
+    function setRule(rule) {
+      const bad = blockedBy(rule);
+      if (bad) { showMsg(blockedMessage(bad, rule)); return false; }
+      Object.assign(state, rule);
+      if (state.loop && state.method === 'grid') {   // 回り込む設定では数を畳んでおく
         state.dCol = ((state.dCol % 10) + 10) % 10;
         state.dDan = ((state.dDan % DANS) + DANS) % DANS;
       }
+      showMsg('');
       render();
+      return true;
+    }
+
+    function moveBy(dCol, dDan) {
+      setRule({ method: 'grid', dCol: state.dCol + dCol, dDan: state.dDan + dDan, step: state.step });
     }
 
     function resetShift() { state.dCol = 0; state.dDan = 0; state.step = 0; render(); }
@@ -624,8 +698,9 @@
         return rule.step > 0 ? 'あいうえお順に' + rule.step + '送る'
                              : 'あいうえお順に' + (-rule.step) + 'もどす';
       }
+      // 画面の表示（「左に1」など）と同じ言い方になるよう、近いほうの言い方に直す
       const parts = [];
-      const r = rule.dCol, d = rule.dDan;
+      const r = signedCol(rule.dCol), d = signedDan(rule.dDan);
       if (r) parts.push(r > 0 ? '右に' + r : '左に' + (-r));
       if (d) parts.push(d > 0 ? '下に' + d : '上に' + (-d));
       return parts.length ? parts.join('・') : 'ずらさない';
@@ -635,18 +710,14 @@
     function applyRuleInput() {
       const h = Number($('#numH').value) || 0;
       const v = Number($('#numV').value) || 0;
-      state.dCol = $('#dirH').value === 'right' ? h : -h;
-      state.dDan = $('#dirV').value === 'down' ? v : -v;
-      if (state.loop) {
-        state.dCol = ((state.dCol % 10) + 10) % 10;
-        state.dDan = ((state.dDan % DANS) + DANS) % DANS;
-      }
-      render();
+      const dCol = $('#dirH').value === 'right' ? h : -h;
+      const dDan = $('#dirV').value === 'down' ? v : -v;
+      if (!setRule({ method: 'grid', dCol, dDan })) syncRuleInput();   // 止めたら欄を元に戻す
     }
 
     function applySeqInput() {
-      state.step = Number($('#numSeq').value) || 0;
-      render();
+      const step = Number($('#numSeq').value) || 0;
+      if (!setRule({ method: 'seq', step })) syncRuleInput();
     }
 
     function syncRuleInput() {
@@ -753,6 +824,75 @@
           updateMethodUI();
           render();
           showMsg('「' + f.word + '」になる法則（' + ruleText(f.rule) + '）にしました。');
+        });
+        list.appendChild(b);
+      });
+    }
+
+    // ===== 入れた言葉ぜんぶに使える法則をさがす =====
+    // すべての言葉が「同時に」別の言葉になる法則だけを見つける（謎解きの問題づくり向き）
+    function findCommonRules() {
+      const texts = state.rows.map(t => t.trim()).filter(t => t);
+      const list = $('#suggestList');
+      $('#suggestBox').hidden = false;
+      list.innerHTML = '';
+
+      if (texts.length < 2) {
+        $('#suggestMsg').textContent = '2つ以上の言葉を入れてから押してください。';
+        return;
+      }
+
+      const dict = loadDict();
+      const found = [];
+      allRules().forEach(rule => {
+        const results = [];
+        for (const t of texts) {
+          const out = tryRule(t, rule);
+          if (hasProblem(out)) return;              // ずらせない文字があるので、この法則は使えない
+          const w = out.join('');
+          if (w === t) return;                      // 変わらないものは除く
+          const hit = dict.get(w);
+          if (!hit) return;                         // 1つでも辞書にない言葉になったら、この法則は不採用
+          results.push({ from: t, to: w, kanji: hit.kanji, rank: hit.rank });
+        }
+        // どれくらい身近な言葉ばかりになるかで並べる（小さいほど身近）
+        const score = results.reduce((a, b) => a + b.rank, 0) / results.length;
+        found.push({ rule, results, score });
+      });
+
+      found.sort((a, b) => a.score - b.score);
+
+      const how = (state.method === 'seq' ? 'あいうえお順で送る' : 'たて・よこにずらす')
+        + '／' + (state.loop ? 'はしで回り込む' : '回り込まない');
+
+      if (!found.length) {
+        $('#suggestMsg').innerHTML = '入れた <b>' + texts.length + '個</b> の言葉すべてに使える法則は'
+          + '見つかりませんでした。（今の設定：' + how + '）<br>'
+          + '言葉を減らすか、ずらし方・はしの扱いを変えてみてください。';
+        return;
+      }
+
+      $('#suggestMsg').innerHTML = '<b>' + texts.length + '個</b> の言葉すべてに使える法則が <b>'
+        + found.length + '個</b> 見つかりました（' + how + '）。押すと、その法則になります。';
+
+      found.slice(0, 40).forEach(f => {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.className = 'sug';
+        b.style.alignItems = 'flex-start';
+        const pairs = f.results.map(r =>
+          escapeHtml(r.from) + ' → <b>' + escapeHtml(r.to) + '</b>'
+          + (r.kanji ? '<span class="kanji">（' + escapeHtml(r.kanji) + '）</span>' : '')
+        ).join('　');
+        b.innerHTML = '<span class="rule" style="margin-left:0;font-weight:700;">'
+          + ruleText(f.rule) + '</span><span style="font-size:15px;">' + pairs + '</span>';
+        b.addEventListener('click', () => {
+          if (f.rule.method === 'seq') { state.method = 'seq'; state.step = f.rule.step; }
+          else { state.method = 'grid'; state.dCol = f.rule.dCol; state.dDan = f.rule.dDan; }
+          $('#method').value = state.method;
+          updateMethodUI();
+          render();
+          showMsg(ruleText(f.rule) + ' にしました。');
         });
         list.appendChild(b);
       });
@@ -880,8 +1020,7 @@
         const k = cell.dataset.kana;
         cell.classList.toggle('from', !!fromNums[k]);
         cell.classList.toggle('to', !!toNums[k]);
-        setBadge(cell, 'badge-from', fromNums[k]);
-        setBadge(cell, 'badge-to', toNums[k]);
+        setNums(cell, fromNums[k], toNums[k]);
       });
 
       $('#shiftInfo').innerHTML = describeShift();
@@ -899,16 +1038,30 @@
       updateRuleNote(out);
     }
 
-    // マスにつける番号（同じ文字を何回か使ったときは「1,3」のように並べる）
-    function setBadge(cell, cls, nums) {
-      let el = cell.querySelector('.' + cls);
-      if (!nums || !nums.length) { if (el) el.remove(); return; }
-      if (!el) {
-        el = document.createElement('span');
-        el.className = 'badge ' + cls;
-        cell.appendChild(el);
+    // マスの左上につける番号。もと（オレンジ）と先（青）を横に並べて出す。
+    // 同じ文字を何回か使ったときは「1,3」のようにまとめる
+    function setNums(cell, fromList, toList) {
+      let box = cell.querySelector('.nums');
+      if (!fromList && !toList) { if (box) box.remove(); return; }
+      if (!box) {
+        box = document.createElement('span');
+        box.className = 'nums';
+        cell.appendChild(box);
       }
-      el.textContent = nums.length > 3 ? nums.slice(0, 2).join(',') + '…' : nums.join(',');
+      const label = (list) => list.length > 2 ? list.slice(0, 2).join(',') + '…' : list.join(',');
+      box.innerHTML = '';
+      if (fromList) {
+        const el = document.createElement('span');
+        el.className = 'n-from';
+        el.textContent = label(fromList);
+        box.appendChild(el);
+      }
+      if (toList) {
+        const el = document.createElement('span');
+        el.className = 'n-to';
+        el.textContent = label(toList);
+        box.appendChild(el);
+      }
     }
 
     function updateRuleNote(out) {
@@ -976,6 +1129,14 @@
       });
       $('#loopMode').addEventListener('change', (e) => {
         state.loop = e.target.value === 'loop';
+        // 回り込まない設定にしたとき、今のずれ方だとはみ出してしまうなら、いったん元に戻す
+        const bad = blockedBy({ method: state.method, dCol: state.dCol, dDan: state.dDan, step: state.step });
+        if (bad) {
+          resetShift();
+          showMsg('「回り込まない」にしたので、「' + bad + '」がはみ出さないよう、ずらし方を元に戻しました。');
+          return;
+        }
+        showMsg('');
         render();
       });
 
@@ -984,8 +1145,8 @@
       $('#left').addEventListener('click', () => moveBy(-1, 0));
       $('#right').addEventListener('click', () => moveBy(1, 0));
       $('#reset').addEventListener('click', resetShift);
-      $('#seqPlus').addEventListener('click', () => { state.step++; render(); });
-      $('#seqMinus').addEventListener('click', () => { state.step--; render(); });
+      $('#seqPlus').addEventListener('click', () => setRule({ method: 'seq', step: state.step + 1 }));
+      $('#seqMinus').addEventListener('click', () => setRule({ method: 'seq', step: state.step - 1 }));
 
       ['#numH', '#numV'].forEach(sel => $(sel).addEventListener('input', applyRuleInput));
       ['#dirH', '#dirV'].forEach(sel => $(sel).addEventListener('change', syncRuleInput));
@@ -996,6 +1157,7 @@
       $('#btnCopy').addEventListener('click', () => copyText(outText(shiftWord(state.chars.join('')))));
       $('#btnSwap').addEventListener('click', swapToResult);
 
+      $('#btnFindCommon').addEventListener('click', findCommonRules);
       $('#btnAddRow').addEventListener('click', () => { state.rows.push(''); buildBatch(); });
       $('#btnClearRows').addEventListener('click', () => {
         if (state.rows.some(r => r) && !confirm('入れた言葉を全部消します。よろしいですか？')) return;
