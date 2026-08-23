@@ -44,7 +44,7 @@ jobs:
         run: |
           set -e
           # 公開してよいサイト（index.html を持つもの）だけを列挙
-          PUBLIC_DIRS="travel-planner toy-story-modoki-web hinshi-panic kaeriten-quest keisan-quest rough oshiking crossword"
+          PUBLIC_DIRS="travel-planner toy-story-modoki-web hinshi-panic kaeriten-quest keisan-quest rough oshiking crossword moji-zurashi"
           mkdir -p _site/projects
           # トップページ（作品一覧）
           cp site/index.html _site/index.html
