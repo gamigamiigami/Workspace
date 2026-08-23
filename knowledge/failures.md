@@ -1,5 +1,52 @@
 # 失敗・ハマりポイント集
 
+## ダブルタップ抑止：「2度目を無視する」実装は連続タップまで潰す（危険）
+
+**症状：** ダブルタップ（拡大）を防ぐため、2度目のタップを無効にする handler を書いたら、連続入力（`あんぱんまん`など6字タップ）ができなくなった。
+
+**原因：** よく見かける実装：
+```js
+let touchCount = 0;
+document.addEventListener('touchend', (e) => {
+  touchCount++;
+  if (touchCount === 2) {
+    e.preventDefault();      // ← 2度目を無視する
+    touchCount = 0;
+  }
+}, false);
+```
+これは「素早い2つのタップを同じ位置にされたら無視」という意図なのに、実装が雑だと**3度目のタップまで無視**されてしまう。または callback の timing ずれで、連続した単純なタップ（異なる位置、目的が違う）まで検出されてしまう。
+
+**対処：** CSS-only ソリューションを使う（JavaScript handler は不要）：
+```html
+<!-- meta viewport -->
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+
+<!-- CSS -->
+<style>
+  body {
+    touch-action: manipulation;  /* ← ダブルタップ拡大のみ無効化、他の touch は通す */
+  }
+</style>
+
+<!-- ピンチ抑止は必要に応じて -->
+<script>
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length > 1) e.preventDefault();
+  }, { passive: false });
+</script>
+```
+
+**メリット：** 
+- ダブルタップ拡大だけをピンポイントで抑止
+- 連続タップ（異なる位置）は全て通す
+- ドラッグやスワイプに影響しない
+- 実装が単純
+
+**タグ：** #iPad #タッチ #CSS #副作用 #セッション149
+
+---
+
 ## 変数名がブラウザの機能を隠してしまう（history / location / name など）
 
 **症状：** `history.replaceState is not a function` というエラー。書き方は正しいのに動かない。
