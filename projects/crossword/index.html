@@ -391,6 +391,24 @@
       }
       .print-note { font-size: var(--pfont, 10pt); margin-bottom: 2mm; }
     }
+
+    /* ===== 選択ダイアログ（保存しますか？ などを3択で聞く） ===== */
+    #askBack {
+      position: fixed; inset: 0; z-index: 9998;
+      background: rgba(20,30,40,.45);
+      display: flex; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #askBack[hidden] { display: none; }
+    #askBox {
+      background: #fff; border-radius: 16px;
+      padding: 20px; max-width: 420px; width: 100%;
+      box-shadow: 0 10px 40px rgba(0,0,0,.25);
+    }
+    #askTitle { font-size: 17px; font-weight: 700; margin-bottom: 8px; }
+    #askText { font-size: 14px; color: #5c6672; line-height: 1.7; margin-bottom: 16px; white-space: pre-wrap; }
+    #askBtns { display: flex; flex-direction: column; gap: 8px; }
+    #askBtns button { width: 100%; min-height: 48px; font-size: 15px; }
   </style>
 </head>
 <body>
@@ -703,7 +721,7 @@
       <h2>印刷・保存</h2>
       <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="width:100%;margin-bottom:8px;">
       <div class="row">
-        <button id="btnSaveWork">作品として保存</button>
+        <button id="btnSaveWork">保存する</button>
         <button id="btnOpenWork" class="sub">保存した作品を開く</button>
         <button id="btnNewWork" class="sub">新しく作る</button>
       </div>
@@ -3112,6 +3130,7 @@ var qrcode = function() {
     const SHARE_API = 'https://crossword-store.igamiigamiigami.workers.dev';
     
     const STORAGE_KEY = 'crossword-supporter-v1';
+    const TRY_KEY = 'crossword-from-try';   // 「解答モードを試す」から来たかどうかの印
     const GRID = 41;          // 内部の作業スペース（画面に見せるのは「使っている範囲」だけ）
     const VIEW_MARGIN = 2;    // 使っている範囲の外側に見せる余白（マス）
     const VIEW_MIN = 8;       // 盤面が空のときに見せる大きさ
@@ -4353,16 +4372,34 @@ var qrcode = function() {
     }
 
     // ===== 新しく作りなおす =====
-    function newWork() {
-      if (hasUnsavedChanges()) {
-        const name = state.title ? '「' + state.title + '」' : 'いまの内容';
-        const ok = confirm(
-          name + 'は、まだ保存されていません。\n\n' +
-          'このまま新しく作ると、いまの内容は消えます。よろしいですか？\n\n' +
-          '※残したいときは「キャンセル」を押して、「作品として保存」をしてから、もう一度この操作をしてください。'
-        );
-        if (!ok) return;
+    // 保存していない内容があるときは、消す前に「保存する／保存せず消す／やめる」を選んでもらう
+    async function confirmDiscard(actionText) {
+      if (!hasUnsavedChanges()) return true;
+      const name = state.title ? '「' + state.title + '」' : 'いまの内容';
+      const choice = await askChoice(
+        '保存しますか？',
+        name + 'は、まだ保存されていません。\n\n'
+        + 'このまま' + actionText + 'と、いまの内容は消えます。',
+        [
+          { label: '保存してから進む', value: 'save', kind: '' },
+          { label: '保存せずに消して進む', value: 'discard', kind: 'danger' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (!choice) return false;
+      if (choice === 'save') {
+        await saveAsWork();
+        // 「やめる」を選ぶなどして保存されなかったときは、そのまま進めない
+        if (hasUnsavedChanges()) {
+          showMsg('保存しなかったので、そのままにしました。', 'ng');
+          return false;
+        }
       }
+      return true;
+    }
+
+    async function newWork() {
+      if (!(await confirmDiscard('新しく作る'))) return;
       applyData({
         title: '', words: [], keyword: '',
         // マイ辞書（登録してきた語彙）と盤面の大きさの設定は、育ててきたものなので引き継ぐ
@@ -4380,40 +4417,100 @@ var qrcode = function() {
       showMsg('新しく作りはじめます。マイ辞書と盤面の大きさの設定はそのまま残しています。', 'ok');
     }
 
-    function saveAsWork() {
+    // ===== 選択ダイアログ =====
+    // ボタンを最大3つまで出して、押されたものの値を返す（confirm は2択しか出せないため）
+    function askChoice(title, text, buttons) {
+      return new Promise(resolve => {
+        const back = $('#askBack');
+        const box = $('#askBtns');
+        $('#askTitle').textContent = title;
+        $('#askText').textContent = text;
+        box.innerHTML = '';
+
+        const close = (value) => {
+          back.hidden = true;
+          document.removeEventListener('keydown', onKey);
+          resolve(value);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') close(null); };
+
+        buttons.forEach(b => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = b.kind || 'sub';
+          el.textContent = b.label;
+          el.addEventListener('click', () => close(b.value));
+          box.appendChild(el);
+        });
+
+        back.hidden = false;
+        document.addEventListener('keydown', onKey);
+        // 背景を押したときも「やめる」と同じにする
+        back.onclick = (e) => { if (e.target === back) close(null); };
+        const first = box.querySelector('button');
+        if (first) first.focus();
+      });
+    }
+
+    // ===== 作品の保存 =====
+    // mode: 'overwrite'（上書き）／'new'（別の作品として保存）
+    function storeWork(mode, isFirst) {
       const list = loadWorks();
-      const title = state.title || '（無題）';
-      const data = serialize();
       const now = Date.now();
-      let item = state.workId ? list.find(w => w.id === state.workId) : null;
-      if (item) {
-        item.title = title;
+      const data = serialize();
+
+      if (mode === 'overwrite') {
+        const item = list.find(w => w.id === state.workId);
+        if (!item) return storeWork('new', true);   // 元の作品が見つからなければ新規で保存する
+        item.title = state.title || item.title || '（無題）';
         item.savedAt = now;
         item.data = data;
-      } else {
-        item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now, data };
-        list.unshift(item);
-        state.workId = item.id;
+        if (saveWorks(list)) {
+          markSaved();
+          showMsg('「' + item.title + '」を上書き保存しました。', 'ok');
+        }
+        return;
       }
+
+      const title = state.title || '（無題）';
+      const item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now, data };
+      list.unshift(item);
+      state.workId = item.id;
       if (saveWorks(list)) {
         markSaved();
-        showMsg('「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。', 'ok');
+        showMsg(isFirst
+          ? '「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。'
+          : '「' + title + '」を新しい作品として保存しました。（前の作品もそのまま残っています）', 'ok');
       }
     }
 
-    function openWork(id) {
+    // 保存ボタンを押したとき。すでに保存ずみの作品なら、上書きか別保存かを選んでもらう
+    async function saveAsWork() {
+      if (!state.workId || !loadWorks().some(w => w.id === state.workId)) {
+        storeWork('new', true);   // まだ一度も保存していないので、聞かずに保存する
+        return;
+      }
+      const name = state.title || '（無題）';
+      const choice = await askChoice(
+        'どちらに保存しますか？',
+        '「' + name + '」は保存ずみです。\n\n'
+        + '・上書き保存 … 前の内容は消えて、今の内容に置きかわります\n'
+        + '・別の作品として保存 … 前の内容を残したまま、もう1つ増やします（作り直しのとき）',
+        [
+          { label: '上書き保存する', value: 'overwrite', kind: '' },
+          { label: '別の作品として保存する', value: 'new', kind: 'sub' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (choice) storeWork(choice);
+    }
+
+    async function openWork(id) {
       const list = loadWorks();
       const item = list.find(w => w.id === id);
       if (!item) return;
-      if (item.id !== state.workId && hasUnsavedChanges()) {
-        const name = state.title ? '「' + state.title + '」' : 'いまの内容';
-        const ok = confirm(
-          name + 'は、まだ保存されていません。\n\n' +
-          '「' + (item.title || '（無題）') + '」を開くと、いまの内容は消えます。よろしいですか？\n\n' +
-          '※残したいときは「キャンセル」を押して、「作品として保存」をしてください。'
-        );
-        if (!ok) return;
-      }
+      if (item.id !== state.workId
+          && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
       applyData(item.data);
       state.workId = item.id;
       history = [];
@@ -4968,6 +5065,9 @@ var qrcode = function() {
       $('#btnTrySolve').addEventListener('click', async () => {
         const url = await makeShareLink();
         if (!url) return;
+        // 「試しに解いてみる」で来たという印を残す。
+        // これがある時だけ「作る画面にもどる」を出すので、配布リンクを開いた人には出ない
+        try { sessionStorage.setItem(TRY_KEY, '1'); } catch (e) { /* 使えなくても支障はない */ }
         // 同じページ内で # を変えるだけでは読み込み直されないので、明示的に読み直す
         location.href = url;
         location.reload();
@@ -5907,11 +6007,11 @@ var qrcode = function() {
       $('#solveTitle').textContent = data.t || 'クロスワード';
       document.title = (data.t || 'クロスワード');
 
-      // この端末でクロスワードを作ったことがある＝作る人の画面なので、戻るボタンを出す。
-      // 生徒が配布リンクを開いただけの端末には作りかけのデータが無いので、ボタンは出ない
-      let isMaker = false;
-      try { isMaker = !!localStorage.getItem(STORAGE_KEY); } catch (e) { isMaker = false; }
-      if (isMaker) {
+      // 「解答モードを試す」から来たときだけ、作る画面に戻れるようにする。
+      // 配布リンクを開いた人（生徒など）には出さない
+      let fromTry = false;
+      try { fromTry = sessionStorage.getItem(TRY_KEY) === '1'; } catch (e) { fromTry = false; }
+      if (fromTry) {
         const back = $('#btnBackToEdit');
         back.hidden = false;
         back.addEventListener('click', () => {
@@ -5920,6 +6020,7 @@ var qrcode = function() {
           // 古いアドレス（#つき）を読み直してしまうため、replaceState で先に消しておく
           // （このツールでは history という名前を「元に戻す」用の配列に使っているので、
           //   ブラウザ側のものは window.history と書いて取り違えないようにする）
+          try { sessionStorage.removeItem(TRY_KEY); } catch (e) { /* 使えなくても支障はない */ }
           const clean = location.href.split('#')[0].split('?')[0];
           window.history.replaceState(null, '', clean);
           location.reload();
@@ -6352,6 +6453,15 @@ var qrcode = function() {
     // ===== 起動 =====
     init();
   </script>
+
+  <!-- ===== 選択ダイアログ（3つまでの選択肢を出せる） ===== -->
+  <div id="askBack" hidden>
+    <div id="askBox" role="dialog" aria-modal="true" aria-labelledby="askTitle">
+      <div id="askTitle"></div>
+      <div id="askText"></div>
+      <div id="askBtns"></div>
+    </div>
+  </div>
 
 </body>
 </html>
