@@ -155,8 +155,14 @@
     }
     /* 机の向き＝四角の縦横比＋太い辺（机の正面）で表現する */
     .seat.orient-front .desk      { width: 92%; height: 70%; border-top-width: 7px; }
+    .seat.orient-back .desk       { width: 92%; height: 70%; border-bottom-width: 7px; }
     .seat.orient-side-left .desk  { width: 66%; height: 96%; border-left-width: 7px; }
     .seat.orient-side-right .desk { width: 66%; height: 96%; border-right-width: 7px; }
+
+    /* 教室の向き切替：黒板を下にするときは、黒板ラベルと座席表の順番を入れかえる */
+    .room-view { display: flex; flex-direction: column; }
+    .room-view.flipped { flex-direction: column-reverse; }
+    .room-view.flipped .board-label { margin-bottom: 0; margin-top: 8px; }
     .desk .orient-mark { font-size: 10px; color: #999; line-height: 1; }
     .desk .seat-name { font-weight: bold; line-height: 1.2; }
     .desk .seat-icons { position: absolute; top: 0; right: 2px; font-size: 11px; }
@@ -192,8 +198,14 @@
     /* 班がついた机はわくを太くする（男女の背景色と同時に見える） */
     .desk.has-group { border-width: 4px; }
     .seat.orient-front .desk.has-group      { border-top-width: 8px; }
+    .seat.orient-back .desk.has-group       { border-bottom-width: 8px; }
     .seat.orient-side-left .desk.has-group  { border-left-width: 8px; }
     .seat.orient-side-right .desk.has-group { border-right-width: 8px; }
+
+    /* 席替えタブ：入れ替え／今回だけ固定の操作中の見た目 */
+    .seat.pick-selected .desk { outline: 4px solid #e67e22; outline-offset: 2px; }
+    .desk .pin-mark { position: absolute; left: 1px; bottom: 1px; font-size: 11px; line-height: 1; }
+    .seat.pinned .desk { box-shadow: inset 0 0 0 2px #e67e22; }
 
     /* 通路：コの字などの「形」が見えるよう、うすく目立たない表示にする */
     .seat.disabled .desk {
@@ -223,6 +235,33 @@
     }
     /* 班の凡例は「太いわく」で表す（座席表の見た目とそろえる） */
     .legend .swatch.group-swatch { background: #fff; border-width: 4px; border-style: solid; }
+
+    /* 席替えタブの操作バー：スクロールしても画面上部に貼りつく（座席を見ながら実行できる） */
+    .sticky-bar {
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      background: var(--panel);
+      border-bottom: 2px solid var(--primary);
+      padding: 8px 14px;
+      margin: -14px -14px 12px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .sticky-bar .row { gap: 6px; }
+    .sticky-bar button { padding: 8px 12px; min-height: 40px; }
+
+    /* 前回とのくらべ：ひと目でわかる成績表 */
+    .prev-check { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .prev-check .chk {
+      font-size: 13px;
+      border-radius: 8px;
+      padding: 2px 8px;
+      border: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    .prev-check .chk.ok { background: #eafaf1; border-color: #27ae60; color: #1e8449; }
+    .prev-check .chk.bad { background: #fdecea; border-color: var(--danger); color: var(--danger); font-weight: bold; }
+    .prev-check .chk.none { background: #f4f6f8; color: #667; }
 
     /* 操作モードボタン（選択中をはっきり見せる） */
     .tool-btn.active {
@@ -377,7 +416,12 @@
       .seat { cursor: default; }
       .print-header { display: block !important; margin-bottom: 10px; font-size: 14px; }
       .roster-card { page-break-inside: avoid; border-width: 1px; }
-      #tab-roster > .card:last-of-type { page-break-before: always; } /* 座席表は新しいページから */
+      .print-break { page-break-before: always; } /* このカードは新しいページから印刷する */
+      /* 印刷では男女の●印を出さない（先生の要望） */
+      .desk .gender-dot { display: none !important; }
+      /* 空席・通路は席ごと消す。ただし場所はあけたままにして座席表がずれないようにする */
+      .seat.vacant, .seat.disabled { visibility: hidden; }
+      .sticky-bar { position: static; }
     }
     .print-header { display: none; }
 
@@ -487,34 +531,61 @@
   <!-- ===== ③🎲 席替えタブ ===== -->
   <section id="tab-shuffle" class="tab-panel">
     <!-- 準備ができていないときの案内（生徒0名など） -->
+    <!-- 画面上部に貼りつく操作バー：スクロールせずに座席を見ながら実行できる -->
+    <div class="sticky-bar no-print">
+      <div class="row">
+        <button id="btnRunShuffle" class="primary" style="font-size:17px">🎲 席替え実行</button>
+        <button id="btnSaveHistory">💾 記録する</button>
+        <button id="btnInvertGender" title="今の男子と女子の位置を入れかえます">🔁 男女を逆に</button>
+        <button id="btnFlipView" title="黒板を上にするか下にするかを切りかえます">🔄 黒板の向き</button>
+        <button id="btnPrintSeats">🖨 印刷</button>
+      </div>
+      <!-- 前回とくらべた結果をここに常に出す（別のページを見に行かなくてよい） -->
+      <div id="prevCheck" class="prev-check"></div>
+    </div>
+
     <div id="shuffleGuide"></div>
+
     <div class="card no-print">
       <h2>🎲 席替えをする</h2>
-      <p class="hint">ボタンをおすと、固定席・NG設定をまもったランダムな席ができます。<br>
-      気に入らなければ何度でもおしてOK！決まったら「💾この席を記録する」をおしましょう。</p>
+      <p class="hint">ボタンをおすと、NG設定・固定席をまもった席ができます。<br>
+      <strong>何回か作って、いちばん良いものが自動でえらばれます</strong>（前回と同じ席・前回と同じ隣などをできるだけ避けます）。</p>
       <label class="check-label">
         <input type="checkbox" id="chkChecker">
         ♟ 男女が交互（市松模様）になるようにする
       </label>
       <p class="hint">チェックを入れると、となり合う席が 男・女・男・女… とジグザグ（市松模様）に交互になるよう席替えします。
       「②生徒」タブで男女の登録が必要です。</p>
-      <div class="row" style="margin-top:8px">
-        <button id="btnRunShuffle" class="primary" style="font-size:18px">🎲 席替え実行</button>
-        <button id="btnSaveHistory">💾 この席を記録する</button>
-        <button id="btnPrintSeats">🖨 印刷</button>
+
+      <h3>席を手なおしする（今回かぎり）</h3>
+      <div class="row">
+        <button id="toolNone" class="tool-btn active">👀 見るだけ</button>
+        <button id="toolSwap" class="tool-btn">🔀 2人を入れかえる</button>
+        <button id="toolPin" class="tool-btn">📌 今回だけ固定する</button>
       </div>
+      <p class="hint" id="shuffleToolHint">席をタップしても何も起きません。手なおししたいときは上のボタンをえらんでください。</p>
+      <div class="row">
+        <span class="hint" id="pinCount"></span>
+        <button id="btnClearPins">📌 今回だけの固定をぜんぶ消す</button>
+      </div>
+      <p class="hint">📌今回だけの固定は、<strong>この1回の席替えだけ</strong>に使われます（「💾記録する」と自動で消えます）。<br>
+      1年間ずっと守りたい設定は「🚫NG設定」タブでおこなってください。</p>
     </div>
+
     <div class="card">
       <h2>座席表</h2>
       <div class="no-print" style="margin-bottom:10px">
         <p class="hint" style="margin-bottom:4px">色の見かた</p>
         <div id="shuffleLegend" class="legend"></div>
       </div>
-      <div class="board-label">黒　板</div>
-      <div class="seat-grid-wrap"><div id="shuffleGrid" class="seat-grid"></div></div>
+      <div class="room-view" id="shuffleRoom">
+        <div class="board-label">黒　板</div>
+        <div class="seat-grid-wrap"><div id="shuffleGrid" class="seat-grid"></div></div>
+      </div>
     </div>
+
     <div class="card no-print">
-      <h2>チェック結果</h2>
+      <h2>くわしいチェック結果</h2>
       <ul id="warningList" class="warning-list"></ul>
       <p class="hint">項目をタップすると該当の席がオレンジ枠で光ります</p>
     </div>
@@ -554,11 +625,18 @@
     </div>
     <div class="card">
       <h2>着席NG（この生徒が座れない席）</h2>
+      <p class="hint">ここで決めたNG席は<strong>1年間ずっと使われます</strong>（席替えのたびに守られます）。</p>
       <div class="row">
         <label>生徒を選択：</label>
         <select id="ngSeatStudent"></select>
       </div>
-      <p class="hint">席をタップするとNG席として登録/解除されます（赤＝NG席）</p>
+      <div class="row no-print" style="margin-top:8px">
+        <button id="btnNgAll">🚫 ぜんぶNGにする</button>
+        <button id="btnNgClear">↩️ ぜんぶ解除する</button>
+        <span class="hint" id="ngSeatCount"></span>
+      </div>
+      <p class="hint">「ぜんぶNGにする」→ 座ってよい席だけタップして解除、という使い方が早いです。<br>
+      席をタップするとNG席として登録/解除されます（赤＝NG席）</p>
       <div class="board-label">黒　板</div>
       <div class="seat-grid-wrap"><div id="ngGrid" class="seat-grid"></div></div>
     </div>
@@ -579,10 +657,22 @@
       <h2>全員名簿（名前と班の一覧）</h2>
       <ul id="rosterAll" class="roster-all"></ul>
     </div>
-    <div class="card">
-      <h2>座席表</h2>
-      <div class="board-label">黒　板</div>
-      <div class="seat-grid-wrap"><div id="rosterGrid" class="seat-grid"></div></div>
+    <!-- 両面印刷用：おもて＝黒板が上（先生が黒板側から見た図） -->
+    <div class="card print-break">
+      <h2>座席表（黒板が上・先生から見た図）</h2>
+      <div class="room-view">
+        <div class="board-label">黒　板</div>
+        <div class="seat-grid-wrap"><div id="rosterGrid" class="seat-grid"></div></div>
+      </div>
+    </div>
+    <!-- 両面印刷用：うら＝黒板が下（生徒が自分の席から見た図） -->
+    <div class="card print-break">
+      <h2>座席表（黒板が下・教室のうしろから見た図）</h2>
+      <p class="hint no-print">この2枚を「両面印刷」すると、おもて＝黒板が上／うら＝黒板が下 になります。</p>
+      <div class="room-view flipped">
+        <div class="board-label">黒　板</div>
+        <div class="seat-grid-wrap"><div id="rosterGridFlipped" class="seat-grid"></div></div>
+      </div>
     </div>
   </section>
 
@@ -656,8 +746,23 @@
       return 'background:' + color + ';color:' + textColorFor(color);
     }
 
-    const ORIENT_MARKS = { 'front': '↑', 'side-left': '←', 'side-right': '→' };
-    const MAX_RESTART = 300; // 席替えアルゴリズムの最大リスタート回数
+    const ORIENT_MARKS = { 'front': '↑', 'back': '↓', 'side-left': '←', 'side-right': '→' };
+    // 黒板を下にして表示するときは、机の向きも180度回して見せる
+    const ORIENT_FLIP = { 'front': 'back', 'back': 'front', 'side-left': 'side-right', 'side-right': 'side-left' };
+
+    const MAX_RESTART = 300;      // 席替えアルゴリズムの最大リスタート回数
+    const CANDIDATE_TARGET = 40;  // 候補をこの数だけ作り、いちばん良いものをえらぶ
+
+    // 「良くない席」の減点。数が大きいほど強く避ける。
+    // 目的：前回と同じ席／前回と近くだった人がまた近く、を確実に避ける
+    const PENALTY = {
+      sameSeat: 1000,   // 前回とまったく同じ席（いちばん避けたい）
+      side: 120,        // 前回と左右の隣が同じ
+      frontBack: 90,    // 前回と前後が同じ
+      diagonal: 40,     // 前回と斜めが同じ
+      sameGroup: 60,    // 前回と同じ班
+      oldNear: 8        // もっと前の回で近くだった（軽めに避ける）
+    };
     const GENDER_LABELS = { m: '男', f: '女' };
     const GENDER_COLORS = { m: '#dbeafe', f: '#fde4ec' };      // 机の背景色（うすい青／うすいピンク）
     const GENDER_MARK_COLORS = { m: '#2f6fd0', f: '#d5407e' }; // 左上の●印（はっきりした色）
@@ -706,8 +811,10 @@
         deskMeta: {},        // "行-列" → { orient, disabled, vacant, fixedStudentId, ngStudentIds, groupId }
         ngPairs: [],
         history: [],
-        currentSeats: null,  // 直近の席替え結果（席キー → 生徒ID）
-        checkerGender: false // 男女を市松模様（交互）に並べるか
+        currentSeats: null,   // 直近の席替え結果（席キー → 生徒ID）
+        checkerGender: false, // 男女を市松模様（交互）に並べるか
+        tempFixed: {},        // 今回だけの固定（席キー → 生徒ID）。記録するとリセットされる
+        viewFlipped: false    // 座席表を「黒板が下」で表示するか
       };
     }
 
@@ -761,6 +868,114 @@
         result.push(nr + '-' + nc);
       }
       return result;
+    }
+
+    // 方向べつの隣：左右（となり）／前後／斜め。
+    // 「前回と隣が同じ」「前回と前後が同じ」「前回と斜めが同じ」を別々に判定するために使う。
+    function neighborsBy(cr, key, offsets) {
+      const [r, c] = key.split('-').map(Number);
+      const result = [];
+      for (const [dr, dc] of offsets) {
+        const nr = r + dr, nc = c + dc;
+        if (nr < 0 || nc < 0 || nr >= cr.rows || nc >= cr.cols) continue;
+        if (getDeskMeta(cr, nr, nc).disabled) continue; // 通路をはさんだら「近く」ではない
+        result.push(nr + '-' + nc);
+      }
+      return result;
+    }
+    const OFF_SIDE = [[0, -1], [0, 1]];                    // 左右
+    const OFF_FB   = [[-1, 0], [1, 0]];                    // 前後
+    const OFF_DIAG = [[-1, -1], [-1, 1], [1, -1], [1, 1]]; // 斜め
+    function getSideNeighbors(cr, key) { return neighborsBy(cr, key, OFF_SIDE); }
+    function getFrontBackNeighbors(cr, key) { return neighborsBy(cr, key, OFF_FB); }
+    function getDiagonalNeighbors(cr, key) { return neighborsBy(cr, key, OFF_DIAG); }
+
+    // 2人組をあらわす文字列（順番によらず同じキーになる）
+    function pairKey(a, b) { return a < b ? a + '|' + b : b + '|' + a; }
+
+    // ある配置における「だれとだれがどんな位置関係か」をまとめて取り出す
+    function assignmentRelations(cr, seatsMap) {
+      const side = new Set(), fb = new Set(), diag = new Set(), group = new Set();
+      const byGroup = {};
+      for (const key of Object.keys(seatsMap)) {
+        const sid = seatsMap[key];
+        if (!sid) continue;
+        for (const nk of getSideNeighbors(cr, key)) { const n = seatsMap[nk]; if (n) side.add(pairKey(sid, n)); }
+        for (const nk of getFrontBackNeighbors(cr, key)) { const n = seatsMap[nk]; if (n) fb.add(pairKey(sid, n)); }
+        for (const nk of getDiagonalNeighbors(cr, key)) { const n = seatsMap[nk]; if (n) diag.add(pairKey(sid, n)); }
+        const g = getSeatGroup(cr, key);
+        if (g) (byGroup[g.id] = byGroup[g.id] || []).push(sid);
+      }
+      // 同じ班どうしの組み合わせ
+      for (const gid of Object.keys(byGroup)) {
+        const mem = byGroup[gid];
+        for (let i = 0; i < mem.length; i++)
+          for (let j = i + 1; j < mem.length; j++) group.add(pairKey(mem[i], mem[j]));
+      }
+      return { side: side, fb: fb, diag: diag, group: group };
+    }
+
+    // 履歴ごとの位置関係を先に計算しておく（候補ごとに計算し直さないため）
+    function buildHistoryRelations(cr) {
+      return cr.history.map(h => ({
+        label: h.label,
+        seats: h.seats,
+        groupSnapshot: h.groupSnapshot,
+        rel: assignmentRelations(cr, h.seats)
+      }));
+    }
+
+    // 前回（最新の履歴）とくらべて、何がダブっているかを数える
+    function comparePrevious(cr, assignment, prevInfo) {
+      const result = { sameSeat: 0, side: 0, fb: 0, diag: 0, group: 0, hasPrev: !!prevInfo,
+                       seatsSameSeat: [], seatsSide: [], seatsFb: [], seatsDiag: [], seatsGroup: [] };
+      if (!prevInfo) return result;
+      const seatOf = {};
+      for (const key of Object.keys(assignment)) if (assignment[key]) seatOf[assignment[key]] = key;
+
+      for (const key of Object.keys(assignment)) {
+        const sid = assignment[key];
+        if (sid && prevInfo.seats[key] === sid) { result.sameSeat++; result.seatsSameSeat.push(key); }
+      }
+      const rel = assignmentRelations(cr, assignment);
+      const collect = (set, prevSet, countKey, seatKey) => {
+        for (const pk of set) {
+          if (!prevSet.has(pk)) continue;
+          result[countKey]++;
+          const [a, b] = pk.split('|');
+          if (seatOf[a]) result[seatKey].push(seatOf[a]);
+          if (seatOf[b]) result[seatKey].push(seatOf[b]);
+        }
+      };
+      collect(rel.side, prevInfo.rel.side, 'side', 'seatsSide');
+      collect(rel.fb, prevInfo.rel.fb, 'fb', 'seatsFb');
+      collect(rel.diag, prevInfo.rel.diag, 'diag', 'seatsDiag');
+      collect(rel.group, prevInfo.rel.group, 'group', 'seatsGroup');
+      return result;
+    }
+
+    // 配置の「良くなさ」を点数にする。小さいほど良い席替え。
+    function scoreAssignment(cr, assignment, histRels) {
+      if (!histRels.length) return 0;
+      const prev = histRels[histRels.length - 1];
+      const cmp = comparePrevious(cr, assignment, prev);
+      let p = cmp.sameSeat * PENALTY.sameSeat +
+              cmp.side * PENALTY.side +
+              cmp.fb * PENALTY.frontBack +
+              cmp.diag * PENALTY.diagonal +
+              cmp.group * PENALTY.sameGroup;
+
+      // もっと前の回で「近く」だった組み合わせも、軽めに避ける
+      if (histRels.length > 1) {
+        const rel = assignmentRelations(cr, assignment);
+        for (let i = 0; i < histRels.length - 1; i++) {
+          const h = histRels[i];
+          for (const pk of rel.side) if (h.rel.side.has(pk)) p += PENALTY.oldNear;
+          for (const pk of rel.fb) if (h.rel.fb.has(pk)) p += PENALTY.oldNear;
+          for (const pk of rel.group) if (h.rel.group.has(pk)) p += PENALTY.oldNear;
+        }
+      }
+      return p;
     }
 
     function getStudent(cr, id) {
@@ -906,27 +1121,41 @@
         prefer = buildCheckerPreference(cr, seats, active);
       }
 
-      // 固定席の生徒を先に配置する
+      // 固定席（1年間ずっと）と、今回だけの固定📌を先に配置する
       const baseAssignment = {};
       const fixedIds = new Set();
       for (const key of seats) {
         const meta = cr.deskMeta[key];
         if (meta && meta.fixedStudentId) {
           const st = active.find(s => s.id === meta.fixedStudentId);
-          if (st) {
-            baseAssignment[key] = st.id;
-            fixedIds.add(st.id);
-          }
+          if (st) { baseAssignment[key] = st.id; fixedIds.add(st.id); }
         }
+      }
+      // 今回だけの固定は、1年間の固定席よりも優先する（先生が今回そうしたい、という意思表示）
+      for (const key of Object.keys(cr.tempFixed || {})) {
+        const sid = cr.tempFixed[key];
+        const st = active.find(s => s.id === sid);
+        if (!st || seats.indexOf(key) < 0) continue;
+        // その生徒が別の席に固定されていたら、そちらを外す
+        for (const k of Object.keys(baseAssignment)) {
+          if (baseAssignment[k] === sid) delete baseAssignment[k];
+        }
+        baseAssignment[key] = sid;
+        fixedIds.add(sid);
       }
       const movable = active.filter(s => !fixedIds.has(s.id));
       const freeSeats = seats.filter(k => !baseAssignment[k]);
 
-      // リスタートループ：シャッフル → 貪欲配置 を最大300回試す。
+      // 過去の位置関係は先に1回だけ計算しておく
+      const histRels = buildHistoryRelations(cr);
+
+      // リスタートループ：シャッフル → 貪欲配置 をくり返し、
+      // 成功した配置を候補としてためて、いちばん点数の良いものをえらぶ。
+      // （以前は最初に成功した1つをそのまま使っていたので、前回と同じ席などが残りやすかった）
       // 市松模様ONのときは、前半は「希望の席のみ」で厳しく試し、後半は妥協も許す。
-      let result = null;
+      const candidates = [];
       const strictLimit = Math.floor(MAX_RESTART * 2 / 3);
-      for (let t = 0; t < MAX_RESTART; t++) {
+      for (let t = 0; t < MAX_RESTART && candidates.length < CANDIDATE_TARGET; t++) {
         const strict = !!prefer && t < strictLimit;
         const a = Object.assign({}, baseAssignment);
         const shuffledStudents = shuffle(movable);
@@ -945,7 +1174,20 @@
           if (!seat) { ok = false; break; }
           a[seat] = st.id;
         }
-        if (ok) { result = a; break; }
+        if (ok) candidates.push(a);
+      }
+
+      // 候補の中から「前回とのダブりがいちばん少ない」配置をえらぶ
+      let result = null;
+      let bestScore = 0;
+      if (candidates.length) {
+        let best = candidates[0], bestP = Infinity;
+        for (const a of candidates) {
+          const p = scoreAssignment(cr, a, histRels);
+          if (p < bestP) { bestP = p; best = a; }
+        }
+        result = best;
+        bestScore = bestP;
       }
 
       // 300回失敗 → NG隣接制約を緩和して強制配置（着席NGはなるべく守る）
@@ -985,7 +1227,9 @@
         relaxed: relaxed,
         checkerRequested: checkerRequested,
         checkerAvailable: !!prefer,
-        checkerMisses: checkerMisses
+        checkerMisses: checkerMisses,
+        candidateCount: candidates.length,
+        score: bestScore
       };
     }
 
@@ -994,105 +1238,101 @@
     // =====================================================
     function checkSoftConstraints(cr, assignment) {
       const warnings = [];
+      const nameOf = sid => { const s = getStudent(cr, sid); return s ? s.name : '?'; };
+      const seatOf = {};
+      for (const key of Object.keys(assignment)) if (assignment[key]) seatOf[assignment[key]] = key;
 
-      // --- 同じ席チェック：最新の履歴と比較 ---
+      // --- 前回（いちばん新しい履歴）とのくらべ ---
+      // 同じ席／隣が同じ／前後が同じ／斜めが同じ／同じ班 を1つずつ出す
       const latest = cr.history[cr.history.length - 1];
       if (latest) {
+        const prevRel = assignmentRelations(cr, latest.seats);
+        const rel = assignmentRelations(cr, assignment);
+
         for (const key of Object.keys(assignment)) {
           const sid = assignment[key];
           if (sid && latest.seats[key] === sid) {
-            const st = getStudent(cr, sid);
             warnings.push({
-              level: 'warn',
-              text: '⚠️ ' + (st ? st.name : '?') + ' は前回（' + latest.label + '）と同じ席です',
+              level: 'error',
+              text: '❌ ' + nameOf(sid) + ' は前回（' + latest.label + '）と同じ席です',
               seats: [key]
+            });
+          }
+        }
+        const reportRepeat = (set, prevSet, level, label) => {
+          for (const pk of set) {
+            if (!prevSet.has(pk)) continue;
+            const [a, b] = pk.split('|');
+            warnings.push({
+              level: level,
+              text: (level === 'error' ? '❌ ' : '⚠️ ') + nameOf(a) + ' と ' + nameOf(b) + ' は前回も' + label + 'です',
+              seats: [seatOf[a], seatOf[b]].filter(Boolean)
+            });
+          }
+        };
+        reportRepeat(rel.side, prevRel.side, 'error', '左右のとなり');
+        reportRepeat(rel.fb, prevRel.fb, 'error', '前後');
+        reportRepeat(rel.diag, prevRel.diag, 'warn', '斜め');
+        reportRepeat(rel.group, prevRel.group, 'warn', '同じ班');
+      }
+
+      // --- もっと前の回とのくらべ（前回ぶんは上ですでに出しているので除く） ---
+      // 「前々回も隣だった」などは参考情報（ℹ️）として出す
+      if (cr.history.length > 1) {
+        const rel = assignmentRelations(cr, assignment);
+        for (let i = 0; i < cr.history.length - 1; i++) {
+          const h = cr.history[i];
+          const hRel = assignmentRelations(cr, h.seats);
+          const near = new Set([...hRel.side, ...hRel.fb]);
+          for (const pk of new Set([...rel.side, ...rel.fb])) {
+            if (!near.has(pk)) continue;
+            const [a, b] = pk.split('|');
+            warnings.push({
+              level: 'info',
+              text: 'ℹ️ ' + nameOf(a) + ' と ' + nameOf(b) + ' は「' + h.label + '」でも近くの席でした',
+              seats: [seatOf[a], seatOf[b]].filter(Boolean)
+            });
+          }
+          for (const pk of rel.group) {
+            if (!hRel.group.has(pk)) continue;
+            const [a, b] = pk.split('|');
+            warnings.push({
+              level: 'info',
+              text: 'ℹ️ ' + nameOf(a) + ' と ' + nameOf(b) + ' は「' + h.label + '」でも同じ班でした',
+              seats: [seatOf[a], seatOf[b]].filter(Boolean)
             });
           }
         }
       }
 
-      // 今回の隣接ペア一覧（重複なし）を作る
-      const seatOf = {}; // 生徒ID → 席キー
-      for (const key of Object.keys(assignment)) {
-        if (assignment[key]) seatOf[assignment[key]] = key;
-      }
-      const currentPairs = []; // [idA, idB]
-      const pairSeen = new Set();
-      for (const key of Object.keys(assignment)) {
-        const sid = assignment[key];
-        if (!sid) continue;
-        for (const nKey of getNeighbors(cr, key)) {
-          const nid = assignment[nKey];
-          if (!nid) continue;
-          const pairKey = [sid, nid].sort().join('|');
-          if (!pairSeen.has(pairKey)) {
-            pairSeen.add(pairKey);
-            currentPairs.push([sid, nid]);
-          }
-        }
-      }
-
-      // --- 隣履歴チェック：過去に隣だったペアが再び隣か ---
-      for (const h of cr.history) {
-        const histAdjacent = new Set();
-        for (const key of Object.keys(h.seats)) {
-          const sid = h.seats[key];
-          if (!sid) continue;
-          for (const nKey of getNeighbors(cr, key)) {
-            const nid = h.seats[nKey];
-            if (nid) histAdjacent.add([sid, nid].sort().join('|'));
-          }
-        }
-        for (const [a, b] of currentPairs) {
-          if (histAdjacent.has([a, b].sort().join('|'))) {
-            const sa = getStudent(cr, a), sb = getStudent(cr, b);
-            if (sa && sb) {
-              warnings.push({
-                level: 'info',
-                text: 'ℹ️ ' + sa.name + ' と ' + sb.name + ' は「' + h.label + '」でも隣でした',
-                seats: [seatOf[a], seatOf[b]].filter(Boolean)
-              });
-            }
-          }
-        }
-      }
-
-      // --- 同班履歴チェック：今回同じ班のペアが過去にも同じ班だったか ---
-      // 班は「席」につくので、同じ班の席に座った生徒同士がペアになる
-      const sameGroupPairs = [];
-      const byGroup = {}; // groupId → [{sid, gname}]
-      for (const key of Object.keys(assignment)) {
-        const sid = assignment[key];
-        if (!sid) continue;
-        const g = getSeatGroup(cr, key);
-        if (g) (byGroup[g.id] = byGroup[g.id] || []).push({ sid: sid, gname: g.name });
-      }
-      for (const gid of Object.keys(byGroup)) {
-        const members = byGroup[gid];
-        for (let i = 0; i < members.length; i++) {
-          for (let j = i + 1; j < members.length; j++) {
-            sameGroupPairs.push([members[i].sid, members[j].sid, members[i].gname]);
-          }
-        }
-      }
-      for (const h of cr.history) {
-        if (!h.groupSnapshot) continue;
-        for (const [a, b, gname] of sameGroupPairs) {
-          const ga = h.groupSnapshot[a], gb = h.groupSnapshot[b];
-          if (ga && ga === gb) {
-            const sa = getStudent(cr, a), sb = getStudent(cr, b);
-            if (sa && sb) {
-              warnings.push({
-                level: 'info',
-                text: 'ℹ️ ' + sa.name + ' と ' + sb.name + '（' + gname + '）は「' + h.label + '」でも同じ班でした',
-                seats: [seatOf[a], seatOf[b]].filter(Boolean)
-              });
-            }
-          }
-        }
-      }
-
       return warnings;
+    }
+
+    // 前回とのくらべを、席替えページの上に出す「成績表」用にまとめる
+    function renderPrevCheck(cr) {
+      const el = document.getElementById('prevCheck');
+      if (!el) return;
+      if (!cr.currentSeats) {
+        el.innerHTML = '<span class="chk none">「🎲席替え実行」をおすと、前回とのくらべがここに出ます</span>';
+        return;
+      }
+      const latest = cr.history[cr.history.length - 1];
+      if (!latest) {
+        el.innerHTML = '<span class="chk none">まだ履歴がありません（「💾記録する」をおすと次回から前回とくらべます）</span>';
+        return;
+      }
+      const prevInfo = { seats: latest.seats, rel: assignmentRelations(cr, latest.seats) };
+      const cmp = comparePrevious(cr, cr.currentSeats, prevInfo);
+      const item = (label, n) =>
+        '<span class="chk ' + (n === 0 ? 'ok' : 'bad') + '">' +
+        (n === 0 ? '✅' : '❌') + label + ' ' + n + (label === '席が同じ' ? '人' : '組') + '</span>';
+      el.innerHTML =
+        '<span class="chk none">前回（' + escapeHtml(latest.label) + '）とくらべて</span>' +
+        item('席が同じ', cmp.sameSeat) +
+        item('となりが同じ', cmp.side) +
+        item('前後が同じ', cmp.fb) +
+        item('斜めが同じ', cmp.diag) +
+        item('同じ班', cmp.group);
     }
 
     // =====================================================
@@ -1120,13 +1360,19 @@
         }
       }
 
-      for (let r = 0; r < cr.rows; r++) {
-        for (let c = 0; c < cr.cols; c++) {
+      // 黒板を下にして見るときは、教室を180度まわして描く（行も列も逆順）
+      const flip = !!extra.flip;
+      for (let i = 0; i < cr.rows; i++) {
+        for (let j = 0; j < cr.cols; j++) {
+          const r = flip ? cr.rows - 1 - i : i;
+          const c = flip ? cr.cols - 1 - j : j;
           const key = r + '-' + c;
           const meta = getDeskMeta(cr, r, c);
           const cell = document.createElement('div');
           // 机の四角の形は orient-XXX クラスのCSSで変わる（コの字隊形が見た目でわかる）
-          cell.className = 'seat orient-' + (meta.orient || 'front');
+          const baseOrient = meta.orient || 'front';
+          const shownOrient = flip ? (ORIENT_FLIP[baseOrient] || baseOrient) : baseOrient;
+          cell.className = 'seat orient-' + shownOrient;
           cell.dataset.key = key;
           const desk = document.createElement('div');
           desk.className = 'desk';
@@ -1142,8 +1388,8 @@
               '<span class="orient-mark">' + (ORIENT_MARKS[meta.orient] || '↑') + '</span>' +
               '<span>空席</span>';
           } else {
-            // 向きマーク（四角の形＋矢印の二重表示）
-            const orientMark = ORIENT_MARKS[meta.orient] || '↑';
+            // 向きマーク（四角の形＋矢印の二重表示）。黒板が下のときは矢印も回す
+            const orientMark = ORIENT_MARKS[shownOrient] || '↑';
             let nameHtml = '';
             let icons = '';
             let extras = ''; // 男女の●印・班のラベル
@@ -1197,6 +1443,13 @@
                           escapeHtml(group.name) + '</span>';
               }
 
+              // 今回だけの固定📌。席替え前（席が空のとき）にも見えるようにする
+              const pinnedSid = (mode === 'seating' && cr.tempFixed) ? cr.tempFixed[key] : null;
+              if (pinnedSid) {
+                cell.classList.add('pinned');
+                extras += '<span class="pin-mark">📌</span>';
+              }
+
               if (st) {
                 nameHtml = '<span class="seat-name">' + escapeHtml(st.name) + '</span>';
                 if (st.gender && GENDER_COLORS[st.gender]) {
@@ -1209,6 +1462,10 @@
                 else if (seatLevel[key] === 'info') icons += 'ℹ️';
                 if (seatLevel[key] === 'error') cell.classList.add('error-seat');
                 else if (seatLevel[key] === 'warn') cell.classList.add('warn-seat');
+              } else if (pinnedSid) {
+                // まだ席替えしていないが、この席に座らせると決めてある生徒
+                const pst = getStudent(cr, pinnedSid);
+                nameHtml = '<span class="empty-seat">' + (pst ? escapeHtml(pst.name) : '?') + '<br>(予約)</span>';
               } else {
                 nameHtml = '<span class="empty-seat">（あき）</span>';
               }
@@ -1823,6 +2080,19 @@
     function renderNgGrid() {
       const cr = getActiveClassroom();
       const sid = document.getElementById('ngSeatStudent').value;
+
+      // いま何席がNGで、座れる席が何席あるかを出す（全部NGにしたあとの目安）
+      const countEl = document.getElementById('ngSeatCount');
+      if (countEl) {
+        if (!sid) {
+          countEl.textContent = '';
+        } else {
+          const seats = getEnabledSeats(cr);
+          const ngN = seats.filter(k => (cr.deskMeta[k].ngStudentIds || []).includes(sid)).length;
+          countEl.textContent = 'NG ' + ngN + '席 ／ 座れる ' + (seats.length - ngN) + '席';
+        }
+      }
+
       renderGrid('ngGrid', cr, 'ng', {
         ngStudentId: sid,
         onTap: (key) => {
@@ -1840,6 +2110,29 @@
     }
     document.getElementById('ngSeatStudent').addEventListener('change', renderNgGrid);
 
+    // 全部NG／全解除（1つずつタップするのが大変なとき用）
+    function setAllNg(makeNg) {
+      const cr = getActiveClassroom();
+      const sid = document.getElementById('ngSeatStudent').value;
+      if (!sid) { alert('先に生徒をえらんでください'); return; }
+      const st = getStudent(cr, sid);
+      const seats = getEnabledSeats(cr);
+      if (makeNg && !confirm('「' + (st ? st.name : '?') + '」を、' + seats.length +
+          'つの席ぜんぶでNGにします。\nこのあと、座ってよい席だけタップして解除してください。\nよろしいですか？')) return;
+      if (!makeNg && !confirm('「' + (st ? st.name : '?') + '」のNG席をぜんぶ解除します。よろしいですか？')) return;
+      for (const key of seats) {
+        const [r, c] = key.split('-').map(Number);
+        const meta = getDeskMeta(cr, r, c);
+        const idx = meta.ngStudentIds.indexOf(sid);
+        if (makeNg && idx < 0) meta.ngStudentIds.push(sid);
+        if (!makeNg && idx >= 0) meta.ngStudentIds.splice(idx, 1);
+      }
+      saveState();
+      renderNgGrid();
+    }
+    document.getElementById('btnNgAll').addEventListener('click', () => setAllNg(true));
+    document.getElementById('btnNgClear').addEventListener('click', () => setAllNg(false));
+
     // =====================================================
     // 🎲 席替えタブ
     // =====================================================
@@ -1851,6 +2144,152 @@
       saveState();
     });
 
+    // --- 席替えタブの手なおしモード ---
+    let shuffleTool = 'none';  // 'none' | 'swap' | 'pin'
+    let swapFirstKey = null;   // 入れ替えで1つ目に選んだ席
+
+    function setShuffleTool(tool) {
+      shuffleTool = tool;
+      swapFirstKey = null;
+      renderShuffleTab();
+    }
+    document.getElementById('toolNone').addEventListener('click', () => setShuffleTool('none'));
+    document.getElementById('toolSwap').addEventListener('click', () => setShuffleTool('swap'));
+    document.getElementById('toolPin').addEventListener('click', () => setShuffleTool('pin'));
+
+    // 席をタップしたときの動き（入れ替え／今回だけ固定）
+    function onShuffleSeatTap(key) {
+      const cr = getActiveClassroom();
+      const meta = cr.deskMeta[key];
+      if (!meta || meta.disabled || meta.vacant) return;
+      if (!cr.currentSeats) cr.currentSeats = {};
+
+      if (shuffleTool === 'swap') {
+        if (!swapFirstKey) {
+          swapFirstKey = key;
+        } else if (swapFirstKey === key) {
+          swapFirstKey = null; // 同じ席をもう一度タップ＝えらび直し
+        } else {
+          // 2つの席の生徒を入れかえる（空席との入れかえ＝移動もできる）
+          const a = cr.currentSeats[swapFirstKey] || null;
+          const b = cr.currentSeats[key] || null;
+          cr.currentSeats[swapFirstKey] = b;
+          cr.currentSeats[key] = a;
+          // 今回だけの固定がついていたら、いっしょに動かす
+          const ta = cr.tempFixed[swapFirstKey], tb = cr.tempFixed[key];
+          if (ta) delete cr.tempFixed[swapFirstKey];
+          if (tb) delete cr.tempFixed[key];
+          if (ta) cr.tempFixed[key] = ta;
+          if (tb) cr.tempFixed[swapFirstKey] = tb;
+          swapFirstKey = null;
+          lastWarnings = checkSoftConstraints(cr, cr.currentSeats);
+          saveState();
+          renderRosterTab();
+        }
+        renderShuffleTab();
+        return;
+      }
+
+      if (shuffleTool === 'pin') {
+        if (cr.tempFixed[key]) {
+          delete cr.tempFixed[key]; // もう一度タップで解除
+          saveState();
+          renderShuffleTab();
+          return;
+        }
+        const sid = cr.currentSeats[key];
+        if (sid) {
+          // すでに座っている生徒をこの席に固定する
+          for (const k of Object.keys(cr.tempFixed)) if (cr.tempFixed[k] === sid) delete cr.tempFixed[k];
+          cr.tempFixed[key] = sid;
+          saveState();
+          renderShuffleTab();
+        } else {
+          // 空いている席 → だれを座らせるかえらぶ（席替え前の「この子はここ」に使う）
+          openPinPicker(key);
+        }
+        return;
+      }
+    }
+
+    // 空席に「今回だけこの生徒」を割りあてるモーダル
+    function openPinPicker(key) {
+      const cr = getActiveClassroom();
+      const options = ['<option value="">（えらんでください）</option>'].concat(
+        cr.students.filter(s => !s.inactive).map(s => {
+          let where = '';
+          for (const k of Object.keys(cr.tempFixed)) if (cr.tempFixed[k] === s.id) where = '（📌' + seatLabel(k) + '）';
+          return '<option value="' + s.id + '">' + escapeHtml(s.name) + where + '</option>';
+        })
+      ).join('');
+      openModal('この席にすわる生徒（今回だけ）',
+        '<p class="hint">' + seatLabel(key) + ' に、今回の席替えだけこの生徒をすわらせます。<br>' +
+        '1年間ずっと同じ席にしたい場合は「②生徒」タブの編集で「固定席」を使ってください。</p>' +
+        '<label>生徒</label><select id="pinStudent">' + options + '</select>',
+        () => {
+          const sid = document.getElementById('pinStudent').value;
+          if (!sid) { alert('生徒をえらんでください'); return false; }
+          // その生徒が別の席に予約されていたら外す
+          for (const k of Object.keys(cr.tempFixed)) if (cr.tempFixed[k] === sid) delete cr.tempFixed[k];
+          cr.tempFixed[key] = sid;
+          saveState();
+          renderShuffleTab();
+        }, '決定');
+    }
+
+    document.getElementById('btnClearPins').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const n = Object.keys(cr.tempFixed || {}).length;
+      if (n === 0) { alert('今回だけの固定📌はありません'); return; }
+      if (!confirm('今回だけの固定📌を' + n + '件ぜんぶ消します。よろしいですか？')) return;
+      cr.tempFixed = {};
+      saveState();
+      renderShuffleTab();
+    });
+
+    // 男女の位置を入れかえる（市松模様の白黒を反転するイメージ）
+    document.getElementById('btnInvertGender').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      if (!cr.currentSeats) { alert('先に席替えを実行してください'); return; }
+      const a = cr.currentSeats;
+      const maleSeats = [], femaleSeats = [];
+      for (const key of Object.keys(a)) {
+        const sid = a[key];
+        if (!sid) continue;
+        // 固定席・今回だけの固定は動かさない（先生が決めた席なので）
+        if (cr.tempFixed[key] === sid) continue;
+        if (cr.deskMeta[key] && cr.deskMeta[key].fixedStudentId === sid) continue;
+        const st = getStudent(cr, sid);
+        if (!st) continue;
+        if (st.gender === 'm') maleSeats.push(key);
+        else if (st.gender === 'f') femaleSeats.push(key);
+      }
+      if (maleSeats.length === 0 || femaleSeats.length === 0) {
+        alert('男子か女子のどちらかがいないため、入れかえられません');
+        return;
+      }
+      const males = maleSeats.map(k => a[k]);
+      const females = femaleSeats.map(k => a[k]);
+      const n = Math.min(maleSeats.length, femaleSeats.length);
+      // 男子は女子がいた席へ、女子は男子がいた席へ（あまった人はそのまま）
+      for (let i = 0; i < n; i++) {
+        a[femaleSeats[i]] = males[i];
+        a[maleSeats[i]] = females[i];
+      }
+      lastWarnings = checkSoftConstraints(cr, a);
+      saveState();
+      renderShuffleTab();
+      renderRosterTab();
+    });
+
+    // 座席表の向き（黒板が上／下）を切りかえる
+    document.getElementById('btnFlipView').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      cr.viewFlipped = !cr.viewFlipped;
+      saveState();
+      renderShuffleTab();
+    });
+
     document.getElementById('btnRunShuffle').addEventListener('click', () => {
       const cr = getActiveClassroom();
       const result = runSeatingAlgorithm(cr);
@@ -1859,7 +2298,17 @@
         return;
       }
       cr.currentSeats = result.assignment;
+      swapFirstKey = null;
       lastWarnings = checkSoftConstraints(cr, result.assignment);
+
+      // 何通り作って、その中からえらんだかを知らせる（安心材料）
+      if (cr.history.length > 0 && result.candidateCount > 1) {
+        lastWarnings.unshift({
+          level: 'info',
+          text: '🔎 ' + result.candidateCount + '通りの席を作って、前回とのダブりがいちばん少ないものをえらびました',
+          seats: []
+        });
+      }
 
       // 市松模様の結果を先頭に知らせる
       if (result.checkerRequested) {
@@ -1925,11 +2374,42 @@
         guide.innerHTML = '';
       }
 
+      // 手なおしモードの見た目とヒント
+      document.getElementById('toolNone').classList.toggle('active', shuffleTool === 'none');
+      document.getElementById('toolSwap').classList.toggle('active', shuffleTool === 'swap');
+      document.getElementById('toolPin').classList.toggle('active', shuffleTool === 'pin');
+      const toolHints = {
+        none: '席をタップしても何も起きません。手なおししたいときは上のボタンをえらんでください。',
+        swap: swapFirstKey
+          ? '「' + seatLabel(swapFirstKey) + '」をえらび中。入れかえたい席をタップしてください（同じ席をもう一度タップでとりけし）'
+          : '入れかえたい2つの席を順にタップしてください。空いている席とも入れかえられます。',
+        pin: '席をタップすると📌今回だけ固定になります（もう一度タップで解除）。空いている席をタップすると、だれをすわらせるかえらべます。'
+      };
+      document.getElementById('shuffleToolHint').textContent = toolHints[shuffleTool];
+      const pinN = Object.keys(cr.tempFixed || {}).length;
+      document.getElementById('pinCount').textContent =
+        pinN ? '📌今回だけの固定：' + pinN + '件' : '📌今回だけの固定：なし';
+
+      // 黒板の向き
+      const room = document.getElementById('shuffleRoom');
+      if (room) room.classList.toggle('flipped', !!cr.viewFlipped);
+      document.getElementById('btnFlipView').textContent =
+        cr.viewFlipped ? '🔄 黒板が下' : '🔄 黒板が上';
+
       renderGrid('shuffleGrid', cr, 'seating', {
         seats: cr.currentSeats || {},
-        warnings: lastWarnings
+        warnings: lastWarnings,
+        flip: !!cr.viewFlipped,
+        onTap: (shuffleTool === 'none') ? null : onShuffleSeatTap
       });
+      // 入れ替えでえらび中の席を光らせる
+      if (swapFirstKey) {
+        document.querySelectorAll('#shuffleGrid .seat').forEach(el => {
+          el.classList.toggle('pick-selected', el.dataset.key === swapFirstKey);
+        });
+      }
       renderLegend('shuffleLegend', cr);
+      renderPrevCheck(cr);
 
       // 警告パネル
       const ul = document.getElementById('warningList');
@@ -1974,6 +2454,8 @@
         seats: Object.assign({}, cr.currentSeats),
         groupSnapshot: groupSnapshot
       });
+      // 「今回だけの固定📌」はこの回かぎりなので、記録したら消す
+      cr.tempFixed = {};
       saveState();
     }
 
@@ -1988,9 +2470,11 @@
         '<label>ラベル</label><input type="text" id="historyLabel" value="' + escapeHtml(defaultLabel) + '">',
         () => {
           const label = document.getElementById('historyLabel').value.trim() || defaultLabel;
+          const hadPins = Object.keys(cr.tempFixed || {}).length;
           saveCurrentAsHistory(label);
-          renderHistoryTab();
-          alert('保存しました：' + label);
+          renderAll();
+          alert('保存しました：' + label +
+                (hadPins ? '\n（今回だけの固定📌' + hadPins + '件はリセットしました）' : ''));
         }, '保存');
     });
 
@@ -2017,6 +2501,7 @@
         container.innerHTML = '<p class="hint">「③席替え」を実行すると、班別名簿がここにできます</p>';
         allList.innerHTML = '<li class="hint">「③席替え」を実行すると、全員の名前と班の一覧がここにできます</li>';
         renderGrid('rosterGrid', cr, 'seating', { seats: {} });
+        renderGrid('rosterGridFlipped', cr, 'seating', { seats: {}, flip: true });
         return;
       }
 
@@ -2076,7 +2561,9 @@
       }
       allList.innerHTML = allHtml || '<li class="hint">生徒が登録されていません</li>';
 
+      // 両面印刷用に、黒板が上の図と黒板が下の図の両方を作る
       renderGrid('rosterGrid', cr, 'seating', { seats: cr.currentSeats });
+      renderGrid('rosterGridFlipped', cr, 'seating', { seats: cr.currentSeats, flip: true });
     }
 
     // =====================================================
@@ -2334,6 +2821,8 @@
           else { cr.year = ''; cr.className = cr.name || ''; }
         }
         if (cr.checkerGender === undefined) cr.checkerGender = false;
+        if (!cr.tempFixed) cr.tempFixed = {};
+        if (cr.viewFlipped === undefined) cr.viewFlipped = false;
         for (const st of cr.students) {
           if (st.gender === undefined) st.gender = null;
         }
