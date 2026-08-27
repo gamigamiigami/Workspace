@@ -498,7 +498,9 @@
       <p class="hint-line">
         ①枠を決める → ②使いたいワードを登録 → ③キーワードを決める → ④このボタン、の順で使えます。<br>
         登録した語は<strong>必ず全部使い</strong>、つながらないところや足りないキーワードの文字は、
-        辞書から語を足して埋めます。
+        辞書から語を足して埋めます。<br>
+        <strong>自分で語を選びたいときは</strong>、下のキーワード欄の
+        「足りない文字を含む語をさがす」で候補を出せます（盤面には置きません）。
       </p>
     </div>
 
@@ -523,7 +525,7 @@
       <div id="kwChips"></div>
       <p id="kwSummary"></p>
       <div class="row">
-        <button id="btnFromKeyword" class="sub">自動で作る（登録した語は全部使う）</button>
+        <button id="btnFindForKeyword">足りない文字を含む語をさがす</button>
       </div>
       <p class="hint-line">足りない文字を含むワードを辞書から選んで、盤面と記号まで一気に作ります。</p>
     </div>
@@ -4366,6 +4368,31 @@ var qrcode = function() {
       }
     }
 
+    // ===== キーワードの足りない文字を含む語をさがす（登録はユーザーが選ぶ） =====
+    // 盤面には置かない。あくまで「こういう語がありますよ」と候補を並べるだけ。
+    // 盤面まで作るのは、①の一番上の「自動で作る」ボタンの役目。
+    function findForKeyword() {
+      const kw = chars(state.keyword);
+      if (kw.length < 2) { showMsg('先にキーワードを入れてください。', 'ng'); return; }
+      const missing = missingKeywordChars();
+      if (!missing.length) {
+        showMsg('キーワードの文字は、登録ワードで全部そろっています。'
+          + '①の一番上の「自動で作る」で盤面を作れます。', 'ok');
+        return;
+      }
+      // 「キーワードの未使用文字を含む語だけ」に絞って検索する
+      $('#findKw').checked = true;
+      state.linkPair = null;
+      $('#findChars').value = '';
+      $('#findText').value = '';
+      findWords();
+      showMsg('まだ足りない文字「' + [...new Set(missing)].join('・')
+        + '」を含む語を出しました。使いたい語をタップすると登録できます。', 'ok');
+      // 候補の一覧が見えるところまで動かす
+      const el = $('#findResult');
+      if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
     // ===== 盤面と登録ワードをそろえる =====
     // 登録から消した語が盤面に残ったままにならないようにする。
     // （同じ語を2回置いている場合も、登録に無ければ全部外す）
@@ -5249,7 +5276,8 @@ var qrcode = function() {
           if (state.mode !== 'paint') setMode('paint');
         });
       });
-      $('#btnFromKeyword').addEventListener('click', () => runAutoBuild('#btnFromKeyword'));
+      // キーワード欄のボタンは「候補を出すだけ」。盤面には置かない
+      $('#btnFindForKeyword').addEventListener('click', findForKeyword);
       $('#btnDir').addEventListener('click', toggleDir);
       $('#btnRotate').addEventListener('click', rotateSelected);
       $('#btnUndo').addEventListener('click', undo);
@@ -5416,10 +5444,17 @@ var qrcode = function() {
     const asKana = (t) => (kanaMode() === 'hira' ? toHira(t) : toKata(t));
 
     // キーワードのうち、まだどの登録ワードにも出てこない文字
+    // 登録ワードでまだまかなえていないキーワードの文字を、足りない「個数」ぶん返す。
+    // 「が」が2回あるキーワードなら、登録ワードにも「が」が2つ要る
     function missingKeywordChars() {
-      const inWords = new Set();
-      state.words.forEach(w => chars(w.text).forEach(ch => inWords.add(ch)));
-      return chars(state.keyword).filter(ch => !inWords.has(ch));
+      const left = countChars([].concat(...state.words.map(w => chars(w.text))));
+      const out = [];
+      chars(state.keyword).forEach(ch => {
+        const n = left.get(ch) || 0;
+        if (n > 0) left.set(ch, n - 1);
+        else out.push(ch);
+      });
+      return out;
     }
 
     function findWords() {
