@@ -187,6 +187,25 @@
 
     /* ===== キーワード ===== */
     #kwChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    /* ===== 記号の並び（上＝記号、下＝そのマスの文字） ===== */
+    .mk-strip { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; margin-left: 8px; }
+    .mk-cell {
+      display: inline-flex; flex-direction: column; align-items: center;
+      min-width: 30px; padding: 2px 4px;
+      border: 1px solid var(--line); border-radius: 6px; background: #fff;
+      line-height: 1.15;
+    }
+    .mk-cell b { font-size: 10px; color: var(--sub); font-weight: 700; }
+    .mk-cell i { font-size: 17px; font-style: normal; font-weight: 700; }
+    .mk-cell.good { background: #e8f5ec; border-color: #9ecdb0; }
+    .mk-cell.good i { color: var(--ok); }
+    .mk-cell.wrong { background: #fdecea; border-color: #e8a9a1; }
+    .mk-cell.wrong i { color: var(--ng); }
+    .mk-cell.miss { background: #f1f3f5; border-style: dashed; }
+    .mk-cell.miss i { color: var(--ng); }
+    .mk-cell.dup { background: #fff4e0; border-color: #e8cfa4; }
+    .mk-cell.dup i { color: #c46a00; font-size: 14px; }
+
     .kw-chip {
       width: 46px; min-height: 58px;
       border-radius: 8px; border: 2px solid var(--line);
@@ -3702,6 +3721,34 @@ var qrcode = function() {
     }
 
     // ===== ③ キーワード =====
+    // ===== キーワードの文字は「個数」で数える =====
+    // 「が」が2回あるキーワードなら、盤面にも「が」のマスが2つ必要。
+    // 記号A・Bはそれぞれ別のマスにふるので、1マスでは2文字分をまかなえない。
+    function countChars(list) {
+      const m = new Map();
+      list.forEach(ch => m.set(ch, (m.get(ch) || 0) + 1));
+      return m;
+    }
+
+    function keywordNeed() { return countChars(chars(state.keyword)); }
+
+    // 置いた語（{text} の配列）に出てくる文字を数える
+    function placedCharCounts(placed) {
+      const all = [];
+      placed.forEach(p => chars(p.text).forEach(ch => all.push(ch)));
+      return countChars(all);
+    }
+
+    // 足りない文字を「足りない個数だけ」並べて返す（「が」が1つ足りなければ ['が']）
+    function missingFor(counts) {
+      const out = [];
+      keywordNeed().forEach((need, ch) => {
+        const have = counts.get(ch) || 0;
+        for (let i = have; i < need; i++) out.push(ch);
+      });
+      return out;
+    }
+
     function renderKeyword() {
       const box = $('#kwChips');
       box.innerHTML = '';
@@ -3711,19 +3758,26 @@ var qrcode = function() {
         $('#kwSummary').textContent = '';
         return;
       }
-      const inWords = new Set();
-      state.words.forEach(w => chars(w.text).forEach(ch => inWords.add(ch)));
-      const onBoard = new Set();
-      for (const v of board.map.values()) onBoard.add(v.ch);
+      // 同じ文字が何回も出るキーワードに対応するため、使ったぶんを減らしながら見ていく
+      const wordCount = countChars([].concat(...state.words.map(w => chars(w.text))));
+      const boardCount = new Map();
+      for (const v of board.map.values()) boardCount.set(v.ch, (boardCount.get(v.ch) || 0) + 1);
 
       const missing = [];
       cs.forEach(ch => {
         const chip = document.createElement('div');
         let st = '未使用';
         let cls = 'kw-chip';
-        if (onBoard.has(ch)) { cls += ' board'; st = '盤面済'; }
-        else if (inWords.has(ch)) { cls += ' used'; st = 'ワード有'; }
-        else missing.push(ch);
+        const onBoardLeft = boardCount.get(ch) || 0;
+        const inWordsLeft = wordCount.get(ch) || 0;
+        if (onBoardLeft > 0) {
+          boardCount.set(ch, onBoardLeft - 1);
+          if (inWordsLeft > 0) wordCount.set(ch, inWordsLeft - 1);
+          cls += ' board'; st = '盤面済';
+        } else if (inWordsLeft > 0) {
+          wordCount.set(ch, inWordsLeft - 1);
+          cls += ' used'; st = 'ワード有';
+        } else missing.push(ch);
         chip.className = cls;
         chip.innerHTML = escapeHtml(ch) + '<span class="st">' + st + '</span>';
         box.appendChild(chip);
@@ -4165,6 +4219,57 @@ var qrcode = function() {
       return problems;
     }
 
+    // 記号を A から順に並べ、それぞれのマスの文字を対応させる。
+    // 抜けている記号のところは空にして「×」を出すので、どこが欠けているか一目で分かる
+    function markSequence() {
+      const list = markEntries();
+      const byMark = new Map();
+      list.forEach(x => {
+        if (!byMark.has(x.mark)) byMark.set(x.mark, []);
+        byMark.get(x.mark).push(x.ch);
+      });
+      const marks = [...byMark.keys()];
+      const kwLen = chars(state.keyword).length;
+      const seq = [];
+
+      if (marks.length && marks.every(m => /^\d+$/.test(m))) {
+        // 1・2・3… の記号
+        const max = Math.max(kwLen, ...marks.map(Number));
+        for (let i = 1; i <= max; i++) seq.push(String(i));
+      } else {
+        // A・B・C… の記号。キーワードの長さぶんは必ず並べる
+        const codes = marks.filter(m => /^[A-Za-z]$/.test(m)).map(m => m.toUpperCase().charCodeAt(0));
+        const max = Math.max(64 + kwLen, ...(codes.length ? codes : [64]));
+        for (let c = 65; c <= max; c++) seq.push(String.fromCharCode(c));
+        // ①など、A〜Z以外の記号はうしろに足す
+        marks.forEach(m => { if (!seq.includes(m)) seq.push(m); });
+      }
+      const kw = chars(state.keyword);
+      return seq.map((mark, i) => {
+        const got = byMark.get(mark) || [];
+        return { mark, chars: got, want: kw[i] || '' };
+      });
+    }
+
+    // 記号の並びを画面に出す（上＝記号、下＝そのマスの文字）
+    function renderMarkStrip(seq) {
+      if (!seq.length) return '';
+      const cells = seq.map(x => {
+        let cls = 'mk-cell';
+        let show;
+        if (x.chars.length === 0) { cls += ' miss'; show = '×'; }
+        else if (x.chars.length > 1) { cls += ' dup'; show = x.chars.join(''); }
+        else {
+          show = x.chars[0];
+          if (x.want && x.chars[0] !== x.want) cls += ' wrong';
+          else if (x.want) cls += ' good';
+        }
+        return '<span class="' + cls + '"><b>' + escapeHtml(x.mark) + '</b>'
+          + '<i>' + escapeHtml(show) + '</i></span>';
+      }).join('');
+      return '<span class="mk-strip">' + cells + '</span>';
+    }
+
     function renderMarkCheck() {
       const el = $('#markCheck');
       if (!el) return;
@@ -4174,9 +4279,9 @@ var qrcode = function() {
 
       // 記号が1つも無いとき
       if (list.length === 0) {
-        const onBoard = new Set();
-        for (const v of board.map.values()) onBoard.add(v.ch);
-        const notOnBoard = [...new Set(kw)].filter(ch => !onBoard.has(ch));
+        const bc = new Map();
+        for (const v of board.map.values()) bc.set(v.ch, (bc.get(v.ch) || 0) + 1);
+        const notOnBoard = missingFor(bc);
         el.className = 'diag' + (kw.length ? ' ng' : '');
         el.textContent = kw.length
           ? '△ まだ記号がありません。「キーワードに合わせて自動でふる」を押してください。'
@@ -4185,41 +4290,43 @@ var qrcode = function() {
         return;
       }
 
-      // 記号の順に読むと何になるか（キーワードが未設定でも必ず出す）
-      const got = list.map(x => x.ch).join('');
-      const order = list.map(x => x.mark).join('→');
-      const head = '記号の順（' + order + '）に読むと「<b>' + escapeHtml(got) + '</b>」';
+      // 記号の順に読むと今どうなっているか。抜けは「×」で出す
+      const seq = markSequence();
+      const strip = renderMarkStrip(seq);
+      const reading = seq.map(x => x.chars.length ? x.chars.join('') : '×').join('');
+      const head = '今のキーワード：「<b>' + escapeHtml(reading) + '</b>」';
 
       // 記号自体のエラーが先。読み取り順が狂うので、これを直さないと照合しても意味がない
       if (problems.length) {
         el.className = 'diag ng';
         el.innerHTML = '✗ 記号に問題があります：' + problems.join('／')
-          + '<br>' + head + '（この順で合っているか確かめてください）';
+          + '<br>' + head + strip;
         return;
       }
 
       if (kw.length === 0) {
         el.className = 'diag ok';
-        el.innerHTML = head + '。①ことばでキーワードを入れると、合っているか照合します。';
+        el.innerHTML = head + strip
+          + '<br>①ことばでキーワードを入れると、合っているか照合します。';
         return;
       }
 
-      const onBoard = new Set();
-      for (const v of board.map.values()) onBoard.add(v.ch);
-      const notOnBoard = [...new Set(kw)].filter(ch => !onBoard.has(ch));
+      const bc = new Map();
+      for (const v of board.map.values()) bc.set(v.ch, (bc.get(v.ch) || 0) + 1);
+      const notOnBoard = missingFor(bc);
 
-      if (got === state.keyword) {
+      if (reading === state.keyword) {
         el.className = 'diag ok';
-        el.innerHTML = '◎ ' + head + '。キーワードと一致しています。';
+        el.innerHTML = '◎ ' + head + strip + '<br>キーワードと一致しています。';
         return;
       }
 
       el.className = 'diag ng';
-      let msg = '✗ ' + head + 'ですが、キーワードは「' + escapeHtml(state.keyword) + '」です。';
+      let msg = '✗ ' + head + '（キーワードは「' + escapeHtml(state.keyword) + '」）' + strip + '<br>';
       if (list.length !== kw.length) {
         msg += '　記号が ' + list.length + ' 個、キーワードは ' + kw.length + ' 文字です。';
       }
-      const gc = chars(got);
+      const gc = chars(reading);
       const bad = [];
       for (let i = 0; i < Math.min(gc.length, kw.length); i++) {
         if (gc[i] !== kw[i]) bad.push((i + 1) + '番目（' + list[i].mark + '）は「' + gc[i] + '」→「' + kw[i] + '」');
@@ -5448,7 +5555,8 @@ var qrcode = function() {
       pool.forEach(t => chars(t).forEach(ch => cov.add(ch)));
       let guard = 0;
       while (pool.length < target && guard++ < 60) {
-        const need = kwChars.filter(ch => !cov.has(ch));
+        // 同じ文字が2回要るキーワードにも足りるよう、個数で足りない分を出す
+        const need = missingFor(countChars([].concat(...pool.map(t => chars(t)))));
         let best = null;
         for (const d of dict) {
           const text = conv(d.r);
@@ -5506,7 +5614,7 @@ var qrcode = function() {
       const dict = loadDict().filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
         && d.r.length >= 2 && (!N || d.r.length <= N)
         && !(hira && isLoanword(d)));   // ひらがなで作るときは外来語を避ける
-      const kwChars = [...new Set(chars(state.keyword))];
+      const kwLen = chars(state.keyword).length;
       const kwSelf = new Set([state.keyword, toHira(state.keyword), toKata(state.keyword)]);
       const all = state.words.map(w => w.text);
       const tooLong = N ? all.filter(t => chars(t).length > N) : [];
@@ -5523,9 +5631,8 @@ var qrcode = function() {
         let res = generateLayout(pool, 300, 700, reqSet);
         for (let iter = 0; iter < 12 && Date.now() - t0 < BUDGET; iter++) {
           const missReq = res ? res.failed.filter(t => reqSet.has(t)) : req.slice();
-          const onBoard = new Set();
-          if (res) res.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
-          const missKw = kwChars.filter(ch => !onBoard.has(ch));
+          // 同じ文字が2回あるキーワードは、その回数ぶんのマスが要る
+          const missKw = missingFor(res ? placedCharCounts(res.placed) : new Map());
           if (!missReq.length && !missKw.length) break;          // 完成
           const helper = pickHelper(pool, missReq, missKw, dict, conv, kwSelf);
           if (!helper) break;
@@ -5537,10 +5644,8 @@ var qrcode = function() {
           await tick();
         }
         if (res) {
-          const onBoard = new Set();
-          res.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
           res._missReq = res.failed.filter(t => reqSet.has(t)).length;
-          res._missKw = kwChars.filter(ch => !onBoard.has(ch)).length;
+          res._missKw = missingFor(placedCharCounts(res.placed)).length;
           // 必須語の不足 → キーワードの不足 → 余計な語の少なさ、の順に良さを比べる
           const rank = (x, n) => -x._missReq * 1000 - x._missKw * 100 - n;
           if (!best || rank(res, added.length) > rank(best, bestAdded.length)) {
@@ -5574,13 +5679,11 @@ var qrcode = function() {
       refresh();
       pickHints(state.hintCount);
       showTab('build');
-      if (kwChars.length) autoMark();
+      if (kwLen) autoMark();
 
       const usedAdded = bestAdded.filter(h => placedTexts.has(h.text)).map(h => h.text);
       const missReq = best.failed.filter(t => reqSet.has(t));
-      const onBoard = new Set();
-      best.placed.forEach(p => chars(p.text).forEach(ch => onBoard.add(ch)));
-      const missKw = kwChars.filter(ch => !onBoard.has(ch));
+      const missKw = missingFor(placedCharCounts(best.placed));
 
       let msg = '<strong>' + best.placed.length + ' 語</strong>で組みました'
         + '（たて' + best.h + '×よこ' + best.w + 'マス' + (N ? ' / ' + N + '×' + N + 'まで' : '') + '）。';
@@ -5589,7 +5692,7 @@ var qrcode = function() {
           + (N ? '（枠を大きくすると入ることがあります）' : '')
         : ' <span style="color:var(--ok);font-weight:700;">登録した語'
           + (tooLong.length ? '（枠に入る長さのもの）' : '') + 'はすべて使いました。</span>';
-      if (kwChars.length) {
+      if (kwLen) {
         msg += missKw.length
           ? ' <span style="color:var(--ng)">キーワードの「' + escapeHtml(missKw.join('・')) + '」が盤面にありません</span>'
           : ' <span style="color:var(--ok);font-weight:700;">キーワードの文字もすべて入りました。</span>';
@@ -5619,7 +5722,7 @@ var qrcode = function() {
         out.innerHTML = '<span style="color:var(--ng)">この条件に合う語が辞書にありません。</span>';
         return;
       }
-      const kwChars = [...new Set(chars(state.keyword))];
+      const kwChars = chars(state.keyword);   // 同じ文字が2回あればその回数だけ必要
       const kwSelf = new Set([state.keyword, toHira(state.keyword), toKata(state.keyword)]);
       const base = state.words.map(w => w.text).filter(t => chars(t).length <= N);
       const tooLong = state.words.map(w => w.text).filter(t => chars(t).length > N);
@@ -5635,9 +5738,8 @@ var qrcode = function() {
         const pool = pickPool(base, target, dict, conv, kwChars, kwSelf);
         const res = generateLayout(pool, 400, 900);
         if (res) {
-          const cov = new Set();
-          res.placed.forEach(p => chars(p.text).forEach(ch => cov.add(ch)));
-          res._kw = kwChars.filter(ch => cov.has(ch)).length;
+          // そろった文字の「個数」で数える（「が」が2つ要るなら2マス必要）
+          res._kw = kwChars.length - missingFor(placedCharCounts(res.placed)).length;
           if (!bestRes || res._kw > bestRes._kw
               || (res._kw === bestRes._kw && res.placed.length > bestRes.placed.length)) {
             bestRes = res; bestPool = pool;
@@ -5673,7 +5775,9 @@ var qrcode = function() {
       showTab('build');
       if (kwChars.length) autoMark();
 
-      const missing = kwChars.filter(ch => ![...board.map.values()].some(v => v.ch === ch));
+      const boardCount = new Map();
+      for (const v of board.map.values()) boardCount.set(v.ch, (boardCount.get(v.ch) || 0) + 1);
+      const missing = missingFor(boardCount);
       let msg = '<strong>' + bestRes.placed.length + ' 語</strong>が ' + N + '×' + N
         + ' の枠に入りました（たて' + bestRes.h + '×よこ' + bestRes.w + 'マス）。';
       if (missing.length) {
