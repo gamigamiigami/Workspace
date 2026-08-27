@@ -401,6 +401,12 @@
         position: absolute; top: 0; left: 1px;
         font-size: calc(var(--pcell, 8mm) * 0.30); font-weight: 700; line-height: 1;
       }
+      /* マスの番号。カギ一覧が「1ヨコ」と番号で指すので、これが無いと問題として解けない。
+         画面の盤面と同じく右上に置く（左上は記号 A・B・C… の場所） */
+      .print-grid td .n {
+        position: absolute; top: 0; right: 1px;
+        font-size: calc(var(--pcell, 8mm) * 0.28); font-weight: 400; line-height: 1;
+      }
       .print-kw { margin: 0 auto 12px; text-align: center; }
       .print-kw table { border-collapse: collapse; margin: 4px auto; }
       .print-kw td {
@@ -5098,6 +5104,8 @@ var qrcode = function() {
           if (!cell2) { html += '<td class="' + (state.blackFill ? 'black' : 'blank') + '"></td>'; continue; }
           const mk = state.marks[k2];
           const m = mk ? '<span class="m">' + escapeHtml(mk) + '</span>' : '';
+          const no = numbers[idx(r, c)] || 0;
+          const n = (state.showNums && no) ? '<span class="n">' + no + '</span>' : '';
           const cls = [];
           if (state.colors[k2]) cls.push('c-' + state.colors[k2]);
           const bd = state.borders[k2] || (mk ? 'double' : '');
@@ -5108,7 +5116,7 @@ var qrcode = function() {
           const isHint = skeleton && state.hints.includes(k2);
           if (isHint && !state.colors[k2]) cls.push('c-b');
           const ch = (withAnswer || isHint) ? escapeHtml(cell2.ch) : '';
-          html += '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' + m + ch + '</td>';
+          html += '<td' + (cls.length ? ' class="' + cls.join(' ') + '"' : '') + '>' + n + m + ch + '</td>';
         }
         html += '</tr>';
       }
