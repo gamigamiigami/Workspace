@@ -504,7 +504,7 @@
       <div id="kwChips"></div>
       <p id="kwSummary"></p>
       <div class="row">
-        <button id="btnFromKeyword" class="sub">このキーワードで作る（語も自動で選ぶ）</button>
+        <button id="btnFromKeyword" class="sub">自動で作る（登録した語は全部使う）</button>
       </div>
       <p class="hint-line">足りない文字を含むワードを辞書から選んで、盤面と記号まで一気に作ります。</p>
     </div>
@@ -3972,10 +3972,17 @@ var qrcode = function() {
         const id = del.dataset.del;
         const w = state.words.find(x => x.id === id);
         if (!w) return;
-        if (!confirm('「' + w.text + '」を登録から消します。よろしいですか？')) return;
+        const onBoard = state.placed.filter(p => p.text === w.text).length;
+        const ask = onBoard
+          ? '「' + w.text + '」を登録から消します。盤面に置いてある分も外れます。よろしいですか？'
+          : '「' + w.text + '」を登録から消します。よろしいですか？';
+        if (!confirm(ask)) return;
+        snapshot();
         state.words = state.words.filter(x => x.id !== id);
         if (state.selWordId === id) state.selWordId = null;
+        syncBoardWithWords();
         refresh();
+        if (onBoard) showMsg('「' + w.text + '」を登録と盤面の両方から外しました。', 'ok');
       });
     }
 
@@ -4120,34 +4127,95 @@ var qrcode = function() {
     }
 
     // ===== キーワードと記号の照合 =====
+
+    // 記号そのものに問題がないかを調べる。
+    // A・B・C… のように「重なりなく・とぎれなく」ふられているのが正しい状態
+    function markProblems() {
+      const list = markEntries();
+      if (!list.length) return [];
+      const problems = [];
+      const counts = {};
+      list.forEach(x => { counts[x.mark] = (counts[x.mark] || 0) + 1; });
+
+      // 同じ記号が2つ以上ある
+      const dup = Object.entries(counts).filter(([, n]) => n > 1);
+      dup.forEach(([mk, n]) => {
+        problems.push('「' + mk + '」が ' + n + ' 個あります（1つずつにしてください）');
+      });
+
+      // とぎれ（A・C はあるのに B が無い、1・3 はあるのに 2 が無い）
+      const marks = Object.keys(counts);
+      const allNum = marks.every(m => /^\d+$/.test(m));
+      const allAlpha = marks.every(m => /^[A-Za-z]$/.test(m));
+      if (allNum) {
+        const nums = marks.map(Number).sort((a, b) => a - b);
+        const miss = [];
+        for (let i = 1; i <= nums[nums.length - 1]; i++) if (!counts[String(i)]) miss.push(i);
+        if (miss.length) problems.push('「' + miss.join('・') + '」がありません');
+      } else if (allAlpha) {
+        const codes = marks.map(m => m.toUpperCase().charCodeAt(0)).sort((a, b) => a - b);
+        const miss = [];
+        for (let c = 65; c <= codes[codes.length - 1]; c++) {
+          if (!marks.some(m => m.toUpperCase().charCodeAt(0) === c)) miss.push(String.fromCharCode(c));
+        }
+        if (miss.length) problems.push('「' + miss.join('・') + '」がありません');
+        // 「Aがありません」と重ねて言わないようにする
+        else if (codes[0] !== 65) problems.push('「A」から始まっていません');
+      }
+      return problems;
+    }
+
     function renderMarkCheck() {
       const el = $('#markCheck');
       if (!el) return;
       const kw = chars(state.keyword);
-      if (kw.length === 0) {
-        el.className = 'diag ok';
-        el.textContent = '①ことばでキーワードを入れると、記号との照合ができます。';
+      const list = markEntries();
+      const problems = markProblems();
+
+      // 記号が1つも無いとき
+      if (list.length === 0) {
+        const onBoard = new Set();
+        for (const v of board.map.values()) onBoard.add(v.ch);
+        const notOnBoard = [...new Set(kw)].filter(ch => !onBoard.has(ch));
+        el.className = 'diag' + (kw.length ? ' ng' : '');
+        el.textContent = kw.length
+          ? '△ まだ記号がありません。「キーワードに合わせて自動でふる」を押してください。'
+            + (notOnBoard.length ? '　なお、盤面にない文字：' + notOnBoard.join('・') : '')
+          : 'マスに記号を入れると、ここに「記号の順に読んだ言葉」が出ます。';
         return;
       }
-      const list = markEntries();
+
+      // 記号の順に読むと何になるか（キーワードが未設定でも必ず出す）
       const got = list.map(x => x.ch).join('');
+      const order = list.map(x => x.mark).join('→');
+      const head = '記号の順（' + order + '）に読むと「<b>' + escapeHtml(got) + '</b>」';
+
+      // 記号自体のエラーが先。読み取り順が狂うので、これを直さないと照合しても意味がない
+      if (problems.length) {
+        el.className = 'diag ng';
+        el.innerHTML = '✗ 記号に問題があります：' + problems.join('／')
+          + '<br>' + head + '（この順で合っているか確かめてください）';
+        return;
+      }
+
+      if (kw.length === 0) {
+        el.className = 'diag ok';
+        el.innerHTML = head + '。①ことばでキーワードを入れると、合っているか照合します。';
+        return;
+      }
+
       const onBoard = new Set();
       for (const v of board.map.values()) onBoard.add(v.ch);
       const notOnBoard = [...new Set(kw)].filter(ch => !onBoard.has(ch));
 
-      if (list.length === 0) {
-        el.className = 'diag ng';
-        el.textContent = '△ まだ記号がありません。「キーワードに合わせて自動でふる」を押してください。'
-          + (notOnBoard.length ? '　なお、盤面にない文字：' + notOnBoard.join('・') : '');
-        return;
-      }
       if (got === state.keyword) {
         el.className = 'diag ok';
-        el.textContent = '◎ 記号の順に読むと「' + got + '」。キーワードと一致しています。';
+        el.innerHTML = '◎ ' + head + '。キーワードと一致しています。';
         return;
       }
+
       el.className = 'diag ng';
-      let msg = '✗ 記号の順に読むと「' + got + '」ですが、キーワードは「' + state.keyword + '」です。';
+      let msg = '✗ ' + head + 'ですが、キーワードは「' + escapeHtml(state.keyword) + '」です。';
       if (list.length !== kw.length) {
         msg += '　記号が ' + list.length + ' 個、キーワードは ' + kw.length + ' 文字です。';
       }
@@ -4158,7 +4226,7 @@ var qrcode = function() {
       }
       if (bad.length) msg += '　ちがうところ：' + bad.slice(0, 5).join('、');
       if (notOnBoard.length) msg += '　盤面にない文字：' + notOnBoard.join('・');
-      el.textContent = msg;
+      el.innerHTML = msg;
     }
 
     // ===== 記号をキーワードの順に自動でふる =====
@@ -4191,7 +4259,59 @@ var qrcode = function() {
       }
     }
 
-    // ===== キーワードから逆算して、必要なワードを辞書から選ぶ =====
+    // ===== 盤面と登録ワードをそろえる =====
+    // 登録から消した語が盤面に残ったままにならないようにする。
+    // （同じ語を2回置いている場合も、登録に無ければ全部外す）
+    function syncBoardWithWords() {
+      const known = new Set(state.words.map(w => w.text));
+      const before = state.placed.length;
+      state.placed = state.placed.filter(p => known.has(p.text));
+      if (state.placed.length === before) return false;
+      // 盤面から消えたマスに付いていた記号・色・枠も片づける
+      board = buildBoard();
+      ['marks', 'colors', 'borders'].forEach(kind => {
+        Object.keys(state[kind]).forEach(k => { if (!board.map.has(k)) delete state[kind][k]; });
+      });
+      state.hints = (state.hints || []).filter(k => board.map.has(k));
+      if (state.selPlacedId && !state.placed.some(p => p.id === state.selPlacedId)) state.selPlacedId = null;
+      clearCycle();
+      return true;
+    }
+
+    // ===== 自動で作る（これ1本に統一） =====
+    //
+    // 絶対に守る条件は2つ：
+    //   1. 登録したワードは必ず全部使う
+    //   2. キーワードの文字がすべて盤面に出る
+    // どちらも buildWithRequired() が満たす（必須語の不足 → キーワードの不足 の順で良さを比べている）。
+    // ①の一番上のボタンも、キーワード欄のボタンも、この同じ処理を呼ぶ。
+    async function autoBuild() {
+      const hasWords = state.words.length > 0;
+      const hasKw = chars(state.keyword).length >= 2;
+
+      // 登録ワードがあるとき ＝ 主役。必ず全部使い、キーワードも満たす
+      if (hasWords) return buildWithRequired();
+
+      // 登録ワードが無く、キーワードだけあるとき ＝ 辞書から語を選ぶところから始める
+      //（buildWithRequired は「必ず使う語」を土台に組み上げる作りなので、
+      //   土台がゼロだと動き出せない。そのため語えらびから行うこちらを使う）
+      if (hasKw) return buildFromKeyword();
+
+      // どちらも無いとき ＝ 枠いっぱいに辞書から集める
+      if (state.maxSize) return collectWordsToFit();
+
+      showMsg('ワードを登録するか、キーワードを入れてから押してください。', 'ng');
+    }
+
+    function runAutoBuild(btnSel) {
+      const btn = $(btnSel);
+      if (btn) btn.disabled = true;
+      const run = autoBuild();
+      const done = () => { if (btn) btn.disabled = false; };
+      if (run && run.finally) run.finally(done); else done();
+    }
+
+    // ===== キーワードから逆算して、必要なワードを辞書から選ぶ（現在は未使用・参考用） =====
     function buildFromKeyword() {
       const kw = chars(state.keyword);
       if (kw.length < 2) { showMsg('先にキーワードを入れてください。', 'ng'); return; }
@@ -5022,7 +5142,7 @@ var qrcode = function() {
           if (state.mode !== 'paint') setMode('paint');
         });
       });
-      $('#btnFromKeyword').addEventListener('click', buildFromKeyword);
+      $('#btnFromKeyword').addEventListener('click', () => runAutoBuild('#btnFromKeyword'));
       $('#btnDir').addEventListener('click', toggleDir);
       $('#btnRotate').addEventListener('click', rotateSelected);
       $('#btnUndo').addEventListener('click', undo);
@@ -5052,12 +5172,7 @@ var qrcode = function() {
       $('#blackFill').addEventListener('change', (e) => {
         state.blackFill = e.target.checked; refresh();
       });
-      $('#btnFitWords').addEventListener('click', () => {
-        $('#btnFitWords').disabled = true;
-        // 登録した語があれば「必ず全部使う」方式、無ければ辞書から集める方式
-        const run = state.words.length ? buildWithRequired() : collectWordsToFit();
-        run.finally(() => { $('#btnFitWords').disabled = false; });
-      });
+      $('#btnFitWords').addEventListener('click', () => runAutoBuild('#btnFitWords'));
       const syncSize = (v) => {
         state.maxSize = Number(v) || 0;
         $('#genSize').value = String(state.maxSize);
