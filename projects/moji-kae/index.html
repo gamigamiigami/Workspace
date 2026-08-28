@@ -258,6 +258,59 @@
     .cand .word { font-size: 18px; font-weight: 700; letter-spacing: .06em; }
     .cand .kanji { color: var(--sub); font-size: 13px; }
 
+    /* ===== たずねるダイアログ（confirm は2択しか出せないので自前で用意する） ===== */
+    .ask-back {
+      position: fixed; inset: 0; z-index: 900;
+      background: rgba(20,30,40,.45);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    /* hidden 属性だけでは display:flex に負けてしまうので、ここで消す */
+    .ask-back[hidden] { display: none; }
+    .ask-box {
+      background: #fff; border-radius: 14px; padding: 16px;
+      max-width: 460px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    .ask-box h3 { font-size: 16px; margin-bottom: 8px; }
+    .ask-box p { font-size: 14px; color: var(--sub); white-space: pre-wrap; margin-bottom: 12px; }
+    .ask-btns { display: flex; flex-direction: column; gap: 8px; }
+
+    /* お気に入りの法則 */
+    #favList { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .fav-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+    .fav-row .body { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: none;
+      padding: 0; color: var(--text); font-family: inherit; min-height: 0; cursor: pointer; }
+    .fav-row .body:hover { background: none; }
+    .fav-row .nm { font-weight: 700; font-size: 15px; }
+    .fav-row .rl { font-size: 13px; color: var(--sub); font-family: ui-monospace, monospace; }
+
+    /* 1文字ずつの対応 */
+    .pair-line { font-size: 12px; color: var(--sub); margin: 2px 0 0 6px; }
+    .pair-line b { color: var(--main-dark); }
+
+    /* むずかしさの印 */
+    .lv { font-size: 11px; border-radius: 6px; padding: 1px 5px; border: 1px solid; }
+    .lv.easy { color: #1f7a4d; border-color: #9ed3b7; background: #eefaf3; }
+
+    /* ===== 印刷 ===== */
+    #printArea { display: none; }
+    @media print {
+      body { background: #fff; padding: 0; max-width: none; }
+      header, footer, .panel, .tabs, .ask-back { display: none !important; }
+      #printArea { display: block; }
+      .pr-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+      .pr-sub { font-size: 12px; text-align: center; color: #555; margin-bottom: 14px; }
+      .pr-rule { border: 1px solid #333; border-radius: 8px; padding: 8px 10px; margin-bottom: 14px;
+                 font-size: 15px; }
+      .pr-q { border-bottom: 1px dashed #999; padding: 10px 4px; font-size: 18px;
+              display: flex; align-items: center; gap: 12px; }
+      .pr-q .no { width: 26px; color: #555; font-size: 13px; }
+      .pr-q .w { font-weight: 700; letter-spacing: .12em; }
+      .pr-q .ans { flex: 1; border-bottom: 1px solid #333; min-height: 20px;
+                   letter-spacing: .12em; font-weight: 700; }
+      .pr-note { font-size: 12px; color: #555; margin-top: 12px; }
+    }
+
     /* 保存した作品 */
     #worksList { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
     .work-item { display: flex; align-items: center; gap: 8px;
@@ -293,6 +346,29 @@
       </div>
       <div id="ruleList"></div>
       <p class="hint-line" id="ruleNote"></p>
+
+      <!-- まとめて入れる：a>i, k>s のように1行で書ける -->
+      <details style="margin-top:10px;">
+        <summary style="font-size:14px;cursor:pointer;">法則をまとめて入れる／お気に入り</summary>
+        <div class="row" style="margin-top:8px;">
+          <input type="text" id="bulkRules" placeholder="例：a&gt;i, k&gt;s"
+                 style="flex:1 1 200px;min-width:0;font-family:inherit;font-size:16px;min-height:44px;
+                        padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
+          <button id="btnBulkRules" class="sub small">まとめて入れる</button>
+        </div>
+        <p class="hint-line">
+          <b>かえる前 &gt; かえたあと</b> を「、」か「,」で区切って並べます。
+          <code>a&gt;i</code> <code>a→i</code> <code>a-&gt;i</code> のどれでも書けます。
+        </p>
+        <div class="row" style="margin-top:10px;">
+          <input type="text" id="favName" placeholder="お気に入りの名前（例：母音ずらし）"
+                 style="flex:1 1 160px;min-width:0;font-family:inherit;font-size:16px;min-height:44px;
+                        padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
+          <button id="btnFavAdd" class="sub small">★ 今の法則を登録</button>
+        </div>
+        <p class="hint-line">★はどの作品でも共通です（この端末に残ります）。押すとその法則になります。</p>
+        <div id="favList"></div>
+      </details>
     </div>
 
     <!-- ===== 言葉 ===== -->
@@ -307,6 +383,10 @@
         <label class="check" style="display:flex;align-items:center;gap:6px;font-size:14px;">
           <input type="checkbox" id="showRomaji" style="min-height:0;width:18px;height:18px;">
           ローマ字も見る
+        </label>
+        <label class="check" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+          <input type="checkbox" id="showPairs" style="min-height:0;width:18px;height:18px;">
+          1文字ずつの対応を見る
         </label>
       </div>
       <div id="wordList"></div>
@@ -332,6 +412,10 @@
           <option value="3" selected>3文字</option>
           <option value="4">4文字</option>
         </select>
+        <select id="lvSel" aria-label="むずかしさ">
+          <option value="all">むずかしさ：どれでも</option>
+          <option value="easy">小学生向けだけ</option>
+        </select>
       </div>
       <p class="hint-line">
         <b>法則をさがす</b>＝入れた言葉が<b>すべて同時に</b>別のちゃんとした言葉になる法則を見つけます。<br>
@@ -343,6 +427,26 @@
       </div>
     </div>
 
+    <!-- ===== 印刷 ===== -->
+    <div class="panel">
+      <h2>印刷する <span class="hint">問題用紙・答えの紙が作れます</span></h2>
+      <div class="row">
+        <select id="printKind" aria-label="印刷するもの">
+          <option value="q">問題用紙（答えなし）</option>
+          <option value="a">答えの紙（答え入り）</option>
+        </select>
+        <button id="btnPrint" class="sub">印刷する</button>
+        <label class="check" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+          <input type="checkbox" id="printRule" style="min-height:0;width:18px;height:18px;">
+          問題用紙に法則も書く
+        </label>
+      </div>
+      <p class="hint-line">
+        問題用紙は「<b>かえたあとの言葉</b>」を並べて、答えを書く線を引いた形で出ます。
+        法則を伏せれば「どんな法則か当てる」問題になります。
+      </p>
+    </div>
+
     <!-- ===== 保存 ===== -->
     <div class="panel">
       <h2>作品として保存 <span class="hint">この端末に残ります</span></h2>
@@ -352,7 +456,17 @@
                       padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
         <button id="btnSaveWork">保存する</button>
         <button id="btnOpenWorks" class="sub">保存した作品</button>
+        <button id="btnNewWork" class="sub">＋ 新しく作る</button>
       </div>
+      <div class="row" style="margin-top:8px;">
+        <button id="btnExport" class="sub small">ファイルに保存</button>
+        <button id="btnImport" class="sub small">ファイルから読みこむ</button>
+        <input type="file" id="fileInput" accept="application/json,.json" hidden>
+      </div>
+      <p class="hint-line">
+        作った内容は自動でこの端末に残ります（次に開いたとき続きから）。
+        <b>ファイルに保存</b>すると、別の端末へ移したり、バックアップしたりできます（★も一緒に入ります）。
+      </p>
       <div id="worksBox" hidden>
         <div id="worksList"></div>
         <button id="btnCloseWorks" class="sub small" style="margin-top:6px;">閉じる</button>
@@ -361,6 +475,18 @@
     </div>
 
   </main>
+
+  <!-- たずねるダイアログ（保存するか・上書きか など） -->
+  <div class="ask-back" id="askBack" hidden>
+    <div class="ask-box">
+      <h3 id="askTitle"></h3>
+      <p id="askText"></p>
+      <div class="ask-btns" id="askBtns"></div>
+    </div>
+  </div>
+
+  <!-- 印刷用（画面には出さない） -->
+  <div id="printArea"></div>
 
   <footer>
     文字かえ君 ｜ 外部の通信は使っていないので、ネットがなくても動きます<br>
@@ -464,12 +590,23 @@
 
     // ===== 状態 =====
     const state = {
+      title: '',                          // 作品の名前
+      workId: null,                       // 「保存した作品」のどれを開いているか（未保存なら null）
       level: 'romaji',                    // 'romaji'（ローマ字単位）／'kana'（かな単位）
       rules: [{ from: 'a', to: 'i' }],    // 置きかえの法則
       words: ['', '', ''],                // かける言葉
       reverse: false,                     // true なら「かえたあと」を入れて元を出す
-      showRomaji: false
+      showRomaji: false,
+      showPairs: false,                   // 1文字ずつの対応を出すか
+      favs: []                            // ★お気に入りの法則（全作品で共通）
     };
+
+    // 「小学生向け」の線引き。辞書は使用頻度の高い順に並んでいるので、
+    // 上位3000語までを身近な言葉＝小学生向けとして扱う（クロスワードと同じ基準）
+    const ELEM_RANK = 3000;
+    function isEasy(rank) { return rank < ELEM_RANK; }
+    function lvTag(rank) { return isEasy(rank) ? '<span class="lv easy">小</span>' : ''; }
+    function elemOnly() { const el = $('#lvSel'); return !!el && el.value === 'easy'; }
 
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
@@ -571,7 +708,7 @@
         from.value = rule.from;
         from.placeholder = state.level === 'romaji' ? 'a' : 'あ';
         from.setAttribute('aria-label', (i + 1) + '番目の法則：かえる前');
-        from.addEventListener('input', () => { state.rules[i].from = from.value.trim(); render(); });
+        from.addEventListener('input', () => { state.rules[i].from = from.value.trim(); render(); saveLocal(); });
 
         const arrow = document.createElement('span');
         arrow.className = 'to-arrow';
@@ -582,7 +719,7 @@
         to.value = rule.to;
         to.placeholder = state.level === 'romaji' ? 'i' : 'い';
         to.setAttribute('aria-label', (i + 1) + '番目の法則：かえたあと');
-        to.addEventListener('input', () => { state.rules[i].to = to.value.trim(); render(); });
+        to.addEventListener('input', () => { state.rules[i].to = to.value.trim(); render(); saveLocal(); });
 
         const del = document.createElement('button');
         del.type = 'button';
@@ -591,7 +728,7 @@
         del.addEventListener('click', () => {
           state.rules.splice(i, 1);
           if (!state.rules.length) state.rules.push({ from: '', to: '' });
-          buildRules(); render();
+          buildRules(); render(); saveLocal();
         });
 
         row.append(no, from, arrow, to, del);
@@ -615,7 +752,7 @@
         inp.placeholder = i === 0 ? '例：あか' : '';
         inp.spellcheck = false;
         inp.setAttribute('aria-label', (i + 1) + '番目の言葉');
-        inp.addEventListener('input', () => { state.words[i] = inp.value.trim(); renderWords(); });
+        inp.addEventListener('input', () => { state.words[i] = inp.value.trim(); renderWords(); saveLocal(); });
 
         const arrow = document.createElement('span');
         arrow.className = 'arrow2';
@@ -668,13 +805,28 @@
           : unknown ? '辞書にない言葉です' : '';
 
         // ローマ字の途中経過（どこがどう変わったか見えるように）
+        const lines = [];
         if (state.showRomaji && state.level === 'romaji') {
-          rom.innerHTML = escapeHtml(kanaToRomaji(text)) + ' → <b>'
-            + escapeHtml(kanaToRomaji(res)) + '</b>';
-        } else {
-          rom.textContent = '';
+          lines.push(escapeHtml(kanaToRomaji(text)) + ' → <b>' + escapeHtml(kanaToRomaji(res)) + '</b>');
         }
+        if (state.showPairs) {
+          lines.push(charPairs(text).map(pr => pr.changed
+            ? escapeHtml(pr.from) + '→<b>' + escapeHtml(pr.to) + '</b>'
+            : escapeHtml(pr.from) + '→' + escapeHtml(pr.to)).join('　'));
+        }
+        rom.innerHTML = lines.join('<br>');
       });
+    }
+
+    // 1文字ずつの対応（あ→い　か→き のように、どこが変わったか見えるようにする）
+    function charPairs(text) {
+      const rules = state.reverse ? invertRules(state.rules) : state.rules;
+      const out = [];
+      Array.from(text).forEach(ch => {
+        const to = applyRules(ch, rules, state.level);
+        out.push({ from: ch, to, changed: to !== ch });
+      });
+      return out;
     }
 
     function render() {
@@ -697,7 +849,8 @@
     // ===== さがす：この言葉に使える法則 =====
     // ローマ字なら「1文字→1文字」、かななら「かな1字→かな1字」を総当たりする
     function alphabet() {
-      if (state.level === 'kana') return Object.keys(BASE).filter(k => k !== 'ー');
+      // 拗音（ゃゅょ）・小さい「っ」・のばす音「ー」も、ほかの文字と同じようにあつかう
+      if (state.level === 'kana') return Object.keys(BASE).concat(['ゃ', 'ゅ', 'ょ', 'っ']);
       return 'abcdeghikmnoprstuwyz'.split('');
     }
 
@@ -717,6 +870,7 @@
             if (!hit) return;
             results.push({ from: w, to: r, kanji: hit.kanji, rank: hit.rank });
           }
+          if (elemOnly() && results.some(r => !isEasy(r.rank))) return;   // 小学生向けだけにしぼる
           const score = results.reduce((a, b) => a + b.rank, 0) / results.length;
           found.push({ rules, results, score });
         });
@@ -725,13 +879,26 @@
       return found;
     }
 
-    function showResults(title, items, render1) {
+    function showResults(title, items, render1, topButton) {
       const box = $('#resultBox');
       const list = $('#resultList');
       box.hidden = false;
       list.innerHTML = '';
       $('#resultMsg').innerHTML = title;
+      if (topButton) list.appendChild(topButton);
       items.slice(0, 60).forEach(it => list.appendChild(render1(it)));
+    }
+
+    // 候補の言葉を、あいている欄から順にまとめて入れる
+    function putWords(words) {
+      words.forEach(w => {
+        if (state.words.includes(w)) return;      // 同じ語は入れない
+        const i = state.words.findIndex(x => !x);
+        if (i >= 0) state.words[i] = w; else state.words.push(w);
+      });
+      buildWords();
+      saveLocal();
+      showMsg(words.length + '個の言葉を欄に入れました。');
     }
 
     // 1つの言葉について、使える法則をさがす
@@ -752,7 +919,8 @@
         const r = f.results[0];
         b.innerHTML = '<span class="rule">' + escapeHtml(ruleLabel(f.rules)) + '</span>'
           + '<span class="word">' + escapeHtml(r.to) + '</span>'
-          + (r.kanji ? '<span class="kanji">' + escapeHtml(r.kanji) + '</span>' : '');
+          + (r.kanji ? '<span class="kanji">' + escapeHtml(r.kanji) + '</span>' : '')
+          + lvTag(r.rank);
         b.addEventListener('click', () => useRules(f.rules));
         return b;
       });
@@ -802,7 +970,9 @@
         if (isBroken(r) || r === yomi) return;
         const hit = dict.get(r);
         if (!hit) return;
+        if (elemOnly() && (!isEasy(info.rank) || !isEasy(hit.rank))) return;
         found.push({ from: yomi, fromKanji: info.kanji, to: r, toKanji: hit.kanji,
+                     easy: isEasy(info.rank) && isEasy(hit.rank),
                      rank: info.rank + hit.rank });
       });
       found.sort((a, b) => a.rank - b.rank);
@@ -812,6 +982,13 @@
           [], () => document.createElement('div'));
         return;
       }
+      const bulk = document.createElement('button');
+      bulk.type = 'button';
+      bulk.className = 'sub small';
+      bulk.style.marginBottom = '6px';
+      bulk.textContent = '上から10組をまとめて欄に入れる';
+      bulk.addEventListener('click', () => putWords(found.slice(0, 10).map(f => f.from)));
+
       showResults('この法則（<b>' + escapeHtml(ruleLabel(rules)) + '</b>）で使える言葉が <b>'
         + found.length + '組</b> あります。（よく使う順に60組まで）押すと欄に入れます。', found, (f) => {
         const b = document.createElement('button');
@@ -821,22 +998,202 @@
           + (f.fromKanji ? '<span class="kanji">' + escapeHtml(f.fromKanji) + '</span>' : '')
           + '<span class="arrow2">→</span>'
           + '<span class="word">' + escapeHtml(f.to) + '</span>'
-          + (f.toKanji ? '<span class="kanji">' + escapeHtml(f.toKanji) + '</span>' : '');
+          + (f.toKanji ? '<span class="kanji">' + escapeHtml(f.toKanji) + '</span>' : '')
+          + (f.easy ? '<span class="lv easy">小</span>' : '');
         b.addEventListener('click', () => {
           const i = state.words.findIndex(w => !w);
           if (i >= 0) state.words[i] = f.from; else state.words.push(f.from);
           buildWords();
+          saveLocal();
           showMsg('「' + f.from + '」を欄に入れました。');
         });
         return b;
-      });
+      }, bulk);
+    }
+
+    // 「a>i, k>s」のような1行の書き方を、法則の並びに直す
+    function parseBulkRules(text) {
+      return String(text)
+        .replace(/[，、]/g, ',')
+        .split(/[,\n]/)
+        .map(t => t.trim())
+        .filter(t => t)
+        .map(t => {
+          const m = t.split(/\s*(?:->|=>|＞|>|→|:|：)\s*/);
+          if (m.length < 2) return null;
+          const from = (m[0] || '').trim(), to = (m[1] || '').trim();
+          return (from && to) ? { from, to } : null;
+        })
+        .filter(r => r);
     }
 
     function useRules(rules) {
       state.rules = rules.map(r => ({ from: r.from, to: r.to }));
       buildRules();
       render();
+      saveLocal();
       showMsg(ruleLabel() + ' にしました。');
+    }
+
+    // ===== たずねるダイアログ =====
+    // confirm は「はい／いいえ」の2択しか出せないので、3つ以上えらべるものを自前で用意する
+    function askChoice(title, text, buttons) {
+      return new Promise(resolve => {
+        const back = $('#askBack');
+        const box = $('#askBtns');
+        $('#askTitle').textContent = title;
+        $('#askText').textContent = text;
+        box.innerHTML = '';
+        const close = (value) => {
+          back.hidden = true;
+          document.removeEventListener('keydown', onKey);
+          resolve(value);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') close(null); };
+        buttons.forEach(bt => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = bt.kind || 'sub';
+          el.textContent = bt.label;
+          el.addEventListener('click', () => close(bt.value));
+          box.appendChild(el);
+        });
+        back.hidden = false;
+        document.addEventListener('keydown', onKey);
+        back.onclick = (e) => { if (e.target === back) close(null); };
+        const first = box.querySelector('button');
+        if (first) first.focus();
+      });
+    }
+
+    // ===== ★お気に入りの法則（全作品で共通・この端末に残る） =====
+    const FAV_KEY = 'moji-kae-favs-v1';
+
+    function loadFavs() {
+      try {
+        const raw = localStorage.getItem(FAV_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter(f => f && Array.isArray(f.rules)) : [];
+      } catch (e) { return []; }
+    }
+    function saveFavs() {
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(state.favs)); } catch (e) { /* 入らなければあきらめる */ }
+    }
+
+    function addFav() {
+      const rules = state.rules.filter(r => r.from && r.to);
+      if (!rules.length) { $('#saveMsg').textContent = '先に法則を決めてください。'; return; }
+      const name = ($('#favName').value || '').trim() || ruleLabel(rules);
+      state.favs.unshift({ name, level: state.level, rules: rules.map(r => ({ from: r.from, to: r.to })) });
+      if (state.favs.length > 60) state.favs.pop();
+      $('#favName').value = '';
+      saveFavs();
+      renderFavs();
+      $('#saveMsg').textContent = '「' + name + '」を★に登録しました。';
+    }
+
+    function renderFavs() {
+      const box = $('#favList');
+      if (!box) return;
+      box.innerHTML = '';
+      if (!state.favs.length) {
+        box.innerHTML = '<p class="hint-line">まだ★はありません。よく使う法則を登録しておくと、すぐ呼び出せます。</p>';
+        return;
+      }
+      state.favs.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.className = 'fav-row';
+        const body = document.createElement('button');
+        body.type = 'button';
+        body.className = 'body';
+        body.innerHTML = '<div class="nm">★ ' + escapeHtml(f.name) + '</div>'
+          + '<div class="rl">' + escapeHtml(ruleLabel(f.rules))
+          + '（' + (f.level === 'kana' ? 'かな' : 'ローマ字') + '）</div>';
+        body.addEventListener('click', () => {
+          state.level = f.level === 'kana' ? 'kana' : 'romaji';
+          $('#level').value = state.level;
+          useRules(f.rules);
+          saveLocal();
+        });
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'sub small';
+        del.textContent = '消す';
+        del.addEventListener('click', () => {
+          if (!confirm('★「' + f.name + '」を消しますか？')) return;
+          state.favs.splice(i, 1);
+          saveFavs();
+          renderFavs();
+        });
+        row.append(body, del);
+        box.appendChild(row);
+      });
+    }
+
+    // ===== 自動保存（作りかけの内容をこの端末に残す） =====
+    const STORAGE_KEY = 'moji-kae-v1';
+
+    function serialize() {
+      return {
+        version: 1,
+        workId: state.workId,        // どの作品を開いているか（開きなおしても上書きを選べるように）
+        title: state.title,
+        level: state.level,
+        rules: state.rules.map(r => ({ from: r.from, to: r.to })),
+        words: state.words.slice(),
+        reverse: state.reverse,
+        showRomaji: state.showRomaji,
+        showPairs: state.showPairs
+      };
+    }
+
+    // ファイルに書き出すときは★も一緒に持ち出す（別の端末へ移せるように）
+    function serializeFile() {
+      const d = serialize();
+      d.favs = state.favs;
+      return d;
+    }
+
+    function applyData(d) {
+      if (!d) return false;
+      state.workId = d.workId || null;
+      state.title = d.title || '';
+      state.level = d.level === 'kana' ? 'kana' : 'romaji';
+      state.rules = (Array.isArray(d.rules) && d.rules.length)
+        ? d.rules.map(r => ({ from: r.from || '', to: r.to || '' })) : [{ from: '', to: '' }];
+      state.words = (Array.isArray(d.words) && d.words.length) ? d.words.slice() : ['', '', ''];
+      state.reverse = !!d.reverse;
+      state.showRomaji = !!d.showRomaji;
+      state.showPairs = !!d.showPairs;
+      // ファイルから読みこんだ★は、いまの★に足す（消して置きかえない）
+      if (Array.isArray(d.favs)) {
+        d.favs.filter(f => f && Array.isArray(f.rules)).forEach(f => {
+          if (!state.favs.some(x => x.name === f.name && ruleLabel(x.rules) === ruleLabel(f.rules))) {
+            state.favs.push(f);
+          }
+        });
+        saveFavs();
+      }
+      $('#level').value = state.level;
+      $('#dirSel').value = state.reverse ? 'after' : 'before';
+      $('#showRomaji').checked = state.showRomaji;
+      $('#showPairs').checked = state.showPairs;
+      $('#workTitle').value = state.title;
+      buildRules(); buildWords(); render(); renderFavs();
+      return true;
+    }
+
+    function saveLocal() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize())); }
+      catch (e) { $('#saveMsg').textContent = '自動保存できません（プライベートモードの可能性）。'; }
+    }
+
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* 読めなければ新規でよい */ }
+      return null;
     }
 
     // ===== 作品として保存 =====
@@ -855,16 +1212,39 @@
       catch (e) { $('#saveMsg').textContent = '保存できませんでした。'; return false; }
     }
 
-    function saveWork() {
-      const title = ($('#workTitle').value || '').trim() || '（無題）';
-      const list = loadWorks();
-      list.unshift({
-        id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
-        title, savedAt: Date.now(),
-        data: { level: state.level, rules: state.rules.slice(),
-                words: state.words.slice(), reverse: state.reverse }
-      });
-      if (saveWorks(list)) $('#saveMsg').textContent = '「' + title + '」として保存しました。';
+    // ===== 「保存していない変更があるか」の判定 =====
+    let savedSig = '';
+    function workSignature() {
+      const d = serialize();
+      delete d.workId;         // どの作品を開いているかは中身ではないので、判定から外す
+      return JSON.stringify(d);
+    }
+    function markSaved() { savedSig = workSignature(); }
+    function hasUnsavedChanges() {
+      const empty = !state.words.some(w => w) && !state.title;
+      if (empty) return false;
+      return workSignature() !== savedSig;
+    }
+
+    // 消す前に「保存する／保存せず進む／やめる」を聞く
+    async function confirmDiscard(actionText) {
+      if (!hasUnsavedChanges()) return true;
+      const name = state.title ? '「' + state.title + '」' : 'いまの内容';
+      const choice = await askChoice(
+        '保存しますか？',
+        name + 'は、まだ保存されていません。\n\nこのまま' + actionText + 'と、いまの内容は消えます。',
+        [
+          { label: '保存してから進む', value: 'save', kind: '' },
+          { label: '保存せずに消して進む', value: 'discard', kind: 'danger' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (!choice) return false;
+      if (choice === 'save') {
+        await saveAsWork();
+        if (hasUnsavedChanges()) { $('#saveMsg').textContent = '保存しなかったので、そのままにしました。'; return false; }
+      }
+      return true;
     }
 
     function workSummary(d) {
@@ -873,20 +1253,82 @@
       return (pairs.join('　') || '（言葉なし）') + '　【' + ruleLabel(d.rules || []) + '】';
     }
 
-    function openWork(id) {
+    // mode: 'overwrite'（上書き）／'new'（別の作品として保存）
+    function storeWork(mode) {
+      const list = loadWorks();
+      const now = Date.now();
+      const data = serialize();
+
+      if (mode === 'overwrite') {
+        const item = list.find(w => w.id === state.workId);
+        if (!item) return storeWork('new');    // 元の作品が見つからなければ新規で保存する
+        item.title = state.title || item.title || '（無題）';
+        item.savedAt = now;
+        data.workId = state.workId;
+        item.data = data;
+        if (saveWorks(list)) {
+          markSaved(); saveLocal();
+          $('#saveMsg').textContent = '「' + item.title + '」を上書き保存しました。';
+        }
+        return;
+      }
+
+      const title = state.title || '（無題）';
+      const item = { id: 'w' + now + Math.random().toString(36).slice(2, 6), title, savedAt: now, data };
+      data.workId = item.id;
+      list.unshift(item);
+      state.workId = item.id;
+      if (saveWorks(list)) {
+        markSaved(); saveLocal();
+        $('#saveMsg').textContent = '「' + title + '」として保存しました。'
+          + 'あとで「保存した作品」から続きができます。';
+      }
+    }
+
+    // すでに保存ずみの作品なら、上書きか別保存かを選んでもらう
+    async function saveAsWork() {
+      state.title = ($('#workTitle').value || '').trim();
+      if (!state.workId || !loadWorks().some(w => w.id === state.workId)) { storeWork('new'); return; }
+      const name = state.title || '（無題）';
+      const choice = await askChoice(
+        'どちらに保存しますか？',
+        '「' + name + '」は保存ずみです。\n\n'
+        + '・上書き保存 … 前の内容に置きかわります\n'
+        + '・別の作品として保存 … 前の作品を残して、もう1つ増やします',
+        [
+          { label: '上書き保存する', value: 'overwrite', kind: '' },
+          { label: '別の作品として保存する', value: 'new', kind: 'sub' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (choice) storeWork(choice);
+    }
+
+    async function openWork(id) {
       const item = loadWorks().find(w => w.id === id);
       if (!item) return;
-      const d = item.data;
-      state.level = d.level === 'kana' ? 'kana' : 'romaji';
-      state.rules = (d.rules && d.rules.length) ? d.rules.slice() : [{ from: '', to: '' }];
-      state.words = (d.words && d.words.length) ? d.words.slice() : ['', '', ''];
-      state.reverse = !!d.reverse;
-      $('#level').value = state.level;
-      $('#dirSel').value = state.reverse ? 'after' : 'before';
-      $('#workTitle').value = item.title;
-      buildRules(); buildWords(); render();
+      if (item.id !== state.workId
+          && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
+      applyData(item.data);
+      state.workId = item.id;
+      state.title = item.title || state.title;
+      $('#workTitle').value = state.title;
+      markSaved(); saveLocal();
       $('#worksBox').hidden = true;
       $('#saveMsg').textContent = '「' + item.title + '」を開きました。';
+    }
+
+    // まっさらから作りなおす（★はどの作品でも共通なので残る）
+    async function newWork() {
+      if (!(await confirmDiscard('新しく作る'))) return;
+      applyData({ title: '', level: state.level, rules: [{ from: '', to: '' }],
+                  words: ['', '', ''], reverse: false,
+                  showRomaji: state.showRomaji, showPairs: state.showPairs });
+      $('#workTitle').value = '';
+      $('#worksBox').hidden = true;
+      $('#resultBox').hidden = true;
+      markSaved(); saveLocal();
+      $('#saveMsg').textContent = '新しく作りはじめます。★お気に入りはそのまま残しています。';
     }
 
     function deleteWork(id) {
@@ -895,6 +1337,7 @@
       if (!item) return;
       if (!confirm('「' + item.title + '」を削除します。よろしいですか？')) return;
       saveWorks(list.filter(w => w.id !== id));
+      if (state.workId === id) { state.workId = null; saveLocal(); }
       renderWorks();
     }
 
@@ -913,7 +1356,8 @@
           body.className = 'body';
           const d = new Date(item.savedAt);
           const p2 = n => String(n).padStart(2, '0');
-          body.innerHTML = '<div class="nm">' + escapeHtml(item.title) + '</div>'
+          body.innerHTML = '<div class="nm">' + escapeHtml(item.title)
+            + (item.id === state.workId ? '（開いています）' : '') + '</div>'
             + '<div class="sum">' + escapeHtml(workSummary(item.data)) + '</div>'
             + '<div class="sum">' + d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate())
             + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + '</div>';
@@ -930,38 +1374,130 @@
       $('#worksBox').hidden = false;
     }
 
+    // ===== ファイルに保存・ファイルから読みこむ =====
+    async function exportFile() {
+      const name = (state.title || 'moji-kae').replace(/[\\/:*?"<>|]/g, '_');
+      const text = JSON.stringify(serializeFile(), null, 2);
+      // ブラウザの中で開いている場合は、そちらの保存のしくみを使う
+      let saver = null;
+      try {
+        if (window.claude && typeof window.claude.use === 'function') saver = await window.claude.use('downloads');
+      } catch (e) { saver = null; }
+      if (saver) {
+        try {
+          await saver.save({ filename: name + '.json', data: text });
+          $('#saveMsg').textContent = 'ファイルに保存しました。';
+          return;
+        } catch (e) { /* だめならふつうの方法にする */ }
+      }
+      const blob = new Blob([text], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = name + '.json';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      $('#saveMsg').textContent = 'ファイルに保存しました。';
+    }
+
+    function importFile(file) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        let data = null;
+        try { data = JSON.parse(reader.result); }
+        catch (e) { $('#saveMsg').textContent = 'このファイルは読みこめませんでした。'; return; }
+        if (!(await confirmDiscard('読みこむ'))) return;
+        applyData(data);
+        state.workId = null;        // 読みこんだものは「まだ保存していない作品」としてあつかう
+        markSaved(); saveLocal();
+        $('#saveMsg').textContent = 'ファイルから読みこみました。';
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== 印刷 =====
+    function buildPrint() {
+      const area = $('#printArea');
+      const kind = $('#printKind').value;          // 'q'（問題）／'a'（答え）
+      const showRule = kind === 'a' || $('#printRule').checked;
+      const words = state.words.map(w => w.trim()).filter(w => w);
+      area.innerHTML = '';
+
+      const h = document.createElement('div');
+      h.className = 'pr-title';
+      h.textContent = (state.title || '文字かえの問題') + (kind === 'a' ? '（答え）' : '');
+      area.appendChild(h);
+
+      const sub = document.createElement('div');
+      sub.className = 'pr-sub';
+      sub.textContent = kind === 'a' ? '答え合わせ用' : '名前（　　　　　　　　　　）';
+      area.appendChild(sub);
+
+      const rl = document.createElement('div');
+      rl.className = 'pr-rule';
+      rl.innerHTML = showRule
+        ? '<b>法則</b>：' + escapeHtml(ruleLabel(state.rules.filter(r => r.from && r.to)))
+          + '（' + (state.level === 'kana' ? 'かな' : 'ローマ字') + 'でかえる）'
+        : '<b>法則</b>：？　どんな決まりで文字がかわったか考えよう。';
+      area.appendChild(rl);
+
+      words.forEach((w, i) => {
+        const res = convert(w);
+        // 問題は「かえたあとの言葉」を出して、もとの言葉を書かせる形にする
+        const q = state.reverse ? w : res;
+        const ans = state.reverse ? res : w;
+        const row = document.createElement('div');
+        row.className = 'pr-q';
+        row.innerHTML = '<span class="no">(' + (i + 1) + ')</span>'
+          + '<span class="w">' + escapeHtml(q) + '</span>'
+          + '<span style="font-size:14px;">→</span>'
+          + '<span class="ans">' + (kind === 'a' ? escapeHtml(ans) : '') + '</span>';
+        area.appendChild(row);
+      });
+
+      if (!words.length) {
+        const p2 = document.createElement('p');
+        p2.textContent = '（言葉が入っていません）';
+        area.appendChild(p2);
+      }
+
+      const note = document.createElement('p');
+      note.className = 'pr-note';
+      note.textContent = '文字かえ君でつくりました。';
+      area.appendChild(note);
+    }
+
     // ===== 操作の割り当て =====
     function bindEvents() {
       $('#level').addEventListener('change', (e) => {
         state.level = e.target.value;
-        buildRules(); render();
+        buildRules(); render(); saveLocal();
       });
       $('#btnAddRule').addEventListener('click', () => {
         state.rules.push({ from: '', to: '' });
-        buildRules(); render();
+        buildRules(); render(); saveLocal();
       });
       $('#btnClearRules').addEventListener('click', () => {
         state.rules = [{ from: '', to: '' }];
-        buildRules(); render();
+        buildRules(); render(); saveLocal();
       });
 
       $('#dirSel').addEventListener('change', (e) => {
         state.reverse = e.target.value === 'after';
-        buildWords();
+        buildWords(); saveLocal();
         showMsg(state.reverse
           ? 'かえたあとの言葉を入れると、かえる前の言葉が出ます。'
           : 'かえる前の言葉を入れると、かえたあとの言葉が出ます。');
       });
       $('#showRomaji').addEventListener('change', (e) => {
         state.showRomaji = e.target.checked;
-        renderWords();
+        renderWords(); saveLocal();
       });
 
-      $('#btnAddWord').addEventListener('click', () => { state.words.push(''); buildWords(); });
+      $('#btnAddWord').addEventListener('click', () => { state.words.push(''); buildWords(); saveLocal(); });
       $('#btnClearWords').addEventListener('click', () => {
         if (state.words.some(w => w) && !confirm('入れた言葉を全部消します。よろしいですか？')) return;
         state.words = ['', '', ''];
-        buildWords(); showMsg('');
+        buildWords(); showMsg(''); saveLocal();
       });
       $('#btnCopyAll').addEventListener('click', () => {
         const lines = state.words.filter(w => w).map(w => w + ' → ' + convert(w));
@@ -977,17 +1513,62 @@
       $('#btnFindCommon').addEventListener('click', findCommonRules);
       $('#btnFindWords').addEventListener('click', findWords);
 
-      $('#btnSaveWork').addEventListener('click', saveWork);
+      // 1文字ずつの対応
+      $('#showPairs').addEventListener('change', (e) => {
+        state.showPairs = e.target.checked;
+        renderWords(); saveLocal();
+      });
+
+      // 法則をまとめて入れる
+      $('#btnBulkRules').addEventListener('click', () => {
+        const rules = parseBulkRules($('#bulkRules').value);
+        if (!rules.length) {
+          showMsg('「a>i, k>s」のように、かえる前と後を > でつないで書いてください。');
+          return;
+        }
+        state.rules = rules;
+        buildRules(); render(); saveLocal();
+        $('#bulkRules').value = '';
+        showMsg(rules.length + '個の法則を入れました（' + ruleLabel() + '）。');
+      });
+      $('#bulkRules').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnBulkRules').click(); });
+
+      // ★お気に入りの法則
+      $('#btnFavAdd').addEventListener('click', addFav);
+      $('#favName').addEventListener('keydown', (e) => { if (e.key === 'Enter') addFav(); });
+
+      // 印刷
+      $('#btnPrint').addEventListener('click', () => { buildPrint(); window.print(); });
+
+      // 保存まわり
+      $('#workTitle').addEventListener('input', (e) => { state.title = e.target.value; saveLocal(); });
+      $('#btnSaveWork').addEventListener('click', saveAsWork);
       $('#btnOpenWorks').addEventListener('click', renderWorks);
       $('#btnCloseWorks').addEventListener('click', () => { $('#worksBox').hidden = true; });
+      $('#btnNewWork').addEventListener('click', newWork);
+      $('#btnExport').addEventListener('click', exportFile);
+      $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#fileInput').addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (f) importFile(f);
+        e.target.value = '';
+      });
     }
 
     // ===== 初期化 =====
     function init() {
-      buildRules();
-      buildWords();
+      state.favs = loadFavs();     // ★は作品とは別に読みこむ（全作品で共通）
+      const saved = loadLocal();
       bindEvents();
-      render();
+      if (saved) {
+        applyData(saved);
+        // 前に開いていた作品がまだ残っていれば、その作品を開いている状態にもどす
+        // （こうすると保存のときに「上書き」か「別の作品として」かを選べる）
+        if (saved.workId && !loadWorks().some(w => w.id === saved.workId)) state.workId = null;
+      } else {
+        buildRules(); buildWords(); render(); renderFavs();
+      }
+      markSaved();   // 今の内容を「保存ずみ」の基準にする（開いた直後に確認が出ないように）
     }
 
     init();
