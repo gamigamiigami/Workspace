@@ -514,8 +514,7 @@
         <li>「②生徒」タブで名前をいれる</li>
         <li>「③席替え」タブでボタンをおすだけ！</li>
       </ol>
-      <p class="hint">💡 入力は自動で保存されます。画面を閉じても消えません。<br>
-      💡 グループ分けやNG設定は、あとから好きなときに足せばOKです。</p>
+      <p class="hint">入力は自動で保存されます。グループ・NG設定はあとから足せばOKです。</p>
     </div>
 
     <div class="card">
@@ -530,8 +529,7 @@
         <button id="btnPresetFront">⬜ ぜんぶ前向きにする</button>
         <button id="btnPresetU">🔄 コの字にする</button>
       </div>
-      <p class="hint">コの字＝左右の机は教室の中を向き、いちばん後ろの机は黒板を向き、まん中と黒板側があく形です。
-      人数が入りきらないときは、左右・後ろを自動で2列にします。</p>
+      <p class="hint">コの字は、人数が入りきらないと自動で二重コの字になります。</p>
       <h3>1つずつ変えたいとき</h3>
       <div class="row no-print">
         <button id="toolOrient" class="tool-btn active">🔄 向きをかえる</button>
@@ -555,7 +553,7 @@
         <input type="text" id="inputStudentName" placeholder="名前を書いて「追加」をおす" style="flex:1;min-width:160px">
         <button id="btnAddStudent" class="primary">追加</button>
       </div>
-      <p class="hint">性別は、追加したあとに一覧の「男/女」ボタンでかえられます（席の色分け・市松模様に使います）</p>
+      <p class="hint">性別は、追加したあと一覧の「男/女」ボタンでかえられます。</p>
       <h3>まとめていれたいとき（1行に1人ずつ）</h3>
       <div class="row">
         <textarea id="csvText" rows="3" placeholder="田中太郎,男&#10;鈴木花子,女&#10;佐藤次郎　←性別はなくてもOK" style="flex:1;min-width:200px"></textarea>
@@ -573,7 +571,7 @@
         <button id="numModeSerial" class="tool-btn active">1・2・3…（通し番号）</button>
         <button id="numModeGender" class="tool-btn">男1・女1…（男女別）</button>
       </div>
-      <p class="hint">上から順に自動で番号がつきます。ちがう番号にしたいときは「編集」から直せます。</p>
+      <p class="hint">上から順に自動でつきます。ちがう番号にしたいときは「編集」から。</p>
       <ul id="studentList" class="item-list"></ul>
       <div class="next-step no-print">
         <button id="btnNextToShuffle" class="primary">つぎへ：③席替えをする →</button>
@@ -594,6 +592,15 @@
         <button id="btnCompare" title="前回の座席と今回の座席をならべて見くらべます">🔍 前回とならべる</button>
         <button id="btnPrintSeats">🖨 印刷</button>
       </div>
+      <!-- 手なおしボタンも上に貼りつける（座席を見ながら押せるように） -->
+      <div class="row" style="margin-top:6px">
+        <span class="hint">手なおし</span>
+        <button id="toolNone" class="tool-btn active">👀 見るだけ</button>
+        <button id="toolSwap" class="tool-btn">🔀 入れかえ</button>
+        <button id="toolPin" class="tool-btn">📌 今回だけ固定</button>
+        <span class="hint" id="pinCount"></span>
+      </div>
+      <p class="hint" id="shuffleToolHint" style="display:none"></p>
       <!-- 前回とくらべた結果をここに常に出す（別のページを見に行かなくてよい） -->
       <div id="prevCheck" class="prev-check"></div>
       <!-- NG設定にひっかかったときの大きな警告 -->
@@ -603,50 +610,40 @@
     <div id="shuffleGuide"></div>
 
     <div class="card no-print">
-      <h2>🎲 席替えをする</h2>
-      <p class="hint">ボタンをおすと、NG設定・固定席をまもった席ができます。<br>
-      <strong>何回か作って、いちばん良いものが自動でえらばれます</strong>（前回と同じ席・前回と同じ隣などをできるだけ避けます）。</p>
       <label class="check-label">
         <input type="checkbox" id="chkChecker">
         ♟ 男女が交互（市松模様）になるようにする
       </label>
-      <p class="hint">チェックを入れると、となり合う席が 男・女・男・女… とジグザグ（市松模様）に交互になるよう席替えします。
-      「②生徒」タブで男女の登録が必要です。</p>
-
-      <h3>席を手なおしする（今回かぎり）</h3>
       <div class="row">
-        <button id="toolNone" class="tool-btn active">👀 見るだけ</button>
-        <button id="toolSwap" class="tool-btn">🔀 2人を入れかえる</button>
-        <button id="toolPin" class="tool-btn">📌 今回だけ固定する</button>
-      </div>
-      <p class="hint" id="shuffleToolHint">席をタップしても何も起きません。手なおししたいときは上のボタンをえらんでください。</p>
-      <div class="row">
-        <span class="hint" id="pinCount"></span>
         <button id="btnClearPins">📌 今回だけの固定をぜんぶ消す</button>
+        <span class="hint">📌は「💾記録する」で自動的に消えます</span>
       </div>
-      <p class="hint">📌今回だけの固定は、<strong>この1回の席替えだけ</strong>に使われます（「💾記録する」と自動で消えます）。<br>
-      1年間ずっと守りたい設定は「🚫NG設定」タブでおこなってください。</p>
     </div>
 
     <!-- 前回とならべて見くらべるモード -->
     <div class="card no-print" id="compareCard" style="display:none">
-      <h2>🔍 前回とならべて見くらべる</h2>
-      <p class="hint">どちらの座席表でも、生徒をタップするとその子が<strong>両方</strong>で光ります。
-      「前回どこにいて、今回どこになったか」がひと目でわかります。（男女や班の色は消してあります）</p>
       <div class="row">
-        <span class="hint" id="compareWho">生徒をタップしてください</span>
+        <h2 style="margin:0">🔍 見くらべる</h2>
+        <label>くらべる回：<select id="compareTarget"></select></label>
         <button id="btnCompareClear">えらび直す</button>
       </div>
+      <p class="hint">どちらの座席表でも生徒をタップすると、その子が両方で光ります。<br>
+      上の「🔀入れかえ」「📌今回だけ固定」をえらぶと、ならべたまま<strong>右（今回）</strong>を手なおしできます。</p>
+      <div class="row"><strong id="compareWho"></strong></div>
       <div class="compare-wrap">
         <div class="compare-col">
           <h3 id="comparePrevTitle">前回</h3>
-          <div class="board-label">黒　板</div>
-          <div class="seat-grid-wrap"><div id="comparePrevGrid" class="seat-grid"></div></div>
+          <div class="room-view" id="comparePrevRoom">
+            <div class="board-label">黒　板</div>
+            <div class="seat-grid-wrap"><div id="comparePrevGrid" class="seat-grid"></div></div>
+          </div>
         </div>
         <div class="compare-col">
-          <h3>今回</h3>
-          <div class="board-label">黒　板</div>
-          <div class="seat-grid-wrap"><div id="compareNowGrid" class="seat-grid"></div></div>
+          <h3 id="compareNowTitle">今回</h3>
+          <div class="room-view" id="compareNowRoom">
+            <div class="board-label">黒　板</div>
+            <div class="seat-grid-wrap"><div id="compareNowGrid" class="seat-grid"></div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -666,7 +663,7 @@
     <div class="card no-print">
       <h2>くわしいチェック結果</h2>
       <ul id="warningList" class="warning-list"></ul>
-      <p class="hint">項目をタップすると該当の席がオレンジ枠で光ります</p>
+      <p class="hint">項目をタップすると該当の席が光ります</p>
     </div>
   </section>
 
@@ -674,13 +671,13 @@
   <section id="tab-groups" class="tab-panel">
     <div class="card">
       <h2>🎨 班を「席」で決める</h2>
-      <p class="hint">①下の班から「この色をぬる」をえらぶ → ②座席表の席をタップすると班の色がぬれます。<br>
-      もう一度タップすると色が消えます。<strong>だれがその班になるかは、席替えの結果で決まります。</strong></p>
+      <p class="hint">班をえらぶ →座席表の席をタップで色がぬれます（もう一度タップで消える）。<br>
+      <strong>だれがその班になるかは、席替えの結果で決まります。</strong></p>
       <ul id="groupPalette" class="item-list"></ul>
       <div class="row" style="margin-top:8px">
         <button id="btnAddGroup" class="primary">＋班を追加</button>
       </div>
-      <p class="hint">●をタップ＝色がかわる（となり合う番号の班は、にた色にならないようにしてあります）／班の名前は直接書きかえられます</p>
+      <p class="hint">●をタップで色がかわります。班の名前は直接書きかえられます。</p>
     </div>
     <div class="card">
       <h2>座席表（タップして色をぬる）</h2>
@@ -714,8 +711,7 @@
         <button id="btnNgClear">↩️ ぜんぶ解除する</button>
         <span class="hint" id="ngSeatCount"></span>
       </div>
-      <p class="hint">「ぜんぶNGにする」→ 座ってよい席だけタップして解除、という使い方が早いです。<br>
-      席をタップするとNG席として登録/解除されます（赤＝NG席）</p>
+      <p class="hint">席をタップでNG席の登録/解除（赤＝NG席）。「ぜんぶNGにする」→座ってよい席だけ解除、が早いです。</p>
       <div class="board-label">黒　板</div>
       <div class="seat-grid-wrap"><div id="ngGrid" class="seat-grid"></div></div>
     </div>
@@ -725,26 +721,18 @@
   <section id="tab-roster" class="tab-panel">
     <div class="card no-print">
       <button id="btnPrintRoster" class="primary">🖨 印刷（A4で出力されます）</button>
-      <p class="hint">印刷画面で「PDFに保存」をえらべば、PDFファイルとしても保存できます。</p>
+      <p class="hint">1・2ページ目＝座席表（両面印刷むき）／3ページ目＝名簿。印刷画面の「PDFに保存」でPDFにもできます。</p>
     </div>
     <p class="print-header" id="printHeader"></p>
+    <!-- 1ページ目：黒板が上（先生が黒板側から見た図） -->
     <div class="card">
-      <h2 id="rosterTitle">班別名簿</h2>
-      <div id="rosterCards" class="roster-cards"></div>
-    </div>
-    <div class="card">
-      <h2>全員名簿（名前と班の一覧）</h2>
-      <ul id="rosterAll" class="roster-all"></ul>
-    </div>
-    <!-- 両面印刷用：おもて＝黒板が上（先生が黒板側から見た図） -->
-    <div class="card print-break">
       <h2>座席表（黒板が上・先生から見た図）</h2>
       <div class="room-view">
         <div class="board-label">黒　板</div>
         <div class="seat-grid-wrap"><div id="rosterGrid" class="seat-grid"></div></div>
       </div>
     </div>
-    <!-- 両面印刷用：うら＝黒板が下（生徒が自分の席から見た図） -->
+    <!-- 2ページ目：黒板が下（生徒が自分の席から見た図）。1・2ページを両面印刷できる -->
     <div class="card print-break">
       <h2>座席表（黒板が下・教室のうしろから見た図）</h2>
       <p class="hint no-print">この2枚を「両面印刷」すると、おもて＝黒板が上／うら＝黒板が下 になります。</p>
@@ -753,20 +741,29 @@
         <div class="seat-grid-wrap"><div id="rosterGridFlipped" class="seat-grid"></div></div>
       </div>
     </div>
+    <!-- 3ページ目：名簿 -->
+    <div class="card print-break">
+      <h2 id="rosterTitle">班別名簿</h2>
+      <div id="rosterCards" class="roster-cards"></div>
+    </div>
+    <div class="card">
+      <h2>全員名簿（名前と班の一覧）</h2>
+      <ul id="rosterAll" class="roster-all"></ul>
+    </div>
   </section>
 
   <!-- ===== 📊 つながりタブ（今回の席が、これまで何回そうだったか） ===== -->
   <section id="tab-relations" class="tab-panel">
     <div class="card">
       <h2>📊 これまでのつながり</h2>
-      <p class="hint">いまの座席表について、<strong>これまで何回そうだったか</strong>を項目べつに出します。<br>
-      「◯回目」＝今回をふくめた回数です。過去に一度もなかった組み合わせは出しません。</p>
+      <p class="hint">「◯回目」＝今回をふくめた回数。過去に一度もなかった組み合わせは出しません。</p>
       <div class="row no-print">
         <span class="hint">ならびかえ：</span>
         <button id="relSortCount" class="tool-btn active">回数が多い順</button>
-        <button id="relSortName" class="tool-btn">名前順</button>
+        <button id="relSortName" class="tool-btn">名簿順</button>
       </div>
       <p class="hint" id="relSummary"></p>
+      <p class="hint" id="relSortNote"></p>
     </div>
     <div class="card"><h2>🤝 となり同士（左右）</h2><ul id="relSide" class="item-list"></ul></div>
     <div class="card"><h2>↕️ 前後</h2><ul id="relFb" class="item-list"></ul></div>
@@ -1643,6 +1640,8 @@
           const shownOrient = flip ? (ORIENT_FLIP[baseOrient] || baseOrient) : baseOrient;
           cell.className = 'seat orient-' + shownOrient;
           cell.dataset.key = key;
+          // 入れかえで1つ目にえらんだ席
+          if (extra.selectedKey === key) cell.classList.add('pick-selected');
           const desk = document.createElement('div');
           desk.className = 'desk';
 
@@ -2595,6 +2594,13 @@
     // --- 前回とならべて見くらべるモード ---
     let compareOpen = false;
     let compareStudentId = null;
+    let compareHistoryId = null;  // くらべる回。null なら前回（いちばん新しい回）
+
+    document.getElementById('compareTarget').addEventListener('change', (e) => {
+      compareHistoryId = e.target.value;
+      compareStudentId = null;
+      renderShuffleTab();
+    });
 
     document.getElementById('btnCompare').addEventListener('click', () => {
       const cr = getActiveClassroom();
@@ -2611,46 +2617,78 @@
       renderShuffleTab();
     });
 
+    // くらべる相手の履歴を返す（えらばれていなければ前回＝いちばん新しい回）
+    function getCompareHistory(cr) {
+      if (!cr.history.length) return null;
+      return cr.history.find(h => h.id === compareHistoryId) || cr.history[cr.history.length - 1];
+    }
+
     function renderCompare(cr) {
       const card = document.getElementById('compareCard');
-      const latest = cr.history[cr.history.length - 1];
-      if (!compareOpen || !latest) { card.style.display = 'none'; return; }
+      const target = getCompareHistory(cr);
+      if (!compareOpen || !target) { card.style.display = 'none'; return; }
       card.style.display = 'block';
-      document.getElementById('comparePrevTitle').textContent = '前回：' + historyLabel(latest);
 
-      // どちらの座席表をタップしても、その席の生徒をえらんだことにする
+      // くらべる回のえらびかた（新しい回が上。「前回」と分かるよう印をつける）
+      const sel = document.getElementById('compareTarget');
+      sel.innerHTML = '';
+      const latestId = cr.history[cr.history.length - 1].id;
+      for (const h of [...cr.history].reverse()) {
+        const opt = document.createElement('option');
+        opt.value = h.id;
+        opt.textContent = historyLabel(h) + (h.id === latestId ? '（前回）' : '');
+        if (h.id === target.id) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      document.getElementById('comparePrevTitle').textContent =
+        historyLabel(target) + (target.id === latestId ? '（前回）' : '');
+
+      // 黒板の向きを、ならべた2つの座席表にもそろえて反映する
+      const flip = !!cr.viewFlipped;
+      document.getElementById('comparePrevRoom').classList.toggle('flipped', flip);
+      document.getElementById('compareNowRoom').classList.toggle('flipped', flip);
+
+      // 生徒をえらぶ（もう一度タップで解除）
       const pick = (seatsMap) => (key) => {
         const sid = seatsMap[key];
         if (!sid) return;
-        compareStudentId = (compareStudentId === sid) ? null : sid; // もう一度タップで解除
+        compareStudentId = (compareStudentId === sid) ? null : sid;
         renderShuffleTab();
       };
 
+      // 左（過去の回）は記録なので、いつでも「えらぶ」だけ
       renderGrid('comparePrevGrid', cr, 'seating', {
-        seats: latest.seats,
+        seats: target.seats,
         plain: true,                       // 男女・班の色を出さない
         highlightStudentId: compareStudentId,
-        flip: !!cr.viewFlipped,
-        onTap: pick(latest.seats)
+        flip: flip,
+        onTap: pick(target.seats)
       });
+
+      // 右（今回）は、手なおしモード中ならならべたまま入れかえ・固定ができる
+      const editing = (shuffleTool === 'swap' || shuffleTool === 'pin');
+      document.getElementById('compareNowTitle').textContent =
+        '今回' + (editing ? (shuffleTool === 'swap' ? '（🔀入れかえできます）' : '（📌固定できます）') : '');
       renderGrid('compareNowGrid', cr, 'seating', {
         seats: cr.currentSeats || {},
         plain: true,
         highlightStudentId: compareStudentId,
-        flip: !!cr.viewFlipped,
-        onTap: pick(cr.currentSeats || {})
+        flip: flip,
+        selectedKey: editing ? swapFirstKey : null,
+        onTap: editing ? onShuffleSeatTap : pick(cr.currentSeats || {})
       });
 
-      // えらんだ生徒が「前回どこ → 今回どこ」かを文で出す
+      // えらんだ生徒が「そのとき どこ → 今回 どこ」かを文で出す
       const who = document.getElementById('compareWho');
       if (!compareStudentId) {
-        who.textContent = 'どちらかの座席表で生徒をタップしてください';
+        who.textContent = '';
       } else {
         const st = getStudent(cr, compareStudentId);
         const findKey = (m) => Object.keys(m || {}).find(k => m[k] === compareStudentId);
-        const before = findKey(latest.seats);
+        const before = findKey(target.seats);
         const after = findKey(cr.currentSeats);
-        who.textContent = (st ? st.name : '?') + '：前回 ' + (before ? seatLabel(before) : 'いなかった') +
+        who.textContent = (st ? st.name : '?') + '：' + historyLabel(target) + ' ' +
+                          (before ? seatLabel(before) : 'いなかった') +
                           ' → 今回 ' + (after ? seatLabel(after) : 'いない');
       }
     }
@@ -2759,16 +2797,17 @@
       document.getElementById('toolSwap').classList.toggle('active', shuffleTool === 'swap');
       document.getElementById('toolPin').classList.toggle('active', shuffleTool === 'pin');
       const toolHints = {
-        none: '席をタップしても何も起きません。手なおししたいときは上のボタンをえらんでください。',
+        none: '',
         swap: swapFirstKey
-          ? '「' + seatLabel(swapFirstKey) + '」をえらび中。入れかえたい席をタップしてください（同じ席をもう一度タップでとりけし）'
-          : '入れかえたい2つの席を順にタップしてください。空いている席とも入れかえられます。',
-        pin: '席をタップすると📌今回だけ固定になります（もう一度タップで解除）。空いている席をタップすると、だれをすわらせるかえらべます。'
+          ? '「' + seatLabel(swapFirstKey) + '」をえらび中 → 入れかえたい席をタップ（同じ席をもう一度タップでとりけし）'
+          : '入れかえたい2つの席を順にタップ（空いている席とも入れかえられます）',
+        pin: '席をタップで📌固定／解除。空いている席をタップすると、だれをすわらせるかえらべます'
       };
-      document.getElementById('shuffleToolHint').textContent = toolHints[shuffleTool];
+      const hintEl = document.getElementById('shuffleToolHint');
+      hintEl.textContent = toolHints[shuffleTool];
+      hintEl.style.display = toolHints[shuffleTool] ? 'block' : 'none';
       const pinN = Object.keys(cr.tempFixed || {}).length;
-      document.getElementById('pinCount').textContent =
-        pinN ? '📌今回だけの固定：' + pinN + '件' : '📌今回だけの固定：なし';
+      document.getElementById('pinCount').textContent = pinN ? '📌' + pinN + '件' : '';
 
       // 黒板の向き
       const room = document.getElementById('shuffleRoom');
@@ -2780,14 +2819,9 @@
         seats: cr.currentSeats || {},
         warnings: lastWarnings,
         flip: !!cr.viewFlipped,
+        selectedKey: swapFirstKey,
         onTap: (shuffleTool === 'none') ? null : onShuffleSeatTap
       });
-      // 入れ替えでえらび中の席を光らせる
-      if (swapFirstKey) {
-        document.querySelectorAll('#shuffleGrid .seat').forEach(el => {
-          el.classList.toggle('pick-selected', el.dataset.key === swapFirstKey);
-        });
-      }
       renderLegend('shuffleLegend', cr);
       renderPrevCheck(cr);
       renderHardAlert(cr);
@@ -2998,8 +3032,11 @@
             when: past.map(h => historyLabel(h))
           });
         }
-        if (relSort === 'count') rows.sort((x, y) => y.count - x.count || x.a.name.localeCompare(y.a.name, 'ja'));
-        else rows.sort((x, y) => x.a.name.localeCompare(y.a.name, 'ja') || x.b.name.localeCompare(y.b.name, 'ja'));
+        // 「回数が多い順」＝回数の多いものを上に。「名簿順」＝出席番号の小さい順。
+        // （回数がぜんぶ同じときは、どちらでならべても見た目が変わらないことがある）
+        const noOf = (st) => numberCache.num[st.id] || 999;
+        if (relSort === 'count') rows.sort((x, y) => y.count - x.count || noOf(x.a) - noOf(y.a) || noOf(x.b) - noOf(y.b));
+        else rows.sort((x, y) => noOf(x.a) - noOf(y.a) || noOf(x.b) - noOf(y.b));
         return rows;
       };
 
@@ -3023,6 +3060,14 @@
           '</span></li>'
         ).join('');
       }
+
+      // 回数がぜんぶ同じだと、ならべかえても見た目が変わらない。その理由を出しておく
+      const allCounts = new Set();
+      for (const kind of Object.keys(boxes)) collect(kind).forEach(r => allCounts.add(r.count));
+      document.getElementById('relSortNote').textContent =
+        (allCounts.size <= 1 && allCounts.size > 0)
+          ? 'いまは回数がぜんぶ同じ（' + [...allCounts][0] + '回目）なので、ならべかえても順番は変わりません。'
+          : '';
 
       summary.innerHTML =
         'くり返しになっている組み合わせ： ' +
