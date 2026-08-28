@@ -551,14 +551,11 @@
       </div>
       <div class="row">
         <label for="findChars">この文字を全部ふくむ</label>
-        <input type="text" id="findChars" placeholder="例：つあい" style="flex:1 1 110px;">
+        <input type="text" id="findChars" placeholder="複数OK・順番は自由（例：つあい → あいさつ）" style="flex:1 1 220px;">
         <button id="btnFindChars" class="sub small">この文字でさがす</button>
       </div>
-      <p class="hint-line" style="margin-top:2px;">
-        複数の文字も対応。<b>並べる順番は関係ありません</b>（例：<b>つあい</b> → <b>あいさつ</b>）。
-      </p>
       <div class="row">
-        <label for="linkA">2つの語をつなぐ語</label>
+        <label for="linkA">語につなぐ語（2つ目は「なし」でもOK）</label>
         <select id="linkA"></select>
         <select id="linkB"></select>
         <button id="btnLinkWords" class="sub small">つなぐ語をさがす</button>
@@ -3623,9 +3620,12 @@ var qrcode = function() {
         const el = $(sel);
         if (!el) return;
         const cur = el.value;
-        el.innerHTML = state.words.map(w => '<option>' + escapeHtml(w.text) + '</option>').join('');
-        if ([...el.options].some(o => o.value === cur)) el.value = cur;
-        else if (el.options.length > i) el.selectedIndex = Math.min(i, el.options.length - 1);
+        el.innerHTML = '<option value="">なし</option>'
+          + state.words.map(w => '<option>' + escapeHtml(w.text) + '</option>').join('');
+        // まだ一度も選んでいないときだけ、最初のワードを仮に入れておく
+        if (cur && [...el.options].some(o => o.value === cur)) el.value = cur;
+        else if (!cur && el.dataset.touched === '1') el.value = '';
+        else el.selectedIndex = Math.min(i + 1, el.options.length - 1);
       });
 
       // ②つくる：まだ盤面に置いていないワードだけ
@@ -5209,9 +5209,15 @@ var qrcode = function() {
       $('#findChars').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { state.linkPair = null; findWords(); }
       });
+      ['#linkA', '#linkB'].forEach(sel => {
+        const el = $(sel);
+        if (el) el.addEventListener('change', () => { el.dataset.touched = '1'; });
+      });
       $('#btnLinkWords').addEventListener('click', () => {
-        const a = $('#linkA').value, b = $('#linkB').value;
-        if (!a || !b || a === b) { showMsg('ちがう2つの語を選んでください。', 'ng'); return; }
+        let a = $('#linkA').value, b = $('#linkB').value;
+        if (!a && b) { a = b; b = ''; }          // 1つ目が「なし」なら2つ目を主役にする
+        if (!a) { showMsg('つなぎたい語を1つ以上えらんでください。', 'ng'); return; }
+        if (a === b) { showMsg('ちがう2つの語を選ぶか、片方を「なし」にしてください。', 'ng'); return; }
         state.linkPair = { a, b };
         $('#findChars').value = '';
         findWords();
@@ -5493,7 +5499,7 @@ var qrcode = function() {
       // 「この文字を全部ふくむ」（例：あいさ → あ・い・さ をすべて含む語）
       const needChars = [...new Set(chars(conv($('#findChars').value.trim())))];
       const linkA = link ? chars(conv(link.a)) : null;
-      const linkB = link ? chars(conv(link.b)) : null;
+      const linkB = (link && link.b) ? chars(conv(link.b)) : null;
       const wantKw = useKw && missing.length > 0;
 
       // マイ辞書（過去に登録した語）→ 国語辞書 の順にしらべる
@@ -5514,7 +5520,8 @@ var qrcode = function() {
         if (state.maxSize && cs.length > state.maxSize) continue;   // 枠に入らない長さは出さない
         if (q && text.indexOf(q) < 0 && toKata(text).indexOf(toKata(q)) < 0 && item.s.indexOf(q) < 0) continue;
         if (needChars.length && !needChars.every(ch => cs.includes(ch))) continue;
-        if (link && (!cs.some(ch => linkA.includes(ch)) || !cs.some(ch => linkB.includes(ch)))) continue;
+        if (link && !cs.some(ch => linkA.includes(ch))) continue;
+        if (linkB && !cs.some(ch => linkB.includes(ch))) continue;
         const kwHit = missing.filter(ch => cs.includes(ch)).length;
         if (wantKw && kwHit === 0) continue;
         const crossable = haveChars.size === 0 || cs.some(ch => haveChars.has(ch));
@@ -5523,10 +5530,12 @@ var qrcode = function() {
         // 未使用文字を多く含む語をいちばん上に。次に交差できる語、次によく使う語
         // 2語をつなぐ検索では、両方に「別々の文字で」つながる語を上位にする
         let linkBonus = 0;
-        if (link) {
+        if (link && linkB) {
           const onlyA = cs.some(ch => linkA.includes(ch) && !linkB.includes(ch));
           const onlyB = cs.some(ch => linkB.includes(ch) && !linkA.includes(ch));
           linkBonus = (onlyA && onlyB) ? 2000 : (onlyA || onlyB) ? 500 : 0;
+        } else if (link) {
+          linkBonus = 500;
         }
         const score = kwHit * 1000 + linkBonus + (crossable ? 200 : 0) + (item.mine ? 150 : 0)
           + Math.max(0, 100 - item.rank / 100);
@@ -5550,7 +5559,10 @@ var qrcode = function() {
       head.style.width = '100%';
       const lv = $('#findLevel').selectedOptions[0].textContent;
       const cond = (state.linkPair
-        ? '「' + escapeHtml(state.linkPair.a) + '」と「' + escapeHtml(state.linkPair.b) + '」をつなぐ語／' : '')
+        ? (state.linkPair.b
+            ? '「' + escapeHtml(state.linkPair.a) + '」と「' + escapeHtml(state.linkPair.b) + '」をつなぐ語／'
+            : '「' + escapeHtml(state.linkPair.a) + '」につながる語／')
+        : '')
         + (state.maxSize ? state.maxSize + '文字以内／' : '');
       head.innerHTML = cond + lv + '／' + total + ' 語の候補から ' + list.length + ' 語を表示（タップで登録）'
         + (missing.length ? '　<span style="color:var(--ng)">未使用の文字：'
