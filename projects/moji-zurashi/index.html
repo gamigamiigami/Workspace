@@ -356,6 +356,66 @@
       header h1 { font-size: 17px; }
       header h1 .sub-title { display: none; }
     }
+    /* ===== たずねるダイアログ（confirm は2択しか出せないので自前で用意する） ===== */
+    .ask-back {
+      position: fixed; inset: 0; z-index: 900;
+      background: rgba(20,30,40,.45);
+      display: flex; align-items: center; justify-content: center; padding: 16px;
+    }
+    /* hidden 属性だけでは display:flex に負けてしまうので、ここで消す */
+    .ask-back[hidden] { display: none; }
+    .ask-box {
+      background: #fff; border-radius: 14px; padding: 16px;
+      max-width: 460px; width: 100%; box-shadow: 0 10px 30px rgba(0,0,0,.2);
+    }
+    .ask-box h3 { font-size: 16px; margin-bottom: 8px; }
+    .ask-box p { font-size: 14px; color: var(--sub); white-space: pre-wrap; margin-bottom: 12px; }
+    .ask-btns { display: flex; flex-direction: column; gap: 8px; }
+
+    /* ★お気に入りの法則 */
+    #favList { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+    .fav-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      border: 1px solid var(--line); border-radius: 10px; padding: 6px 10px; }
+    .fav-row .body { flex: 1 1 auto; min-width: 0; text-align: left; background: none; border: none;
+      padding: 0; color: var(--text); font-family: inherit; min-height: 0; cursor: pointer; }
+    .fav-row .body:hover { background: none; }
+    .fav-row .nm { font-weight: 700; font-size: 15px; }
+    .fav-row .rl { font-size: 13px; color: var(--sub); }
+
+    /* むずかしさの印 */
+    .lv { font-size: 11px; border-radius: 6px; padding: 1px 5px; border: 1px solid;
+          color: #1f7a4d; border-color: #9ed3b7; background: #eefaf3; margin-left: 4px; }
+
+    /* 辞書にない言葉は押すと「近い法則」をさがせる */
+    .to.notword, .word-line.notword { cursor: pointer; }
+
+    /* ===== 印刷 ===== */
+    #printArea { display: none; }
+    @media print {
+      body { background: #fff; padding: 0; max-width: none; }
+      header, footer, .tabs, .panel, .ctrl-wrap, .mode-panel,
+      #savePanel, #savePanel2, .ask-back { display: none !important; }
+      #printArea { display: block; }
+      .pr-title { font-size: 20px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+      .pr-sub { font-size: 12px; text-align: center; color: #555; margin-bottom: 14px; }
+      .pr-rule { border: 1px solid #333; border-radius: 8px; padding: 8px 10px; margin-bottom: 14px; font-size: 15px; }
+      .pr-q { border-bottom: 1px dashed #999; padding: 10px 4px; font-size: 18px;
+              display: flex; align-items: center; gap: 12px; }
+      .pr-q .no { width: 26px; color: #555; font-size: 13px; }
+      .pr-q .w { font-weight: 700; letter-spacing: .12em; }
+      .pr-q .ans { flex: 1; border-bottom: 1px solid #333; min-height: 20px;
+                   letter-spacing: .12em; font-weight: 700; }
+      .pr-note { font-size: 12px; color: #555; margin-top: 12px; }
+      /* 暗号表 */
+      .pr-tables { display: flex; gap: 14px; justify-content: center; align-items: flex-start; }
+      .pr-tbl { display: grid; gap: 2px; }
+      .pr-tbl .h { font-size: 11px; text-align: center; color: #555; }
+      .pr-tbl .c { border: 1px solid #666; border-radius: 4px; text-align: center;
+                   font-size: 13px; padding: 3px 1px; min-width: 34px; }
+      .pr-tbl .c .a { font-weight: 700; }
+      .pr-tbl .c .b { color: #333; }
+      .pr-tbl .c.empty { border-style: dotted; color: #bbb; }
+    }
   </style>
 </head>
 <body>
@@ -424,6 +484,11 @@
             <option value="3">3文字</option>
             <option value="4" selected>4文字</option>
           </select>
+          <select id="lvSel" aria-label="むずかしさ"
+                  style="min-height:44px;padding:8px;border:1px solid var(--line);border-radius:10px;font-size:15px;">
+            <option value="all">むずかしさ：どれでも</option>
+            <option value="easy">小学生向けだけ</option>
+          </select>
         </div>
         <p class="hint-line">
           「使える言葉の組み合わせ」＝<b>今の法則でずらすと、別のちゃんとした言葉になる</b>言葉を、
@@ -436,6 +501,7 @@
         </p>
         <div id="suggestBox" hidden>
           <p id="suggestMsg" class="hint-line"></p>
+          <div id="suggestTop"></div>
           <div id="suggestList"></div>
         </div>
       </div>
@@ -521,12 +587,30 @@
         </div>
 
         <p class="shift-info" id="shiftInfo">ずらしていません</p>
+
+        <details style="margin-top:8px;">
+          <summary style="font-size:14px;cursor:pointer;">★お気に入りの法則</summary>
+          <div class="row" style="margin-top:8px;">
+            <input type="text" id="favName" placeholder="名前（例：下に1ずらし）"
+                   style="flex:1 1 150px;min-width:0;font-family:inherit;font-size:16px;min-height:44px;
+                          padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
+            <button id="btnFavAdd" class="sub small">★ 今の法則を登録</button>
+          </div>
+          <p class="hint-line">★はどの作品でも共通です（この端末に残ります）。押すとその法則になります。</p>
+          <div id="favList"></div>
+        </details>
       </div>
 
       <div class="panel" id="outPanel">
         <h2>できあがり <span class="hint" id="pickedCount"></span></h2>
         <div id="result" class="word-line empty">表の文字をタップすると、ここに出ます。</div>
         <div id="pairs"></div>
+        <div class="row" style="margin-top:8px;">
+          <input type="text" id="wordEntry" placeholder="言葉を打って入れる（例：あんぱんまん）"
+                 style="flex:1 1 180px;min-width:0;font-family:inherit;font-size:16px;min-height:44px;
+                        padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
+          <button id="btnAddWordChars" class="sub small">入れる</button>
+        </div>
         <div class="row" style="margin-top:8px;">
           <button id="btnUndo" class="sub small">1文字消す</button>
           <button id="btnClearChars" class="danger small">全部消す</button>
@@ -541,6 +625,27 @@
   </main>
 
   <div class="panel" id="savePanel">
+    <h2>印刷する <span class="hint">暗号表・問題用紙・答え一覧</span></h2>
+    <div class="row">
+      <select id="printKind" aria-label="印刷するもの"
+              style="min-height:44px;padding:8px;border:1px solid var(--line);border-radius:10px;font-size:15px;">
+        <option value="table">暗号表（もとの表 → ずらした表）</option>
+        <option value="q">問題用紙（答えなし）</option>
+        <option value="a">答え一覧（答え入り）</option>
+      </select>
+      <button id="btnPrint" class="sub">印刷する</button>
+      <label class="check" style="display:flex;align-items:center;gap:6px;font-size:14px;">
+        <input type="checkbox" id="printRule" style="min-height:0;width:18px;height:18px;">
+        問題用紙に法則も書く
+      </label>
+    </div>
+    <p class="hint-line">
+      <b>暗号表</b>＝五十音表のマスに「もとの文字 → ずらした文字」を書いた1枚。生徒に配る対応表になります。<br>
+      <b>問題用紙</b>＝ずらしたあとの言葉を並べて、答えを書く線を引いた形。法則を伏せれば「決まりを当てる」問題になります。
+    </p>
+  </div>
+
+  <div class="panel" id="savePanel2">
     <h2>作品として保存 <span class="hint">この端末に残ります（リンク配布はしません）</span></h2>
     <div class="row">
       <input type="text" id="workTitle" placeholder="名前（例：あいさつの暗号）"
@@ -548,9 +653,17 @@
                     padding:8px 10px;border:1px solid var(--line);border-radius:10px;">
       <button id="btnSaveWork">保存する</button>
       <button id="btnOpenWorks" class="sub">保存した作品</button>
+      <button id="btnNewWork" class="sub">＋ 新しく作る</button>
+    </div>
+    <div class="row" style="margin-top:8px;">
+      <button id="btnExport" class="sub small">ファイルに保存</button>
+      <button id="btnImport" class="sub small">ファイルから読みこむ</button>
+      <input type="file" id="fileInput" accept="application/json,.json" hidden>
     </div>
     <p class="hint-line">
       「どんな言葉を・どんな法則で・どんな言葉にしたか」をまとめて残します。あとから開いて続きができます。
+      作りかけの内容は<b>自動でこの端末に残ります</b>（次に開いたとき続きから）。
+      <b>ファイルに保存</b>すれば、別の端末へ移したりバックアップしたりできます（★も一緒に入ります）。
     </p>
     <div id="worksBox" hidden>
       <div id="worksList"></div>
@@ -558,6 +671,18 @@
     </div>
     <p id="saveMsg" class="hint-line"></p>
   </div>
+
+  <!-- たずねるダイアログ（保存するか・上書きか など） -->
+  <div class="ask-back" id="askBack" hidden>
+    <div class="ask-box">
+      <h3 id="askTitle"></h3>
+      <p id="askText"></p>
+      <div class="ask-btns" id="askBtns"></div>
+    </div>
+  </div>
+
+  <!-- 印刷用（画面には出さない） -->
+  <div id="printArea"></div>
 
   <footer>
     外部の通信は使っていないので、ネットがなくても動きます ｜
@@ -654,8 +779,18 @@
       bCol: 0, bDan: 0,  // 法則Bのずれ（たて・よこ方式のみ）
       dCol: 0,           // 左右のずれ（右がプラス）
       dDan: 0,           // 上下のずれ（下がプラス）
-      step: 0            // あいうえお順で送る数
+      step: 0,           // あいうえお順で送る数
+      title: '',         // 作品の名前
+      workId: null,      // 「保存した作品」のどれを開いているか（未保存なら null）
+      favs: []           // ★お気に入りの法則（全作品で共通）
     };
+
+    // 「小学生向け」の線引き。辞書は使用頻度の高い順に並んでいるので、
+    // 上位3000語までを身近な言葉＝小学生向けとして扱う（クロスワードと同じ基準）
+    const ELEM_RANK = 3000;
+    function isEasy(rank) { return rank < ELEM_RANK; }
+    function lvTag(rank) { return isEasy(rank) ? '<span class="lv">小</span>' : ''; }
+    function elemOnly() { const el = $('#lvSel'); return !!el && el.value === 'easy'; }
 
     const $ = (sel) => document.querySelector(sel);
     const $$ = (sel) => document.querySelectorAll(sel);
@@ -968,6 +1103,7 @@
       const list = $('#suggestList');
       $('#suggestBox').hidden = false;
       list.innerHTML = '';
+      $('#suggestTop').innerHTML = '';
 
       if (!text) { $('#suggestMsg').textContent = '先に言葉を入れてください。'; return; }
 
@@ -980,7 +1116,10 @@
         const word = out.join('');
         if (word === text || seen.has(word)) return;
         const hit = dict.get(word);
-        if (hit) { seen.add(word); found.push({ word, kanji: hit.kanji, rank: hit.rank, rule }); }
+        if (!hit) return;
+        if (elemOnly() && !isEasy(hit.rank)) return;      // 小学生向けだけにしぼる
+        seen.add(word);
+        found.push({ word, kanji: hit.kanji, rank: hit.rank, rule });
       });
       found.sort((a, b) => a.rank - b.rank);
 
@@ -1002,6 +1141,7 @@
         b.className = 'sug';
         b.innerHTML = '<span class="word">' + escapeHtml(f.word) + '</span>'
           + (f.kanji ? '<span class="kanji">' + escapeHtml(f.kanji) + '</span>' : '')
+          + lvTag(f.rank)
           + '<span class="rule">' + ruleText(f.rule) + '</span>';
         b.addEventListener('click', () => {
           if (f.rule.method === 'seq') { state.method = 'seq'; state.step = f.rule.step; }
@@ -1022,6 +1162,7 @@
       const list = $('#suggestList');
       $('#suggestBox').hidden = false;
       list.innerHTML = '';
+      $('#suggestTop').innerHTML = '';
 
       if (texts.length < 2) {
         $('#suggestMsg').textContent = '2つ以上の言葉を入れてから押してください。';
@@ -1039,6 +1180,7 @@
           if (w === t) return;                      // 変わらないものは除く
           const hit = dict.get(w);
           if (!hit) return;                         // 1つでも辞書にない言葉になったら、この法則は不採用
+          if (elemOnly() && !isEasy(hit.rank)) return;   // 小学生向けだけにしぼる
           results.push({ from: t, to: w, kanji: hit.kanji, rank: hit.rank });
         }
         // どれくらい身近な言葉ばかりになるかで並べる（小さいほど身近）
@@ -1091,6 +1233,7 @@
       const list = $('#suggestList');
       $('#suggestBox').hidden = false;
       list.innerHTML = '';
+      $('#suggestTop').innerHTML = '';
 
       const rule = currentRule();
       const moved = rule.method === 'seq' ? rule.step !== 0 : (rule.dCol !== 0 || rule.dDan !== 0);
@@ -1109,7 +1252,9 @@
         if (w === yomi) return;
         const hit = dict.get(w);
         if (!hit) return;
+        if (elemOnly() && (!isEasy(info.rank) || !isEasy(hit.rank))) return;
         found.push({ from: yomi, fromKanji: info.kanji, to: w, toKanji: hit.kanji,
+                     easy: isEasy(info.rank) && isEasy(hit.rank),
                      rank: info.rank + hit.rank });
       });
       found.sort((a, b) => a.rank - b.rank);
@@ -1125,6 +1270,15 @@
         + len + '文字の組み合わせが <b>' + found.length + '組</b> あります。'
         + '（よく使う言葉から順に、上位100組まで）押すと、その言葉を欄に入れます。';
 
+      // さがした言葉を、そのまま問題（まとめて入れる欄）にできるようにする
+      const bulk = document.createElement('button');
+      bulk.type = 'button';
+      bulk.className = 'sub small';
+      bulk.style.margin = '6px 0';
+      bulk.textContent = '上から10組をまとめて欄に入れる';
+      bulk.addEventListener('click', () => putRows(found.slice(0, 10).map(f => f.from)));
+      $('#suggestTop').appendChild(bulk);
+
       found.slice(0, 100).forEach(f => {
         const b = document.createElement('button');
         b.type = 'button';
@@ -1133,15 +1287,29 @@
           + (f.fromKanji ? '<span class="kanji">' + escapeHtml(f.fromKanji) + '</span>' : '')
           + '<span class="arrow2" style="margin:0 4px;">→</span>'
           + '<span class="word">' + escapeHtml(f.to) + '</span>'
-          + (f.toKanji ? '<span class="kanji">' + escapeHtml(f.toKanji) + '</span>' : '');
+          + (f.toKanji ? '<span class="kanji">' + escapeHtml(f.toKanji) + '</span>' : '')
+          + (f.easy ? '<span class="lv">小</span>' : '');
         b.addEventListener('click', () => {
           const i = state.rows.findIndex(r => !r);
           if (i >= 0) state.rows[i] = f.from; else state.rows.push(f.from);
           buildBatch();
+          saveLocal();
           showMsg('「' + f.from + '」を欄に入れました。');
         });
         list.appendChild(b);
       });
+    }
+
+    // さがした言葉を、あいている欄から順にまとめて入れる
+    function putRows(words) {
+      words.forEach(w => {
+        if (state.rows.includes(w)) return;      // 同じ語は入れない
+        const i = state.rows.findIndex(r => !r);
+        if (i >= 0) state.rows[i] = w; else state.rows.push(w);
+      });
+      buildBatch();
+      saveLocal();
+      showMsg(words.length + '個の言葉を欄に入れました。');
     }
 
     function escapeHtml(s) {
@@ -1224,15 +1392,19 @@
 
     // 入力欄はそのままに、結果の表示だけ描き直す（打っている途中で欄が作り直されないように）
     // 1つの結果欄を書く（ずらせなかった／辞書にない、の色分けもここで行う）
-    function fillResultCell(cell, out, label) {
+    function fillResultCell(cell, out, label, source) {
       if (!cell) return;
       const t = outText(out);
       const broken = hasProblem(out);
       const unknown = !broken && !isRealWord(t);
-      cell.textContent = (label ? label + ' ' : '') + t;
+      cell.textContent = (label ? label + ' ' : '') + t + (unknown ? '（？）' : '');
       cell.classList.toggle('bad', broken);
       cell.classList.toggle('notword', unknown);
-      cell.title = unknown ? '辞書にない言葉です' : '';
+      cell.title = broken ? 'ずらせない文字があります（×＝はみ出し／・＝表の空欄）'
+        : unknown ? '辞書にない言葉です。押すと、この言葉から作れる法則をさがします'
+        : '';
+      // 辞書にない言葉のときは、押せば「実在する言葉になる法則」をさがせるようにする
+      cell.onclick = (unknown && source) ? () => findWords(source) : null;
     }
 
     function clearResultCell(cell, label) {
@@ -1243,6 +1415,7 @@
     }
 
     function renderBatch() {
+      saveSoon();
       const rows = $$('#batchList .batch-row');
       state.rows.forEach((text, i) => {
         const row = rows[i];
@@ -1252,21 +1425,22 @@
         if (state.useAB && row._abCells) {
           const { a, b, ab } = row._abCells;
           if (!text) { clearResultCell(a, 'A'); clearResultCell(b, 'B'); clearResultCell(ab, 'A&B'); return; }
-          fillResultCell(a, tryRule(text, ruleA()), 'A');
-          fillResultCell(b, tryRule(text, ruleB()), 'B');
-          fillResultCell(ab, applyAB(text), 'A&B');
+          fillResultCell(a, tryRule(text, ruleA()), 'A', text);
+          fillResultCell(b, tryRule(text, ruleB()), 'B', text);
+          fillResultCell(ab, applyAB(text), 'A&B', text);
           return;
         }
 
         const to = row.querySelector('.to');
         if (!to) return;
         if (!text) { clearResultCell(to); return; }
-        fillResultCell(to, convertWord(text));
+        fillResultCell(to, convertWord(text), '', text);
       });
     }
 
     // ===== 画面の更新 =====
     function render() {
+      saveSoon();
       const src = state.chars.join('');
       const out = shiftWord(src);
       const moved = state.method === 'seq' ? state.step !== 0 : (state.dCol !== 0 || state.dDan !== 0);
@@ -1482,9 +1656,37 @@
       });
       ['#numHB', '#numVB'].forEach(sel => $(sel).addEventListener('input', applyRuleBInput));
       ['#dirHB', '#dirVB'].forEach(sel => $(sel).addEventListener('change', applyRuleBInput));
-      $('#btnSaveWork').addEventListener('click', saveWork);
+      $('#workTitle').addEventListener('input', (e) => { state.title = e.target.value; saveSoon(); });
+      $('#btnSaveWork').addEventListener('click', saveAsWork);
       $('#btnOpenWorks').addEventListener('click', renderWorks);
       $('#btnCloseWorks').addEventListener('click', () => { $('#worksBox').hidden = true; });
+      $('#btnNewWork').addEventListener('click', newWork);
+      $('#btnExport').addEventListener('click', exportFile);
+      $('#btnImport').addEventListener('click', () => $('#fileInput').click());
+      $('#fileInput').addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (f) importFile(f);
+        e.target.value = '';
+      });
+
+      // 印刷
+      $('#btnPrint').addEventListener('click', () => { buildPrint(); window.print(); });
+
+      // ★お気に入りの法則
+      $('#btnFavAdd').addEventListener('click', addFav);
+      $('#favName').addEventListener('keydown', (e) => { if (e.key === 'Enter') addFav(); });
+
+      // 五十音表モード：言葉を打ってまとめて入れる
+      const addTyped = () => {
+        const t = ($('#wordEntry').value || '').trim();
+        if (!t) { showMsg('入れたい言葉を打ってください。'); return; }
+        Array.from(t).forEach(ch => state.chars.push(ch));
+        $('#wordEntry').value = '';
+        render();
+        showMsg('「' + t + '」を入れました。表をタップして足すこともできます。');
+      };
+      $('#btnAddWordChars').addEventListener('click', addTyped);
+      $('#wordEntry').addEventListener('keydown', (e) => { if (e.key === 'Enter') addTyped(); });
       $('#inputSide').addEventListener('change', (e) => {
         state.reverse = e.target.value === 'after';
         buildBatch();   // 入力欄の左右が入れかわるので、並べ直す
@@ -1519,7 +1721,129 @@
       });
     }
 
-    // ===== 作品の保存（この端末のブラウザに残す） =====
+    // ===== たずねるダイアログ =====
+    // confirm は「はい／いいえ」の2択しか出せないので、3つ以上えらべるものを自前で用意する
+    function askChoice(title, text, buttons) {
+      return new Promise(resolve => {
+        const back = $('#askBack');
+        const box = $('#askBtns');
+        $('#askTitle').textContent = title;
+        $('#askText').textContent = text;
+        box.innerHTML = '';
+        const close = (value) => {
+          back.hidden = true;
+          document.removeEventListener('keydown', onKey);
+          resolve(value);
+        };
+        const onKey = (e) => { if (e.key === 'Escape') close(null); };
+        buttons.forEach(bt => {
+          const el = document.createElement('button');
+          el.type = 'button';
+          el.className = bt.kind || 'sub';
+          el.textContent = bt.label;
+          el.addEventListener('click', () => close(bt.value));
+          box.appendChild(el);
+        });
+        back.hidden = false;
+        document.addEventListener('keydown', onKey);
+        back.onclick = (e) => { if (e.target === back) close(null); };
+        const first = box.querySelector('button');
+        if (first) first.focus();
+      });
+    }
+
+    // ===== ★お気に入りの法則（全作品で共通・この端末に残る） =====
+    const FAV_KEY = 'moji-zurashi-favs-v1';
+
+    function loadFavs() {
+      try {
+        const raw = localStorage.getItem(FAV_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter(f => f && f.name) : [];
+      } catch (e) { return []; }
+    }
+    function saveFavs() {
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(state.favs)); } catch (e) { /* 入らなければあきらめる */ }
+    }
+
+    // いまの法則をひとまとめにしたもの
+    function favLabel(f) {
+      let t = ruleText(f.method === 'seq'
+        ? { method: 'seq', step: f.step }
+        : { method: 'grid', dCol: f.dCol, dDan: f.dDan });
+      if (f.useAB) t = 'A：' + t + '／B：' + ruleText({ method: 'grid', dCol: f.bCol || 0, dDan: f.bDan || 0 });
+      return t + '／' + (f.loop ? 'はしで回り込む' : '回り込まない');
+    }
+
+    function addFav() {
+      const f = {
+        method: state.method, dCol: state.dCol, dDan: state.dDan, step: state.step,
+        loop: state.loop, useAB: state.useAB, bCol: state.bCol, bDan: state.bDan
+      };
+      const moved = f.method === 'seq' ? f.step !== 0 : (f.dCol !== 0 || f.dDan !== 0);
+      if (!moved && !f.useAB) { $('#saveMsg').textContent = '先に法則を決めてください（今はずらしていません）。'; return; }
+      f.name = ($('#favName').value || '').trim() || favLabel(f);
+      state.favs.unshift(f);
+      if (state.favs.length > 60) state.favs.pop();
+      $('#favName').value = '';
+      saveFavs();
+      renderFavs();
+      $('#saveMsg').textContent = '「' + f.name + '」を★に登録しました。';
+    }
+
+    function useFav(f) {
+      state.method = f.method === 'seq' ? 'seq' : 'grid';
+      state.dCol = f.dCol || 0; state.dDan = f.dDan || 0; state.step = f.step || 0;
+      state.loop = f.loop !== false;
+      state.useAB = !!f.useAB;
+      state.bCol = f.bCol || 0; state.bDan = f.bDan || 0;
+      $('#method').value = state.method;
+      $('#loopMode').value = state.loop ? 'loop' : 'stop';
+      $('#useAB').checked = state.useAB;
+      $('#ruleB').hidden = !state.useAB;
+      $('#numHB').value = -state.bCol; $('#dirHB').value = 'left';
+      $('#numVB').value = state.bDan; $('#dirVB').value = 'down';
+      updateMethodUI();
+      buildBatch();
+      render();
+      saveLocal();
+      showMsg('「' + f.name + '」の法則にしました。');
+    }
+
+    function renderFavs() {
+      const box = $('#favList');
+      if (!box) return;
+      box.innerHTML = '';
+      if (!state.favs.length) {
+        box.innerHTML = '<p class="hint-line">まだ★はありません。よく使う法則を登録しておくと、すぐ呼び出せます。</p>';
+        return;
+      }
+      state.favs.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.className = 'fav-row';
+        const body = document.createElement('button');
+        body.type = 'button';
+        body.className = 'body';
+        body.innerHTML = '<div class="nm">★ ' + escapeHtml(f.name) + '</div>'
+          + '<div class="rl">' + escapeHtml(favLabel(f)) + '</div>';
+        body.addEventListener('click', () => useFav(f));
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'sub small';
+        del.textContent = '消す';
+        del.addEventListener('click', () => {
+          if (!confirm('★「' + f.name + '」を消しますか？')) return;
+          state.favs.splice(i, 1);
+          saveFavs();
+          renderFavs();
+        });
+        row.append(body, del);
+        box.appendChild(row);
+      });
+    }
+
+    // ===== 自動保存（作りかけの内容をこの端末に残す） =====
+    const STORAGE_KEY = 'moji-zurashi-v1';
     const WORKS_KEY = 'moji-zurashi-works-v1';
 
     function loadWorks() {
@@ -1545,6 +1869,109 @@
       };
     }
 
+    function serialize() {
+      const d = currentWork();
+      d.version = 1;
+      d.workId = state.workId;    // どの作品を開いているか（開きなおしても上書きを選べるように）
+      d.title = state.title;
+      return d;
+    }
+
+    // ファイルに書き出すときは★も一緒に持ち出す（別の端末へ移せるように）
+    function serializeFile() {
+      const d = serialize();
+      d.favs = state.favs;
+      return d;
+    }
+
+    function applyData(w) {
+      if (!w) return false;
+      state.workId = w.workId || null;
+      state.title = w.title || '';
+      state.chars = Array.isArray(w.chars) ? w.chars.slice() : [];
+      state.rows = Array.isArray(w.rows) && w.rows.length ? w.rows.slice() : ['', '', ''];
+      state.method = w.method === 'seq' ? 'seq' : 'grid';
+      state.dCol = w.dCol || 0; state.dDan = w.dDan || 0; state.step = w.step || 0;
+      state.loop = w.loop !== false;
+      state.reverse = !!w.reverse;
+      state.useAB = !!w.useAB;
+      state.bCol = w.bCol || 0; state.bDan = w.bDan || 0;
+      // ファイルから読みこんだ★は、いまの★に足す（消して置きかえない）
+      if (Array.isArray(w.favs)) {
+        w.favs.filter(f => f && f.name).forEach(f => {
+          if (!state.favs.some(x => x.name === f.name && favLabel(x) === favLabel(f))) state.favs.push(f);
+        });
+        saveFavs();
+      }
+      $('#useAB').checked = state.useAB;
+      $('#ruleB').hidden = !state.useAB;
+      $('#numHB').value = -state.bCol; $('#dirHB').value = 'left';
+      $('#numVB').value = state.bDan; $('#dirVB').value = 'down';
+      $('#method').value = state.method;
+      $('#loopMode').value = state.loop ? 'loop' : 'stop';
+      $('#inputSide').value = state.reverse ? 'after' : 'before';
+      $('#workTitle').value = state.title;
+      updateMethodUI();
+      buildBatch();
+      renderFavs();
+      setMode(w.mode === 'text' ? 'text' : 'table');
+      return true;
+    }
+
+    function saveLocal() {
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize())); }
+      catch (e) { $('#saveMsg').textContent = '自動保存できません（プライベートモードの可能性）。'; }
+    }
+
+    let saveTimer = null;
+    function saveSoon() {
+      clearTimeout(saveTimer);
+      saveTimer = setTimeout(saveLocal, 400);
+    }
+
+    function loadLocal() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) return JSON.parse(raw);
+      } catch (e) { /* 読めなければ新規でよい */ }
+      return null;
+    }
+
+    // ===== 「保存していない変更があるか」の判定 =====
+    let savedSig = '';
+    function workSignature() {
+      const d = serialize();
+      delete d.workId;      // どの作品を開いているかは中身ではないので、判定から外す
+      return JSON.stringify(d);
+    }
+    function markSaved() { savedSig = workSignature(); }
+    function hasUnsavedChanges() {
+      const empty = !state.chars.length && !state.rows.some(r => r) && !state.title;
+      if (empty) return false;
+      return workSignature() !== savedSig;
+    }
+
+    // 消す前に「保存する／保存せず進む／やめる」を聞く
+    async function confirmDiscard(actionText) {
+      if (!hasUnsavedChanges()) return true;
+      const name = state.title ? '「' + state.title + '」' : 'いまの内容';
+      const choice = await askChoice(
+        '保存しますか？',
+        name + 'は、まだ保存されていません。\n\nこのまま' + actionText + 'と、いまの内容は消えます。',
+        [
+          { label: '保存してから進む', value: 'save', kind: '' },
+          { label: '保存せずに消して進む', value: 'discard', kind: 'danger' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (!choice) return false;
+      if (choice === 'save') {
+        await saveAsWork();
+        if (hasUnsavedChanges()) { $('#saveMsg').textContent = '保存しなかったので、そのままにしました。'; return false; }
+      }
+      return true;
+    }
+
     // 一覧に出す一行の説明（どんな言葉を・どんな法則で・どんな言葉にしたか）
     function workSummary(w) {
       let rule = ruleText(w.method === 'seq'
@@ -1554,8 +1981,8 @@
         rule = 'A：' + rule + '／B：'
           + ruleText({ method: 'grid', dCol: w.bCol || 0, dDan: w.bDan || 0 });
       }
-      const src = w.mode === 'table' ? [w.chars.join('')] : w.rows.filter(t => t);
-      if (!src.length) return rule;
+      const src = w.mode === 'table' ? [(w.chars || []).join('')] : (w.rows || []).filter(t => t);
+      if (!src.length || !src[0]) return rule;
       const keep = currentWork();
       Object.assign(state, { method: w.method, dCol: w.dCol, dDan: w.dDan, step: w.step, loop: w.loop });
       const pairs = src.slice(0, 3).map(t => t + '→' + outText(shiftWord(t)));
@@ -1563,40 +1990,82 @@
       return pairs.join('　') + (src.length > 3 ? ' ほか' : '') + '　【' + rule + '】';
     }
 
-    function saveWork() {
-      const title = ($('#workTitle').value || '').trim() || '（無題）';
+    // mode: 'overwrite'（上書き）／'new'（別の作品として保存）
+    function storeWork(mode) {
       const list = loadWorks();
-      const item = { id: 'w' + Date.now() + Math.random().toString(36).slice(2, 6),
-                     title, savedAt: Date.now(), data: currentWork() };
+      const now = Date.now();
+      const data = serialize();
+
+      if (mode === 'overwrite') {
+        const item = list.find(w => w.id === state.workId);
+        if (!item) return storeWork('new');   // 元の作品が見つからなければ新規で保存する
+        item.title = state.title || item.title || '（無題）';
+        item.savedAt = now;
+        data.workId = state.workId;
+        item.data = data;
+        if (saveWorks(list)) {
+          markSaved(); saveLocal();
+          $('#saveMsg').textContent = '「' + item.title + '」を上書き保存しました。';
+        }
+        return;
+      }
+
+      const title = state.title || '（無題）';
+      const item = { id: 'w' + now + Math.random().toString(36).slice(2, 6), title, savedAt: now, data };
+      data.workId = item.id;
       list.unshift(item);
-      if (saveWorks(list)) $('#saveMsg').textContent = '「' + title + '」として保存しました。';
+      state.workId = item.id;
+      if (saveWorks(list)) {
+        markSaved(); saveLocal();
+        $('#saveMsg').textContent = '「' + title + '」として保存しました。'
+          + 'あとで「保存した作品」から続きができます。';
+      }
     }
 
-    function openWork(id) {
+    // すでに保存ずみの作品なら、上書きか別保存かを選んでもらう
+    async function saveAsWork() {
+      state.title = ($('#workTitle').value || '').trim();
+      if (!state.workId || !loadWorks().some(w => w.id === state.workId)) { storeWork('new'); return; }
+      const name = state.title || '（無題）';
+      const choice = await askChoice(
+        'どちらに保存しますか？',
+        '「' + name + '」は保存ずみです。\n\n'
+        + '・上書き保存 … 前の内容に置きかわります\n'
+        + '・別の作品として保存 … 前の作品を残して、もう1つ増やします',
+        [
+          { label: '上書き保存する', value: 'overwrite', kind: '' },
+          { label: '別の作品として保存する', value: 'new', kind: 'sub' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (choice) storeWork(choice);
+    }
+
+    async function openWork(id) {
       const item = loadWorks().find(w => w.id === id);
       if (!item) return;
-      const w = item.data;
-      state.chars = Array.isArray(w.chars) ? w.chars.slice() : [];
-      state.rows = Array.isArray(w.rows) && w.rows.length ? w.rows.slice() : ['', '', ''];
-      state.method = w.method === 'seq' ? 'seq' : 'grid';
-      state.dCol = w.dCol || 0; state.dDan = w.dDan || 0; state.step = w.step || 0;
-      state.loop = w.loop !== false;
-      state.reverse = !!w.reverse;
-      state.useAB = !!w.useAB;
-      state.bCol = w.bCol || 0; state.bDan = w.bDan || 0;
-      $('#useAB').checked = state.useAB;
-      $('#ruleB').hidden = !state.useAB;
-      $('#numHB').value = -state.bCol; $('#dirHB').value = 'left';
-      $('#numVB').value = state.bDan; $('#dirVB').value = 'down';
-      $('#method').value = state.method;
-      $('#loopMode').value = state.loop ? 'loop' : 'stop';
-      $('#inputSide').value = state.reverse ? 'after' : 'before';
-      $('#workTitle').value = item.title;
-      updateMethodUI();
-      setMode(w.mode === 'text' ? 'text' : 'table');
-      buildBatch();
+      if (item.id !== state.workId
+          && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
+      applyData(item.data);
+      state.workId = item.id;
+      state.title = item.title || state.title;
+      $('#workTitle').value = state.title;
+      markSaved(); saveLocal();
       $('#worksBox').hidden = true;
       $('#saveMsg').textContent = '「' + item.title + '」を開きました。';
+    }
+
+    // まっさらから作りなおす（★はどの作品でも共通なので残る）
+    async function newWork() {
+      if (!(await confirmDiscard('新しく作る'))) return;
+      applyData({ mode: state.mode, chars: [], rows: ['', '', ''],
+                  method: state.method, dCol: 0, dDan: 0, step: 0,
+                  loop: state.loop, reverse: false, useAB: false, bCol: 0, bDan: 0, title: '' });
+      $('#workTitle').value = '';
+      $('#worksBox').hidden = true;
+      $('#suggestBox').hidden = true;
+      markSaved(); saveLocal();
+      $('#saveMsg').textContent = '新しく作りはじめます。★お気に入りはそのまま残しています。';
     }
 
     function deleteWork(id) {
@@ -1605,6 +2074,7 @@
       if (!item) return;
       if (!confirm('「' + item.title + '」を削除します。よろしいですか？')) return;
       saveWorks(list.filter(w => w.id !== id));
+      if (state.workId === id) { state.workId = null; saveLocal(); }
       renderWorks();
     }
 
@@ -1623,7 +2093,8 @@
           body.className = 'body';
           const d = new Date(item.savedAt);
           const p2 = n => String(n).padStart(2, '0');
-          body.innerHTML = '<div class="nm">' + escapeHtml(item.title) + '</div>'
+          body.innerHTML = '<div class="nm">' + escapeHtml(item.title)
+            + (item.id === state.workId ? '（開いています）' : '') + '</div>'
             + '<div class="sum">' + escapeHtml(workSummary(item.data)) + '</div>'
             + '<div class="sum">' + d.getFullYear() + '/' + p2(d.getMonth() + 1) + '/' + p2(d.getDate())
             + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + '</div>';
@@ -1640,15 +2111,167 @@
       $('#worksBox').hidden = false;
     }
 
+    // ===== ファイルに保存・ファイルから読みこむ =====
+    async function exportFile() {
+      const name = (state.title || 'moji-zurashi').replace(/[\\/:*?"<>|]/g, '_');
+      const text = JSON.stringify(serializeFile(), null, 2);
+      let saver = null;
+      try {
+        if (window.claude && typeof window.claude.use === 'function') saver = await window.claude.use('downloads');
+      } catch (e) { saver = null; }
+      if (saver) {
+        try {
+          await saver.save({ filename: name + '.json', data: text });
+          $('#saveMsg').textContent = 'ファイルに保存しました。';
+          return;
+        } catch (e) { /* だめならふつうの方法にする */ }
+      }
+      const blob = new Blob([text], { type: 'application/json' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = name + '.json';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      $('#saveMsg').textContent = 'ファイルに保存しました。';
+    }
+
+    function importFile(file) {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        let data = null;
+        try { data = JSON.parse(reader.result); }
+        catch (e) { $('#saveMsg').textContent = 'このファイルは読みこめませんでした。'; return; }
+        if (!(await confirmDiscard('読みこむ'))) return;
+        applyData(data);
+        state.workId = null;      // 読みこんだものは「まだ保存していない作品」としてあつかう
+        markSaved(); saveLocal();
+        $('#saveMsg').textContent = 'ファイルから読みこみました。';
+      };
+      reader.readAsText(file);
+    }
+
+    // ===== 印刷 =====
+    // 暗号表：五十音表のマスに「もとの文字 → ずらした文字」を書いた1枚
+    function buildCipherTable(id, cols) {
+      const wrap = document.createElement('div');
+      wrap.className = 'pr-tbl';
+      wrap.style.gridTemplateColumns = 'repeat(' + cols.length + ', auto)';
+      cols.forEach(col => {
+        const h = document.createElement('div');
+        h.className = 'h';
+        h.textContent = col.name + '行';
+        wrap.appendChild(h);
+      });
+      for (let dan = 0; dan < DANS; dan++) {
+        cols.forEach(col => {
+          const ch = col.kana[dan];
+          const c = document.createElement('div');
+          c.className = 'c' + (ch ? '' : ' empty');
+          if (!ch) { c.textContent = '－'; wrap.appendChild(c); return; }
+          const to = shiftChar(ch);
+          const t = to === OUT ? '×' : (to === BLANK ? '・' : to);
+          c.innerHTML = '<span class="a">' + escapeHtml(ch) + '</span>→<span class="b">'
+            + escapeHtml(t) + '</span>';
+          wrap.appendChild(c);
+        });
+      }
+      return wrap;
+    }
+
+    // 印刷に出す言葉（五十音表モードなら登録した文字、まとめてモードなら各行）
+    function printWords() {
+      return state.mode === 'table'
+        ? [state.chars.join('')].filter(t => t)
+        : state.rows.map(t => t.trim()).filter(t => t);
+    }
+
+    function buildPrint() {
+      const area = $('#printArea');
+      const kind = $('#printKind').value;      // 'table'／'q'／'a'
+      const showRule = kind !== 'q' || $('#printRule').checked;
+      area.innerHTML = '';
+
+      const h = document.createElement('div');
+      h.className = 'pr-title';
+      h.textContent = (state.title || '文字ずらしの問題')
+        + (kind === 'a' ? '（答え）' : kind === 'table' ? '（暗号表）' : '');
+      area.appendChild(h);
+
+      const sub = document.createElement('div');
+      sub.className = 'pr-sub';
+      sub.textContent = kind === 'q' ? '名前（　　　　　　　　　　）'
+        : kind === 'a' ? '答え合わせ用' : 'この表のとおりに文字が入れかわります';
+      area.appendChild(sub);
+
+      const rl = document.createElement('div');
+      rl.className = 'pr-rule';
+      rl.innerHTML = showRule
+        ? '<b>法則</b>：' + escapeHtml(favLabel({
+            method: state.method, dCol: state.dCol, dDan: state.dDan, step: state.step,
+            loop: state.loop, useAB: state.useAB, bCol: state.bCol, bDan: state.bDan }))
+        : '<b>法則</b>：？　どんな決まりで文字がかわったか考えよう。';
+      area.appendChild(rl);
+
+      if (kind === 'table') {
+        const box = document.createElement('div');
+        box.className = 'pr-tables';
+        box.appendChild(buildCipherTable('daku', DAKU));
+        box.appendChild(buildCipherTable('sei', SEI));
+        area.appendChild(box);
+        const nt = document.createElement('p');
+        nt.className = 'pr-note';
+        nt.textContent = '左＝濁音・半濁音の表／右＝清音の表。べつの表なので、ずらしても表をまたぎません。'
+          + '「ん」はずらさずそのままです。';
+        area.appendChild(nt);
+        return;
+      }
+
+      const words = printWords();
+      words.forEach((w, i) => {
+        const out = outText(convertWord(w));
+        // 問題は「ずらしたあとの言葉」を出して、もとの言葉を書かせる形にする
+        const q = state.reverse ? w : out;
+        const ans = state.reverse ? out : w;
+        const row = document.createElement('div');
+        row.className = 'pr-q';
+        row.innerHTML = '<span class="no">(' + (i + 1) + ')</span>'
+          + '<span class="w">' + escapeHtml(q) + '</span>'
+          + '<span style="font-size:14px;">→</span>'
+          + '<span class="ans">' + (kind === 'a' ? escapeHtml(ans) : '') + '</span>';
+        area.appendChild(row);
+      });
+
+      if (!words.length) {
+        const p2 = document.createElement('p');
+        p2.textContent = '（言葉が入っていません）';
+        area.appendChild(p2);
+      }
+
+      const note = document.createElement('p');
+      note.className = 'pr-note';
+      note.textContent = '文字ずらし君でつくりました。';
+      area.appendChild(note);
+    }
+
     // ===== 初期化 =====
     function init() {
       buildTable('#tblDaku', DAKU);
       buildTable('#tblSei', SEI);
       $('#nCell').appendChild(makeKanaCell(N_KANA));
-      buildBatch();
+      state.favs = loadFavs();      // ★は作品とは別に読みこむ（全作品で共通）
       bindEvents();
-      updateMethodUI();
-      setMode('table');
+      const saved = loadLocal();
+      if (saved) {
+        applyData(saved);
+        // 前に開いていた作品がもう無ければ、「まだ保存していない」あつかいにする
+        if (saved.workId && !loadWorks().some(w => w.id === saved.workId)) state.workId = null;
+      } else {
+        buildBatch();
+        renderFavs();
+        updateMethodUI();
+        setMode('table');
+      }
+      markSaved();   // 今の内容を「保存ずみ」の基準にする（開いた直後に確認が出ないように）
     }
 
     init();
