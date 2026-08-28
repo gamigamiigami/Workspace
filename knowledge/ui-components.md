@@ -1,8 +1,197 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-05-23
+最終更新：2026-08-27
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## NG制約エラー表示（3層化）
+
+**用途：** ユーザーが手で座席配置を編集したときに、NG設定（隣席NG、ペアNGなど）に違反した場合、その違反を「層別」に視覚化して即座に修正を促す。
+
+**設計理念：**
+- **層1（ポップアップ）：即座の警告** — 違反を犯したその場で「🚫 男2 と 男1 がとなり同士です（隣席NG）：おしゃべり」と理由メモ付きで知らせる
+- **層2（警告バー）：画面上部に集約** — 赤い警告バーに違反件数を表示（「❌ NG違反が3件あります」）。直すと自動で消える
+- **層3（視覚マーク）：該当席をマーク** — 違反している座席を赤く囲んで🚫マークで視認性向上
+
+**実装（席替えツール `projects/seat-assignment/index.html` の実物）：**
+
+HTML — 警告バーは操作バーの中に置き、ふだんは空にしておく。
+```html
+<div class="sticky-bar no-print">
+  <div class="row"><button id="btnRunShuffle" class="primary">🎲 席替え実行</button></div>
+  <div id="prevCheck" class="prev-check"></div>
+  <div id="hardAlert" class="hard-alert"></div>
+</div>
+```
+
+CSS — 警告バーと、違反した席の強調。
+```css
+.hard-alert {
+  display: none;                 /* 違反が無いあいだは出さない */
+  background: #fdecea;
+  border: 2px solid #c0392b;
+  color: #c0392b;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-top: 8px;
+  font-size: 14px;
+}
+.hard-alert ul { margin: 4px 0 4px 18px; }
+/* 層3：違反している席（!important で他の色づけに勝たせる） */
+.seat.ng-violation .desk {
+  background: #fdecea !important;
+  border-color: #c0392b !important;
+  box-shadow: 0 0 0 3px rgba(192,57,43,0.35);
+}
+```
+
+JS — 違反を1か所で判定し、3層すべてがその結果を使う。
+```javascript
+// 判定はここ1か所だけ。戻り値に ng:true を付けておくと座席描画で拾える
+function checkNgViolations(cr, assignment) {
+  const violations = [];
+  const seen = new Set();
+  for (const key of Object.keys(assignment)) {
+    const sid = assignment[key];
+    if (!sid) continue;
+    const meta = cr.deskMeta[key];
+    if (meta && (meta.ngStudentIds || []).includes(sid)) {
+      violations.push({ level: 'error', ng: true, seats: [key],
+        text: '🚫 ' + nameOf(sid) + ' は ' + seatLabel(key) + ' に座れません（着席NGの席です）' });
+    }
+    for (const nKey of getNeighbors(cr, key)) {
+      const nid = assignment[nKey];
+      if (!nid || !isNGPair(cr, sid, nid)) continue;
+      const pk = pairKey(sid, nid);
+      if (seen.has(pk)) continue;   // 同じペアを2回出さない
+      seen.add(pk);
+      const p = cr.ngPairs.find(x => (x.a===sid&&x.b===nid)||(x.a===nid&&x.b===sid));
+      violations.push({ level: 'error', ng: true, seats: [key, nKey],
+        text: '🚫 ' + nameOf(sid) + ' と ' + nameOf(nid) + ' がとなり同士です（隣席NG）' +
+              (p && p.reason ? '：' + p.reason : '') });
+    }
+  }
+  return violations;
+}
+
+// 層2：警告バー（違反が無ければ空にして display:none にもどす）
+function renderHardAlert(cr) {
+  const el = document.getElementById('hardAlert');
+  const v = cr.currentSeats ? checkNgViolations(cr, cr.currentSeats) : [];
+  if (!v.length) { el.innerHTML = ''; el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = '<strong>🚫 NG設定にひっかかっています（' + v.length + '件）</strong><ul>' +
+    v.map(w => '<li>' + escapeHtml(w.text.replace(/^🚫 /, '')) + '</li>').join('') + '</ul>';
+}
+
+// 層1：手で動かした「その席」が原因のものだけ、その場で知らせる
+const moved = [seatA, seatB];
+const bad = checkNgViolations(cr, cr.currentSeats)
+  .filter(w => (w.seats || []).some(s => moved.includes(s)));
+if (bad.length) alert('🚫 NG設定にひっかかりました\n\n' + bad.map(w => '・' + w.text).join('\n'));
+
+// 層3：座席描画で ng:true の席にクラスとアイコンを付ける
+const ngSeats = new Set();
+for (const w of warnings) if (w.ng) for (const k of (w.seats || [])) ngSeats.add(k);
+if (ngSeats.has(key)) { cell.classList.add('ng-violation'); icons += '🚫'; }
+```
+
+**ポイント：**
+- 判定関数は1つだけにして、3層すべてが同じ結果を使う（表示のズレが起きない）
+- ポップアップは「いま動かした席が原因のものだけ」に絞る（関係ない既存の違反で毎回出さない）
+- 隣席NGは同じペアを2回数えないよう `pairKey` で重複を除く
+- 警告バーは違反が消えたら `innerHTML=''` にもどす（消し忘れを防ぐ）
+- 席の強調は `!important`。男女の背景色・班のわく色より前に出す必要があるため
+
+**ポイント：**
+- **段階的な情報提示** — ポップアップ（即座）→ 警告バー（継続表示）→ 席マーク（視覚的位置情報）で、ユーザーが「何が問題か」「どこに問題があるか」を多角的に理解可能
+- **自動消去** — 違反を修正したら層1～3が自動で消える。ユーザーの修正がリアルタイムで「成功」に変わるまで表示
+- **理由メモ** — 各NG違反に「なぜダメなのか」（例：「隣席NG」「ペアNG」）を明記。教育現場で「なぜ入れかえてくれないのか」という疑問を事前に解消
+
+**応用例：**
+- 入場制限（定員超）の警告
+- データ入力エラー（必須項目未入力）の警告
+- スケジュール競合（ダブルブッキング）の警告
+
+---
+
+## 操作バー（画面上部貼りつき・スクロール不要）
+
+**用途：** 長いコンテンツ（座席表など）を見ながら、スクロール不要で操作ボタンにアクセスする必要があるUI。iPad や タッチデバイスでの UX 向上。
+
+```html
+<!-- 操作バー：画面上部に固定 -->
+<div class="action-bar">
+  <div class="comparison-info">
+    前回とくらべて ✅席が同じ 0人 ✅となりが同じ 0組 ❌前後が同じ 1組 ✅斜めが同じ 0組
+  </div>
+  <div class="button-group">
+    <button onclick="executeSeating()">🎲席替え実行</button>
+    <button onclick="swapSeats()">🔀入れかえる</button>
+    <button onclick="fixSeat()">📌今回だけ固定</button>
+    <button onclick="reverseMaleFemale()">♀♂逆にする</button>
+  </div>
+</div>
+
+<!-- メインコンテンツ：スクロール可能 -->
+<div class="seating-container">
+  <!-- 座席表をここに配置 -->
+</div>
+```
+
+```css
+.action-bar {
+  position: sticky;
+  top: 0;
+  background: white;
+  border-bottom: 2px solid #ddd;
+  padding: 12px;
+  z-index: 50;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.comparison-info {
+  font-size: 14px;
+  margin-bottom: 8px;
+  padding: 8px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+.button-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.button-group button {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 13px;
+}
+.button-group button:active {
+  background: #e8e8e8;
+}
+
+/* iPad縦持ち対応 */
+@media (max-width: 600px) {
+  .action-bar { padding: 8px; }
+  .button-group { gap: 4px; }
+  .button-group button { padding: 6px 8px; font-size: 12px; }
+}
+```
+
+**ポイント：**
+- `position: sticky; top: 0;` で「スクロール時も画面上部に貼りつく」を実現
+- `z-index: 50` で、下部のコンテンツより上に浮かぶ
+- 比較情報（「前回とくらべて」）をバー内に常時表示することで、ユーザーが「今回の質」を意識
+- iPad での 2人入れかえなど細かいタップ操作も、スクロール不要で実施可能
+
+**実装例（座席配置ツール）：**
+- セッション107で実装完了。30名の座席表を見ながら、バーの操作ボタンにアクセスできるようになった。
+- 結果として「初心者がスクロール位置で迷わない」「操作→座席確認のループが高速化」
 
 ---
 
