@@ -114,6 +114,21 @@
       flex-shrink: 0;
     }
 
+    /* 名前と性別を分けて貼りつける2列の入力欄 */
+    .paste-cols { display: flex; gap: 10px; flex-wrap: wrap; }
+    .paste-col { flex: 1 1 200px; display: flex; flex-direction: column; gap: 4px; }
+    .paste-col textarea { width: 100%; font-family: inherit; }
+    /* 性別のほうは1行が短いので幅を小さく */
+    .paste-col:last-child { flex: 0 1 130px; }
+
+    /* 一覧の男女ボタン（1回でえらべる） */
+    .gender-pick { display: flex; gap: 4px; }
+    .gender-pick button {
+      min-width: 40px; padding: 8px 10px;
+      font-size: 14px;
+    }
+    .gender-pick button.on { color: #fff; font-weight: bold; border-color: transparent; }
+
     /* ===== 座席グリッド ===== */
     .board-label {
       background: #34495e;
@@ -553,13 +568,39 @@
         <input type="text" id="inputStudentName" placeholder="名前を書いて「追加」をおす" style="flex:1;min-width:160px">
         <button id="btnAddStudent" class="primary">追加</button>
       </div>
-      <p class="hint">性別は、追加したあと一覧の「男/女」ボタンでかえられます。</p>
+      <p class="hint">性別は、追加したあと一覧の「男」「女」ボタンでえらべます（1回のタップ）。</p>
       <h3>まとめていれたいとき（1行に1人ずつ）</h3>
-      <div class="row">
-        <textarea id="csvText" rows="3" placeholder="田中太郎,男&#10;鈴木花子,女&#10;佐藤次郎　←性別はなくてもOK" style="flex:1;min-width:200px"></textarea>
+      <div class="row no-print">
+        <button id="btnPasteMode1" class="tool-btn active">1つの欄にまとめて</button>
+        <button id="btnPasteMode2" class="tool-btn">名前と性別を分けて</button>
       </div>
+
+      <!-- ① 1つの欄にまとめて貼る -->
+      <div id="pasteSingle">
+        <div class="row">
+          <textarea id="csvText" rows="4" placeholder="田中太郎,男&#10;鈴木花子,女&#10;佐藤次郎　←性別はなくてもOK" style="flex:1;min-width:200px"></textarea>
+        </div>
+      </div>
+
+      <!-- ② 名前だけ／性別だけ を別々に貼る（上から順に組み合わせる） -->
+      <div id="pasteSplit" style="display:none">
+        <p class="hint">名前と性別を別べつに貼りつけられます。<strong>上から順に組み合わせます</strong>（1行目の名前＝1行目の性別）。<br>
+        性別のほうは空でもかまいません（あとから一覧で決められます）。</p>
+        <div class="paste-cols">
+          <div class="paste-col">
+            <label class="hint">名前（1行に1人）</label>
+            <textarea id="pasteNames" rows="8" placeholder="田中太郎&#10;鈴木花子&#10;佐藤次郎"></textarea>
+          </div>
+          <div class="paste-col">
+            <label class="hint">性別（1行に1つ）</label>
+            <textarea id="pasteGenders" rows="8" placeholder="男&#10;女&#10;男"></textarea>
+          </div>
+        </div>
+        <p class="hint" id="pasteCount"></p>
+      </div>
+
       <div class="row" style="margin-top:8px">
-        <button id="btnImportCSV">↑の名前をまとめて追加</button>
+        <button id="btnImportCSV" class="primary">↑をまとめて追加</button>
         <button id="btnExportCSV">名簿をファイルに保存（CSV）</button>
       </div>
     </div>
@@ -860,7 +901,8 @@
       sameSeat: 600,   // ×  前回とまったく同じ席
       frontBack: 120,  // ▲  前回と前後が同じ
       diagonal: 100,   // ▲  前回と斜めが同じ
-      oldNear: 8       // もっと前の回で近くだった（軽めに避ける）
+      pastSide: 110,   // ▲  前回より前の回で となり同士 だった（可能なら避けたい）
+      oldNear: 8       // もっと前の回で前後だった（軽めに避ける）
     };
     const GENDER_LABELS = { m: '男', f: '女' };
     const GENDER_COLORS = { m: '#dbeafe', f: '#fde4ec' };      // 机の背景色（うすい青／うすいピンク）
@@ -994,11 +1036,59 @@
       }
       return result;
     }
-    const OFF_SIDE = [[0, -1], [0, 1]];                    // 左右
     const OFF_FB   = [[-1, 0], [1, 0]];                    // 前後
     const OFF_DIAG = [[-1, -1], [-1, 1], [1, -1], [1, 1]]; // 斜め
-    function getSideNeighbors(cr, key) { return neighborsBy(cr, key, OFF_SIDE); }
-    function getFrontBackNeighbors(cr, key) { return neighborsBy(cr, key, OFF_FB); }
+
+    // 机が「内側向き」か（コの字の左右のうでなど）。内側向きの机は たて にもならぶ。
+    function isInward(meta) {
+      return meta && (meta.orient === 'side-left' || meta.orient === 'side-right');
+    }
+
+    // =====================================================
+    // 「となり同士」の定義
+    //
+    // 横（左右）：
+    //   ・横にならぶ数が偶数のとき … 机を2つずつ組にする。
+    //       6列なら 1&2 / 3&4 / 5&6 がとなり。2&3 はとなりではない
+    //   ・横にならぶ数が奇数のとき … 左右どちらもとなり（1&2, 2&3, 3&4 …）
+    // たて（前後）：
+    //   ・机が内側向き（←→）の席どうしだけ、たてのならびもとなりになる
+    //   ・机が前向き（↑）の席は、横だけがとなり
+    // =====================================================
+    function getSideNeighbors(cr, key) {
+      const [r, c] = key.split('-').map(Number);
+      const out = [];
+      const addCol = (nc) => {
+        if (nc < 0 || nc >= cr.cols) return;
+        if (getDeskMeta(cr, r, nc).disabled) return; // 通路のむこうはとなりではない
+        out.push(r + '-' + nc);
+      };
+      if (cr.cols % 2 === 0) {
+        // 偶数：2つずつの組の相手だけ（0基準なので、偶数列は右、奇数列は左が相手）
+        addCol(c % 2 === 0 ? c + 1 : c - 1);
+      } else {
+        // 奇数：左右どちらもとなり
+        addCol(c - 1);
+        addCol(c + 1);
+      }
+      // 内側向きの机どうしは、たてのならびもとなり
+      if (isInward(getDeskMeta(cr, r, c))) {
+        for (const nr of [r - 1, r + 1]) {
+          if (nr < 0 || nr >= cr.rows) continue;
+          const nmeta = getDeskMeta(cr, nr, c);
+          if (nmeta.disabled || !isInward(nmeta)) continue;
+          out.push(nr + '-' + c);
+        }
+      }
+      return out;
+    }
+
+    // 前後（たてのならび）。ただし「となり」と数えたものは前後から外す
+    // （内側向きの机どうしのたてのならびは となり あつかいのため）
+    function getFrontBackNeighbors(cr, key) {
+      const side = new Set(getSideNeighbors(cr, key));
+      return neighborsBy(cr, key, OFF_FB).filter(k => !side.has(k));
+    }
     function getDiagonalNeighbors(cr, key) { return neighborsBy(cr, key, OFF_DIAG); }
 
     // 2人組をあらわす文字列（順番によらず同じキーになる）
@@ -1024,6 +1114,26 @@
           for (let j = i + 1; j < mem.length; j++) group.add(pairKey(mem[i], mem[j]));
       }
       return { side: side, fb: fb, diag: diag, group: group };
+    }
+
+    // ▲ 前回より前の回で「となり同士」だったペアが、今回もとなり同士になっている数。
+    //   （前回ぶんは ×× のルールで防いでいるので、ここでは前回を除いて数える）
+    function countPastSidePairs(cr, assignment, histRels) {
+      if (histRels.length < 2) return { pairs: 0, seats: [] };
+      const rel = assignmentRelations(cr, assignment);
+      const seatOf = {};
+      for (const key of Object.keys(assignment)) if (assignment[key]) seatOf[assignment[key]] = key;
+      const hit = new Set();
+      for (let i = 0; i < histRels.length - 1; i++) {
+        for (const pk of rel.side) if (histRels[i].rel.side.has(pk)) hit.add(pk);
+      }
+      const seats = [];
+      for (const pk of hit) {
+        const [a, b] = pk.split('|');
+        if (seatOf[a]) seats.push(seatOf[a]);
+        if (seatOf[b]) seats.push(seatOf[b]);
+      }
+      return { pairs: hit.size, seats: seats };
     }
 
     // 履歴ごとの位置関係を先に計算しておく（候補ごとに計算し直さないため）
@@ -1118,7 +1228,8 @@
         const rel = assignmentRelations(cr, assignment);
         for (let i = 0; i < histRels.length - 1; i++) {
           const h = histRels[i];
-          for (const pk of rel.side) if (h.rel.side.has(pk)) p += PENALTY.oldNear;
+          // ▲ 過去にとなり同士だったペアが、また となり同士 になっている
+          for (const pk of rel.side) if (h.rel.side.has(pk)) p += PENALTY.pastSide;
           for (const pk of rel.fb) if (h.rel.fb.has(pk)) p += PENALTY.oldNear;
         }
       }
@@ -1592,6 +1703,7 @@
         item('⚠️', '席が同じ', cmp.sameSeat, '人', 'warn') +
         item('△', '前後が同じ', cmp.fb, '組', 'mild') +
         item('△', '斜めが同じ', cmp.diag, '組', 'mild') +
+        item('△', '前にもとなり', countPastSidePairs(cr, cr.currentSeats, buildHistoryRelations(cr)).pairs, '組', 'mild') +
         '<span class="chk note">□前回近くだった人と同じ班 ' + cmp.nearThenGroup + '組</span>' +
         (cmp.sameSeatForced
           ? '<span class="chk note">（NGで1席しかない ' + cmp.sameSeatForced + '人は「席が同じ」から除外）</span>'
@@ -2020,14 +2132,80 @@
         const name = parts[0];
         let gender = null;
         for (const p of parts.slice(1)) {
-          if (p === '男' || /^m$/i.test(p)) gender = 'm';
-          else if (p === '女' || /^f$/i.test(p)) gender = 'f';
+          const g = parseGender(p);
+          if (g) gender = g;
         }
         if (addStudent(name, gender)) count++;
       }
       return count;
     }
+    // 文字から男/女を読みとる（「男」「男子」「M」「1」なども受けつける）
+    function parseGender(text) {
+      const t = (text || '').trim();
+      if (!t) return null;
+      if (t.includes('男') || /^(m|b|1)$/i.test(t)) return 'm';
+      if (t.includes('女') || /^(f|g|w|2)$/i.test(t)) return 'f';
+      return null;
+    }
+
+    // 名前だけ／性別だけ を別べつに貼りつけて追加する（上から順に組み合わせる）
+    function importSplit(namesText, gendersText) {
+      const names = namesText.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      // 性別は「空行」も1人ぶんとして数えたいので、うしろの空行だけを取りのぞく
+      const genders = gendersText.split(/\r?\n/).map(s => s.trim());
+      while (genders.length && genders[genders.length - 1] === '') genders.pop();
+      let count = 0;
+      names.forEach((name, i) => {
+        if (addStudent(name, parseGender(genders[i]))) count++;
+      });
+      return { count: count, names: names.length, genders: genders.length };
+    }
+
+    // 貼りつけかたの切りかえ
+    let pasteMode = 'single'; // 'single'（1つの欄）| 'split'（名前と性別を分ける）
+    function setPasteMode(mode) {
+      pasteMode = mode;
+      document.getElementById('btnPasteMode1').classList.toggle('active', mode === 'single');
+      document.getElementById('btnPasteMode2').classList.toggle('active', mode === 'split');
+      document.getElementById('pasteSingle').style.display = (mode === 'single') ? 'block' : 'none';
+      document.getElementById('pasteSplit').style.display = (mode === 'split') ? 'block' : 'none';
+      updatePasteCount();
+    }
+    document.getElementById('btnPasteMode1').addEventListener('click', () => setPasteMode('single'));
+    document.getElementById('btnPasteMode2').addEventListener('click', () => setPasteMode('split'));
+
+    // 名前と性別の行数がそろっているかを、貼りつけながら知らせる
+    function updatePasteCount() {
+      const el = document.getElementById('pasteCount');
+      if (!el || pasteMode !== 'split') { if (el) el.textContent = ''; return; }
+      const names = document.getElementById('pasteNames').value
+        .split(/\r?\n/).map(s => s.trim()).filter(Boolean).length;
+      const gLines = document.getElementById('pasteGenders').value.split(/\r?\n/).map(s => s.trim());
+      while (gLines.length && gLines[gLines.length - 1] === '') gLines.pop();
+      if (names === 0 && gLines.length === 0) { el.textContent = ''; return; }
+      el.textContent = '名前 ' + names + '行／性別 ' + gLines.length + '行' +
+        (gLines.length && names !== gLines.length ? '　⚠️ 行数がちがいます（上から順に組み合わせます）' : '');
+    }
+    document.getElementById('pasteNames').addEventListener('input', updatePasteCount);
+    document.getElementById('pasteGenders').addEventListener('input', updatePasteCount);
+
     document.getElementById('btnImportCSV').addEventListener('click', () => {
+      if (pasteMode === 'split') {
+        const nEl = document.getElementById('pasteNames');
+        const gEl = document.getElementById('pasteGenders');
+        const r = importSplit(nEl.value, gEl.value);
+        if (r.count === 0) { alert('追加できる名前がありません'); return; }
+        nEl.value = '';
+        gEl.value = '';
+        updatePasteCount();
+        alert(r.count + '名を追加しました' +
+          (r.genders && r.names !== r.genders
+            ? '\n\n⚠️ 名前が' + r.names + '行、性別が' + r.genders +
+              '行でした。あまったぶんは性別なしで追加しています。一覧でなおせます。'
+            : ''));
+        renderAll();
+        return;
+      }
       const ta = document.getElementById('csvText');
       const count = importStudentCSV(ta.value);
       if (count > 0) {
@@ -2095,15 +2273,25 @@
           (fixedKey ? ' <span class="badge gray">🔒' + seatLabel(fixedKey) + '</span>' : '') +
           '</span>';
 
-        // 性別ボタン：タップで 男→女→なし と切り替わる
-        const btnGender = document.createElement('button');
-        btnGender.textContent = st.gender ? GENDER_LABELS[st.gender] : '男/女';
-        btnGender.title = 'タップで性別を切り替え（席の色分け・市松模様に使います）';
-        btnGender.addEventListener('click', () => {
-          st.gender = (st.gender === 'm') ? 'f' : (st.gender === 'f') ? null : 'm';
-          saveState();
-          renderAll();
-        });
+        // 性別：男・女のボタンを両方出して、1回のタップでえらべるようにする
+        // （もう一度おすと「なし」にもどせる）
+        const btnGender = document.createElement('span');
+        btnGender.className = 'gender-pick';
+        for (const g of ['m', 'f']) {
+          const b = document.createElement('button');
+          b.textContent = GENDER_LABELS[g];
+          b.title = GENDER_LABELS[g] + 'にする（もう一度おすと「なし」にもどります）';
+          if (st.gender === g) {
+            b.classList.add('on');
+            b.style.background = GENDER_MARK_COLORS[g];
+          }
+          b.addEventListener('click', () => {
+            st.gender = (st.gender === g) ? null : g; // 同じボタンをもう一度＝なし
+            saveState();
+            renderAll();
+          });
+          btnGender.appendChild(b);
+        }
 
         const btnEdit = document.createElement('button');
         btnEdit.textContent = '編集';
