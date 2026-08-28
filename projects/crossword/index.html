@@ -611,11 +611,12 @@
 
     <!-- ===== マイ辞書：よく使う語とそのカギを、この端末に残しておく場所 ===== -->
     <div class="panel">
-      <h2>マイ辞書 <span class="hint">よく使う語とカギを残す</span></h2>
+      <h2>マイ辞書 <span class="hint">★お気に入り ＋ つかった語</span></h2>
       <p class="hint-line">
-        ★をつけた語は、上の「ワード候補をさがす」で<b>いちばん上に出ます</b>。
-        カギを書いておくと、その語を盤面に置いたときに<b>カギ欄へ自動で入ります</b>（あとから直せます）。<br>
-        ワードを登録すると「つかった語」として自動でここに残ります（★はつきません）。★は自分でつけてください。
+        マイ辞書は<b>2種類</b>の語でできています。<br>
+        ・<b>★お気に入り</b>＝自分で★をつけた語。<b>どの作品でも共通</b>で残ります。さがすとき<b>いちばん上</b>に出ます。<br>
+        ・<b>つかった語</b>＝ワードを登録すると自動でたまる語。<b>いま作っている作品の中だけ</b>で、別の作品には出ません。<br>
+        カギを書いておくと、その語を盤面に置いたときに<b>カギ欄へ自動で入ります</b>（あとから直せます）。カギを書くと★がつきます。
       </p>
       <div class="row">
         <input type="text" id="myWord" placeholder="語（例：あいさつ）" style="flex:1 1 110px;">
@@ -629,8 +630,9 @@
       </div>
       <div id="myList"></div>
       <div class="row" style="margin-top:8px;">
-        <button id="btnMyClearAuto" class="sub small">★なしをまとめて消す</button>
-        <button id="btnMyClearAll" class="sub small">マイ辞書を空にする</button>
+        <button id="btnMyClearFav" class="sub small">★お気に入りを全部消す</button>
+        <button id="btnMyClearAuto" class="sub small">つかった語を全部消す</button>
+        <button id="btnMyClearAll" class="danger small">マイ辞書を空にする</button>
       </div>
     </div>
 
@@ -3239,7 +3241,8 @@ var qrcode = function() {
       title: '',
       words: [],      // { id, text }
       keyword: '',
-      myDict: [],     // 一度でも登録したワード（次回以降も候補に出る）
+      favDict: [],    // ★お気に入り（全作品で共通・この端末に残る）
+      used: [],       // この作品でつかった語（作品ごと。作品を変えると入れかわる）
       meta: {},       // ワード -> 漢字などの表記（辞書から登録したときの覚え書き）
       placed: [],     // { id, text, r, c, dir }  dir: 'across' | 'down'
       marks: {},      // 'r,c' -> 'A' などの記号（マスごとに手動入力）
@@ -3965,31 +3968,69 @@ var qrcode = function() {
     }
 
     // ===== マイ辞書 =====
-    // { text, meta, clue, fav } の配列。fav=true が「★＝自分で選んだよく使う語」
-    function myEntry(text) { return state.myDict.find(m => m.text === text) || null; }
+    // マイ辞書 ＝ ★お気に入り（全作品で共通） ＋ つかった語（その作品だけ）
+    // ★は作品といっしょに保存せず、この端末の別の場所にしまう。だから作品を変えても残る。
+    const FAV_KEY = 'crossword-favdict-v1';
 
-    // 一度でも登録した語はマイ辞書に残し、次回以降の候補に出す（★はつけない）
+    function loadFav() {
+      try {
+        const raw = localStorage.getItem(FAV_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list)
+          ? list.filter(m => m && m.text).map(m => ({ text: m.text, meta: m.meta || '', clue: m.clue || '' }))
+          : [];
+      } catch (e) { return []; }
+    }
+
+    function saveFav() {
+      try { localStorage.setItem(FAV_KEY, JSON.stringify(state.favDict)); } catch (e) { /* 入らなければあきらめる */ }
+    }
+
+    // ★お気に入りからさがす（全作品で共通）
+    function myEntry(text) { return state.favDict.find(m => m.text === text) || null; }
+    // この作品でつかった語からさがす
+    function usedEntry(text) { return state.used.find(m => m.text === text) || null; }
+
+    // ★とつかった語を1つの並びにする（★が先）
+    function myAll() {
+      return state.favDict.map(m => ({ text: m.text, meta: m.meta || '', clue: m.clue || '', fav: true }))
+        .concat(state.used.map(m => ({ text: m.text, meta: m.meta || '', clue: '', fav: false })));
+    }
+
+    // ワードを登録したら「つかった語」として覚える（★はつけない・この作品の中だけ）
     function rememberWord(text, meta) {
       if (meta) state.meta[text] = meta;
-      const found = myEntry(text);
+      const fav = myEntry(text);
+      if (fav) { if (meta && !fav.meta) { fav.meta = meta; saveFav(); } return fav; }
+      const found = usedEntry(text);
       if (found) { if (meta && !found.meta) found.meta = meta; return found; }
-      const m = { text, meta: meta || state.meta[text] || '', clue: '', fav: false };
-      state.myDict.push(m);
-      // ★をつけた語は消さずに、自動でたまった語だけを古い順に減らす
-      if (state.myDict.length > 800) {
-        const i = state.myDict.findIndex(x => !x.fav);
-        if (i >= 0) state.myDict.splice(i, 1);
-      }
+      const m = { text, meta: meta || state.meta[text] || '' };
+      state.used.push(m);
+      if (state.used.length > 400) state.used.shift();   // 多すぎたら古いものから減らす
       return m;
     }
 
-    // ★つきで登録する（カギも一緒に覚える）
+    // ★お気に入りに入れる（カギも一緒に覚える・全作品で共通）
     function favWord(text, clue, meta) {
-      const m = rememberWord(text, meta);
-      m.fav = true;
-      if (clue !== undefined && clue !== null) m.clue = clue;
+      if (meta) state.meta[text] = meta;
+      let m = myEntry(text);
+      if (!m) {
+        m = { text, meta: meta || state.meta[text] || '', clue: '' };
+        state.favDict.push(m);
+      } else if (meta && !m.meta) m.meta = meta;
+      if (clue !== undefined && clue !== null && clue !== '') m.clue = clue;
+      state.used = state.used.filter(x => x.text !== text);   // ★に上がったら「つかった語」からは外す
       clueSig = '';          // カギ欄を作りなおして、自動入力を反映させる
+      saveFav();
       return m;
+    }
+
+    // ★をはずす（この作品の「つかった語」にもどす）
+    function unfavWord(text) {
+      state.favDict = state.favDict.filter(m => m.text !== text);
+      saveFav();
+      if (!usedEntry(text)) state.used.push({ text, meta: state.meta[text] || '' });
+      clueSig = '';
     }
 
     // マイ辞書の一覧を描く
@@ -4002,18 +4043,23 @@ var qrcode = function() {
       if (act && act.tagName === 'INPUT' && box.contains(act)) return;
       const q = ($('#myFilter').value || '').trim().normalize('NFC');
       const favOnly = $('#myFavOnly').checked;
-      const favN = state.myDict.filter(m => m.fav).length;
-      $('#myCount').textContent = '★' + favN + '語 ／ つかった語 ' + (state.myDict.length - favN) + '語';
-      let list = state.myDict.filter(m => (!favOnly || m.fav)
-        && (!q || m.text.includes(q) || toKata(m.text).includes(toKata(q)) || (m.meta || '').includes(q)));
-      list = list.slice().reverse();               // 新しく入れたものを上に
+      $('#myCount').textContent = '★お気に入り ' + state.favDict.length + '語（全作品で共通）'
+        + ' ／ つかった語 ' + state.used.length + '語（この作品だけ）';
+      const match = (m) => !q || m.text.includes(q) || toKata(m.text).includes(toKata(q)) || (m.meta || '').includes(q);
+      // ★は新しいものを上に、そのあとに「つかった語」を新しい順にならべる
+      let list = state.favDict.map(m => ({ text: m.text, meta: m.meta || '', clue: m.clue || '', fav: true }))
+        .filter(match).reverse();
+      if (!favOnly) {
+        list = list.concat(state.used.map(m => ({ text: m.text, meta: m.meta || '', clue: '', fav: false }))
+          .filter(match).reverse());
+      }
       const over = list.length - 200;
       list = list.slice(0, 200);                   // 多すぎるときは200語まで表示
       box.innerHTML = '';
       if (list.length === 0) {
         box.innerHTML = '<p class="hint-line">'
-          + (state.myDict.length === 0 ? 'まだ何も入っていません。上の欄から登録できます。'
-             : favOnly ? '★のついた語はまだありません。「★だけ見る」を外すと、つかった語が出ます。'
+          + (state.favDict.length + state.used.length === 0 ? 'まだ何も入っていません。上の欄から登録できます。'
+             : favOnly ? '★のついた語はまだありません。「★だけ見る」を外すと、この作品でつかった語が出ます。'
              : '見つかりませんでした。') + '</p>';
         return;
       }
@@ -4021,6 +4067,7 @@ var qrcode = function() {
         const row = document.createElement('div');
         row.className = 'my-row';
         row.dataset.text = m.text;
+        row.dataset.fav = m.fav ? '1' : '';
         const fav = document.createElement('button');
         fav.type = 'button';
         fav.className = 'my-fav' + (m.fav ? ' on' : '');
@@ -4030,15 +4077,22 @@ var qrcode = function() {
         const name = document.createElement('span');
         name.className = 'mw';
         name.innerHTML = escapeHtml(m.text)
-          + (m.meta && m.meta !== m.text ? ' <span class="mm">' + escapeHtml(m.meta) + '</span>' : '');
+          + (m.meta && m.meta !== m.text ? ' <span class="mm">' + escapeHtml(m.meta) + '</span>' : '')
+          + (m.fav ? '' : ' <span class="mm">この作品だけ</span>');
         const clue = document.createElement('input');
         clue.type = 'text';
         clue.className = 'mc';
         clue.placeholder = 'カギを書く（書くと自動で入ります）';
         clue.value = m.clue || '';
         clue.addEventListener('input', () => {
-          m.clue = clue.value;
-          if (clue.value && !m.fav) { m.fav = true; fav.classList.add('on'); fav.textContent = '★'; }
+          // カギを書いた語は「よく使う語」とみなして★お気に入りに入れる（全作品で共通になる）
+          if (clue.value) {
+            favWord(m.text, clue.value, m.meta);
+            if (!m.fav) { m.fav = true; fav.classList.add('on'); fav.textContent = '★'; row.dataset.fav = '1'; }
+          } else {
+            const e2 = myEntry(m.text);
+            if (e2) { e2.clue = ''; saveFav(); }
+          }
           clueSig = '';
           renderClues();
           saveLocal();
@@ -4712,8 +4766,9 @@ var qrcode = function() {
     function serialize() {
       return {
         version: 1,
+        workId: state.workId,   // どの作品を開いているか（「元にもどす」で見失わないように持っておく）
         title: state.title, words: state.words, keyword: state.keyword,
-        myDict: state.myDict, meta: state.meta,
+        used: state.used, meta: state.meta,
         placed: state.placed,
         marks: state.marks, colors: state.colors, borders: state.borders, clues: state.clues,
         hideLetters: state.hideLetters, showNums: state.showNums, blackFill: state.blackFill,
@@ -4723,16 +4778,44 @@ var qrcode = function() {
       };
     }
 
+    // ファイルに保存するときの中身。★お気に入りも一緒に持ち出せるようにする
+    // （作品そのものには★を入れない。入れると作品ごとに★が変わってしまうため）
+    function serializeFile() {
+      const d = serialize();
+      d.favDict = state.favDict;
+      return d;
+    }
+
     function applyData(d) {
       if (!d) return false;
-      state.workId = null;
+      state.workId = d.workId || null;
       state.shareId = d.shareId || null;
       state.shareToken = d.shareToken || '';
       state.title = d.title || '';
       state.words = Array.isArray(d.words) ? d.words : [];
       state.keyword = d.keyword || '';
-      state.myDict = Array.isArray(d.myDict) ? d.myDict : [];
       state.meta = d.meta || {};
+      state.used = Array.isArray(d.used) ? d.used.filter(m => m && m.text) : [];
+      // 前のかたち（★とつかった語がひとまとめだったころ）のデータを読んだとき
+      if (Array.isArray(d.myDict)) {
+        d.myDict.filter(m => m && m.text).forEach(m => {
+          if (m.fav || m.clue) {
+            const e2 = myEntry(m.text);
+            if (e2) { if (!e2.clue && m.clue) e2.clue = m.clue; }
+            else state.favDict.push({ text: m.text, meta: m.meta || '', clue: m.clue || '' });
+          } else if (!usedEntry(m.text)) state.used.push({ text: m.text, meta: m.meta || '' });
+        });
+        saveFav();
+      }
+      // ファイルから読みこんだ★は、いまの★に足す（消して置きかえない）
+      if (Array.isArray(d.favDict)) {
+        d.favDict.filter(m => m && m.text).forEach(m => {
+          const e2 = myEntry(m.text);
+          if (e2) { if (!e2.clue && m.clue) e2.clue = m.clue; }
+          else state.favDict.push({ text: m.text, meta: m.meta || '', clue: m.clue || '' });
+        });
+        saveFav();
+      }
       state.placed = Array.isArray(d.placed) ? d.placed : [];
       state.marks = d.marks || {};
       state.colors = d.colors || {};
@@ -4766,6 +4849,8 @@ var qrcode = function() {
 
     function saveLocal() {
       try {
+        // serialize() が workId（どの作品を開いているか）も持っているので、
+        // ページを開きなおしても「上書き保存」を選べる
         localStorage.setItem(STORAGE_KEY, JSON.stringify(serialize()));
       } catch (e) {
         $('#msg').textContent = '自動保存できません（プライベートモードの可能性）。「ファイルに保存」を使ってください。';
@@ -4802,6 +4887,7 @@ var qrcode = function() {
       // 配布リンクの合言葉は作品の中身ではないので、変更の判定からは外す
       delete d.shareId;
       delete d.shareToken;
+      delete d.workId;
       return JSON.stringify(d);
     }
 
@@ -4831,6 +4917,7 @@ var qrcode = function() {
       );
       if (!choice) return false;
       if (choice === 'save') {
+        // すでに保存ずみの作品なら、この中で「上書き」か「別の作品として」かを聞く
         await saveAsWork();
         // 「やめる」を選ぶなどして保存されなかったときは、そのまま進めない
         if (hasUnsavedChanges()) {
@@ -4845,8 +4932,9 @@ var qrcode = function() {
       if (!(await confirmDiscard('新しく作る'))) return;
       applyData({
         title: '', words: [], keyword: '',
-        // マイ辞書（登録してきた語彙）と盤面の大きさの設定は、育ててきたものなので引き継ぐ
-        myDict: state.myDict, meta: state.meta, maxSize: state.maxSize,
+        // 盤面の大きさの設定は引き継ぐ。★お気に入りは作品と別に残るので何もしなくてよい。
+        // 「つかった語」は作品ごとなので、ここでまっさらにする（used を渡さない）
+        meta: state.meta, maxSize: state.maxSize,
         placed: [], marks: {}, colors: {}, borders: {}, clues: {},
         hideLetters: false, showNums: true, blackFill: false,
         puzzleType: state.puzzleType, hintCount: state.hintCount, hints: []
@@ -4857,7 +4945,7 @@ var qrcode = function() {
       markSaved();
       saveLocal();
       showTab('words');
-      showMsg('新しく作りはじめます。マイ辞書と盤面の大きさの設定はそのまま残しています。', 'ok');
+      showMsg('新しく作りはじめます。★お気に入りと盤面の大きさの設定はそのまま残しています。', 'ok');
     }
 
     // ===== 選択ダイアログ =====
@@ -4913,6 +5001,7 @@ var qrcode = function() {
       const data = serialize();
 
       if (mode === 'overwrite') {
+        data.workId = state.workId;
         const item = list.find(w => w.id === state.workId);
         if (!item) return storeWork('new', true);   // 元の作品が見つからなければ新規で保存する
         item.title = state.title || item.title || '（無題）';
@@ -4920,6 +5009,7 @@ var qrcode = function() {
         item.data = data;
         if (saveWorks(list)) {
           markSaved();
+          saveLocal();   // 「いまどの作品を開いているか」も残す（開きなおしても上書きを選べる）
           showMsg('「' + item.title + '」を上書き保存しました。'
             + (state.shareId ? '配布リンクは今までのままです。' : ''), 'ok');
         }
@@ -4928,10 +5018,12 @@ var qrcode = function() {
 
       const title = state.title || '（無題）';
       const item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now, data };
+      data.workId = item.id;      // コピー元のIDが残らないように、新しいIDに書きかえる
       list.unshift(item);
       state.workId = item.id;
       if (saveWorks(list)) {
         markSaved();
+        saveLocal();   // 「いまどの作品を開いているか」も残す
         showMsg(isFirst
           ? '「' + title + '」として保存しました。あとで「保存した作品を開く」から続きができます。'
           : '「' + title + '」を新しい作品として保存しました。前の作品はそのまま残ります。'
@@ -5041,7 +5133,7 @@ var qrcode = function() {
       } catch (e) { saver = null; }
       if (saver) {
         try {
-          await saver.save({ filename: name + '.json', data: JSON.stringify(serialize(), null, 2) });
+          await saver.save({ filename: name + '.json', data: JSON.stringify(serializeFile(), null, 2) });
           $('#msg').textContent = 'ファイルに保存しました。';
         } catch (err) {
           if (err && err.code === 'declined') {
@@ -5053,7 +5145,7 @@ var qrcode = function() {
         }
         return;
       }
-      const blob = new Blob([JSON.stringify(serialize(), null, 2)], { type: 'application/json' });
+      const blob = new Blob([JSON.stringify(serializeFile(), null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url; a.download = name + '.json';
@@ -5078,7 +5170,7 @@ var qrcode = function() {
 
     // ===== コピー用データ（ダウンロードが使えない環境のための保存・復元） =====
     function showDataBox() {
-      $('#dataText').value = JSON.stringify(serialize());
+      $('#dataText').value = JSON.stringify(serializeFile());
       $('#dataBox').style.display = 'block';
       $('#dataText').focus();
       $('#dataText').select();
@@ -5416,30 +5508,45 @@ var qrcode = function() {
       $('#myList').addEventListener('click', (e) => {
         const btn = e.target.closest('[data-act]');
         if (!btn) return;
-        const text = btn.closest('.my-row').dataset.text;
-        const m = myEntry(text);
-        if (!m) return;
+        const row = btn.closest('.my-row');
+        const text = row.dataset.text;
+        const isFav = row.dataset.fav === '1';
         if (btn.dataset.act === 'fav') {
-          m.fav = !m.fav;
+          if (isFav) unfavWord(text);                       // ★をはずす → この作品のつかった語にもどる
+          else favWord(text, '', state.meta[text] || '');   // ★をつける → 全作品で共通になる
         } else {
           if (!confirm('「' + text + '」をマイ辞書から消しますか？\n（盤面の語や登録ワードは消えません）')) return;
-          state.myDict = state.myDict.filter(x => x.text !== text);
+          if (isFav) { state.favDict = state.favDict.filter(x => x.text !== text); saveFav(); }
+          else state.used = state.used.filter(x => x.text !== text);
         }
         clueSig = '';
         renderMyDict(); renderClues(); saveLocal();
       });
+      $('#btnMyClearFav').addEventListener('click', () => {
+        const n = state.favDict.length;
+        if (!n) { showMsg('★お気に入りはまだありません。', 'ok'); return; }
+        if (!confirm('★お気に入りの ' + n + ' 語を全部消しますか？\nこれは全作品で共通のものです。元にもどせません。')) return;
+        state.favDict = [];
+        saveFav();
+        clueSig = '';
+        renderMyDict(); renderClues(); saveLocal();
+        showMsg('★お気に入りを全部消しました。', 'ok');
+      });
       $('#btnMyClearAuto').addEventListener('click', () => {
-        const n = state.myDict.filter(m => !m.fav).length;
-        if (!n) { showMsg('★なしの語はありません。', 'ok'); return; }
-        if (!confirm('★のついていない ' + n + ' 語を消しますか？\n（★つきの語は残ります）')) return;
-        state.myDict = state.myDict.filter(m => m.fav);
+        const n = state.used.length;
+        if (!n) { showMsg('つかった語はありません。', 'ok'); return; }
+        if (!confirm('この作品でつかった語 ' + n + ' 語を消しますか？\n（★お気に入りは残ります）')) return;
+        state.used = [];
         renderMyDict(); saveLocal();
         showMsg(n + '語を消しました。', 'ok');
       });
       $('#btnMyClearAll').addEventListener('click', () => {
-        if (!state.myDict.length) return;
-        if (!confirm('マイ辞書の ' + state.myDict.length + ' 語を全部消しますか？\nこれは元にもどせません。')) return;
-        state.myDict = [];
+        const n = state.favDict.length + state.used.length;
+        if (!n) return;
+        if (!confirm('マイ辞書の ' + n + ' 語（★お気に入り＋つかった語）を全部消しますか？\nこれは元にもどせません。')) return;
+        state.favDict = [];
+        state.used = [];
+        saveFav();
         clueSig = '';
         renderMyDict(); renderClues(); saveLocal();
         showMsg('マイ辞書を空にしました。', 'ok');
@@ -5696,7 +5803,7 @@ var qrcode = function() {
       const wantKw = useKw && missing.length > 0;
 
       // マイ辞書（過去に登録した語）→ 国語辞書 の順にしらべる
-      const pool = state.myDict.map(m => ({ r: m.text, s: m.meta || '', rank: -1, mine: true, fav: !!m.fav, kyoiku: true }))
+      const pool = myAll().map(m => ({ r: m.text, s: m.meta || '', rank: -1, mine: true, fav: !!m.fav, kyoiku: true }))
         .concat(loadDict()
           .filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
             && !(mode === 'hira' && isLoanword(d)))
@@ -5771,7 +5878,7 @@ var qrcode = function() {
         const meta = (item.meta && item.meta !== item.text) ? item.meta : '';
         chip.innerHTML = '<span class="fr">' + escapeHtml(item.text) + '</span>'
           + '<span class="fs">'
-          + (item.fav ? '<span class="star">★マイ辞書</span> ' : item.mine ? 'つかった語 ' : '')
+          + (item.fav ? '<span class="star">★お気に入り</span> ' : item.mine ? 'つかった語 ' : '')
           + escapeHtml(meta) + '</span>';
         box.appendChild(chip);
       });
@@ -5789,7 +5896,7 @@ var qrcode = function() {
       state.meta = meta;
       state.words.forEach(w => { w.text = conv(w.text); });
       state.placed.forEach(p => { p.text = conv(p.text); });
-      state.myDict.forEach(m => { m.text = conv(m.text); });
+      state.used.forEach(m => { m.text = conv(m.text); });   // ★お気に入りは全作品で共通なので変えない
       state.keyword = conv(state.keyword);
       $('#keywordInput').value = state.keyword;
       clueSig = '';
@@ -7231,9 +7338,14 @@ var qrcode = function() {
 
     // ===== 初期化 =====
     function startEditor() {
+      state.favDict = loadFav();   // ★お気に入りは作品と別に読みこむ（全作品で共通）
       const saved = loadLocal();
-      if (saved) applyData(saved);
-      else { buildGrid(); refresh(); }
+      if (saved) {
+        applyData(saved);
+        // 前に開いていた作品がまだ残っていれば、その作品を開いている状態にもどす
+        // （こうすると保存のときに「上書き」か「別の作品として」かを選べる）
+        if (saved.workId && loadWorks().some(w => w.id === saved.workId)) state.workId = saved.workId;
+      } else { buildGrid(); refresh(); }
       bindEvents();
       setMode('place');
       showTab('words');
