@@ -553,11 +553,10 @@
         <input type="text" id="inputStudentName" placeholder="名前を書いて「追加」をおす" style="flex:1;min-width:160px">
         <button id="btnAddStudent" class="primary">追加</button>
       </div>
-      <p class="hint">性別は、追加したあと一覧の「男/女」ボタンでかえられます。<br>
-      よみがなを入れると、📊つながりタブで「あいうえお順」にならべられます（「編集」から入れられます）。</p>
+      <p class="hint">性別は、追加したあと一覧の「男/女」ボタンでかえられます。</p>
       <h3>まとめていれたいとき（1行に1人ずつ）</h3>
       <div class="row">
-        <textarea id="csvText" rows="3" placeholder="田中太郎,男,たなかたろう&#10;鈴木花子,女,すずきはなこ&#10;佐藤次郎　←性別・よみがなはなくてもOK" style="flex:1;min-width:200px"></textarea>
+        <textarea id="csvText" rows="3" placeholder="田中太郎,男&#10;鈴木花子,女&#10;佐藤次郎　←性別はなくてもOK" style="flex:1;min-width:200px"></textarea>
       </div>
       <div class="row" style="margin-top:8px">
         <button id="btnImportCSV">↑の名前をまとめて追加</button>
@@ -761,7 +760,6 @@
       <div class="row no-print">
         <span class="hint">ならびかえ：</span>
         <button id="relSortCount" class="tool-btn active">回数が多い順</button>
-        <button id="relSortKana" class="tool-btn">あいうえお順</button>
         <button id="relSortNumber" class="tool-btn">名簿順（出席番号）</button>
       </div>
       <p class="hint" id="relSummary"></p>
@@ -1139,10 +1137,12 @@
     //  'gender' … 男女別（男1, 男2 … / 女1, 女2 …）
     function computeNumbers(cr) {
       const map = {};   // 生徒ID → 表示用の番号（例：'12' や '男3'）
-      const plain = {}; // 生徒ID → 数字だけ（並べかえ用）
-      let serial = 0, male = 0, female = 0;
+      const plain = {}; // 生徒ID → 数字だけ
+      const order = {}; // 生徒ID → 名簿にならぶ順番（ならびかえ用）
+      let serial = 0, male = 0, female = 0, idx = 0;
       for (const st of cr.students) {
         if (st.inactive) continue;
+        idx++;
         serial++;
         if (st.gender === 'm') male++;
         else if (st.gender === 'f') female++;
@@ -1150,18 +1150,29 @@
           const n = st.number || (st.gender === 'm' ? male : female);
           plain[st.id] = n;
           map[st.id] = GENDER_LABELS[st.gender] + n;
+          // 男女別のときは「男子ぜんぶ → 女子ぜんぶ」の順にならべる。
+          // 番号だけで比べると男1と女1が同じ数になって混ざるため、男女で大きく差をつける。
+          order[st.id] = (st.gender === 'm' ? 0 : 100000) + n * 1000 + idx;
         } else {
           const n = st.number || serial;
           plain[st.id] = n;
           map[st.id] = String(n);
+          // 男女別モードで性別が未登録の生徒は、いちばん後ろにまわす
+          const base = (cr.numberMode === 'gender') ? 200000 : 0;
+          order[st.id] = base + n * 1000 + idx; // 番号が同じでも順番が決まるよう idx を足す
         }
       }
-      return { label: map, num: plain };
+      return { label: map, num: plain, order: order };
     }
     // 描画のたびに数え直さずにすむよう、直近の計算結果を持っておく
-    let numberCache = { label: {}, num: {} };
+    let numberCache = { label: {}, num: {}, order: {} };
     function refreshNumbers(cr) { numberCache = computeNumbers(cr); return numberCache; }
     function numberOf(sid) { return numberCache.label[sid] || ''; }
+    // 名簿にならぶ順番。番号が無い生徒（除外中など）はいちばん後ろ
+    function rosterOrderOf(sid) {
+      const v = numberCache.order[sid];
+      return (v === undefined) ? Infinity : v;
+    }
 
     // 生徒の班＝「いま座っている席」の班（席替えの結果で決まる）
     function getGroupOf(cr, studentId) {
@@ -1976,15 +1987,11 @@
     // =====================================================
     // 👥 生徒タブ
     // =====================================================
-    function addStudent(name, gender, yomi) {
+    function addStudent(name, gender) {
       const cr = getActiveClassroom();
       const trimmed = name.trim();
       if (!trimmed) return false;
-      cr.students.push({
-        id: uid(), name: trimmed, inactive: false,
-        gender: gender || null, number: null,
-        yomi: (yomi || '').trim()   // あいうえお順にならべるための読み
-      });
+      cr.students.push({ id: uid(), name: trimmed, inactive: false, gender: gender || null, number: null });
       saveState();
       return true;
     }
@@ -2004,28 +2011,19 @@
       }
     });
 
-    // ぜんぶ ひらがな／カタカナ かどうか（よみがなの見わけに使う）
-    function isKanaOnly(str) {
-      return /^[\u3041-\u309F\u30A0-\u30FF\u30FC\s]+$/.test(str);
-    }
-
-    // CSVインポート（1行1名）。
-    // 2つ目から先は「男/女」と「よみがな」をじどうで見わける。
-    //   例）田中太郎,男,たなかたろう ／ 田中太郎,たなかたろう ／ 田中太郎,男
+    // CSVインポート（1行1名。「名前,男」「名前,女」で性別も登録できる）
     function importStudentCSV(text) {
       const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
       let count = 0;
       for (const line of lines) {
         const parts = line.split(/[,，\t、]/).map(s => s.trim());
         const name = parts[0];
-        let gender = null, yomi = '';
+        let gender = null;
         for (const p of parts.slice(1)) {
-          if (!p) continue;
-          if (p === '男' || /^m$/i.test(p)) { gender = 'm'; continue; }
-          if (p === '女' || /^f$/i.test(p)) { gender = 'f'; continue; }
-          if (!yomi && isKanaOnly(p)) { yomi = p; continue; }   // かなだけ＝よみがな
+          if (p === '男' || /^m$/i.test(p)) gender = 'm';
+          else if (p === '女' || /^f$/i.test(p)) gender = 'f';
         }
-        if (addStudent(name, gender, yomi)) count++;
+        if (addStudent(name, gender)) count++;
       }
       return count;
     }
@@ -2045,8 +2043,7 @@
     function exportStudentCSV() {
       const cr = getActiveClassroom();
       const text = cr.students
-        .map(s => [s.name, s.gender ? GENDER_LABELS[s.gender] : '', s.yomi || '']
-          .join(',').replace(/,+$/, ''))
+        .map(s => s.name + (s.gender ? ',' + GENDER_LABELS[s.gender] : ''))
         .join('\n');
       downloadFile(classroomLabel(cr) + '-名簿.csv', text, 'text/csv');
     }
@@ -2090,7 +2087,6 @@
           '<span class="grow">' +
           (st.inactive ? '' : '<strong>' + escapeHtml(numberOf(st.id)) + '</strong> ') +
           escapeHtml(st.name) +
-          (st.yomi ? ' <span class="hint">' + escapeHtml(st.yomi) + '</span>' : '') +
           (st.number ? ' <span class="hint">(番号を手で指定)</span>' : '') +
           (st.gender === 'm' ? ' <span class="badge" style="background:' + GENDER_MARK_COLORS.m + '">男</span>' : '') +
           (st.gender === 'f' ? ' <span class="badge" style="background:' + GENDER_MARK_COLORS.f + '">女</span>' : '') +
@@ -2181,8 +2177,6 @@
 
       openModal('生徒の編集',
         '<label>名前</label><input type="text" id="editStudentName" value="' + escapeHtml(st.name) + '">' +
-        '<label>よみがな（あいうえお順にならべるのに使います）</label>' +
-        '<input type="text" id="editStudentYomi" value="' + escapeHtml(st.yomi || '') + '" placeholder="例：たなかたろう">' +
         '<label>出席番号（空なら上から自動でつきます。いまは「' + escapeHtml(numberOf(sid)) + '」）</label>' +
         '<input type="number" id="editStudentNumber" min="1" max="99" value="' + (st.number || '') + '">' +
         '<label>性別（席の色分け・市松模様に使います）</label><select id="editStudentGender">' + genderOptions + '</select>' +
@@ -2191,7 +2185,6 @@
           const newName = document.getElementById('editStudentName').value.trim();
           if (!newName) { alert('名前を入力してください'); return false; }
           st.name = newName;
-          st.yomi = document.getElementById('editStudentYomi').value.trim();
           const numRaw = document.getElementById('editStudentNumber').value;
           const num = parseInt(numRaw, 10);
           st.number = (numRaw !== '' && num > 0) ? num : null; // 空なら自動採番にもどす
@@ -2960,6 +2953,10 @@
         '<li>' + escapeHtml(numberOf(st.id)) + '　' + escapeHtml(st.name) +
         (st.gender ? '（' + GENDER_LABELS[st.gender] + '）' : '') + '</li>';
 
+      // 班のメンバーは名簿順（出席番号の順）にならべる
+      for (const list of Object.values(memberOf)) list.sort((a, b) => rosterOrderOf(a.id) - rosterOrderOf(b.id));
+      noGroup.sort((a, b) => rosterOrderOf(a.id) - rosterOrderOf(b.id));
+
       for (const g of cr.groups) {
         const members = memberOf[g.id] || [];
         const card = document.createElement('div');
@@ -2985,8 +2982,9 @@
       // --- 全員名簿：「Aさん ○班」のように名前と班を一覧にする ---
       // ならび順は「②生徒」タブに登録した順（名簿順）
       let allHtml = '';
-      for (const st of cr.students) {
-        if (st.inactive) continue;
+      const rosterSorted = cr.students.filter(s => !s.inactive)
+        .sort((a, b) => rosterOrderOf(a.id) - rosterOrderOf(b.id));
+      for (const st of rosterSorted) {
         const g = getGroupOf(cr, st.id);
         allHtml +=
           '<li><span class="rname">' + escapeHtml(numberOf(st.id)) + '　' + escapeHtml(st.name) +
@@ -3007,16 +3005,15 @@
     // 📊 つながりタブ
     // 今回の座席にできている組み合わせが、これまで何回そうだったかを出す
     // =====================================================
-    // 'count'（回数が多い順）| 'kana'（あいうえお順）| 'number'（名簿順＝出席番号）
+    // 'count'（回数が多い順）| 'number'（名簿順＝出席番号の順）
     let relSort = 'count';
     document.getElementById('relSortCount').addEventListener('click', () => { relSort = 'count'; renderRelationsTab(); });
-    document.getElementById('relSortKana').addEventListener('click', () => { relSort = 'kana'; renderRelationsTab(); });
     document.getElementById('relSortNumber').addEventListener('click', () => { relSort = 'number'; renderRelationsTab(); });
 
     function renderRelationsTab() {
       const cr = getActiveClassroom();
+      refreshNumbers(cr); // 出席番号を最新にしてからならべる
       document.getElementById('relSortCount').classList.toggle('active', relSort === 'count');
-      document.getElementById('relSortKana').classList.toggle('active', relSort === 'kana');
       document.getElementById('relSortNumber').classList.toggle('active', relSort === 'number');
 
       const boxes = { side: 'relSide', fb: 'relFb', diag: 'relDiag', group: 'relGroup' };
@@ -3040,14 +3037,9 @@
       const nowRel = assignmentRelations(cr, cr.currentSeats);
       const histRels = buildHistoryRelations(cr);
 
-      // ならびかえの基準
-      //  あいうえお順：よみがながあればそれを使う（漢字のままでは正しい五十音順にならないため）
-      //  名簿順：出席番号
-      const kanaOf = (st) => (st.yomi && st.yomi.trim()) ? st.yomi.trim() : st.name;
-      const noOf = (st) => numberCache.num[st.id] || 999;
-      const cmpKana = (x, y) => kanaOf(x).localeCompare(kanaOf(y), 'ja');
-      const cmpNum = (x, y) => noOf(x) - noOf(y);
-      const cmpMain = (relSort === 'number') ? cmpNum : cmpKana;
+      // ならびかえの基準は「名簿順（出席番号の順）」ひとつ。
+      // 出席番号はふつう あいうえお順 につけるので、名前順とおなじならびになる。
+      const cmpMain = (x, y) => rosterOrderOf(x.id) - rosterOrderOf(y.id);
 
       // 今回できている組み合わせごとに、過去に同じ関係だった回を集める
       const collect = (kind) => {
@@ -3104,15 +3096,6 @@
       for (const kind of Object.keys(boxes)) collect(kind).forEach(r => allCounts.add(r.count));
       if (relSort === 'count' && allCounts.size === 1) {
         notes.push('いまは回数がぜんぶ同じ（' + [...allCounts][0] + '回目）なので、ならべかえても順番は変わりません。');
-      }
-      // ② 漢字の名前は、よみがながないと正しい五十音順にならない
-      if (relSort === 'kana') {
-        const noYomi = cr.students.filter(s => !s.inactive && !(s.yomi && s.yomi.trim()) && !isKanaOnly(s.name));
-        if (noYomi.length) {
-          notes.push('⚠️ よみがなが入っていない生徒が' + noYomi.length + '名います（' +
-            noYomi.slice(0, 3).map(s => s.name).join('・') + (noYomi.length > 3 ? ' ほか' : '') +
-            '）。漢字のままでは正しいあいうえお順になりません。「②生徒」タブの「編集」でよみがなを入れてください。');
-        }
       }
       document.getElementById('relSortNote').innerHTML = notes.map(escapeHtml).join('<br>');
 
@@ -3404,7 +3387,6 @@
         for (const st of cr.students) {
           if (st.gender === undefined) st.gender = null;
           if (st.number === undefined) st.number = null;
-          if (st.yomi === undefined) st.yomi = '';
         }
         for (const g of cr.groups) {
           // 旧：生徒ベースの班（memberIds）→ 新：席ベースの班（deskMeta.groupId）
