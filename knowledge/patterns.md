@@ -2095,3 +2095,30 @@ npm経由（`npm pack qrcode-generator`）でMITライセンスのライブラ�
 - 失敗・注意点 → [failures.md](./failures.md)
 - コーディング規約 → [rules.md](./rules.md)
 - UIコンポーネント → [ui-components.md](./ui-components.md)
+
+## 2026-08-28 「自動でたまる履歴」と「自分で選ぶお気に入り」を1つのデータに同居させる
+
+ことばかける君のマイ辞書で採用。`{ text, meta, clue, fav }` の1配列にして、
+`fav` フラグだけで2つの性格を分けた。
+
+- 自動追加（ワード登録時）は `fav:false` ＝ ゆるい優先度（+150点）
+- 手動の★は `fav:true` ＝ 強い優先度（+900点）
+- 上限800件を超えたら **`fav:false` の古いものだけ**を消す（★は絶対に消さない）
+
+配列を2本に分けるとどちらに入っているかの判定・移動・重複管理が増えるが、
+フラグ1つなら「★をつける／はずす」がその場で切り替わるだけで済む。
+「履歴は勝手にたまってほしい、でも大事なものは埋もれてほしくない」系の要求はこの形が扱いやすい。
+
+## 2026-08-28 一覧を作り直す関数は「入力中なら何もしない」で守る
+
+`renderMyDict()` は `refresh()` から呼ばれるため、ユーザーが一覧内の入力欄に打ち込んでいる
+最中に DOM を作り直すと入力が飛ぶ。ガードを入れて回避した。
+
+```js
+const act = document.activeElement;
+if (act && act.tagName === 'INPUT' && box.contains(act)) return;
+```
+
+**注意**：最初は `if (box.contains(document.activeElement)) return;` と書いたら、
+一覧内の「消す」ボタンを押した瞬間そのボタンが activeElement になり、削除しても
+一覧が更新されないバグになった。**INPUT に限定する**のが要点。

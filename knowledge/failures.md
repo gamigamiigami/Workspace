@@ -986,3 +986,22 @@ function loadData(key, defaultValue) {
 
 - 成功パターン集 → [patterns.md](./patterns.md)
 - コーディング規約 → [rules.md](./rules.md)
+
+## 2026-08-28 activeElement ガードでボタンの再描画まで止まった
+
+**症状**：マイ辞書の「消す」を押してもデータは消えるのに、一覧の行が消えない。
+
+**原因**：入力中の再描画を防ぐために
+`if (box.contains(document.activeElement)) return;` と書いた。
+ボタンをクリックすると**そのボタン自身が activeElement になる**ため、
+削除後の `renderMyDict()` が毎回この行で止まっていた。
+
+**対策**：守りたいのは「文字入力の中断」だけなので、INPUT に限定する。
+
+```js
+const act = document.activeElement;
+if (act && act.tagName === 'INPUT' && box.contains(act)) return;
+```
+
+**教訓**：`contains(document.activeElement)` は「入力中か」ではなく
+「その中の何かにフォーカスがあるか」。ボタンもフォーカスを取る。
