@@ -168,6 +168,22 @@
     .find-chip .fr { font-weight: 700; font-size: 16px; letter-spacing: .04em; }
     .find-chip .fs { font-size: 11px; color: var(--gray); }
     .find-chip.mine { border-color: var(--accent); background: #fffdf6; }
+    .find-chip.used { border-color: #cbd5e0; background: #fbfcfd; }
+    /* マイ辞書の一覧。1語＝1行で、★・語・カギ・削除がならぶ */
+    #myList { margin-top: 10px; max-height: 320px; overflow-y: auto; }
+    .my-row {
+      display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+      padding: 5px 4px; border-bottom: 1px dashed var(--line);
+    }
+    .my-row .mw { font-weight: 700; min-width: 78px; }
+    .my-row .mm { font-size: 11px; color: var(--gray); }
+    .my-row input.mc { flex: 1 1 150px; min-width: 120px; }
+    .my-fav {
+      min-width: 40px; padding: 4px 6px; font-size: 15px; line-height: 1;
+      background: #fff; color: #c9ced6; border: 1px solid var(--line);
+    }
+    .my-fav.on { color: var(--accent); border-color: var(--accent); background: #fffdf6; }
+    .my-del { min-width: 40px; padding: 4px 6px; font-size: 13px; }
     .find-chip .star { color: var(--accent); font-size: 11px; }
     .word-chip .wmeta { font-size: 11px; color: var(--gray); }
 
@@ -591,6 +607,31 @@
           <button id="btnAllHira" class="sub small">登録ワードを全部ひらがなに</button>
         </div>
       </details>
+    </div>
+
+    <!-- ===== マイ辞書：よく使う語とそのカギを、この端末に残しておく場所 ===== -->
+    <div class="panel">
+      <h2>マイ辞書 <span class="hint">よく使う語とカギを残す</span></h2>
+      <p class="hint-line">
+        ★をつけた語は、上の「ワード候補をさがす」で<b>いちばん上に出ます</b>。
+        カギを書いておくと、その語を盤面に置いたときに<b>カギ欄へ自動で入ります</b>（あとから直せます）。<br>
+        ワードを登録すると「つかった語」として自動でここに残ります（★はつきません）。★は自分でつけてください。
+      </p>
+      <div class="row">
+        <input type="text" id="myWord" placeholder="語（例：あいさつ）" style="flex:1 1 110px;">
+        <input type="text" id="myClue" placeholder="カギ（例：朝いちばんにする言葉）" style="flex:2 1 190px;">
+        <button id="btnMyAdd" class="small">★で登録</button>
+      </div>
+      <div class="row">
+        <input type="text" id="myFilter" placeholder="語をしぼりこむ" style="flex:1 1 110px;">
+        <label class="check"><input type="checkbox" id="myFavOnly" checked>★だけ見る</label>
+        <span id="myCount" class="hint"></span>
+      </div>
+      <div id="myList"></div>
+      <div class="row" style="margin-top:8px;">
+        <button id="btnMyClearAuto" class="sub small">★なしをまとめて消す</button>
+        <button id="btnMyClearAll" class="sub small">マイ辞書を空にする</button>
+      </div>
     </div>
 
     <div class="panel">
@@ -3843,6 +3884,11 @@ var qrcode = function() {
         p,
         no: numbers[idx(p.r, p.c)] || 0
       })).sort((a, b) => a.no - b.no);
+      // マイ辞書にカギがある語は、まだ空のカギ欄に自動で入れる（あとから直せる）
+      words.forEach(({ p }) => {
+        const m = myEntry(p.text);
+        if (m && m.clue && !state.clues[p.text]) state.clues[p.text] = m.clue;
+      });
       const sig = words.map(x => x.no + x.p.dir + x.p.text).join('|');
       if (sig !== clueSig) {
         clueSig = sig;
@@ -3859,11 +3905,24 @@ var qrcode = function() {
           input.style.flex = '1 1 140px';
           input.value = state.clues[p.text] || '';
           input.addEventListener('input', () => { state.clues[p.text] = input.value; saveLocal(); });
+          // このカギをマイ辞書に覚えさせるボタン（次に同じ語を使うとき自動で入る）
+          const keep = document.createElement('button');
+          keep.type = 'button';
+          keep.className = 'my-fav' + (myEntry(p.text) && myEntry(p.text).fav ? ' on' : '');
+          keep.textContent = '★';
+          keep.title = 'この語とカギをマイ辞書に覚えさせる';
+          keep.addEventListener('click', () => {
+            favWord(p.text, input.value, state.meta[p.text] || '');
+            keep.classList.add('on');
+            renderMyDict();
+            saveLocal();
+            showMsg('「' + p.text + '」をマイ辞書に覚えました。', 'ok');
+          });
           const label = document.createElement('span');
           label.innerHTML = '<strong>' + no + '</strong> ' + (p.dir === 'across' ? 'ヨコ' : 'タテ')
             + ' <span style="color:var(--gray)">' + escapeHtml(p.text) + '</span>';
           label.style.minWidth = '110px';
-          item.append(label, input);
+          item.append(label, input, keep);
           box.appendChild(item);
         });
       }
@@ -3882,6 +3941,7 @@ var qrcode = function() {
       renderWarnings();
       renderPlaced();
       renderClues();
+      renderMyDict();
       renderMarkCheck();
       renderTypeInfo();
       $('#btnRemoveWord').disabled = !state.selPlacedId;
@@ -3904,13 +3964,99 @@ var qrcode = function() {
       refresh();
     }
 
-    // 一度でも登録した語はマイ辞書に残し、次回以降の候補に出す
+    // ===== マイ辞書 =====
+    // { text, meta, clue, fav } の配列。fav=true が「★＝自分で選んだよく使う語」
+    function myEntry(text) { return state.myDict.find(m => m.text === text) || null; }
+
+    // 一度でも登録した語はマイ辞書に残し、次回以降の候補に出す（★はつけない）
     function rememberWord(text, meta) {
       if (meta) state.meta[text] = meta;
-      const found = state.myDict.find(m => m.text === text);
-      if (found) { if (meta) found.meta = meta; return; }
-      state.myDict.push({ text, meta: meta || state.meta[text] || '' });
-      if (state.myDict.length > 800) state.myDict.shift();
+      const found = myEntry(text);
+      if (found) { if (meta && !found.meta) found.meta = meta; return found; }
+      const m = { text, meta: meta || state.meta[text] || '', clue: '', fav: false };
+      state.myDict.push(m);
+      // ★をつけた語は消さずに、自動でたまった語だけを古い順に減らす
+      if (state.myDict.length > 800) {
+        const i = state.myDict.findIndex(x => !x.fav);
+        if (i >= 0) state.myDict.splice(i, 1);
+      }
+      return m;
+    }
+
+    // ★つきで登録する（カギも一緒に覚える）
+    function favWord(text, clue, meta) {
+      const m = rememberWord(text, meta);
+      m.fav = true;
+      if (clue !== undefined && clue !== null) m.clue = clue;
+      clueSig = '';          // カギ欄を作りなおして、自動入力を反映させる
+      return m;
+    }
+
+    // マイ辞書の一覧を描く
+    function renderMyDict() {
+      const box = $('#myList');
+      if (!box) return;
+      // カギを打っている最中に作り直すと入力が中断されるので、そのときは何もしない
+      // （ボタンを押したときは作り直したいので、入力欄にいるときだけ止める）
+      const act = document.activeElement;
+      if (act && act.tagName === 'INPUT' && box.contains(act)) return;
+      const q = ($('#myFilter').value || '').trim().normalize('NFC');
+      const favOnly = $('#myFavOnly').checked;
+      const favN = state.myDict.filter(m => m.fav).length;
+      $('#myCount').textContent = '★' + favN + '語 ／ つかった語 ' + (state.myDict.length - favN) + '語';
+      let list = state.myDict.filter(m => (!favOnly || m.fav)
+        && (!q || m.text.includes(q) || toKata(m.text).includes(toKata(q)) || (m.meta || '').includes(q)));
+      list = list.slice().reverse();               // 新しく入れたものを上に
+      const over = list.length - 200;
+      list = list.slice(0, 200);                   // 多すぎるときは200語まで表示
+      box.innerHTML = '';
+      if (list.length === 0) {
+        box.innerHTML = '<p class="hint-line">'
+          + (state.myDict.length === 0 ? 'まだ何も入っていません。上の欄から登録できます。'
+             : favOnly ? '★のついた語はまだありません。「★だけ見る」を外すと、つかった語が出ます。'
+             : '見つかりませんでした。') + '</p>';
+        return;
+      }
+      list.forEach(m => {
+        const row = document.createElement('div');
+        row.className = 'my-row';
+        row.dataset.text = m.text;
+        const fav = document.createElement('button');
+        fav.type = 'button';
+        fav.className = 'my-fav' + (m.fav ? ' on' : '');
+        fav.dataset.act = 'fav';
+        fav.textContent = m.fav ? '★' : '☆';
+        fav.title = m.fav ? '★をはずす' : '★をつける';
+        const name = document.createElement('span');
+        name.className = 'mw';
+        name.innerHTML = escapeHtml(m.text)
+          + (m.meta && m.meta !== m.text ? ' <span class="mm">' + escapeHtml(m.meta) + '</span>' : '');
+        const clue = document.createElement('input');
+        clue.type = 'text';
+        clue.className = 'mc';
+        clue.placeholder = 'カギを書く（書くと自動で入ります）';
+        clue.value = m.clue || '';
+        clue.addEventListener('input', () => {
+          m.clue = clue.value;
+          if (clue.value && !m.fav) { m.fav = true; fav.classList.add('on'); fav.textContent = '★'; }
+          clueSig = '';
+          renderClues();
+          saveLocal();
+        });
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'sub small my-del';
+        del.dataset.act = 'del';
+        del.textContent = '消す';
+        row.append(fav, name, clue, del);
+        box.appendChild(row);
+      });
+      if (over > 0) {
+        const p = document.createElement('p');
+        p.className = 'hint-line';
+        p.textContent = 'ほかに ' + over + ' 語あります。上の「語をしぼりこむ」でさがしてください。';
+        box.appendChild(p);
+      }
     }
 
     // ===== 座標の計算（ドラッグ用） =====
@@ -5252,6 +5398,53 @@ var qrcode = function() {
         refresh();
         showMsg('「' + t + '」を登録しました。', 'ok');
       });
+      // マイ辞書
+      $('#btnMyAdd').addEventListener('click', () => {
+        const t = ($('#myWord').value || '').trim().normalize('NFC');
+        if (!t) { showMsg('登録したい語を入れてください。', 'ng'); return; }
+        favWord(t, ($('#myClue').value || '').trim());
+        $('#myWord').value = ''; $('#myClue').value = '';
+        $('#myFavOnly').checked = true;
+        renderMyDict(); renderClues(); saveLocal();
+        showMsg('「' + t + '」をマイ辞書に登録しました。', 'ok');
+      });
+      ['#myWord', '#myClue'].forEach(sel => {
+        $(sel).addEventListener('keydown', (e) => { if (e.key === 'Enter') $('#btnMyAdd').click(); });
+      });
+      $('#myFilter').addEventListener('input', renderMyDict);
+      $('#myFavOnly').addEventListener('change', renderMyDict);
+      $('#myList').addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act]');
+        if (!btn) return;
+        const text = btn.closest('.my-row').dataset.text;
+        const m = myEntry(text);
+        if (!m) return;
+        if (btn.dataset.act === 'fav') {
+          m.fav = !m.fav;
+        } else {
+          if (!confirm('「' + text + '」をマイ辞書から消しますか？\n（盤面の語や登録ワードは消えません）')) return;
+          state.myDict = state.myDict.filter(x => x.text !== text);
+        }
+        clueSig = '';
+        renderMyDict(); renderClues(); saveLocal();
+      });
+      $('#btnMyClearAuto').addEventListener('click', () => {
+        const n = state.myDict.filter(m => !m.fav).length;
+        if (!n) { showMsg('★なしの語はありません。', 'ok'); return; }
+        if (!confirm('★のついていない ' + n + ' 語を消しますか？\n（★つきの語は残ります）')) return;
+        state.myDict = state.myDict.filter(m => m.fav);
+        renderMyDict(); saveLocal();
+        showMsg(n + '語を消しました。', 'ok');
+      });
+      $('#btnMyClearAll').addEventListener('click', () => {
+        if (!state.myDict.length) return;
+        if (!confirm('マイ辞書の ' + state.myDict.length + ' 語を全部消しますか？\nこれは元にもどせません。')) return;
+        state.myDict = [];
+        clueSig = '';
+        renderMyDict(); renderClues(); saveLocal();
+        showMsg('マイ辞書を空にしました。', 'ok');
+      });
+
       $('#btnAllKata').addEventListener('click', () => convertAllKana('kata'));
       $('#btnAllHira').addEventListener('click', () => convertAllKana('hira'));
 
@@ -5503,7 +5696,7 @@ var qrcode = function() {
       const wantKw = useKw && missing.length > 0;
 
       // マイ辞書（過去に登録した語）→ 国語辞書 の順にしらべる
-      const pool = state.myDict.map(m => ({ r: m.text, s: m.meta || '', rank: -1, mine: true, kyoiku: true }))
+      const pool = state.myDict.map(m => ({ r: m.text, s: m.meta || '', rank: -1, mine: true, fav: !!m.fav, kyoiku: true }))
         .concat(loadDict()
           .filter(d => d.rank < level && (!onlyKyoiku || d.kyoiku)
             && !(mode === 'hira' && isLoanword(d)))
@@ -5537,9 +5730,10 @@ var qrcode = function() {
         } else if (link) {
           linkBonus = 500;
         }
-        const score = kwHit * 1000 + linkBonus + (crossable ? 200 : 0) + (item.mine ? 150 : 0)
+        const score = kwHit * 1000 + linkBonus + (crossable ? 200 : 0)
+          + (item.fav ? 900 : item.mine ? 150 : 0)
           + Math.max(0, 100 - item.rank / 100);
-        hits.push({ text, meta: item.s, mine: item.mine, score, kwHit });
+        hits.push({ text, meta: item.s, mine: item.mine, fav: !!item.fav, score, kwHit });
         if (hits.length > 4000) break;
       }
       hits.sort((a, b) => b.score - a.score);
@@ -5570,13 +5764,14 @@ var qrcode = function() {
       box.appendChild(head);
       list.forEach(item => {
         const chip = document.createElement('button');
-        chip.className = 'find-chip' + (item.mine ? ' mine' : '');
+        chip.className = 'find-chip' + (item.fav ? ' mine' : item.mine ? ' used' : '');
         chip.type = 'button';
         chip.dataset.text = item.text;
         chip.dataset.meta = item.meta || '';
         const meta = (item.meta && item.meta !== item.text) ? item.meta : '';
         chip.innerHTML = '<span class="fr">' + escapeHtml(item.text) + '</span>'
-          + '<span class="fs">' + (item.mine ? '<span class="star">★マイ辞書</span> ' : '')
+          + '<span class="fs">'
+          + (item.fav ? '<span class="star">★マイ辞書</span> ' : item.mine ? 'つかった語 ' : '')
           + escapeHtml(meta) + '</span>';
         box.appendChild(chip);
       });
