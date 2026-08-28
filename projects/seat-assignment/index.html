@@ -165,6 +165,7 @@
     .room-view.flipped .board-label { margin-bottom: 0; margin-top: 8px; }
     .desk .orient-mark { font-size: 10px; color: #999; line-height: 1; }
     .desk .seat-name { font-weight: bold; line-height: 1.2; }
+    .desk .seat-no { font-size: 10px; color: #778; line-height: 1; } /* 出席番号 */
     .desk .seat-icons { position: absolute; top: 0; right: 2px; font-size: 11px; }
 
     /* 班のしるし：机の右下に班名ラベル。
@@ -261,7 +262,30 @@
     }
     .prev-check .chk.ok { background: #eafaf1; border-color: #27ae60; color: #1e8449; }
     .prev-check .chk.bad { background: #fdecea; border-color: var(--danger); color: var(--danger); font-weight: bold; }
+    .prev-check .chk.warn { background: #fef9e7; border-color: #f1c40f; color: var(--warn); font-weight: bold; }
+    .prev-check .chk.mild { background: #fbf6ec; border-color: #d9c9a3; color: #8a6d3b; }
+    .prev-check .chk.note { background: #f4f6f8; color: #667; }
     .prev-check .chk.none { background: #f4f6f8; color: #667; }
+
+    /* NG設定やぶりの大きな警告（手で入れかえたときに出る） */
+    .hard-alert {
+      display: none;
+      background: #fdecea;
+      border: 2px solid var(--danger);
+      color: var(--danger);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-top: 8px;
+      font-size: 14px;
+    }
+    .hard-alert ul { margin: 4px 0 4px 18px; }
+    .hard-alert .hint { color: var(--danger); }
+    /* NG設定にひっかかっている席は、はっきり赤くする */
+    .seat.ng-violation .desk {
+      background: #fdecea !important;
+      border-color: var(--danger) !important;
+      box-shadow: 0 0 0 3px rgba(192,57,43,0.35);
+    }
 
     /* 操作モードボタン（選択中をはっきり見せる） */
     .tool-btn.active {
@@ -417,8 +441,12 @@
       .print-header { display: block !important; margin-bottom: 10px; font-size: 14px; }
       .roster-card { page-break-inside: avoid; border-width: 1px; }
       .print-break { page-break-before: always; } /* このカードは新しいページから印刷する */
-      /* 印刷では男女の●印を出さない（先生の要望） */
-      .desk .gender-dot { display: none !important; }
+      /* 印刷では、名前の読みとりのじゃまになる印を出さない
+         （男女の●印・机の向きの矢印・🔒固定マーク・⚠️などのアイコン・📌） */
+      .desk .gender-dot,
+      .desk .orient-mark,
+      .desk .seat-icons,
+      .desk .pin-mark { display: none !important; }
       /* 空席・通路は席ごと消す。ただし場所はあけたままにして座席表がずれないようにする */
       .seat.vacant, .seat.disabled { visibility: hidden; }
       .sticky-bar { position: static; }
@@ -521,6 +549,12 @@
     <div class="card">
       <h2>生徒一覧（<span id="studentCount">0</span>名）</h2>
       <p class="hint" id="genderCount"></p>
+      <div class="row no-print">
+        <span class="hint">出席番号の付け方：</span>
+        <button id="numModeSerial" class="tool-btn active">1・2・3…（通し番号）</button>
+        <button id="numModeGender" class="tool-btn">男1・女1…（男女別）</button>
+      </div>
+      <p class="hint">上から順に自動で番号がつきます。ちがう番号にしたいときは「編集」から直せます。</p>
       <ul id="studentList" class="item-list"></ul>
       <div class="next-step no-print">
         <button id="btnNextToShuffle" class="primary">つぎへ：③席替えをする →</button>
@@ -542,6 +576,8 @@
       </div>
       <!-- 前回とくらべた結果をここに常に出す（別のページを見に行かなくてよい） -->
       <div id="prevCheck" class="prev-check"></div>
+      <!-- NG設定にひっかかったときの大きな警告 -->
+      <div id="hardAlert" class="hard-alert"></div>
     </div>
 
     <div id="shuffleGuide"></div>
@@ -754,14 +790,18 @@
     const CANDIDATE_TARGET = 40;  // 候補をこの数だけ作り、いちばん良いものをえらぶ
 
     // 「良くない席」の減点。数が大きいほど強く避ける。
-    // 目的：前回と同じ席／前回と近くだった人がまた近く、を確実に避ける
+    // 避けたい順（先生の指定）：
+    //   ×× 前回ととなりが同じ      … 絶対に避けたい
+    //   ×  前回と席の位置が同じ    … できるだけ避けたい
+    //      （ただしNG設定で1か所しか座れない生徒は仕方ないので数えない）
+    //   ▲  前回と前後・斜めが同じ  … 可能なら避けたい
+    //   □  前回近くだった人と同じ班 … 避ける必要はないが知りたい（減点なし・お知らせのみ）
     const PENALTY = {
-      sameSeat: 1000,   // 前回とまったく同じ席（いちばん避けたい）
-      side: 120,        // 前回と左右の隣が同じ
-      frontBack: 90,    // 前回と前後が同じ
-      diagonal: 40,     // 前回と斜めが同じ
-      sameGroup: 60,    // 前回と同じ班
-      oldNear: 8        // もっと前の回で近くだった（軽めに避ける）
+      side: 2000,      // ×× 前回と左右のとなりが同じ
+      sameSeat: 600,   // ×  前回とまったく同じ席
+      frontBack: 120,  // ▲  前回と前後が同じ
+      diagonal: 100,   // ▲  前回と斜めが同じ
+      oldNear: 8       // もっと前の回で近くだった（軽めに避ける）
     };
     const GENDER_LABELS = { m: '男', f: '女' };
     const GENDER_COLORS = { m: '#dbeafe', f: '#fde4ec' };      // 机の背景色（うすい青／うすいピンク）
@@ -798,12 +838,23 @@
       }
     }
 
-    function createClassroom(year, className, rows, cols) {
+    // 年度・学年・クラス名から正式名称を作る（例：R8 2年 1-1）
+    function buildClassroomName(year, grade, className) {
+      return [year, grade, className].filter(Boolean).join(' ');
+    }
+    // 画面のタブに出す名前。表示名があればそれを使う。
+    function classroomLabel(cr) {
+      return (cr.displayName && cr.displayName.trim()) ? cr.displayName : cr.name;
+    }
+
+    function createClassroom(year, className, rows, cols, grade, displayName) {
       return {
         id: uid(),
         year: year || '',
+        grade: grade || '',
         className: className || '',
-        name: (year ? year + ' ' : '') + className,
+        displayName: displayName || '',
+        name: buildClassroomName(year, grade, className),
         rows: rows,
         cols: cols,
         students: [],
@@ -813,6 +864,7 @@
         history: [],
         currentSeats: null,   // 直近の席替え結果（席キー → 生徒ID）
         checkerGender: false, // 男女を市松模様（交互）に並べるか
+        numberMode: 'serial', // 出席番号の付け方：'serial'（通し番号）| 'gender'（男1・女1…）
         tempFixed: {},        // 今回だけの固定（席キー → 生徒ID）。記録するとリセットされる
         viewFlipped: false    // 座席表を「黒板が下」で表示するか
       };
@@ -925,17 +977,44 @@
       }));
     }
 
+    // NG設定のせいで「座れる席が1つしかない」生徒の一覧。
+    // この生徒が前回と同じ席になるのは仕方がないので、「席が同じ」として数えない。
+    function getForcedSeatStudents(cr) {
+      const seats = getEnabledSeats(cr);
+      const forced = new Set();
+      for (const st of cr.students) {
+        if (st.inactive) continue;
+        let count = 0;
+        for (const key of seats) {
+          const meta = cr.deskMeta[key];
+          if (!(meta && (meta.ngStudentIds || []).includes(st.id))) count++;
+          if (count > 1) break;
+        }
+        if (count <= 1) forced.add(st.id);
+      }
+      return forced;
+    }
+
     // 前回（最新の履歴）とくらべて、何がダブっているかを数える
-    function comparePrevious(cr, assignment, prevInfo) {
-      const result = { sameSeat: 0, side: 0, fb: 0, diag: 0, group: 0, hasPrev: !!prevInfo,
+    function comparePrevious(cr, assignment, prevInfo, forcedSet) {
+      const result = { sameSeat: 0, side: 0, fb: 0, diag: 0, nearThenGroup: 0, sameSeatForced: 0,
+                       hasPrev: !!prevInfo,
                        seatsSameSeat: [], seatsSide: [], seatsFb: [], seatsDiag: [], seatsGroup: [] };
       if (!prevInfo) return result;
+      const forced = forcedSet || getForcedSeatStudents(cr);
       const seatOf = {};
       for (const key of Object.keys(assignment)) if (assignment[key]) seatOf[assignment[key]] = key;
 
       for (const key of Object.keys(assignment)) {
         const sid = assignment[key];
-        if (sid && prevInfo.seats[key] === sid) { result.sameSeat++; result.seatsSameSeat.push(key); }
+        if (!sid || prevInfo.seats[key] !== sid) continue;
+        if (forced.has(sid)) {
+          // NG設定で1か所しか座れない生徒 → 同じ席でもOK（数えない）
+          result.sameSeatForced++;
+        } else {
+          result.sameSeat++;
+          result.seatsSameSeat.push(key);
+        }
       }
       const rel = assignmentRelations(cr, assignment);
       const collect = (set, prevSet, countKey, seatKey) => {
@@ -950,20 +1029,30 @@
       collect(rel.side, prevInfo.rel.side, 'side', 'seatsSide');
       collect(rel.fb, prevInfo.rel.fb, 'fb', 'seatsFb');
       collect(rel.diag, prevInfo.rel.diag, 'diag', 'seatsDiag');
-      collect(rel.group, prevInfo.rel.group, 'group', 'seatsGroup');
+
+      // □ 前回「近く（となり・前後・斜め）」だった2人が、今回 同じ班になっている
+      //   避ける必要はないが知りたい、という項目なので減点はしない
+      const prevNear = new Set([...prevInfo.rel.side, ...prevInfo.rel.fb, ...prevInfo.rel.diag]);
+      for (const pk of rel.group) {
+        if (!prevNear.has(pk)) continue;
+        result.nearThenGroup++;
+        const [a, b] = pk.split('|');
+        if (seatOf[a]) result.seatsGroup.push(seatOf[a]);
+        if (seatOf[b]) result.seatsGroup.push(seatOf[b]);
+      }
       return result;
     }
 
     // 配置の「良くなさ」を点数にする。小さいほど良い席替え。
-    function scoreAssignment(cr, assignment, histRels) {
+    function scoreAssignment(cr, assignment, histRels, forcedSet) {
       if (!histRels.length) return 0;
       const prev = histRels[histRels.length - 1];
-      const cmp = comparePrevious(cr, assignment, prev);
-      let p = cmp.sameSeat * PENALTY.sameSeat +
-              cmp.side * PENALTY.side +
+      const cmp = comparePrevious(cr, assignment, prev, forcedSet);
+      // 避けたい順に重みをつける（□の「近くだった人が同じ班」は減点しない）
+      let p = cmp.side * PENALTY.side +
+              cmp.sameSeat * PENALTY.sameSeat +
               cmp.fb * PENALTY.frontBack +
-              cmp.diag * PENALTY.diagonal +
-              cmp.group * PENALTY.sameGroup;
+              cmp.diag * PENALTY.diagonal;
 
       // もっと前の回で「近く」だった組み合わせも、軽めに避ける
       if (histRels.length > 1) {
@@ -972,7 +1061,6 @@
           const h = histRels[i];
           for (const pk of rel.side) if (h.rel.side.has(pk)) p += PENALTY.oldNear;
           for (const pk of rel.fb) if (h.rel.fb.has(pk)) p += PENALTY.oldNear;
-          for (const pk of rel.group) if (h.rel.group.has(pk)) p += PENALTY.oldNear;
         }
       }
       return p;
@@ -981,6 +1069,38 @@
     function getStudent(cr, id) {
       return cr.students.find(s => s.id === id) || null;
     }
+
+    // 出席番号を決める。
+    //  ・生徒に number が入っていればそれを使う（先生が手で決めた番号）
+    //  ・入っていなければ、一覧の上から 1, 2, 3 … と自動でつける
+    // numberMode:
+    //  'serial' … 通し番号（1, 2, 3 …）
+    //  'gender' … 男女別（男1, 男2 … / 女1, 女2 …）
+    function computeNumbers(cr) {
+      const map = {};   // 生徒ID → 表示用の番号（例：'12' や '男3'）
+      const plain = {}; // 生徒ID → 数字だけ（並べかえ用）
+      let serial = 0, male = 0, female = 0;
+      for (const st of cr.students) {
+        if (st.inactive) continue;
+        serial++;
+        if (st.gender === 'm') male++;
+        else if (st.gender === 'f') female++;
+        if (cr.numberMode === 'gender' && st.gender) {
+          const n = st.number || (st.gender === 'm' ? male : female);
+          plain[st.id] = n;
+          map[st.id] = GENDER_LABELS[st.gender] + n;
+        } else {
+          const n = st.number || serial;
+          plain[st.id] = n;
+          map[st.id] = String(n);
+        }
+      }
+      return { label: map, num: plain };
+    }
+    // 描画のたびに数え直さずにすむよう、直近の計算結果を持っておく
+    let numberCache = { label: {}, num: {} };
+    function refreshNumbers(cr) { numberCache = computeNumbers(cr); return numberCache; }
+    function numberOf(sid) { return numberCache.label[sid] || ''; }
 
     // 生徒の班＝「いま座っている席」の班（席替えの結果で決まる）
     function getGroupOf(cr, studentId) {
@@ -1146,8 +1266,9 @@
       const movable = active.filter(s => !fixedIds.has(s.id));
       const freeSeats = seats.filter(k => !baseAssignment[k]);
 
-      // 過去の位置関係は先に1回だけ計算しておく
+      // 過去の位置関係と「1席しか座れない生徒」は先に1回だけ計算しておく
       const histRels = buildHistoryRelations(cr);
+      const forcedSet = getForcedSeatStudents(cr);
 
       // リスタートループ：シャッフル → 貪欲配置 をくり返し、
       // 成功した配置を候補としてためて、いちばん点数の良いものをえらぶ。
@@ -1183,7 +1304,7 @@
       if (candidates.length) {
         let best = candidates[0], bestP = Infinity;
         for (const a of candidates) {
-          const p = scoreAssignment(cr, a, histRels);
+          const p = scoreAssignment(cr, a, histRels, forcedSet);
           if (p < bestP) { bestP = p; best = a; }
         }
         result = best;
@@ -1236,8 +1357,49 @@
     // =====================================================
     // ソフト制約チェック（履歴照合 → 警告リスト生成）
     // =====================================================
+    // NG設定やぶり（着席NG・隣席NG）を見つける。
+    // 自動の席替えでは起きないが、先生が手で入れかえたときに起きうるので必ず調べる。
+    function checkNgViolations(cr, assignment) {
+      const violations = [];
+      const nameOf = sid => { const s = getStudent(cr, sid); return s ? s.name : '?'; };
+      const seen = new Set();
+      for (const key of Object.keys(assignment)) {
+        const sid = assignment[key];
+        if (!sid) continue;
+        const meta = cr.deskMeta[key];
+
+        // ① 着席NG：この生徒が座ってはいけない席
+        if (meta && (meta.ngStudentIds || []).includes(sid)) {
+          violations.push({
+            level: 'error', ng: true,
+            text: '🚫 ' + nameOf(sid) + ' は ' + seatLabel(key) + ' に座れません（着席NGの席です）',
+            seats: [key]
+          });
+        }
+
+        // ② 隣席NG：隣り合ってはいけないペア
+        for (const nKey of getNeighbors(cr, key)) {
+          const nid = assignment[nKey];
+          if (!nid || !isNGPair(cr, sid, nid)) continue;
+          const pk = pairKey(sid, nid);
+          if (seen.has(pk)) continue;
+          seen.add(pk);
+          const p = cr.ngPairs.find(x =>
+            (x.a === sid && x.b === nid) || (x.a === nid && x.b === sid));
+          violations.push({
+            level: 'error', ng: true,
+            text: '🚫 ' + nameOf(sid) + ' と ' + nameOf(nid) + ' がとなり同士です（隣席NG）' +
+                  (p && p.reason ? '：' + p.reason : ''),
+            seats: [key, nKey]
+          });
+        }
+      }
+      return violations;
+    }
+
     function checkSoftConstraints(cr, assignment) {
-      const warnings = [];
+      // NG設定やぶりは何よりも先に出す
+      const warnings = checkNgViolations(cr, assignment);
       const nameOf = sid => { const s = getStudent(cr, sid); return s ? s.name : '?'; };
       const seatOf = {};
       for (const key of Object.keys(assignment)) if (assignment[key]) seatOf[assignment[key]] = key;
@@ -1323,16 +1485,34 @@
       }
       const prevInfo = { seats: latest.seats, rel: assignmentRelations(cr, latest.seats) };
       const cmp = comparePrevious(cr, cr.currentSeats, prevInfo);
-      const item = (label, n) =>
-        '<span class="chk ' + (n === 0 ? 'ok' : 'bad') + '">' +
-        (n === 0 ? '✅' : '❌') + label + ' ' + n + (label === '席が同じ' ? '人' : '組') + '</span>';
+      // 避けたい順に「××／×／▲／□」の印をつけて並べる
+      const item = (mark, label, n, unit, cls) =>
+        '<span class="chk ' + (n === 0 ? 'ok' : cls) + '">' +
+        (n === 0 ? '✅' : mark) + label + ' ' + n + unit + '</span>';
       el.innerHTML =
         '<span class="chk none">前回（' + escapeHtml(latest.label) + '）とくらべて</span>' +
-        item('席が同じ', cmp.sameSeat) +
-        item('となりが同じ', cmp.side) +
-        item('前後が同じ', cmp.fb) +
-        item('斜めが同じ', cmp.diag) +
-        item('同じ班', cmp.group);
+        item('❌', 'となりが同じ', cmp.side, '組', 'bad') +
+        item('⚠️', '席が同じ', cmp.sameSeat, '人', 'warn') +
+        item('△', '前後が同じ', cmp.fb, '組', 'mild') +
+        item('△', '斜めが同じ', cmp.diag, '組', 'mild') +
+        '<span class="chk note">□前回近くだった人と同じ班 ' + cmp.nearThenGroup + '組</span>' +
+        (cmp.sameSeatForced
+          ? '<span class="chk note">（NGで1席しかない ' + cmp.sameSeatForced + '人は「席が同じ」から除外）</span>'
+          : '');
+    }
+
+    // NG設定やぶりを画面のいちばん上に大きく出す
+    function renderHardAlert(cr) {
+      const el = document.getElementById('hardAlert');
+      if (!el) return;
+      if (!cr.currentSeats) { el.innerHTML = ''; el.style.display = 'none'; return; }
+      const v = checkNgViolations(cr, cr.currentSeats);
+      if (v.length === 0) { el.innerHTML = ''; el.style.display = 'none'; return; }
+      el.style.display = 'block';
+      el.innerHTML =
+        '<strong>🚫 NG設定にひっかかっています（' + v.length + '件）</strong><ul>' +
+        v.map(w => '<li>' + escapeHtml(w.text.replace(/^🚫 /, '')) + '</li>').join('') +
+        '</ul><span class="hint">手で入れかえた席が原因です。もどすか、「🎲席替え実行」でやり直してください。</span>';
     }
 
     // =====================================================
@@ -1348,8 +1528,10 @@
 
       // 警告レベルを席キーごとに集計（席替え表示用）
       const seatLevel = {};
+      const ngSeats = new Set(); // NG設定やぶりの席（はっきり赤くする）
       if (extra.warnings) {
         for (const w of extra.warnings) {
+          if (w.ng) for (const key of (w.seats || [])) ngSeats.add(key);
           for (const key of (w.seats || [])) {
             // error > warn > info の優先順で席の枠色を決める
             if (w.level === 'error' || seatLevel[key] === undefined ||
@@ -1451,13 +1633,17 @@
               }
 
               if (st) {
-                nameHtml = '<span class="seat-name">' + escapeHtml(st.name) + '</span>';
+                const no = numberOf(st.id);
+                nameHtml = (no ? '<span class="seat-no">' + escapeHtml(no) + '</span>' : '') +
+                           '<span class="seat-name">' + escapeHtml(st.name) + '</span>';
                 if (st.gender && GENDER_COLORS[st.gender]) {
                   desk.style.background = GENDER_COLORS[st.gender];
                   extras += '<span class="gender-dot" style="background:' + GENDER_MARK_COLORS[st.gender] + '">' +
                             GENDER_LABELS[st.gender] + '</span>';
                 }
                 if (meta.fixedStudentId === sid) icons += '🔒';
+                // NG設定やぶりは、ほかの警告よりはっきり見せる
+                if (ngSeats.has(key)) { cell.classList.add('ng-violation'); icons += '🚫'; }
                 if (seatLevel[key] === 'warn' || seatLevel[key] === 'error') icons += '⚠️';
                 else if (seatLevel[key] === 'info') icons += 'ℹ️';
                 if (seatLevel[key] === 'error') cell.classList.add('error-seat');
@@ -1498,7 +1684,7 @@
               ';border-color:' + GENDER_MARK_COLORS.f + '"></span>机の色がうすいピンク＝女子（左上に「女」）</span>';
       for (const g of cr.groups) {
         html += '<span class="legend-item"><span class="swatch group-swatch" style="border-color:' + g.color +
-                '"></span>太いわく＝' + escapeHtml(g.name) + '（右下にも班名）</span>';
+                '"></span>太いわく＝' + escapeHtml(g.name) + '</span>';
       }
       if (cr.groups.length === 0) {
         html += '<span class="legend-item hint">班はまだありません（「🎨グループ」タブで作れます）</span>';
@@ -1698,7 +1884,7 @@
       const cr = getActiveClassroom();
       const trimmed = name.trim();
       if (!trimmed) return false;
-      cr.students.push({ id: uid(), name: trimmed, inactive: false, gender: gender || null });
+      cr.students.push({ id: uid(), name: trimmed, inactive: false, gender: gender || null, number: null });
       saveState();
       return true;
     }
@@ -1752,12 +1938,24 @@
       const text = cr.students
         .map(s => s.name + (s.gender ? ',' + GENDER_LABELS[s.gender] : ''))
         .join('\n');
-      downloadFile(cr.name + '-名簿.csv', text, 'text/csv');
+      downloadFile(classroomLabel(cr) + '-名簿.csv', text, 'text/csv');
     }
     document.getElementById('btnExportCSV').addEventListener('click', exportStudentCSV);
 
+    // 出席番号の付け方を切りかえる
+    function setNumberMode(mode) {
+      const cr = getActiveClassroom();
+      cr.numberMode = mode;
+      saveState();
+      renderAll();
+    }
+    document.getElementById('numModeSerial').addEventListener('click', () => setNumberMode('serial'));
+    document.getElementById('numModeGender').addEventListener('click', () => setNumberMode('gender'));
+
     function renderStudentsTab() {
       const cr = getActiveClassroom();
+      document.getElementById('numModeSerial').classList.toggle('active', cr.numberMode !== 'gender');
+      document.getElementById('numModeGender').classList.toggle('active', cr.numberMode === 'gender');
       const activeStudents = cr.students.filter(s => !s.inactive);
       document.getElementById('studentCount').textContent = activeStudents.length;
 
@@ -1779,7 +1977,10 @@
           if (cr.deskMeta[key].fixedStudentId === st.id) { fixedKey = key; break; }
         }
         li.innerHTML =
-          '<span class="grow">' + escapeHtml(st.name) +
+          '<span class="grow">' +
+          (st.inactive ? '' : '<strong>' + escapeHtml(numberOf(st.id)) + '</strong> ') +
+          escapeHtml(st.name) +
+          (st.number ? ' <span class="hint">(番号を手で指定)</span>' : '') +
           (st.gender === 'm' ? ' <span class="badge" style="background:' + GENDER_MARK_COLORS.m + '">男</span>' : '') +
           (st.gender === 'f' ? ' <span class="badge" style="background:' + GENDER_MARK_COLORS.f + '">女</span>' : '') +
           (st.inactive ? ' <span class="badge gray">除外中</span>' : '') +
@@ -1869,12 +2070,17 @@
 
       openModal('生徒の編集',
         '<label>名前</label><input type="text" id="editStudentName" value="' + escapeHtml(st.name) + '">' +
+        '<label>出席番号（空なら上から自動でつきます。いまは「' + escapeHtml(numberOf(sid)) + '」）</label>' +
+        '<input type="number" id="editStudentNumber" min="1" max="99" value="' + (st.number || '') + '">' +
         '<label>性別（席の色分け・市松模様に使います）</label><select id="editStudentGender">' + genderOptions + '</select>' +
         '<label>固定席（移動禁止）</label><select id="editStudentSeat">' + seatOptions + '</select>',
         () => {
           const newName = document.getElementById('editStudentName').value.trim();
           if (!newName) { alert('名前を入力してください'); return false; }
           st.name = newName;
+          const numRaw = document.getElementById('editStudentNumber').value;
+          const num = parseInt(numRaw, 10);
+          st.number = (numRaw !== '' && num > 0) ? num : null; // 空なら自動採番にもどす
           st.gender = document.getElementById('editStudentGender').value || null;
 
           // 固定席の付け替え（他の机に付いていた固定は解除）
@@ -2181,10 +2387,19 @@
           if (tb) delete cr.tempFixed[key];
           if (ta) cr.tempFixed[key] = ta;
           if (tb) cr.tempFixed[swapFirstKey] = tb;
+          const movedKeys = [swapFirstKey, key];
           swapFirstKey = null;
           lastWarnings = checkSoftConstraints(cr, cr.currentSeats);
           saveState();
           renderRosterTab();
+          // 入れかえた席がNG設定にひっかかったら、その場ですぐ知らせる
+          const bad = checkNgViolations(cr, cr.currentSeats)
+            .filter(w => (w.seats || []).some(s => movedKeys.includes(s)));
+          if (bad.length) {
+            alert('🚫 NG設定にひっかかりました\n\n' +
+                  bad.map(w => '・' + w.text.replace(/^🚫 /, '')).join('\n') +
+                  '\n\nこのままでも記録できますが、直すことをおすすめします。');
+          }
         }
         renderShuffleTab();
         return;
@@ -2410,6 +2625,7 @@
       }
       renderLegend('shuffleLegend', cr);
       renderPrevCheck(cr);
+      renderHardAlert(cr);
 
       // 警告パネル
       const ul = document.getElementById('warningList');
@@ -2490,8 +2706,8 @@
     // =====================================================
     function renderRosterTab() {
       const cr = getActiveClassroom();
-      document.getElementById('rosterTitle').textContent = cr.name + '　班別名簿';
-      document.getElementById('printHeader').textContent = cr.name + '　' + todayString() + ' 作成';
+      document.getElementById('rosterTitle').textContent = classroomLabel(cr) + '　班別名簿';
+      document.getElementById('printHeader').textContent = classroomLabel(cr) + '　' + todayString() + ' 作成';
       const container = document.getElementById('rosterCards');
       const allList = document.getElementById('rosterAll');
       container.innerHTML = '';
@@ -2520,7 +2736,7 @@
       }
 
       const memberLi = (st) =>
-        '<li>' + escapeHtml(st.name) +
+        '<li>' + escapeHtml(numberOf(st.id)) + '　' + escapeHtml(st.name) +
         (st.gender ? '（' + GENDER_LABELS[st.gender] + '）' : '') + '</li>';
 
       for (const g of cr.groups) {
@@ -2552,7 +2768,7 @@
         if (st.inactive) continue;
         const g = getGroupOf(cr, st.id);
         allHtml +=
-          '<li><span class="rname">' + escapeHtml(st.name) +
+          '<li><span class="rname">' + escapeHtml(numberOf(st.id)) + '　' + escapeHtml(st.name) +
           (st.gender ? '（' + GENDER_LABELS[st.gender] + '）' : '') + '</span>' +
           (g
             ? '<span class="badge" style="' + groupTagStyle(g.color) + '">' + escapeHtml(g.name) + '</span>'
@@ -2639,7 +2855,8 @@
       for (const cr of state.classrooms) {
         const opt = document.createElement('option');
         opt.value = cr.id;
-        opt.textContent = cr.name;
+        // タブには表示名を出す（表示名がなければ「年度 学年 クラス」）
+        opt.textContent = classroomLabel(cr);
         if (cr.id === state.activeId) opt.selected = true;
         sel.appendChild(opt);
       }
@@ -2658,17 +2875,22 @@
       openModal('年度・クラスを開く / 新しく作る',
         '<p class="hint">同じ「年度」と「クラス名」が前にあれば、そのデータをそのまま開きます（隣・同班の履歴も継続）。<br>新しい組み合わせなら新規作成されます。</p>' +
         '<label>年度（例：R8）</label><input type="text" id="newClassYear" placeholder="例：R8">' +
-        '<label>クラス名（例：1-1）</label><input type="text" id="newClassName" placeholder="例：1-1">' +
+        '<label>学年（例：2年）</label><input type="text" id="newClassGrade" placeholder="例：2年">' +
+        '<label>クラス（例：1-1）</label><input type="text" id="newClassName" placeholder="例：1-1">' +
+        '<label>表示名（画面の左上に出す短い名前。空ならそのまま）</label>' +
+        '<input type="text" id="newClassDisplay" placeholder="例：2年1組">' +
         '<label>横（列数）※新規作成時のみ</label><input type="number" id="newClassCols" value="6" min="1" max="15">' +
         '<label>縦（行数）※新規作成時のみ</label><input type="number" id="newClassRows" value="5" min="1" max="15">',
         () => {
           const year = document.getElementById('newClassYear').value.trim();
+          const grade = document.getElementById('newClassGrade').value.trim();
           const className = document.getElementById('newClassName').value.trim();
-          if (!className) { alert('クラス名を入力してください'); return false; }
+          const displayName = document.getElementById('newClassDisplay').value.trim();
+          if (!className) { alert('クラスを入力してください'); return false; }
 
-          // 既存の同じ年度・クラス名があればそれを開く（新規作成しない）
+          // 既存の同じ年度・学年・クラスがあればそれを開く（新規作成しない）
           const existing = state.classrooms.find(c =>
-            (c.year || '') === year && (c.className || '') === className);
+            (c.year || '') === year && (c.grade || '') === grade && (c.className || '') === className);
           if (existing) {
             state.activeId = existing.id;
             lastWarnings = existing.currentSeats
@@ -2676,13 +2898,13 @@
               : [];
             saveState();
             renderAll();
-            alert('「' + existing.name + '」のデータを開きました（前回までの履歴も使えます）');
+            alert('「' + classroomLabel(existing) + '」のデータを開きました（前回までの履歴も使えます）');
             return;
           }
 
           const cols = Math.max(1, Math.min(15, parseInt(document.getElementById('newClassCols').value, 10) || 6));
           const rows = Math.max(1, Math.min(15, parseInt(document.getElementById('newClassRows').value, 10) || 5));
-          const cr = createClassroom(year, className, rows, cols);
+          const cr = createClassroom(year, className, rows, cols, grade, displayName);
           state.classrooms.push(cr);
           state.activeId = cr.id;
           lastWarnings = [];
@@ -2696,20 +2918,28 @@
       const cr = getActiveClassroom();
       openModal('年度・クラス名の修正',
         '<label>年度（例：R8）</label><input type="text" id="editClassYear" value="' + escapeHtml(cr.year || '') + '">' +
-        '<label>クラス名（例：1-1）</label><input type="text" id="editClassName" value="' + escapeHtml(cr.className || '') + '">' +
+        '<label>学年（例：2年）</label><input type="text" id="editClassGrade" value="' + escapeHtml(cr.grade || '') + '">' +
+        '<label>クラス（例：1-1）</label><input type="text" id="editClassName" value="' + escapeHtml(cr.className || '') + '">' +
+        '<label>表示名（画面の左上に出す短い名前。空ならそのまま）</label>' +
+        '<input type="text" id="editClassDisplay" value="' + escapeHtml(cr.displayName || '') + '" placeholder="例：2年1組">' +
         (state.classrooms.length > 1
           ? '<div class="row" style="margin-top:14px"><button id="btnDeleteClassroom" class="danger-btn">このクラスのデータをぜんぶ削除</button></div>'
           : '<p class="hint">※クラスが1つだけの場合は削除できません</p>'),
         () => {
           const year = document.getElementById('editClassYear').value.trim();
+          const grade = document.getElementById('editClassGrade').value.trim();
           const className = document.getElementById('editClassName').value.trim();
-          if (!className) { alert('クラス名を入力してください'); return false; }
+          const displayName = document.getElementById('editClassDisplay').value.trim();
+          if (!className) { alert('クラスを入力してください'); return false; }
           const dup = state.classrooms.find(c =>
-            c.id !== cr.id && (c.year || '') === year && (c.className || '') === className);
-          if (dup) { alert('「' + (year ? year + ' ' : '') + className + '」は別のデータで既に使われています'); return false; }
+            c.id !== cr.id && (c.year || '') === year && (c.grade || '') === grade &&
+            (c.className || '') === className);
+          if (dup) { alert('「' + buildClassroomName(year, grade, className) + '」は別のデータで既に使われています'); return false; }
           cr.year = year;
+          cr.grade = grade;
           cr.className = className;
-          cr.name = (year ? year + ' ' : '') + className;
+          cr.displayName = displayName;
+          cr.name = buildClassroomName(year, grade, className);
           saveState();
           renderAll();
         }, '保存');
@@ -2717,7 +2947,7 @@
       const delBtn = document.getElementById('btnDeleteClassroom');
       if (delBtn) {
         delBtn.addEventListener('click', () => {
-          if (!confirm('「' + cr.name + '」のデータ（生徒・履歴ぜんぶ）を削除します。元にもどせません。よろしいですか？')) return;
+          if (!confirm('「' + classroomLabel(cr) + '」のデータ（生徒・履歴ぜんぶ）を削除します。元にもどせません。よろしいですか？')) return;
           state.classrooms = state.classrooms.filter(c => c.id !== cr.id);
           state.activeId = state.classrooms[0].id;
           lastWarnings = [];
@@ -2801,6 +3031,7 @@
     // 全体描画・初期化
     // =====================================================
     function renderAll() {
+      refreshNumbers(getActiveClassroom()); // 出席番号を先に計算しておく
       renderClassroomSelect();
       renderLayoutTab();
       renderStudentsTab();
@@ -2823,8 +3054,12 @@
         if (cr.checkerGender === undefined) cr.checkerGender = false;
         if (!cr.tempFixed) cr.tempFixed = {};
         if (cr.viewFlipped === undefined) cr.viewFlipped = false;
+        if (cr.grade === undefined) cr.grade = '';
+        if (cr.displayName === undefined) cr.displayName = '';
+        if (!cr.numberMode) cr.numberMode = 'serial';
         for (const st of cr.students) {
           if (st.gender === undefined) st.gender = null;
+          if (st.number === undefined) st.number = null;
         }
         for (const g of cr.groups) {
           // 旧：生徒ベースの班（memberIds）→ 新：席ベースの班（deskMeta.groupId）
