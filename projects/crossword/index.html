@@ -3794,6 +3794,27 @@ var qrcode = function() {
       return countChars(all);
     }
 
+    // 置き方（{text,r,c,dir} の配列）から、盤面の「マス」ごとに文字を数える。
+    // 交差しているマスは1マスなので1回だけ数える。
+    // キーワードに同じ文字が2回あるとき（例：せんせい の「せ」）、
+    // その2つが交差の同じマスに重なっていると1マスぶんしか使えないため、
+    // 語の文字数ではなくマスの数で見なければならない。
+    function cellCharCounts(placed) {
+      const map = new Map();
+      placed.forEach(p => {
+        const cs = chars(p.text);
+        const dr = p.dir === 'down' ? 1 : 0;
+        const dc = p.dir === 'across' ? 1 : 0;
+        for (let i = 0; i < cs.length; i++) map.set(key(p.r + dr * i, p.c + dc * i), cs[i]);
+      });
+      const out = new Map();
+      for (const ch of map.values()) out.set(ch, (out.get(ch) || 0) + 1);
+      return out;
+    }
+
+    // キーワードのうち、盤面の「マス」が足りない文字（足りない個数だけ並ぶ）
+    function missingKwCells(placed) { return missingFor(cellCharCounts(placed)); }
+
     // 足りない文字を「足りない個数だけ」並べて返す（「が」が1つ足りなければ ['が']）
     function missingFor(counts) {
       const out = [];
@@ -4570,7 +4591,14 @@ var qrcode = function() {
       });
       refresh();
       if (missing.length) {
-        showMsg('△ 「' + missing.join('・') + '」が盤面にないので、その分の記号はふれませんでした。'
+        // 同じ文字が2回あるキーワードは、その2つが交差の同じマスに重なっていると
+        // 1マスぶんしか使えない。原因が分かるように、その旨も伝える
+        const dup = [...new Set(missing)].filter(ch => chars(state.keyword).filter(x => x === ch).length > 1);
+        showMsg('△ 「' + missing.join('・') + '」の分のマスが足りないので、その分の記号はふれませんでした。'
+          + (dup.length
+              ? '「' + dup.join('・') + '」はキーワードの中に何回か出てくるので、'
+                + 'その回数だけ<b>別々のマス</b>が要ります（交差した1マスは1回ぶんにしかなりません）。'
+              : '')
           + 'この文字を含むワードを足すか、②つくるで「別の形にする」を試してください。', 'ng');
       } else {
         showMsg('○ キーワードの順に記号をふりました。二重マスを確認してください。', 'ok');
@@ -5992,7 +6020,7 @@ var qrcode = function() {
         for (let iter = 0; iter < 12 && Date.now() - t0 < BUDGET; iter++) {
           const missReq = res ? res.failed.filter(t => reqSet.has(t)) : req.slice();
           // 同じ文字が2回あるキーワードは、その回数ぶんのマスが要る
-          const missKw = missingFor(res ? placedCharCounts(res.placed) : new Map());
+          const missKw = res ? missingKwCells(res.placed) : missingFor(new Map());
           if (!missReq.length && !missKw.length) break;          // 完成
           const helper = pickHelper(pool, missReq, missKw, dict, conv, kwSelf);
           if (!helper) break;
@@ -6005,7 +6033,7 @@ var qrcode = function() {
         }
         if (res) {
           res._missReq = res.failed.filter(t => reqSet.has(t)).length;
-          res._missKw = missingFor(placedCharCounts(res.placed)).length;
+          res._missKw = missingKwCells(res.placed).length;
           // 必須語の不足 → キーワードの不足 → 余計な語の少なさ、の順に良さを比べる
           const rank = (x, n) => -x._missReq * 1000 - x._missKw * 100 - n;
           if (!best || rank(res, added.length) > rank(best, bestAdded.length)) {
@@ -6043,7 +6071,7 @@ var qrcode = function() {
 
       const usedAdded = bestAdded.filter(h => placedTexts.has(h.text)).map(h => h.text);
       const missReq = best.failed.filter(t => reqSet.has(t));
-      const missKw = missingFor(placedCharCounts(best.placed));
+      const missKw = missingKwCells(best.placed);
 
       let msg = '<strong>' + best.placed.length + ' 語</strong>で組みました'
         + '（たて' + best.h + '×よこ' + best.w + 'マス' + (N ? ' / ' + N + '×' + N + 'まで' : '') + '）。';
@@ -6099,7 +6127,7 @@ var qrcode = function() {
         const res = generateLayout(pool, 400, 900);
         if (res) {
           // そろった文字の「個数」で数える（「が」が2つ要るなら2マス必要）
-          res._kw = kwChars.length - missingFor(placedCharCounts(res.placed)).length;
+          res._kw = kwChars.length - missingKwCells(res.placed).length;
           if (!bestRes || res._kw > bestRes._kw
               || (res._kw === bestRes._kw && res.placed.length > bestRes.placed.length)) {
             bestRes = res; bestPool = pool;
@@ -6292,9 +6320,15 @@ var qrcode = function() {
       const w = maxC - minC + 1, h = maxR - minR + 1;
       // 「必ず使いたい語が何語入ったか」を最優先で評価する
       const reqPlaced = req ? placed.filter(p => req.has(p.text)).length : 0;
-      const score = reqPlaced * 200000 + placed.length * 10000
+      // キーワードの文字が「マスの数」でそろっているか。
+      // 「せんせい」のように同じ文字が2回あるとき、その2つが交差の同じマスに
+      // 重なっていると記号を2つふれないので、足りないぶんを大きく減点する
+      const cellCount = new Map();
+      for (const ch of map.values()) cellCount.set(ch, (cellCount.get(ch) || 0) + 1);
+      const kwMiss = missingFor(cellCount).length;
+      const score = reqPlaced * 200000 - kwMiss * 50000 + placed.length * 10000
         - w * h * (limit ? 0.4 : 2) - Math.abs(w - h) * (limit ? 4 : 20);
-      return { placed, failed: failed.map(x => x.text), score, w, h, reqPlaced };
+      return { placed, failed: failed.map(x => x.text), score, w, h, reqPlaced, kwMiss };
     }
 
     // 何回も試して、いちばんよい形を採用する
@@ -6316,8 +6350,10 @@ var qrcode = function() {
       for (let t = 0; t < limit; t++) {
         const r = tryLayout(items, conn, state.maxSize, req);
         if (!best || r.score > best.score) best = r;
-        if (best.failed.length === 0 && !tooLong.length && tries) break;   // 検証用：全部入ればすぐ切り上げる
-        if (req && tries && best.failed.every(t => !req.has(t))) break;    // 必要な語が全部入ったら切り上げ
+        // 語もキーワードもそろったところで切り上げる（キーワードが欠けていれば探し続ける）
+        const kwOk = !best.kwMiss;
+        if (best.failed.length === 0 && !tooLong.length && tries && kwOk) break;
+        if (req && tries && kwOk && best.failed.every(t => !req.has(t))) break;
         if (Date.now() - t0 > budget) break; // 時間がかかりすぎないように打ち切る
       }
       if (best && tooLong.length) best.failed = best.failed.concat(tooLong.map(x => x.text));
