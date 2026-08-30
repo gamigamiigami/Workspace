@@ -232,6 +232,31 @@
     .kw-chip .st { font-size: 10px; font-weight: 400; line-height: 1; }
     .kw-chip.used  { background: var(--ok-bg); color: var(--ok); border-color: var(--ok); }
     .kw-chip.board { background: var(--ok); color: #fff; border-color: var(--ok); }
+    /* ②つくる：キーワードのマスがそろっているか、ひと目で分かる帯 */
+    #kwPanel .kwb-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+    .kwb-chip {
+      width: 34px; min-height: 40px; border-radius: 8px; border: 2px solid var(--ng);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      background: #fdeeec; color: var(--ng); font-size: 18px; font-weight: 700; line-height: 1.1;
+    }
+    .kwb-chip .st { font-size: 10px; font-weight: 700; }
+    .kwb-chip.ok { border-color: var(--ok); background: var(--ok); color: #fff; }
+    #kwBoardMsg { margin-top: 8px; font-size: 14px; font-weight: 700; }
+    #kwBoardMsg.ok { color: var(--ok); }
+    #kwBoardMsg.ng { color: var(--ng); }
+    #kwBoardMsg .sub2 { display: block; font-size: 12px; font-weight: 400; color: var(--gray); }
+
+    /* ③しあげ：カギの行。ワードが長くても、カギ欄と★を折り返さない */
+    .clue-row { flex-wrap: nowrap; }
+    /* ワードが長いときは、カギ欄をせまくして1行に収める。
+       画面がとてもせまいときだけ、語のほうを「…」で省略する（カギ欄が消えないように） */
+    .clue-row .cl-label {
+      flex: 0 1 auto; white-space: nowrap; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis;
+    }
+    .clue-row input { flex: 1 1 40px; min-width: 80px; }
+    .clue-row .my-fav { flex: 0 0 auto; }
+
     #kwSummary { margin-top: 10px; font-size: 14px; }
     #kwMissing { color: var(--ng); font-weight: 700; }
 
@@ -646,6 +671,13 @@
 
   <!-- ===== 2. つくる ===== -->
   <section class="tab-panel" data-tab="build" hidden>
+    <!-- キーワードのマスがそろっているか、作ったあとすぐ分かるようにする -->
+    <div class="panel" id="kwPanel" hidden>
+      <h2>キーワード <span class="hint">記号をふるマスが足りているか</span></h2>
+      <div id="kwBoardChips" class="kwb-line"></div>
+      <p id="kwBoardMsg"></p>
+    </div>
+
     <div class="panel">
       <div class="row">
         <button id="btnGenerate">自動で作る</button>
@@ -3870,6 +3902,54 @@ var qrcode = function() {
       $('#kwSummary').innerHTML = html;
     }
 
+    // ②つくるの画面で、キーワードのマスがそろっているかをひと目で見せる。
+    // 同じ文字が何回も出るキーワードは、その回数だけ「別々のマス」が要る
+    // （交差した1マスは1回ぶんにしかならない）ので、1つずつ消しこみながら見ていく
+    function renderKwBoard() {
+      const panel = $('#kwPanel');
+      if (!panel) return;
+      const cs = chars(state.keyword);
+      if (cs.length === 0 || board.map.size === 0) { panel.hidden = true; return; }
+      panel.hidden = false;
+
+      const left = new Map();
+      for (const v of board.map.values()) left.set(v.ch, (left.get(v.ch) || 0) + 1);
+
+      const box = $('#kwBoardChips');
+      box.innerHTML = '';
+      const missing = [];
+      cs.forEach(ch => {
+        const n = left.get(ch) || 0;
+        const ok = n > 0;
+        if (ok) left.set(ch, n - 1); else missing.push(ch);
+        const chip = document.createElement('div');
+        chip.className = 'kwb-chip' + (ok ? ' ok' : '');
+        chip.innerHTML = escapeHtml(ch) + '<span class="st">' + (ok ? '✓' : '✗') + '</span>';
+        box.appendChild(chip);
+      });
+
+      const msg = $('#kwBoardMsg');
+      const done = cs.length - missing.length;
+      if (!missing.length) {
+        msg.className = 'ok';
+        msg.innerHTML = '✓ キーワード「' + escapeHtml(state.keyword) + '」は、'
+          + cs.length + '文字ぶんのマスが全部そろっています。'
+          + '<span class="sub2">③しあげの「記号を自動でふる」で、この順に記号がふれます。</span>';
+        return;
+      }
+      // 足りない文字が「キーワードの中で2回以上出てくる文字」なら、交差が原因のことが多い
+      const dup = [...new Set(missing)].filter(ch => cs.filter(x => x === ch).length > 1);
+      msg.className = 'ng';
+      msg.innerHTML = '✗ あと ' + missing.length + ' マス足りません（' + done + '/' + cs.length + '）：「'
+        + escapeHtml([...new Set(missing)].join('・')) + '」'
+        + '<span class="sub2">'
+        + (dup.length
+            ? '「' + escapeHtml(dup.join('・')) + '」はキーワードの中に何回か出てくるので、'
+              + 'その回数だけ<b>別々のマス</b>が要ります（交差した1マスは1回ぶんにしかなりません）。'
+            : 'この文字を含むワードを足してください。')
+        + '「別の形にする」を押すか、①ことばでワードを足すと入ることがあります。</span>';
+    }
+
     // ===== 盤面まわりの表示 =====
     function renderWarnings() {
       const box = $('#warnings');
@@ -3922,11 +4002,10 @@ var qrcode = function() {
         }
         words.forEach(({ p, no }) => {
           const item = document.createElement('div');
-          item.className = 'pair';
+          item.className = 'pair clue-row';
           const input = document.createElement('input');
           input.type = 'text';
           input.placeholder = 'カギを書く';
-          input.style.flex = '1 1 140px';
           input.value = state.clues[p.text] || '';
           input.addEventListener('input', () => { state.clues[p.text] = input.value; saveLocal(); });
           // このカギをマイ辞書に覚えさせるボタン（次に同じ語を使うとき自動で入る）
@@ -3945,7 +4024,8 @@ var qrcode = function() {
           const label = document.createElement('span');
           label.innerHTML = '<strong>' + no + '</strong> ' + (p.dir === 'across' ? 'ヨコ' : 'タテ')
             + ' <span style="color:var(--gray)">' + escapeHtml(p.text) + '</span>';
-          label.style.minWidth = '110px';
+          label.className = 'cl-label';
+          label.title = p.text;   // せまい画面で省略されても、長押しで語が分かるように
           item.append(label, input, keep);
           box.appendChild(item);
         });
@@ -3962,6 +4042,7 @@ var qrcode = function() {
       renderWords();
       renderDiag();
       renderKeyword();
+      renderKwBoard();
       renderWarnings();
       renderPlaced();
       renderClues();
