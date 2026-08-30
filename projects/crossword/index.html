@@ -3410,11 +3410,22 @@ var qrcode = function() {
       if (!inRange(er, ec)) return { ok: false, reason: '盤面の外に出ます' };
 
       const map = mapIn || buildBoard(ignoreId).map;
+      // 同じ向きの語が通っているマス（そこに重ねると、どちらかが相手の中に埋もれてしまう）
+      const sameDir = new Map();
+      state.placed.forEach(q => {
+        if (q.id === ignoreId || q.dir !== dir) return;
+        wordCells(q).forEach(cell => sameDir.set(key(cell.r, cell.c), q.text));
+      });
       let cross = 0;
       for (let i = 0; i < cs.length; i++) {
         const rr = r + (dir === 'down' ? i : 0);
         const cc = c + (dir === 'across' ? i : 0);
         const cur = map.get(key(rr, cc));
+        const same = sameDir.get(key(rr, cc));
+        if (same) {
+          return { ok: false, reason: '同じ向きの「' + same + '」と重なります'
+            + '（どちらかがもう一方の中に埋もれて、盤面から読めなくなります）' };
+        }
         if (cur) {
           if (cur.ch !== cs[i]) return { ok: false, reason: 'すでにある文字とぶつかります' };
           cross++;
@@ -3957,6 +3968,20 @@ var qrcode = function() {
       if (board.conflicts.size > 0) {
         items.push('<p class="w">✗ 文字がぶつかっているマスがあります（赤いマス）。</p>');
       }
+      // 置いたはずの語が、ほかの語の中に埋もれていないか
+      // （「こさいん」の中の「さいん」のように、盤面からはその語として読めない状態）
+      state.placed.forEach(p2 => {
+        const cs = chars(p2.text);
+        const dr = p2.dir === 'down' ? 1 : 0, dc = p2.dir === 'across' ? 1 : 0;
+        const er = p2.r + dr * (cs.length - 1), ec = p2.c + dc * (cs.length - 1);
+        const before = board.map.get(key(p2.r - dr, p2.c - dc));
+        const after = board.map.get(key(er + dr, ec + dc));
+        if (before || after) {
+          items.push('<p class="w">✗ 「' + escapeHtml(p2.text) + '」は、'
+            + 'ほかの語と同じ向きにつながっていて、その語として読めません'
+            + '（前後の文字までつなげて読まれてしまいます）。置きなおしてください。</p>');
+        }
+      });
       badRuns.forEach(run => {
         const pos = (run.dir === 'across' ? 'ヨコ ' + (run.cells[0].r + 1) + '行目' : 'タテ ' + (run.cells[0].c + 1) + '列目');
         items.push('<p class="w">△ 意図しない読みができています：「' + escapeHtml(run.text) + '」（' + pos + '）</p>');
@@ -6265,9 +6290,13 @@ var qrcode = function() {
     // ===== 自動作成（本物のクロスワードのように、不定形に組み上げる） =====
     // map: 'r,c' -> 文字 の単純な対応表を使う（速さ優先）
     // 戻り値：交差の数。置けないときは -1
-    function canPlaceStrict(map, cs, r, c, dir) {
+    // dmap：そのマスを「どの向きの語」が通っているか（1＝ヨコ／2＝タテ）。
+    // 同じ向きの語どうしが重なると、たとえば「こさいん」の中に「さいん」が
+    // すっぽり入ってしまい、置いたはずの語が盤面から読めなくなる
+    function canPlaceStrict(map, cs, r, c, dir, dmap) {
       const dr = dir === 'down' ? 1 : 0;
       const dc = dir === 'across' ? 1 : 0;
+      const bit = dir === 'across' ? 1 : 2;
       const er = r + dr * (cs.length - 1);
       const ec = c + dc * (cs.length - 1);
       if (r < 0 || c < 0 || er >= GRID || ec >= GRID) return -1;
@@ -6278,6 +6307,8 @@ var qrcode = function() {
         const rr = r + dr * i;
         const cc = c + dc * i;
         const cur = map.get(key(rr, cc));
+        // 同じ向きの語と重なるのは禁止（片方が相手の中に埋もれてしまうため）
+        if (dmap && (dmap.get(key(rr, cc)) & bit)) return -1;
         if (cur !== undefined) {
           if (cur !== cs[i]) return -1;
           cross++;
@@ -6327,14 +6358,17 @@ var qrcode = function() {
             : it.cs.length + (Math.random() - 0.5) * 3)
       })).sort((a, b) => b.k - a.k).map(x => x.it);
       const map = new Map();
+      const dmap = new Map();   // マス -> 通っている向き（1＝ヨコ／2＝タテ）
       const placed = [];
       let failed = [];
       const byChar = new Map(); // 文字 -> [{r,c}]（交差できる場所をすぐ引けるようにする）
       const put = (it, r, c, dir) => {
         const dr = dir === 'down' ? 1 : 0;
         const dc = dir === 'across' ? 1 : 0;
+        const bit = dir === 'across' ? 1 : 2;
         for (let i = 0; i < it.cs.length; i++) {
           const rr = r + dr * i, cc = c + dc * i;
+          dmap.set(key(rr, cc), (dmap.get(key(rr, cc)) || 0) | bit);
           if (!map.has(key(rr, cc))) {
             map.set(key(rr, cc), it.cs[i]);
             if (!byChar.has(it.cs[i])) byChar.set(it.cs[i], []);
@@ -6361,7 +6395,7 @@ var qrcode = function() {
             for (const dir of ['across', 'down']) {
               const sr = sp.r - (dir === 'down' ? i : 0);
               const sc = sp.c - (dir === 'across' ? i : 0);
-              const cross = canPlaceStrict(map, it.cs, sr, sc, dir);
+              const cross = canPlaceStrict(map, it.cs, sr, sc, dir, dmap);
               if (cross < 1) continue;
               // 外枠が広がりすぎず、正方形に近い形になる置き方を高く評価する
               const er = sr + (dir === 'down' ? it.cs.length - 1 : 0);
