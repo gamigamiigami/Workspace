@@ -174,6 +174,13 @@ OK: 次回からの正しい対応
    - `projects/<名前>/` に作る → `deploy-pages.yml` の `PUBLIC_DIRS` に `<名前>` を追加 → `site/index.html` にカード追加 → 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` にマージして push（ここからのみPages公開可）。
    - 公開係（ワークフロー）は `deploy-pages.yml` の**1本だけ**にする。旧 `deploy-dashboard.yml` は自動実行停止済み（復活させて二重化すると404の原因になる）。
    - 機密（`knowledge/`・`CLAUDE.md`・`rakuda-sensei` 等）は `PUBLIC_DIRS` に**入れない**＝公開しない。
+5. **運用ブランチへのマージは、毎回確認せずに自動で行う**（2026-08-31 オーナー承認・以後ずっと有効）
+   - 作業ブランチでの作業が終わって検証まで通ったら、
+     `claude/workspace-knowledge-base-setup-ccVKP` にマージして push するところまでを、確認なしで実行する。
+   - 手順：`git fetch origin <運用ブランチ>` → 作業ブランチに取りこんで衝突を解消 →
+     運用ブランチへマージ（早送りできるなら早送り）→ push → 作業ブランチにもどる。
+   - **衝突が出たとき・公開ページを消したり404にしたりする変更のときは、マージせずに必ず確認する。**
+   - マージしたら、GitHub Actions の `deploy-pages.yml` が成功したかを確認してから完了報告する。
 
 ---
 
