@@ -517,6 +517,20 @@
 
   <!-- ===== 1. ことば ===== -->
   <section class="tab-panel" data-tab="words">
+    <!-- 型モード中だけ出る案内（何を登録すればよいかが、ここで分かる） -->
+    <div class="panel" id="shapeBanner" hidden style="border:2px solid var(--ok);">
+      <h2>🔒 いまは「型」で作っています <span class="hint">形と記号の位置は変わりません</span></h2>
+      <p id="shapeBannerInfo" class="hint-line"></p>
+      <p class="hint-line">
+        ここで<b>使いたいワードを登録</b>したり、<b>キーワードを入れ直したり</b>してから、
+        <b>②つくる</b>の「この型で作る」を押してください。<br>
+        ワードだけ・キーワードだけでも作れます（<b>どちらも空のままでは作れません</b>）。
+      </p>
+      <div class="row">
+        <button id="btnShapeGoBuild" class="big">②つくるへ（この型で作る）→</button>
+        <button id="btnShapeExit2" class="sub small">型をやめて、ふつうに作るにもどる</button>
+      </div>
+    </div>
     <div class="panel">
       <div class="row">
         <button id="btnNewWork2" class="sub">＋ 新しく作る</button>
@@ -704,31 +718,44 @@
       <div id="bridgeBox" style="display:none;"></div>
     </div>
 
-    <!-- 形はそのままで中身だけ変える（同じ盤面から何問も作る） -->
-    <div class="panel">
-      <h2>同じ形でもう1問つくる <span class="hint">マスの並びと記号はそのまま</span></h2>
-      <div class="row">
-        <button id="btnReskinMine" class="big">登録したワード・キーワードで作る</button>
-        <button id="btnReskin" class="sub">おまかせで中身を作り直す</button>
+    <!-- ===== 型（同じ形）モード：形と記号だけ残して、中の言葉は全部あたらしく作る ===== -->
+    <div class="panel" id="shapePanel">
+      <h2>同じ形で、別の問題を作る <span class="hint">マスの並びと記号の位置はそのまま</span></h2>
+
+      <!-- ふだんの表示：型モードに入るボタンだけ（ふつうに作るときと混ざらないように） -->
+      <div id="shapeOff">
+        <div class="row">
+          <button id="btnShapeStart" class="big">この形を「型」にして、別の問題を作る →</button>
+        </div>
+        <p class="hint-line">
+          いま画面にあるクロスワードの<b>形（マスの並び）と記号の位置だけ</b>を残して、
+          <b>中の言葉は全部あたらしく</b>作りなおすモードです。<br>
+          押すと、まず<b>いまの作品を保存</b>します（保存しないと先へ進みません。もとの作品は消えません）。<br>
+          そのあと<b>①ことば</b>でワードやキーワードを入れて、ここへ戻って「この型で作る」を押します。
+        </p>
       </div>
-      <div class="row" style="margin-top:6px;">
-        <label class="check"><input type="checkbox" id="reskinKwWord" checked>
-          新しいキーワードが「意味のある言葉」になるまでさがす</label>
+
+      <!-- 型モード中の表示 -->
+      <div id="shapeOn" hidden>
+        <p id="shapeInfo" class="hint-line"></p>
+        <div class="row">
+          <button id="btnShapeWords" class="sub">① ことばへ（ワード・キーワードを入れる）</button>
+          <button id="btnShapeBuild" class="big">② この型で作る</button>
+        </div>
+        <div class="row" style="margin-top:6px;">
+          <label class="check"><input type="checkbox" id="reskinKwWord" checked>
+            キーワードを自動で決めるときは「辞書にある言葉」だけにする</label>
+        </div>
+        <p class="hint-line" style="margin-top:2px;">
+          ↑ キーワードを自分で入れたときは、この設定は使いません（入れたとおりになります）。<br>
+          チェックを入れていると、<b>意味のない文字の並びはキーワードにしません</b>。
+          見つからなかったときは作らずに知らせます（＝わけのわからないキーワードにはなりません）。
+        </p>
+        <p id="reskinResult" class="hint-line"></p>
+        <div class="row" style="margin-top:6px;">
+          <button id="btnShapeExit" class="sub small">型をやめて、ふつうに作るにもどる</button>
+        </div>
       </div>
-      <p class="hint-line" style="margin-top:2px;">
-        ↑「おまかせ」で使う設定です。おまかせでは<b>記号のマスに入った文字を続けて読んだものが、そのままキーワード</b>になります。
-        このチェックが入っていると、それが<b>辞書にある言葉</b>（例：せんせい）になる組み合わせだけを選びます。
-        外すと「せんかい」のような意味のない並びでもよくなり、そのぶん早く見つかります。
-      </p>
-      <p id="reskinResult" class="hint-line"></p>
-      <p class="hint-line">
-        いまの<b>マスの並び（形）と記号の位置</b>はそのままに、<b>中の言葉だけ</b>を入れかえて別の問題を作ります。<br>
-        ・<b>登録したワード・キーワードで作る</b>…①ことばで入れたワードを必ず使い、
-        キーワードも入れたとおりにします。足りないところは辞書で補います。<br>
-        ・<b>おまかせ</b>…ワードもキーワードも全部辞書にまかせます。
-        キーワードは<b>記号のマスに入った文字を読んだもの</b>になります（あとから決まります）。<br>
-        作り直した問題は、<b>もとの作品を上書きせず</b>、同じフォルダに<b>別の作品として</b>保存されます。
-      </p>
     </div>
 
     <div class="panel">
@@ -3302,6 +3329,7 @@ var qrcode = function() {
       workId: null,      // 「作品として保存」した先のID（未保存ならnull）
       folder: '',        // 保存するフォルダ（''＝フォルダなし）
       shapeId: null,     // 同じマスの並び（形）から作った作品どうしをまとめる目印
+      shapeLock: null,   // 型モード中の「固定した形」（{ slots, marks, srcTitle }）。保存はしない
       shareId: null,     // 配布リンクの合言葉（サーバーに保存したときだけ入る）
       shareToken: '',    // その問題を書き換えるための合鍵
       title: '',
@@ -4108,6 +4136,7 @@ var qrcode = function() {
       renderMyDict();
       renderMarkCheck();
       renderTypeInfo();
+      renderShapeMode();
       $('#btnRemoveWord').disabled = !state.selPlacedId;
       $('#btnRotate').disabled = !state.selPlacedId;
       saveLocal();
@@ -4121,6 +4150,10 @@ var qrcode = function() {
         const t = text.normalize('NFC');
         if (state.words.some(w => w.text === t)) { skipped++; return; }
         state.words.push({ id: uid(), text: t });
+        // 型モード中に自分で登録し直した語は、「かならず使うワード」にもどす
+        if (state.shapeLock && state.shapeLock.autoWords) {
+          state.shapeLock.autoWords = state.shapeLock.autoWords.filter(x => x !== t);
+        }
         rememberWord(t);
         added++;
       });
@@ -5155,6 +5188,8 @@ var qrcode = function() {
       history = [];
       state.folder = '';
       state.shapeId = null;
+      state.shapeLock = null;      // 型の固定も外す
+      renderShapeMode();
       renderFolderSelect();
       $('#linkBox').style.display = 'none';
       $('#workListBox').style.display = 'none';
@@ -5280,6 +5315,8 @@ var qrcode = function() {
       if (item.id !== state.workId
           && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
       applyData(item.data);
+      state.shapeLock = null;      // 別の作品を開いたら、型の固定は外す
+      renderShapeMode();
       state.workId = item.id;
       state.folder = item.folder || '';
       state.shapeId = item.shapeId || null;
@@ -5467,6 +5504,8 @@ var qrcode = function() {
       reader.onload = () => {
         try {
           applyData(JSON.parse(reader.result));
+          state.shapeLock = null;   // 読みこんだら型の固定は外す
+          renderShapeMode();
           $('#msg').textContent = '読み込みました。';
         } catch (e) {
           $('#msg').textContent = 'このファイルは読み込めませんでした。';
@@ -5500,6 +5539,8 @@ var qrcode = function() {
     function loadDataText() {
       try {
         applyData(JSON.parse($('#dataText').value));
+        state.shapeLock = null;   // 読みこんだら型の固定は外す
+        renderShapeMode();
         $('#dataBox').style.display = 'none';
         $('#msg').textContent = '読み込みました。';
       } catch (e) {
@@ -5867,6 +5908,7 @@ var qrcode = function() {
         state.keyword = e.target.value.normalize('NFC');
         board = buildBoard();
         renderKeyword();
+        renderShapeMode();   // 型モード中は「あと何文字か」の案内もその場で直す
         saveLocal();
       });
 
@@ -5883,16 +5925,19 @@ var qrcode = function() {
       $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
-      const runReskin = (useMine) => {
-        $('#btnReskin').disabled = true;
-        $('#btnReskinMine').disabled = true;
-        reskinPuzzle(useMine).finally(() => {
-          $('#btnReskin').disabled = false;
-          $('#btnReskinMine').disabled = false;
-        });
-      };
-      $('#btnReskin').addEventListener('click', () => runReskin(false));
-      $('#btnReskinMine').addEventListener('click', () => runReskin(true));
+      // 型（同じ形）モード
+      $('#btnShapeStart').addEventListener('click', () => {
+        $('#btnShapeStart').disabled = true;
+        startShapeMode().finally(() => { $('#btnShapeStart').disabled = false; renderShapeMode(); });
+      });
+      $('#btnShapeBuild').addEventListener('click', () => {
+        $('#btnShapeBuild').disabled = true;
+        buildFromShape().finally(() => { $('#btnShapeBuild').disabled = false; renderShapeMode(); });
+      });
+      $('#btnShapeWords').addEventListener('click', () => showTab('words'));
+      $('#btnShapeGoBuild').addEventListener('click', () => showTab('build'));
+      $('#btnShapeExit').addEventListener('click', () => exitShapeMode());
+      $('#btnShapeExit2').addEventListener('click', () => { exitShapeMode(); showTab('build'); });
 
       // フォルダ
       $('#workFolder').addEventListener('change', (e) => {
@@ -6804,26 +6849,156 @@ var qrcode = function() {
       return folder;
     }
 
-    // useMine … true なら「登録したワード・キーワードを使う」
-    async function reskinPuzzle(useMine) {
+    // ===== 型（同じ形）モード =====
+    // 形（マスの並び）と記号の位置だけを固定して、中の言葉は全部あたらしく作る。
+    // 「ふつうに作る」と混ざらないように、モードに入る／出るをはっきり分けている。
+
+    // 型モードに入る前に、いまの作品を必ず確定させる（消して進む、はなし）
+    async function confirmKeepWork() {
+      const saved = !!state.workId && loadWorks().some(w => w.id === state.workId);
+      if (saved && !hasUnsavedChanges()) return true;
+      if (!state.title) {
+        const t = prompt('いまの作品に名前をつけて保存します（例：2学期クロス）', 'クロスワード');
+        if (t === null) return false;
+        state.title = String(t).trim() || 'クロスワード';
+        $('#title').value = state.title;
+      }
+      if (!saved) {
+        storeWork('new', true);
+        return !hasUnsavedChanges();
+      }
+      const choice = await askChoice(
+        'まず、いまの作品を保存します',
+        '「' + state.title + '」を保存してから、その形を型にします。\n\n'
+        + '・上書き保存 … 前の内容に置きかわります（配布リンクは今までのまま）\n'
+        + '・別の作品として保存 … 前の作品を残して、もう1つ増やします',
+        [
+          { label: '上書き保存する', value: 'overwrite', kind: '' },
+          { label: '別の作品として保存する', value: 'new', kind: 'sub' },
+          { label: 'やめる', value: null, kind: 'sub' }
+        ]
+      );
+      if (!choice) return false;
+      storeWork(choice);
+      return !hasUnsavedChanges();
+    }
+
+    // 型モードに入る（いまの形と記号を写し取り、中身の登録だけ空にする）
+    async function startShapeMode() {
       const out = $('#reskinResult');
       const slots = currentSlots();
       if (slots.length < 2) {
-        out.innerHTML = '<span style="color:var(--ng)">先にクロスワードを作ってください'
-          + '（形をもとにして中身を入れかえる機能です）。</span>';
+        showMsg('先にクロスワードを作ってください（その形を型にします）。', 'ng');
         return;
       }
-      // いまの内容がまだ保存されていなければ、消す前に「上書き／別の作品として／やめる」を聞く
-      if (!(await confirmDiscard('同じ形で新しく作る'))) return;
+      if (!(await confirmKeepWork())) {
+        showMsg('保存しなかったので、型にはしませんでした。', 'ng');
+        return;
+      }
+      const src = state.workId ? loadWorks().find(w => w.id === state.workId) : null;
+      state.shapeLock = {
+        slots: slots.map(s2 => ({ r: s2.r, c: s2.c, dir: s2.dir, len: s2.len, cells: s2.cells.slice() })),
+        markCount: markCellsInOrder().length,
+        srcTitle: (src && src.title) || state.title || 'クロスワード'
+      };
+      // 中身（登録ワード・キーワード）はまっさらにする。形と記号はさわらない
+      snapshot();
+      state.words = [];
+      state.keyword = '';
+      $('#keywordInput').value = '';
+      state.selWordId = null;
+      if (out) out.textContent = '';
+      refresh();
+      showTab('words');
+      showMsg('この形を型にしました。ワードかキーワードを入れてから、②つくるの「この型で作る」を押してください。'
+        + '（盤面に見えている言葉は前の問題です。作ると入れかわります）', 'ok');
+    }
+
+    // 型モードをやめる（形の固定を外すだけ。盤面はそのまま）
+    function exitShapeMode(quiet) {
+      state.shapeLock = null;
+      const out = $('#reskinResult');
+      if (out) out.textContent = '';
+      renderShapeMode();
+      if (!quiet) showMsg('型をやめました。ふつうに作れます（形も変えられます）。', 'ok');
+    }
+
+    // 型モードの見た目を切りかえる（形を変えてしまうボタンは、モード中はおさえる）
+    function renderShapeMode() {
+      const on = !!state.shapeLock;
+      const panelOff = $('#shapeOff'), panelOn = $('#shapeOn'), banner = $('#shapeBanner');
+      if (!panelOff || !panelOn || !banner) return;
+      panelOff.hidden = on;
+      panelOn.hidden = !on;
+      banner.hidden = !on;
+      ['#btnGenerate', '#btnRegenerate', '#btnFitWords', '#btnGoBuild'].forEach(sel => {
+        const b = $(sel);
+        if (!b) return;
+        b.disabled = on;
+        b.title = on ? '型で作っている間は使えません（形が変わってしまうため）。'
+                     + '「型をやめて、ふつうに作るにもどる」を押すと使えます。' : '';
+      });
+      if (!on) return;
+      const lock = state.shapeLock;
+      const lens = {};
+      lock.slots.forEach(s2 => { lens[s2.len] = (lens[s2.len] || 0) + 1; });
+      const lenText = Object.keys(lens).map(Number).sort((a, b) => a - b)
+        .map(n => n + '文字が' + lens[n] + '個').join('／');
+      const kwNow = chars(state.keyword).length;
+      const autoW = lock.autoWords || [];
+      const myN = state.words.filter(w => !autoW.includes(w.text)).length;
+      const info = '型：<b>「' + escapeHtml(lock.srcTitle) + '」</b>と同じ形'
+        + '（ワードの入るところは全部で <b>' + lock.slots.length + '個</b>／' + lenText + '）。'
+        + (lock.markCount
+            ? 'キーワードは <b>' + lock.markCount + '文字</b>です'
+              + (kwNow ? (kwNow === lock.markCount
+                  ? '（いまの入力：「' + escapeHtml(state.keyword) + '」でOK）'
+                  : '<span style="color:var(--ng)">（いまの入力は' + kwNow + '文字。'
+                    + lock.markCount + '文字にしてください）</span>')
+                : '（空のままなら、ツールが自動で決めます）')
+            : '<span style="color:var(--ng)">記号がないので、キーワードは決まりません（③しあげで記号をふってください）</span>')
+        + '　かならず使うワード：<b>' + myN + '語</b>（' + lock.slots.length + '語まで'
+        + (autoW.length ? '／辞書から自動で入った ' + autoW.length + '語 は数えません' : '') + '）';
+      $('#shapeInfo').innerHTML = info;
+      $('#shapeBannerInfo').innerHTML = info;
+    }
+
+    // 型で作る（形・記号は固定。ワード／キーワードは、ここで登録したものを使う）
+    async function buildFromShape() {
+      const out = $('#reskinResult');
+      const lock = state.shapeLock;
+      if (!lock) return;
+
+      const slots = lock.slots.map(s2 => ({ r: s2.r, c: s2.c, dir: s2.dir, len: s2.len, cells: s2.cells.slice() }));
+      // いま盤面にある語（どれだけ入れかわったか数えるため）
+      const nowText = new Map(currentSlots().map(s2 => [s2.r + ',' + s2.c + ',' + s2.dir, s2.text]));
+      const before = slots.map(s2 => nowText.get(s2.r + ',' + s2.c + ',' + s2.dir) || '');
+
+      // 前の回に「辞書から自動で入った語」は、次に作るときの“必ず使うワード”にはしない。
+      // （そうしないと、1回作ったあと2回目が作れなくなる）
+      const autoW = lock.autoWords || [];
+      const texts = [...new Set(state.words.map(w => w.text)
+        .filter(t => chars(t).length >= 2 && !autoW.includes(t)))];
+      const kwChars = chars(state.keyword);
+      const marks = markCellsInOrder();
+      const kwAuto = kwChars.length === 0;
+
+      // 何も入れずに作っても意味がないので、どちらかは必ず入れてもらう
+      if (!texts.length && !kwChars.length) {
+        out.innerHTML = '<span style="color:var(--ng)">①ことばで <b>使いたいワードを登録</b> するか、'
+          + '<b>キーワードを入れて</b> から押してください。'
+          + '（どちらも空のままだと、前と同じような問題ができるだけです）</span>';
+        return;
+      }
 
       // 交差の数を数える（同じマスを2つのわくが通っていれば交差）
       const useCount = new Map();
-      slots.forEach(s => s.cells.forEach(ck => useCount.set(ck, (useCount.get(ck) || 0) + 1)));
-      slots.forEach(s => { s.crossN = s.cells.filter(ck => useCount.get(ck) > 1).length; });
+      slots.forEach(s2 => s2.cells.forEach(ck => useCount.set(ck, (useCount.get(ck) || 0) + 1)));
+      slots.forEach(s2 => { s2.crossN = s2.cells.filter(ck => useCount.get(ck) > 1).length; });
 
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
-      const needLens = new Set(slots.map(s => s.len));
+      const needLens = new Set(slots.map(s2 => s2.len));
 
       // 使える辞書を、長さごとに分けて用意する
       function buildTier(level, onlyKyoiku) {
@@ -6845,31 +7020,25 @@ var qrcode = function() {
         return { byLen, dictSet, metaOf, missing };
       }
 
-      // 今の設定 → 漢字のしばりを外す → むずかしさを広げる、の順にためす。
-      // 「設定では足りません」で止めてしまうと使えないので、自動で広げて作りきる
+      // 今の設定 → 漢字のしばりを外す → むずかしさを広げる、の順にためす
       const level0 = Number($('#findLevel').value) || 10000;
       const kyoiku0 = $('#findKyoiku').checked;
       const tiers = [{ level: level0, kyoiku: kyoiku0, note: '' }];
       if (kyoiku0) tiers.push({ level: level0, kyoiku: false, note: '「小学校で習う漢字を使う語だけ」のしばりを外して' });
       if (level0 < 10000) tiers.push({ level: 10000, kyoiku: false, note: 'むずかしさを「ふつう」まで広げて' });
 
-      const marks = markCellsInOrder();
-      const kwChars = chars(state.keyword);
-
-      // ===== 「登録したワード・キーワードで作る」ときの下調べ =====
-      let required = [];
+      // ===== 入れられるかどうかの下調べ（作る前に、入らない理由をはっきり出す）=====
       const fixed = new Map();
-      if (useMine) {
-        const texts = [...new Set(state.words.map(w => w.text).filter(t => chars(t).length >= 2))];
-        if (texts.length > slots.length) {
-          out.innerHTML = '<span style="color:var(--ng)">この形のわくは <b>' + slots.length
-            + '個</b> ですが、登録したワードが <b>' + texts.length + '語</b> あります。'
-            + 'ワードを ' + (texts.length - slots.length) + '語 減らすか、'
-            + '「おまかせ」で作ってから手で入れかえてください。</span>';
-          return;
-        }
+      let required = [];
+      if (texts.length > slots.length) {
+        out.innerHTML = '<span style="color:var(--ng)">この型のわくは <b>' + slots.length
+          + '個</b> ですが、登録したワードが <b>' + texts.length + '語</b> あります。'
+          + 'ワードを ' + (texts.length - slots.length) + '語 減らしてください。</span>';
+        return;
+      }
+      if (texts.length) {
         const slotLen = new Map();
-        slots.forEach(s => slotLen.set(s.len, (slotLen.get(s.len) || 0) + 1));
+        slots.forEach(s2 => slotLen.set(s2.len, (slotLen.get(s2.len) || 0) + 1));
         const needLen = new Map();
         texts.forEach(t => { const n = chars(t).length; needLen.set(n, (needLen.get(n) || 0) + 1); });
         const overflow = [];
@@ -6879,51 +7048,53 @@ var qrcode = function() {
             + len + '文字のわくは ' + have + '個しかありません');
         });
         if (overflow.length) {
-          out.innerHTML = '<span style="color:var(--ng)">この形には入りません。<br>'
+          out.innerHTML = '<span style="color:var(--ng)">この型には入りません。<br>'
             + overflow.map(escapeHtml).join('<br>') + '<br>'
-            + 'ワードを減らすか、長さの合うワードに変えてください。</span>';
+            + 'ワードを減らすか、長さの合うワードに変えてください。'
+            + '（この型のわくは ' + [...needLens].sort((x, y) => x - y).join('・') + ' 文字です）</span>';
           return;
         }
-        if (kwChars.length && marks.length && kwChars.length !== marks.length) {
-          out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
-            + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。'
-            + '数をそろえるか、③しあげで記号をふり直してください。</span>';
-          return;
-        }
-        if (kwChars.length && !marks.length) {
-          out.innerHTML = '<span style="color:var(--ng)">記号がありません。'
-            + '③しあげで「記号を自動でふる」を押してから、もう一度押してください。</span>';
-          return;
-        }
-        marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
+      }
+      if (kwChars.length && !marks.length) {
+        out.innerHTML = '<span style="color:var(--ng)">記号がありません。'
+          + '③しあげで「記号を自動でふる」を押してから、もう一度押してください。</span>';
+        return;
+      }
+      if (kwChars.length && kwChars.length !== marks.length) {
+        out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
+          + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。'
+          + 'キーワードを ' + marks.length + '文字にするか、③しあげで記号をふり直してください。</span>';
+        return;
+      }
+      marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
+      if (texts.length) {
         required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || '', rank: 0 }));
         const noRoom = required.filter(w => !slots.some(sl => sl.len === w.cs.length
           && sl.cells.every((ck, i) => !fixed.has(ck) || fixed.get(ck) === w.cs[i])));
         if (noRoom.length) {
           out.innerHTML = '<span style="color:var(--ng)">「'
             + escapeHtml(noRoom.map(w => w.t).join('・'))
-            + '」は、この形とキーワードには入りません（長さか、キーワードの文字とぶつかります）。'
+            + '」は、この型' + (kwChars.length ? 'とキーワード' : '') + 'には入りません'
+            + '（長さが合わないか、キーワードの文字とぶつかります）。'
             + 'ワードを変えるか、キーワードを見直してください。</span>';
           return;
         }
       }
 
+      // ===== さがす =====
       const wantKwWord = $('#reskinKwWord').checked;
-      const before = slots.map(s => s.text);
+      const strictKw = kwAuto && marks.length > 0 && wantKwWord;   // 自動で決めるときだけ効く
       const END = Date.now() + 12000;
       let best = null, bestScore = -Infinity, tried = 0;
       let usedNote = '', usedTier = null, lastMissing = null;
 
-      out.textContent = useMine
-        ? '登録したワードとキーワードで、この形に入る組み合わせをさがしています…'
-        : '同じ形で、別の言葉の組み合わせをさがしています…';
+      out.textContent = 'この型に入る組み合わせをさがしています…';
       await tick();
 
       for (const tier of tiers) {
         const dict = buildTier(tier.level, tier.kyoiku);
-        if (dict.missing.length) { lastMissing = dict.missing; continue; }   // この設定では足りない長さがある
+        if (dict.missing.length) { lastMissing = dict.missing; continue; }
         lastMissing = null;
-        // 1段階あたりの持ち時間（最後の段階は残り全部つかう）
         const slice = tier === tiers[tiers.length - 1] ? END : Math.min(END, Date.now() + 4000);
         while (Date.now() < slice) {
           tried++;
@@ -6933,54 +7104,61 @@ var qrcode = function() {
             const kwOk = kw.length >= 2 && dict.dictSet.has(kw);
             const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
             const avgRank = res.assign.reduce((a2, w) => a2 + w.rank, 0) / res.assign.length;
-            if (useMine) {
+            const score = (kwOk ? 100000 : 0) + (kw !== before.join('') ? 0 : 0)
+              + changed * 300 - avgRank / 50;
+            // きびしくさがすときは、辞書にある言葉になったものだけを残す
+            if ((!strictKw || kwOk) && score > bestScore) {
+              bestScore = score;
               best = { ...res, kw, kwOk, changed };
               usedTier = dict; usedNote = tier.note;
-              break;
             }
-            const kwNew = kw !== state.keyword ? 800 : 0;
-            const score = (kwOk ? 100000 : 0) + kwNew + changed * 300 - avgRank / 50;
-            if (score > bestScore) {
-              bestScore = score; best = { ...res, kw, kwOk, changed };
-              usedTier = dict; usedNote = tier.note;
-            }
-            if ((!wantKwWord || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)
-                && (!marks.length || best.kw !== state.keyword)) break;
+            if (best && (!strictKw || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)) break;
           }
-          out.textContent = (useMine ? '登録したワードとキーワードで' : '同じ形で')
-            + '、入る組み合わせをさがしています…（' + tried + '通りためしました）';
+          out.textContent = 'この型に入る組み合わせをさがしています…（' + tried + '通りためしました）';
           await tick();
         }
-        // 見つかっていて、キーワードの条件も満たしていれば、次の段階には進まない
-        if (best && (useMine || !wantKwWord || best.kwOk)) break;
+        if (best && (!strictKw || best.kwOk)) break;
       }
 
       if (!best) {
         const lens = [...needLens].sort((x, y) => x - y).join('・');
         out.innerHTML = '<span style="color:var(--ng)">'
           + (lastMissing
-              ? '<b>' + lastMissing.join('・') + '文字</b>の語が辞書にありません'
-                + '（辞書ぜんぶを見てもです）。そのわくの長さを変えてください。'
-              : 'この形に入る組み合わせが見つかりませんでした。'
-                + '（この形のわくは ' + lens + ' 文字。'
-                + (useMine ? '登録ワードを減らすか、キーワードを短くしてみてください。'
-                           : 'もう一度押すか、②つくるの「別の形にする」で形を少し変えてみてください。') + '）')
+              ? '<b>' + lastMissing.join('・') + '文字</b>の語が辞書にありません（辞書ぜんぶを見てもです）。'
+                + 'この型は使えないので、②つくるでふつうに作り直してください。'
+              : (strictKw
+                  ? '<b>意味のある言葉になるキーワード</b>が、この型では見つかりませんでした。<br>'
+                    + '・キーワードを<b>自分で入れる</b>（' + marks.length + '文字）<br>'
+                    + '・上のチェックを<b>外す</b>（意味のない並びでもよくする）<br>'
+                    + '・登録ワードを減らす、むずかしさを「ふつう」にする<br>'
+                    + 'のどれかをためしてください。<b>わけのわからないキーワードにはしませんでした。</b>'
+                  : 'この型に入る組み合わせが見つかりませんでした。'
+                    + '（この型のわくは ' + lens + ' 文字）<br>'
+                    + (kwChars.length
+                        ? 'キーワード「' + escapeHtml(state.keyword) + '」が入りにくいのかもしれません。'
+                          + '「ん」のように語のはじめに来にくい文字が記号のマスに当たると、とても作りにくくなります。'
+                          + '別のキーワードでためすか、③しあげで記号の位置をふり直してください。<br>'
+                        : '')
+                    + (texts.length ? '登録ワードを減らすのもききます。<br>' : '')
+                    + 'むずかしさを「ふつう（中学生向け）」にすると、見つかりやすくなります。'
+                    + 'もう一度押すと、別の組み合わせをさがします。'))
           + '</span>';
         return;
       }
 
-      // 盤面に反映する（形と記号はそのまま、言葉とキーワードだけ入れかえる）
+      // ===== 盤面に反映する（形と記号はそのまま、言葉とキーワードだけ入れかえる）=====
       snapshot();
       state.placed = slots.map((sl, i) => ({
         id: uid(), text: best.assign[i].t, r: sl.r, c: sl.c, dir: sl.dir
       }));
       const texts2 = [...new Set(best.assign.map(w => w.t))];
       state.words = texts2.map(t => ({ id: uid(), text: t }));
+      lock.autoWords = texts2.filter(t => !texts.includes(t));   // 自動で入った語をおぼえておく
       best.assign.forEach(w => rememberWord(w.t, w.s || (usedTier && usedTier.metaOf.get(w.t)) || ''));
       state.selWordId = null; state.selPlacedId = null;
       clearCycle(); clueSig = ''; viewSig = '';
 
-      if (marks.length && !(useMine && kwChars.length)) {
+      if (marks.length && kwAuto) {
         state.keyword = best.kw;
         $('#keywordInput').value = state.keyword;
       }
@@ -6989,29 +7167,28 @@ var qrcode = function() {
       refresh();
       showTab('build');
 
-      let msg = '<strong>同じ形のまま、中身を作り直しました。</strong>'
-        + '（' + slots.length + '語のうち ' + best.changed + '語が入れかわりました）';
+      let msg = '<strong>型のまま、中身をあたらしく作りました。</strong>'
+        + '（' + slots.length + '語のうち ' + best.changed + '語が前とちがう言葉です）';
       if (usedNote) msg += ' <span style="color:var(--ng)">※いまの設定では語が足りなかったので、'
         + escapeHtml(usedNote) + 'さがしました。</span>';
-      if (useMine) {
-        msg += ' 登録したワードは全部つかいました。'
-          + (kwChars.length ? 'キーワードは「' + escapeHtml(state.keyword) + '」のままです。' : '');
-      }
-      if (marks.length && !(useMine && kwChars.length)) {
+      if (texts.length) msg += ' 登録したワード ' + texts.length + '語は全部つかいました。';
+      if (marks.length && !kwAuto) {
+        msg += ' キーワードは入れたとおり <strong>「' + escapeHtml(state.keyword) + '」</strong> です。';
+      } else if (marks.length) {
         msg += ' 新しいキーワードは <strong>「' + escapeHtml(best.kw) + '」</strong>。';
         msg += best.kwOk
           ? ' <span style="color:var(--ok);font-weight:700;">辞書にある言葉です。</span>'
           : ' <span style="color:var(--ng)">辞書にない並びです'
-            + '（もう一度押すと、別の組み合わせをさがします）。</span>';
-      } else if (!marks.length) {
-        msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。'
-          + '③しあげで記号をふってから、もう一度押してください。</span>';
+            + '（上のチェックを入れて押すと、言葉になるものだけをさがします）。</span>';
+      } else {
+        msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。</span>';
       }
       msg += '<br><span style="color:var(--ok);font-weight:700;">'
         + 'もとの作品は上書きされません。</span>保存すると「📁 ' + escapeHtml(folder)
-        + '」に「' + escapeHtml(state.title) + '」として入ります。';
+        + '」に「' + escapeHtml(state.title) + '」として入ります。'
+        + '<br>つづけて別の問題を作るときは、①ことばでワード・キーワードを入れかえて、もう一度このボタンを押してください。';
       out.innerHTML = msg;
-      showMsg('同じ形で作り直しました。保存すると別の作品になります（もとの作品はそのままです）。', 'ok');
+      showMsg('型で作りました。保存すると別の作品になります（もとの作品はそのままです）。', 'ok');
     }
 
     function findBridges(failedText) {
