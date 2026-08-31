@@ -1,8 +1,68 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-08-22（セッション140・長いリンク維持フォールバック設計を追加）
+最終更新：2026-08-31（セッション175・A/B比較ビュー「見くらべ」画面を追加）
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
+
+---
+
+## A/B 比較ビュー「見くらべ」（ことばかける君 dual.html）
+
+**用途：** 2つの盤面を「同じページ」で見比べながら調整したいとき。
+デスクトップ横表示・タブレット縦持ちの両対応。
+
+**設計ポイント：**
+1. **トグルボタン** — 画面上部に固定して「A / B 切りかえ」を常にアクセス可能に
+2. **横スクロール不要** — 両方並べるときは1つずつ横幅を圧縮（e.g. 各々400pxに）
+3. **スマホ・タブレット対応** — 縦持ち時は積み上げ表示、横持ち時は並べ表示に自動切り替え
+
+**HTML例：**
+```html
+<!-- トグルボタン（固定位置） -->
+<div style="position: fixed; top: 10px; left: 10px; z-index: 1000;">
+  <button id="viewToggle" onclick="toggleView()">
+    見くらべ / A / B
+  </button>
+</div>
+
+<!-- 2面表示コンテナ -->
+<div id="dualContainer" style="
+  display: flex; gap: 10px;
+  max-width: 100%;
+  overflow-x: auto;
+">
+  <!-- A面 -->
+  <div id="panelA" style="flex: 0 0 400px;">
+    <h2>A（横850字）</h2>
+    <div id="boardA" style="border: 1px solid #ccc;"></div>
+  </div>
+  
+  <!-- B面 -->
+  <div id="panelB" style="flex: 0 0 400px;">
+    <h2>B（横550字）</h2>
+    <div id="boardB" style="border: 1px solid #ccc;"></div>
+  </div>
+</div>
+```
+
+**操作ロジック例：**
+```javascript
+let viewMode = 'dual'; // 'dual' | 'a' | 'b'
+
+function toggleView() {
+  viewMode = { dual: 'a', a: 'b', b: 'dual' }[viewMode];
+  
+  document.getElementById('panelA').style.display = 
+    (viewMode === 'dual' || viewMode === 'a') ? 'block' : 'none';
+  document.getElementById('panelB').style.display = 
+    (viewMode === 'dual' || viewMode === 'b') ? 'block' : 'none';
+  
+  document.getElementById('viewToggle').textContent = 
+    { dual: '見くらべ / A / B', a: '見くらべ / A / B', b: '見くらべ / A / B' }[viewMode];
+}
+```
+
+**実例：** https://gamigamiigami.github.io/Workspace/projects/crossword/dual.html
 
 ---
 
