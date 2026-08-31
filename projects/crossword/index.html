@@ -807,29 +807,28 @@
           <label class="check"><input type="checkbox" id="reskinKwWord" checked>
             キーワードを自動で決めるときは「辞書にある言葉」だけにする</label>
         </div>
-        <div class="row">
-          <label class="check"><input type="checkbox" id="shapeRemark">
-            キーワードが入るように、<b>記号の位置は自動で決め直す</b></label>
-        </div>
-        <p class="hint-line" style="margin-top:2px;">
-          ↑ ふだんは<b>記号の位置はそのまま</b>で作ります。ただし、いまの位置だとキーワードが入らないとき
-          （「ん」が言葉のいちばん前のマスに当たっているときなど）は、これにチェックを入れると
-          <b>キーワードが入る場所へ記号をふり直して</b>作ります（マスの並び＝形は変わりません）。
-        </p>
         <p class="hint-line" style="margin-top:2px;">
           ↑ キーワードを自分で入れたときは、この設定は使いません（入れたとおりになります）。<br>
           チェックを入れていると、<b>意味のない文字の並びはキーワードにしません</b>。
           見つからなかったときは作らずに知らせます（＝わけのわからないキーワードにはなりません）。
         </p>
         <p id="reskinResult" class="hint-line"></p>
-        <div class="row" style="margin-top:6px;">
-          <button id="btnShapeMarks" class="sub small">記号（キーワード）の位置を変える</button>
-          <button id="btnShapeMarksReset" class="sub small">型の記号にもどす</button>
+
+        <h3 style="margin-top:10px;font-size:14px;">記号（キーワード）の位置</h3>
+        <p class="hint-line" style="margin-top:2px;">
+          記号の位置は<b>基本、もとの位置のまま</b>作ります。「ん」が言葉のいちばん前のマスに来てしまう時など、
+          <b>そのままでは入らないときだけ、自動で位置を決め直して</b>作ります（マスの並び＝形は変わりません）。<br>
+          位置を自分で決めたいときは、下の3つから選べます（いつでも切りかえられます）。
+        </p>
+        <div class="row" style="margin-top:4px;">
+          <button id="btnShapeMarksReset" class="sub small">① もとの位置にもどす</button>
+          <button id="btnShapeMarksAuto" class="sub small">② 盤面から自動でふり直す</button>
+          <button id="btnShapeMarks" class="sub small">③ 自分で位置を決める</button>
         </div>
         <p class="hint-line" style="margin-top:2px;">
-          記号の位置は<b>基本そのまま</b>ですが、変えることもできます。
-          「位置を変える」を押すと③しあげの<b>記号を入れる</b>に切りかわるので、
-          マスをタップして記号を書いたり消したりしてください（キーワードの文字数も変わります）。
+          ①型に入ったときの位置にもどす／②いま盤面にある言葉とキーワードから、記号をふり直す
+          （いろいろな言葉から選ぶようにします）／③③しあげの「記号を入れる」に切りかわるので、
+          マスをタップして記号を書いたり消したりできます。
         </p>
         <div class="row" style="margin-top:6px;">
           <button id="btnShapeExit" class="sub small">型をやめて、ふつうに作るにもどる</button>
@@ -5054,26 +5053,46 @@ var qrcode = function() {
     }
 
     // ===== 記号をキーワードの順に自動でふる =====
+    // 「同じ語から何個も」「隣どうし」をできるだけ避け、いろいろな語・場所から選ぶ
     function autoMark() {
       const kw = chars(state.keyword);
       if (kw.length === 0) { showMsg('先に①ことばでキーワードを入れてください。', 'ng'); return; }
       if (board.map.size === 0) { showMsg('先にクロスワードを作ってください。', 'ng'); return; }
       snapshot();
-      state.marks = {};
       const style = $('#markStyle').value;
       const label = (i) => (style === 'num' || i >= 26) ? String(i + 1) : String.fromCharCode(65 + i);
-      // 左上から順に見て、まだ使っていないマスを割り当てる
-      const cellList = [...board.map.entries()]
-        .map(([k, v]) => ({ k, ch: v.ch, r: Number(k.split(',')[0]), c: Number(k.split(',')[1]) }))
-        .sort((a, b) => a.r - b.r || a.c - b.c);
-      const used = new Set();
-      const missing = [];
-      kw.forEach((ch, i) => {
-        const hit = cellList.find(x => x.ch === ch && !used.has(x.k));
-        if (!hit) { missing.push(ch); return; }
-        used.add(hit.k);
-        state.marks[hit.k] = label(i);
+
+      const cellChar = new Map();
+      const cellWords = new Map();
+      const wordOrder = new Map();
+      state.placed.forEach(pw => {
+        const cells = wordCells(pw).map(c => key(c.r, c.c));
+        wordOrder.set(pw.id, cells);
+        cells.forEach((k, i) => {
+          cellChar.set(k, wordCells(pw)[i].ch);
+          if (!cellWords.has(k)) cellWords.set(k, []);
+          cellWords.get(k).push(pw.id);
+        });
       });
+
+      const plan = pickMarkCells(kw, cellChar, cellWords, wordOrder);
+      state.marks = {};
+      const missing = [];
+      if (plan) {
+        plan.forEach((k, i) => { state.marks[k] = label(i); });
+      } else {
+        // 全部は入らなかったので、入るところまでだけふる（足りない文字を知らせる）
+        const used = new Set();
+        const remain = new Map(cellChar);
+        kw.forEach((ch, i) => {
+          const sub = pickMarkCells([ch], remain, cellWords, wordOrder);
+          const k = sub && sub[0];
+          if (!k) { missing.push(ch); return; }
+          used.add(k);
+          remain.delete(k);
+          state.marks[k] = label(i);
+        });
+      }
       refresh();
       if (missing.length) {
         // 同じ文字が2回あるキーワードは、その2つが交差の同じマスに重なっていると
@@ -6335,6 +6354,7 @@ var qrcode = function() {
         refresh();
         showMsg('記号を型の位置にもどしました。', 'ok');
       });
+      $('#btnShapeMarksAuto').addEventListener('click', autoMark);
       $('#btnShapeExit').addEventListener('click', () => exitShapeMode());
       $('#btnShapeExit2').addEventListener('click', () => { exitShapeMode(); showTab('build'); });
 
@@ -7242,22 +7262,74 @@ var qrcode = function() {
       return list;
     }
 
-    // 盤面の文字から、キーワードの文字を1つずつ置けるマスを見つける（左上から順に）
-    // 見つからなければ null。見つかれば、キーワードの順に並んだマスの並びを返す
-    function markPlanFor(kwCs, letters) {
-      const cells = [...letters.keys()].map(k => {
-        const [r, c] = k.split(',').map(Number);
-        return { k, r, c, ch: letters.get(k) };
-      }).sort((a, b) => a.r - b.r || a.c - b.c);
+    // 記号を置くマスを、キーワードの文字ぶん選ぶ。
+    // 「同じ語から何個も」「隣どうし」をできるだけ避け、いろいろな語・いろいろな場所から選ぶ。
+    // cellChar   … マスの文字（Map: セルキー -> 文字）
+    // cellWords  … マスがどの語に属するか（Map: セルキー -> [語のID, ...]。交差マスは2つ）
+    // wordOrder  … 語ごとの、マスの並び順（Map: 語のID -> [セルキー, ...]）
+    // 見つからなければ null。見つかれば、キーワードの順に並んだセルキーの配列を返す
+    function pickMarkCells(kwCs, cellChar, cellWords, wordOrder) {
+      const byChar = new Map();
+      cellChar.forEach((ch, k) => {
+        if (!byChar.has(ch)) byChar.set(ch, []);
+        byChar.get(ch).push(k);
+      });
+      const shuffle = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      };
       const used = new Set();
+      const wordUse = new Map();          // 語のID -> すでに何個記号を置いたか
+      const chosenPos = new Map();        // 語のID -> すでに選んだ「その語の中での位置」の集まり
       const plan = [];
       for (const ch of kwCs) {
-        const hit = cells.find(x => x.ch === ch && !used.has(x.k));
-        if (!hit) return null;
-        used.add(hit.k);
-        plan.push(hit.k);
+        const cands = shuffle((byChar.get(ch) || []).filter(k => !used.has(k)));
+        if (!cands.length) return null;
+        let best = null, bestScore = Infinity;
+        for (const k of cands) {
+          const words = cellWords.get(k) || [];
+          const maxUse = words.length ? Math.max(...words.map(w => wordUse.get(w) || 0)) : 0;
+          let adjPenalty = 0;
+          words.forEach(w => {
+            const order = wordOrder.get(w);
+            if (!order) return;
+            const pos = order.indexOf(k);
+            const chosen = chosenPos.get(w);
+            if (chosen) chosen.forEach(p2 => { if (Math.abs(p2 - pos) === 1) adjPenalty++; });
+          });
+          // 同じ語から何個も選ぶことを、いちばん強く避ける。次に、隣どうしを避ける
+          const score = maxUse * 10 + adjPenalty * 3;
+          if (score < bestScore) { bestScore = score; best = { k, words }; }
+        }
+        used.add(best.k);
+        plan.push(best.k);
+        best.words.forEach(w => {
+          wordUse.set(w, (wordUse.get(w) || 0) + 1);
+          const order = wordOrder.get(w);
+          if (!order) return;
+          if (!chosenPos.has(w)) chosenPos.set(w, new Set());
+          chosenPos.get(w).add(order.indexOf(best.k));
+        });
       }
       return plan;
+    }
+
+    // ②つくる（型で作るとき）用：slots（わく）の情報から、語の並びを作ってあげる
+    function markPlanFor(kwCs, letters, slots) {
+      const cellChar = letters;
+      const cellWords = new Map();
+      const wordOrder = new Map();
+      (slots || []).forEach((sl, i) => {
+        wordOrder.set(i, sl.cells);
+        sl.cells.forEach(k => {
+          if (!cellWords.has(k)) cellWords.set(k, []);
+          cellWords.get(k).push(i);
+        });
+      });
+      return pickMarkCells(kwCs, cellChar, cellWords, wordOrder);
     }
 
     // 決めた並びのとおりに、記号をふり直す
@@ -7763,8 +7835,9 @@ var qrcode = function() {
       // ・記号が無い → キーワードが入る場所に、あとから自動でふる
       // ・チェックが入っている → いまの位置は使わず、入る場所にふり直す
       // ・ふつう → いまの記号の位置に、キーワードの文字をはめこむ
-      const wantRemark = $('#shapeRemark') && $('#shapeRemark').checked;
-      let remark = kwChars.length > 0 && (marks.length === 0 || wantRemark || forceRemark);
+      // 記号の位置は、基本は「もとの位置のまま」。記号がない、またはもとの位置では
+      // キーワードが入らなかったとき（forceRemark）だけ、自動で位置を決め直す
+      let remark = kwChars.length > 0 && (marks.length === 0 || forceRemark);
       if (kwChars.length && marks.length && !remark && kwChars.length !== marks.length) {
         out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
           + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。<br>'
@@ -7851,7 +7924,7 @@ var qrcode = function() {
             Math.min(slice, Date.now() + (strictKw ? 700 : 2200)), remark ? kwChars : null);
           if (res) {
             // 記号をふり直すときは、キーワードの文字を置けるかどうかで合否を決める
-            const plan = remark ? markPlanFor(kwChars, res.letters) : null;
+            const plan = remark ? markPlanFor(kwChars, res.letters, slots) : null;
             if (remark && !plan) { planMiss++; out.textContent = 'キーワード「' + state.keyword
               + '」が入る組み合わせをさがしています…（' + tried + '通りためしました）'; await tick(); continue; }
             const kw = remark ? state.keyword : keywordFromLetters(res.letters);
