@@ -297,6 +297,19 @@
     .cell.blank-black { background: #22282f; }
     /* 型モードで、まだ文字が入っていない「型のマス」 */
     .cell.shapecell { background: #eef3fb; box-shadow: inset 0 0 0 2px #b9cbe6; }
+    /* ===== 「計算中です」の見た目（フリーズと区別がつくように）===== */
+    @keyframes spin360 { to { transform: rotate(360deg); } }
+    .btn-spinner {
+      display: inline-block; width: 14px; height: 14px; margin-left: 8px; vertical-align: -2px;
+      border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+      opacity: .85; animation: spin360 .7s linear infinite;
+    }
+    .working-line { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; }
+    .working-line .spinner {
+      display: inline-block; width: 16px; height: 16px; flex: none;
+      border: 3px solid #cfd9e6; border-top-color: var(--navy); border-radius: 50%;
+      animation: spin360 .7s linear infinite;
+    }
     .cell.cand { background: #fff2cd; box-shadow: inset 0 0 0 2px var(--accent); cursor: pointer; }
     .cell.selword { background: #fff6e0; }
     .cell.conflict { background: var(--ng-bg); color: var(--ng); }
@@ -3504,6 +3517,32 @@ var qrcode = function() {
       el.className = kind || '';
     }
 
+    // ===== 「計算中」であることが分かる表示（フリーズと勘違いされないように）=====
+    // 指定した場所に、くるくる回るマークと文字を出す。処理が終わったら呼び出しもとで innerHTML を書きかえればよい
+    function busyHtml(text) {
+      return '<span class="working-line"><span class="spinner" aria-hidden="true"></span>'
+        + escapeHtml(text) + '</span>';
+    }
+    function showBusyText(el, text) {
+      if (!el) return;
+      el.innerHTML = busyHtml(text);
+    }
+
+    // ボタンを「計算中」の見た目にする（文字はそのまま・くるくるマークを追加してdisabledにする）
+    function setWorking(btns, working) {
+      const list = Array.isArray(btns) ? btns : [btns];
+      list.map(b => (typeof b === 'string') ? $(b) : b).forEach(b => {
+        if (!b) return;
+        b.disabled = working;
+        let dot = b.querySelector('.btn-spinner');
+        if (working) {
+          if (!dot) { dot = document.createElement('span'); dot.className = 'btn-spinner'; dot.setAttribute('aria-hidden', 'true'); b.appendChild(dot); }
+        } else if (dot) {
+          dot.remove();
+        }
+      });
+    }
+
     // ===== 盤面の計算 =====
     // 置かれた語が占めるマスの座標を返す
     function wordCells(p) {
@@ -5181,9 +5220,9 @@ var qrcode = function() {
 
     function runAutoBuild(btnSel) {
       const btn = $(btnSel);
-      if (btn) btn.disabled = true;
+      setWorking(btn, true);
       const run = autoBuild();
-      const done = () => { if (btn) btn.disabled = false; };
+      const done = () => setWorking(btn, false);
       if (run && run.finally) run.finally(done); else done();
     }
 
@@ -6428,12 +6467,14 @@ var qrcode = function() {
       $('#btnGoBuild').addEventListener('click', () => {
         showTab('build');
         if (state.shapeLock) { runShapeBuild(); return; }
-        runGenerate();
+        setWorking('#btnGoBuild', true);
+        Promise.resolve(runGenerate()).finally(() => setWorking('#btnGoBuild', false));
       });
       // 型モード中は「この型で作る」として動く
       const runBuildOrGenerate = () => {
         if (state.shapeLock) { showTab('build'); runShapeBuild(); return; }
-        runGenerate();
+        setWorking('#btnGenerate', true);
+        Promise.resolve(runGenerate()).finally(() => setWorking('#btnGenerate', false));
       };
       $('#btnGenerate').addEventListener('click', runBuildOrGenerate);
       $('#btnRegenerate').addEventListener('click', runGenerate);
@@ -6884,7 +6925,8 @@ var qrcode = function() {
       for (let round = 0; round < 4 && Date.now() - t0 < BUDGET; round++) {
         let pool = req.slice();
         const added = [];
-        let res = generateLayout(pool, 300, 700, reqSet);
+        let res = await generateLayout(pool, 300, 700, reqSet,
+          (n) => { showBusyText(out, '足りない語をさがしています…（' + (round + 1) + '巡目・組み合わせを計算中 ' + n + '通り）'); });
         for (let iter = 0; iter < 12 && Date.now() - t0 < BUDGET; iter++) {
           const missReq = res ? res.failed.filter(t => reqSet.has(t)) : req.slice();
           // 同じ文字が2回あるキーワードは、その回数ぶんのマスが要る
@@ -6894,9 +6936,11 @@ var qrcode = function() {
           if (!helper) break;
           pool.push(helper.text);
           added.push(helper);
-          res = generateLayout(pool, 300, 700, reqSet);
-          out.textContent = '足りない語をさがしています… （' + (round + 1) + '巡目 / '
-            + added.length + '語ためしました）';
+          res = await generateLayout(pool, 300, 700, reqSet,
+            (n) => { showBusyText(out, '足りない語をさがしています…（' + (round + 1) + '巡目・組み合わせを計算中 ' + n + '通り／'
+              + added.length + '語ためしました）'); });
+          showBusyText(out, '足りない語をさがしています…（' + (round + 1) + '巡目 / '
+            + added.length + '語ためしました）');
           await tick();
         }
         if (res) {
@@ -6985,14 +7029,15 @@ var qrcode = function() {
       // 枠の広さから、入りそうな語数を見積もる
       const target = Math.max(4, Math.min(16, Math.round(N * N / 5)));
 
-      out.textContent = '枠に入る語を集めています…';
+      showBusyText(out, '枠に入る語を集めています…');
       await tick();
 
       let bestRes = null, bestPool = null;
       // 何通りか集め方を試して、いちばん多く入った組み合わせを採用する
       for (let round = 0; round < 3; round++) {
         const pool = pickPool(base, target, dict, conv, kwChars, kwSelf);
-        const res = generateLayout(pool, 400, 900);
+        const res = await generateLayout(pool, 400, 900, null,
+          (n) => { showBusyText(out, '枠に入る語を集めています…（' + (round + 1) + '/3・計算中 ' + n + '通り）'); });
         if (res) {
           // そろった文字の「個数」で数える（「が」が2つ要るなら2マス必要）
           res._kw = kwChars.length - missingKwCells(res.placed).length;
@@ -7001,7 +7046,7 @@ var qrcode = function() {
             bestRes = res; bestPool = pool;
           }
         }
-        out.textContent = '枠に入る語を集めています… ' + (round + 1) + '/3';
+        showBusyText(out, '枠に入る語を集めています…' + (round + 1) + '/3');
         await tick();
       }
       if (!bestRes || bestRes.placed.length === 0) {
@@ -7208,8 +7253,9 @@ var qrcode = function() {
       return { placed, failed: failed.map(x => x.text), score, w, h, reqPlaced, kwMiss };
     }
 
-    // 何回も試して、いちばんよい形を採用する
-    function generateLayout(words, tries, budgetMs, req) {
+    // 何回も試して、いちばんよい形を採用する。
+    // onProgress(tried, ms) … 「いま何通り試したか」を呼び出しもとに伝える（画面表示・フリーズ防止のため）
+    async function generateLayout(words, tries, budgetMs, req, onProgress) {
       const all = words.map(t => ({ text: t, cs: chars(t) })).filter(x => x.cs.length >= 2);
       // 上限をこえる長さの語は、そもそも入らない
       const tooLong = state.maxSize ? all.filter(x => x.cs.length > state.maxSize) : [];
@@ -7224,6 +7270,7 @@ var qrcode = function() {
       const limit = tries || GEN_TRIES;
       const budget = budgetMs || 1800;
       const t0 = Date.now();
+      let lastYield = Date.now();
       for (let t = 0; t < limit; t++) {
         const r = tryLayout(items, conn, state.maxSize, req);
         if (!best || r.score > best.score) best = r;
@@ -7232,6 +7279,12 @@ var qrcode = function() {
         if (best.failed.length === 0 && !tooLong.length && tries && kwOk) break;
         if (req && tries && kwOk && best.failed.every(t => !req.has(t))) break;
         if (Date.now() - t0 > budget) break; // 時間がかかりすぎないように打ち切る
+        // 一定時間ごとに画面をひと呼吸させる（ここで止まらないと、ブラウザが固まって見える）
+        if (Date.now() - lastYield > 120) {
+          if (onProgress) onProgress(t + 1, Date.now() - t0);
+          await tick();
+          lastYield = Date.now();
+        }
       }
       if (best && tooLong.length) best.failed = best.failed.concat(tooLong.map(x => x.text));
       return best;
@@ -7714,9 +7767,9 @@ var qrcode = function() {
     function runShapeBuild() {
       const btns = ['#btnShapeBuild', '#btnGenerate', '#btnFitWords', '#btnGoBuild']
         .map(sel => $(sel)).filter(Boolean);
-      btns.forEach(b => { b.disabled = true; });
+      setWorking(btns, true);
       buildFromShape().finally(() => {
-        btns.forEach(b => { b.disabled = false; });
+        setWorking(btns, false);
         renderShapeMode();
       });
     }
@@ -7734,8 +7787,9 @@ var qrcode = function() {
           if (/color:var\(--ng\)/.test(v)) showMsg(plain.slice(0, 120), 'ng');
         },
         set textContent(v) {
-          $('#reskinResult').textContent = v;
-          $('#genResult').textContent = v;
+          showBusyText($('#reskinResult'), v);
+          showBusyText($('#genResult'), v);
+          showMsg(v, '');
         }
       };
       const lock = state.shapeLock;
@@ -7921,7 +7975,7 @@ var qrcode = function() {
             marks.forEach((m, i) => tryFixed.set(m.k, cand[i]));
           }
           const res = fillSlots(slots, dict.byLen, tryFixed, required,
-            Math.min(slice, Date.now() + (strictKw ? 700 : 2200)), remark ? kwChars : null);
+            Math.min(slice, Date.now() + (strictKw ? 500 : 900)), remark ? kwChars : null);
           if (res) {
             // 記号をふり直すときは、キーワードの文字を置けるかどうかで合否を決める
             const plan = remark ? markPlanFor(kwChars, res.letters, slots) : null;
@@ -8046,7 +8100,7 @@ var qrcode = function() {
       showMsg('型で作りました。③しあげの保存で「別の作品として保存する」を選ぶと、もとの問題も残ります。', 'ok');
     }
 
-    function findBridges(failedText) {
+    async function findBridges(failedText) {
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
       const level = Number($('#findLevel').value) || 10000;
@@ -8076,21 +8130,25 @@ var qrcode = function() {
       const t0 = Date.now();
       const words = state.words.map(w => w.text);
       const okList = [], maybe = [];
+      let n = 0;
       for (const c of cands.slice(0, 40)) {
         if (okList.length >= 6 || Date.now() - t0 > 2500) { maybe.push(c); continue; }
-        const res = generateLayout(words.concat([c.text]), 120, 260);
+        n++;
+        showBusyText($('#bridgeBox'), 'つなげられる語をさがしています…（' + n + '語目を計算中）');
+        const res = await generateLayout(words.concat([c.text]), 120, 260);
         if (res && res.failed.length === 0) okList.push(c); else maybe.push(c);
       }
       return { ok: okList, maybe: maybe.slice(0, 10) };
     }
 
-    function showBridges(failedText) {
+    async function showBridges(failedText) {
       const box = $('#bridgeBox');
-      box.innerHTML = '<p class="hint-line">さがしています…</p>';
+      showBusyText(box, 'つなげられる語をさがしています…');
       box.style.display = 'block';
-      setTimeout(() => {
-        const { ok, maybe } = findBridges(failedText);
-        box.innerHTML = '';
+      await tick();
+      const { ok, maybe } = await findBridges(failedText);
+      box.innerHTML = '';
+      {
         const head = document.createElement('p');
         head.className = 'hint-line';
         head.style.width = '100%';
@@ -8108,10 +8166,10 @@ var qrcode = function() {
             + '<span class="fs">' + escapeHtml(c.meta && c.meta !== c.text ? c.meta : '') + '</span>';
           box.appendChild(chip);
         });
-      }, 30);
+      }
     }
 
-    function runGenerate() {
+    async function runGenerate() {
       const texts = state.words.map(w => w.text);
       const tooShort = texts.filter(t => chars(t).length < 2);
       const usable = texts.filter(t => chars(t).length >= 2);
@@ -8120,7 +8178,10 @@ var qrcode = function() {
         return;
       }
       if (!okToDropMarks()) return;
-      const res = generateLayout(usable);
+      showBusyText($('#genResult'), '組み合わせを計算しています…');
+      await tick();
+      const res = await generateLayout(usable, null, null, null,
+        (n) => showBusyText($('#genResult'), '組み合わせを計算しています…（' + n + '通り試しました）'));
       if (!res) return;
       snapshot();
       state.placed = res.placed.map(p => ({ id: uid(), text: p.text, r: p.r, c: p.c, dir: p.dir }));
