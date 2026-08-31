@@ -708,14 +708,19 @@
     <div class="panel">
       <h2>同じ形でもう1問つくる <span class="hint">マスの並びと記号はそのまま</span></h2>
       <div class="row">
-        <button id="btnReskin" class="big">同じ形で中身を作り直す</button>
-        <label class="check"><input type="checkbox" id="reskinKwWord" checked>キーワードも言葉になるようにする</label>
+        <button id="btnReskinMine" class="big">登録したワード・キーワードで作る</button>
+        <button id="btnReskin" class="sub">おまかせで中身を作り直す</button>
+      </div>
+      <div class="row" style="margin-top:6px;">
+        <label class="check"><input type="checkbox" id="reskinKwWord" checked>おまかせのとき、キーワードも言葉になるようにする</label>
       </div>
       <p id="reskinResult" class="hint-line"></p>
       <p class="hint-line">
-        いまの<b>マスの並び（形）と記号の位置</b>はそのままに、<b>中の言葉だけ</b>を辞書から入れかえて、
-        別のクロスワードを作ります。<b>キーワードは記号のマスから自動で決まります</b>（新しい言葉になります）。<br>
-        同じ形で難易度ちがい・クラスちがいの問題をいくつも作れます。押すたびに別の中身になります。
+        いまの<b>マスの並び（形）と記号の位置</b>はそのままに、<b>中の言葉だけ</b>を入れかえて別の問題を作ります。<br>
+        ・<b>登録したワード・キーワードで作る</b>…①ことばで入れたワードを必ず使い、
+        キーワードも入れたとおりにします。足りないところは辞書で補います。<br>
+        ・<b>おまかせ</b>…全部を辞書にまかせます。キーワードは記号のマスから自動で決まります。<br>
+        作り直した問題は、<b>もとの作品を上書きせず</b>、同じフォルダに<b>別の作品として</b>保存されます。
       </p>
     </div>
 
@@ -850,6 +855,11 @@
     <div class="panel">
       <h2>印刷・保存</h2>
       <input type="text" id="title" placeholder="タイトル（例：2学期 漢字クロス）" style="width:100%;margin-bottom:8px;">
+      <div class="row" style="margin-bottom:8px;">
+        <label for="workFolder">フォルダ</label>
+        <select id="workFolder" style="flex:1 1 140px;min-width:0;"></select>
+        <button id="btnNewFolder" class="sub small">＋ フォルダを作る</button>
+      </div>
       <div class="row">
         <button id="btnSaveWork">保存する</button>
         <button id="btnOpenWork" class="sub">保存した作品を開く</button>
@@ -3283,6 +3293,8 @@ var qrcode = function() {
     // ===== 状態管理 =====
     const state = {
       workId: null,      // 「作品として保存」した先のID（未保存ならnull）
+      folder: '',        // 保存するフォルダ（''＝フォルダなし）
+      shapeId: null,     // 同じマスの並び（形）から作った作品どうしをまとめる目印
       shareId: null,     // 配布リンクの合言葉（サーバーに保存したときだけ入る）
       shareToken: '',    // その問題を書き換えるための合鍵
       title: '',
@@ -4682,7 +4694,9 @@ var qrcode = function() {
       const gc = chars(reading);
       const bad = [];
       for (let i = 0; i < Math.min(gc.length, kw.length); i++) {
-        if (gc[i] !== kw[i]) bad.push((i + 1) + '番目（' + list[i].mark + '）は「' + gc[i] + '」→「' + kw[i] + '」');
+        // 記号よりキーワードが長いときは、その番号ぶんの記号が無いことがある
+        const mk = list[i] ? list[i].mark : (seq[i] ? seq[i].mark : String(i + 1));
+        if (gc[i] !== kw[i]) bad.push((i + 1) + '番目（' + mk + '）は「' + gc[i] + '」→「' + kw[i] + '」');
       }
       if (bad.length) msg += '　ちがうところ：' + bad.slice(0, 5).join('、');
       if (notOnBoard.length) msg += '　盤面にない文字：' + notOnBoard.join('・');
@@ -4916,6 +4930,7 @@ var qrcode = function() {
       return {
         version: 1,
         workId: state.workId,   // どの作品を開いているか（「元にもどす」で見失わないように持っておく）
+        folder: state.folder, shapeId: state.shapeId,
         title: state.title, words: state.words, keyword: state.keyword,
         used: state.used, meta: state.meta,
         placed: state.placed,
@@ -4938,6 +4953,8 @@ var qrcode = function() {
     function applyData(d) {
       if (!d) return false;
       state.workId = d.workId || null;
+      state.folder = d.folder || '';
+      state.shapeId = d.shapeId || null;
       state.shareId = d.shareId || null;
       state.shareToken = d.shareToken || '';
       state.title = d.title || '';
@@ -5009,6 +5026,44 @@ var qrcode = function() {
     // ===== 作品として保存（名前つき・何個でも保存できる） =====
     const WORKS_KEY = 'crossword-works-v1';
 
+    // ===== フォルダ（作品の入れ物）=====
+    // 1段だけの簡単なつくり。同じ形から作った作品を、自動で1つのフォルダにまとめる
+    const FOLDERS_KEY = 'crossword-folders-v1';
+
+    function loadFolders() {
+      try {
+        const raw = localStorage.getItem(FOLDERS_KEY);
+        const list = raw ? JSON.parse(raw) : [];
+        return Array.isArray(list) ? list.filter(x => typeof x === 'string' && x) : [];
+      } catch (e) { return []; }
+    }
+    function saveFolders(list) {
+      try { localStorage.setItem(FOLDERS_KEY, JSON.stringify([...new Set(list)])); } catch (e) { /* 入らなければあきらめる */ }
+    }
+    function addFolder(name) {
+      const n = String(name || '').trim();
+      if (!n) return '';
+      const list = loadFolders();
+      if (!list.includes(n)) { list.push(n); saveFolders(list); }
+      return n;
+    }
+    // 実際に使われているフォルダ名も合わせて出す（消し忘れがあっても迷子にならない）
+    function allFolders() {
+      const used = loadWorks().map(w => w.folder).filter(f => f);
+      return [...new Set(loadFolders().concat(used))].sort((a, b) => a.localeCompare(b, 'ja'));
+    }
+
+    // 保存パネルのフォルダ選びを描き直す
+    function renderFolderSelect() {
+      const el = $('#workFolder');
+      if (!el) return;
+      const cur = state.folder || '';
+      el.innerHTML = '<option value="">（フォルダなし）</option>'
+        + allFolders().map(f => '<option value="' + escapeHtml(f) + '">' + escapeHtml(f) + '</option>').join('');
+      el.value = [...el.options].some(o => o.value === cur) ? cur : '';
+      if (el.value !== cur) state.folder = el.value;
+    }
+
     function loadWorks() {
       try {
         const raw = localStorage.getItem(WORKS_KEY);
@@ -5037,6 +5092,8 @@ var qrcode = function() {
       delete d.shareId;
       delete d.shareToken;
       delete d.workId;
+      delete d.folder;
+      delete d.shapeId;
       return JSON.stringify(d);
     }
 
@@ -5089,6 +5146,9 @@ var qrcode = function() {
         puzzleType: state.puzzleType, hintCount: state.hintCount, hints: []
       });
       history = [];
+      state.folder = '';
+      state.shapeId = null;
+      renderFolderSelect();
       $('#linkBox').style.display = 'none';
       $('#workListBox').style.display = 'none';
       markSaved();
@@ -5155,6 +5215,8 @@ var qrcode = function() {
         if (!item) return storeWork('new', true);   // 元の作品が見つからなければ新規で保存する
         item.title = state.title || item.title || '（無題）';
         item.savedAt = now;
+        item.folder = state.folder || '';
+        item.shapeId = state.shapeId || null;
         item.data = data;
         if (saveWorks(list)) {
           markSaved();
@@ -5166,7 +5228,9 @@ var qrcode = function() {
       }
 
       const title = state.title || '（無題）';
-      const item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now, data };
+      const item = { id: 'w' + now + Math.random().toString(36).slice(2, 8), title, savedAt: now,
+                     folder: state.folder || '', shapeId: state.shapeId || null, data };
+      if (state.folder) addFolder(state.folder);
       data.workId = item.id;      // コピー元のIDが残らないように、新しいIDに書きかえる
       list.unshift(item);
       state.workId = item.id;
@@ -5210,6 +5274,9 @@ var qrcode = function() {
           && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
       applyData(item.data);
       state.workId = item.id;
+      state.folder = item.folder || '';
+      state.shapeId = item.shapeId || null;
+      renderFolderSelect();
       history = [];
       markSaved();
       saveLocal();
@@ -5239,29 +5306,113 @@ var qrcode = function() {
     function renderWorkList() {
       const list = loadWorks();
       const box = $('#workListItems');
+      box.innerHTML = '';
       if (!list.length) {
         box.innerHTML = '<p class="hint-line">まだ保存した作品はありません。</p>';
-      } else {
-        box.innerHTML = '';
-        list.forEach(item => {
-          const row = document.createElement('div');
-          row.className = 'row';
-          row.style.marginBottom = '4px';
-          const label = document.createElement('button');
-          label.className = 'sub small' + (item.id === state.workId ? ' active' : '');
-          label.style.flex = '1';
-          label.style.textAlign = 'left';
-          label.textContent = (item.title || '（無題）') + '　（' + fmtDate(item.savedAt) + '）';
-          label.addEventListener('click', () => openWork(item.id));
-          const del = document.createElement('button');
-          del.className = 'sub small';
-          del.textContent = '削除';
-          del.addEventListener('click', () => deleteWork(item.id));
-          row.appendChild(label);
-          row.appendChild(del);
-          box.appendChild(row);
-        });
+        $('#workListBox').style.display = 'block';
+        return;
       }
+
+      const folders = allFolders();
+
+      // 1つの作品の行を作る
+      const makeRow = (item) => {
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.marginBottom = '4px';
+        const label = document.createElement('button');
+        label.className = 'sub small' + (item.id === state.workId ? ' active' : '');
+        label.style.flex = '1 1 140px';
+        label.style.minWidth = '0';
+        label.style.textAlign = 'left';
+        label.textContent = (item.title || '（無題）') + '　（' + fmtDate(item.savedAt) + '）';
+        label.addEventListener('click', () => openWork(item.id));
+
+        // どのフォルダに入れるか、その場で変えられる
+        const sel = document.createElement('select');
+        sel.className = 'small';
+        sel.style.flex = '0 1 120px';
+        sel.innerHTML = '<option value="">（なし）</option>'
+          + folders.map(f => '<option value="' + escapeHtml(f) + '">' + escapeHtml(f) + '</option>').join('');
+        sel.value = item.folder || '';
+        sel.title = 'この作品を入れるフォルダ';
+        sel.addEventListener('change', () => {
+          const all = loadWorks();
+          const it = all.find(w => w.id === item.id);
+          if (!it) return;
+          it.folder = sel.value;
+          saveWorks(all);
+          if (state.workId === item.id) { state.folder = sel.value; renderFolderSelect(); saveLocal(); }
+          renderWorkList();
+        });
+
+        const del = document.createElement('button');
+        del.className = 'sub small';
+        del.textContent = '削除';
+        del.addEventListener('click', () => deleteWork(item.id));
+        row.append(label, sel, del);
+        return row;
+      };
+
+      // フォルダごとにまとめて出す（フォルダなしの作品は今までどおり、そのまま並ぶ）
+      const drawGroup = (name, items) => {
+        if (!items.length && !name) return;
+        if (name) {
+          const head = document.createElement('div');
+          head.className = 'row';
+          head.style.cssText = 'margin:10px 0 4px;align-items:center;';
+          const ttl = document.createElement('strong');
+          ttl.textContent = '📁 ' + name + '（' + items.length + '）';
+          ttl.style.flex = '1 1 auto';
+          const shapeN = new Set(items.map(x => x.shapeId).filter(x => x)).size;
+          const note = document.createElement('span');
+          note.className = 'hint';
+          note.textContent = shapeN === 1 && items.length > 1 ? '同じ形の問題' : '';
+          const ren = document.createElement('button');
+          ren.className = 'sub small';
+          ren.textContent = '名前を変える';
+          ren.addEventListener('click', () => {
+            const nn = prompt('フォルダの新しい名前', name);
+            if (!nn || !nn.trim() || nn.trim() === name) return;
+            const all = loadWorks();
+            all.forEach(w => { if (w.folder === name) w.folder = nn.trim(); });
+            saveWorks(all);
+            saveFolders(loadFolders().map(f => (f === name ? nn.trim() : f)));
+            if (state.folder === name) { state.folder = nn.trim(); saveLocal(); }
+            renderFolderSelect();
+            renderWorkList();
+          });
+          const rm = document.createElement('button');
+          rm.className = 'sub small';
+          rm.textContent = 'フォルダを消す';
+          rm.title = '中の作品は消えません（フォルダなしにもどります）';
+          rm.addEventListener('click', () => {
+            if (!confirm('フォルダ「' + name + '」を消しますか？\n中の ' + items.length
+                + ' 作品は消えません（フォルダなしにもどります）。')) return;
+            const all = loadWorks();
+            all.forEach(w => { if (w.folder === name) w.folder = ''; });
+            saveWorks(all);
+            saveFolders(loadFolders().filter(f => f !== name));
+            if (state.folder === name) { state.folder = ''; saveLocal(); }
+            renderFolderSelect();
+            renderWorkList();
+          });
+          head.append(ttl, note, ren, rm);
+          box.appendChild(head);
+        }
+        items.forEach(it => box.appendChild(makeRow(it)));
+        if (name && !items.length) {
+          const p2 = document.createElement('p');
+          p2.className = 'hint-line';
+          p2.textContent = '（からのフォルダです）';
+          box.appendChild(p2);
+        }
+      };
+
+      // フォルダなしの作品を先に（今までと同じ見え方）、そのあとにフォルダを並べる
+      drawGroup('', list.filter(w => !w.folder));
+      folders.forEach(f => drawGroup(f, list.filter(w => w.folder === f)));
+
       $('#workListBox').style.display = 'block';
     }
 
@@ -5725,9 +5876,40 @@ var qrcode = function() {
       $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
-      $('#btnReskin').addEventListener('click', () => {
+      const runReskin = (useMine) => {
         $('#btnReskin').disabled = true;
-        reskinPuzzle().finally(() => { $('#btnReskin').disabled = false; });
+        $('#btnReskinMine').disabled = true;
+        reskinPuzzle(useMine).finally(() => {
+          $('#btnReskin').disabled = false;
+          $('#btnReskinMine').disabled = false;
+        });
+      };
+      $('#btnReskin').addEventListener('click', () => runReskin(false));
+      $('#btnReskinMine').addEventListener('click', () => runReskin(true));
+
+      // フォルダ
+      $('#workFolder').addEventListener('change', (e) => {
+        state.folder = e.target.value;
+        // すでに保存ずみの作品なら、その場でフォルダを移す
+        if (state.workId) {
+          const all = loadWorks();
+          const it = all.find(w => w.id === state.workId);
+          if (it) { it.folder = state.folder; saveWorks(all); }
+        }
+        saveLocal();
+      });
+      $('#btnNewFolder').addEventListener('click', () => {
+        const name = prompt('新しいフォルダの名前（例：2学期・漢字）');
+        if (!name || !name.trim()) return;
+        state.folder = addFolder(name.trim());
+        renderFolderSelect();
+        if (state.workId) {
+          const all = loadWorks();
+          const it = all.find(w => w.id === state.workId);
+          if (it) { it.folder = state.folder; saveWorks(all); }
+        }
+        saveLocal();
+        showMsg('フォルダ「' + state.folder + '」に入れます。保存するとここに入ります。', 'ok');
       });
       $('#btnClearMarks').addEventListener('click', () => {
         if (!confirm('記号を全部消します。よろしいですか？')) return;
@@ -6525,39 +6707,52 @@ var qrcode = function() {
     }
 
     // わくを1つずつ埋めていく（うまくいかなければ戻ってやり直す＝バックトラック）
-    function fillSlots(slots, byLen, used0, deadline) {
+    // fixed    … 先に文字が決まっているマス（キーワードの記号マスなど）
+    // required … 必ず使う言葉（①ことばで登録したワード）
+    function fillSlots(slots, byLen, fixed, required, deadline) {
       const assign = new Array(slots.length).fill(null);
-      const letters = new Map();
-      const used = new Set(used0);
+      const letters = new Map(fixed || []);
+      const used = new Set();
+      const req = required || [];
       // 交差の多いわくから先に決める（あとで行きづまりにくい）
-      const order = slots.map((s, i) => i)
-        .sort((a, b) => slots[b].crossN - slots[a].crossN);
+      const order = slots.map((s, i) => i).sort((a2, b2) => slots[b2].crossN - slots[a2].crossN);
+
+      const fits = (w, pat) => {
+        for (let i = 0; i < pat.length; i++) if (pat[i] && pat[i] !== w.cs[i]) return false;
+        return true;
+      };
+      const shuffle = (arr) => {
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+      };
 
       const rec = (k) => {
         if (Date.now() > deadline) return false;
-        if (k >= order.length) return true;
+        if (k >= order.length) return req.every(w => used.has(w.t));
+        // 残っているわくより、まだ置けていない登録ワードが多ければ、この道は行きどまり
+        const leftReq = req.filter(w => !used.has(w.t)).length;
+        if (leftReq > order.length - k) return false;
+
         const si = order[k];
         const s = slots[si];
         const pat = s.cells.map(ck => letters.get(ck) || null);
-        const pool = byLen.get(s.len) || [];
-        const cands = [];
-        for (const w of pool) {
+
+        // 登録ワードを先に、そのあと辞書から
+        const mine = shuffle(req.filter(w => !used.has(w.t) && w.cs.length === s.len && fits(w, pat)));
+        const rest = [];
+        for (const w of (byLen.get(s.len) || [])) {
           if (used.has(w.t)) continue;
-          let fit = true;
-          for (let i = 0; i < pat.length; i++) {
-            if (pat[i] && pat[i] !== w.cs[i]) { fit = false; break; }
-          }
-          if (fit) cands.push(w);
-          if (cands.length >= 300) break;      // よく使う語から順に見ているので、ここで打ち切ってよい
+          if (fits(w, pat)) rest.push(w);
+          if (rest.length >= 300) break;   // よく使う語から順に見ているので、ここで打ち切ってよい
         }
-        if (!cands.length) return false;
         // 上位のなかをまぜて、押すたびに違う中身になるようにする
-        const head = cands.slice(0, 40);
-        for (let i = head.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [head[i], head[j]] = [head[j], head[i]];
-        }
-        const tries = head.slice(0, 20);
+        const head = shuffle(rest.slice(0, 40)).slice(0, 20);
+        const tries = mine.concat(head);
+        if (!tries.length) return false;
+
         for (const w of tries) {
           const wrote = [];
           for (let i = 0; i < s.cells.length; i++) {
@@ -6577,7 +6772,33 @@ var qrcode = function() {
       return rec(0) ? { assign, letters } : null;
     }
 
-    async function reskinPuzzle() {
+    // 同じ形で作り直したものは、もとの作品を上書きせず、同じフォルダに別の作品として保存する
+    function prepareShapeFolder() {
+      const list = loadWorks();
+      const src = state.workId ? list.find(w => w.id === state.workId) : null;
+      state.shapeId = (src && src.shapeId) || state.shapeId
+        || ('sh' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6));
+      const baseTitle = (state.title || (src && src.title) || 'クロスワード').replace(/\s*\d+$/, '');
+      let folder = state.folder || (src && src.folder) || '';
+      if (!folder) folder = baseTitle + '（同じ形）';
+      addFolder(folder);
+      // もとの作品も同じフォルダに入れて、並べて見えるようにする
+      if (src) {
+        src.folder = folder;
+        src.shapeId = state.shapeId;
+        saveWorks(list);
+      }
+      state.folder = folder;
+      state.workId = null;          // 上書きしない（別の作品として保存される）
+      const same = loadWorks().filter(w => w.shapeId === state.shapeId).length;
+      state.title = baseTitle + ' ' + (same + 1);
+      $('#title').value = state.title;
+      renderFolderSelect();
+      return folder;
+    }
+
+    // useMine … true なら「登録したワード・キーワードを使う」
+    async function reskinPuzzle(useMine) {
       const out = $('#reskinResult');
       const slots = currentSlots();
       if (slots.length < 2) {
@@ -6599,12 +6820,14 @@ var qrcode = function() {
       const needLens = new Set(slots.map(s => s.len));
       const byLen = new Map();
       const dictSet = new Set();
+      const metaOf = new Map();
       loadDict().forEach(d => {
         if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) return;
         if (mode === 'hira' && isLoanword(d)) return;
         const t = conv(d.r);
         const cs = chars(t);
         dictSet.add(t);
+        if (!metaOf.has(t)) metaOf.set(t, d.s);
         if (!needLens.has(cs.length)) return;
         if (!byLen.has(cs.length)) byLen.set(cs.length, []);
         byLen.get(cs.length).push({ t, cs, s: d.s, rank: d.rank });
@@ -6617,39 +6840,113 @@ var qrcode = function() {
         return;
       }
 
-      const wantKwWord = $('#reskinKwWord').checked;
       const marks = markCellsInOrder();
+      const kwChars = chars(state.keyword);
+
+      // ===== 「登録したワード・キーワードで作る」ときの下調べ =====
+      let required = [];
+      const fixed = new Map();
+      if (useMine) {
+        const texts = [...new Set(state.words.map(w => w.text).filter(t => chars(t).length >= 2))];
+        // わくの数より登録ワードが多い
+        if (texts.length > slots.length) {
+          out.innerHTML = '<span style="color:var(--ng)">この形のわくは <b>' + slots.length
+            + '個</b> ですが、登録したワードが <b>' + texts.length + '語</b> あります。'
+            + 'ワードを ' + (texts.length - slots.length) + '語 減らすか、'
+            + '「おまかせ」で作ってから手で入れかえてください。</span>';
+          return;
+        }
+        // 長さごとに、入るわくがあるか
+        const slotLen = new Map();
+        slots.forEach(s => slotLen.set(s.len, (slotLen.get(s.len) || 0) + 1));
+        const overflow = [];
+        const needLen = new Map();
+        texts.forEach(t => {
+          const n = chars(t).length;
+          needLen.set(n, (needLen.get(n) || 0) + 1);
+        });
+        needLen.forEach((n, len) => {
+          const have = slotLen.get(len) || 0;
+          if (n > have) overflow.push(len + '文字のワードが ' + n + '語ありますが、'
+            + len + '文字のわくは ' + have + '個しかありません');
+        });
+        if (overflow.length) {
+          out.innerHTML = '<span style="color:var(--ng)">この形には入りません。<br>'
+            + overflow.map(escapeHtml).join('<br>') + '<br>'
+            + 'ワードを減らすか、長さの合うワードに変えてください。</span>';
+          return;
+        }
+        // キーワードの文字数と記号の数
+        if (kwChars.length && marks.length && kwChars.length !== marks.length) {
+          out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
+            + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。'
+            + '数をそろえるか、③しあげで記号をふり直してください。</span>';
+          return;
+        }
+        if (kwChars.length && !marks.length) {
+          out.innerHTML = '<span style="color:var(--ng)">記号がありません。'
+            + '③しあげで「記号を自動でふる」を押してから、もう一度押してください。</span>';
+          return;
+        }
+        // キーワードの文字を、記号のマスに先に置いておく
+        marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
+        // 同じマスに違う文字を入れようとしていないか（記号が重なっているとき）
+        required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || metaOf.get(t) || '', rank: 0 }));
+        // 登録ワードが、キーワードを置いたあとの形に1つも入らない場合はここで気づける
+        const noRoom = required.filter(w => !slots.some(sl => sl.len === w.cs.length
+          && sl.cells.every((ck, i) => !fixed.has(ck) || fixed.get(ck) === w.cs[i])));
+        if (noRoom.length) {
+          out.innerHTML = '<span style="color:var(--ng)">「'
+            + escapeHtml(noRoom.map(w => w.t).join('・'))
+            + '」は、この形とキーワードには入りません（長さか、キーワードの文字とぶつかります）。'
+            + 'ワードを変えるか、キーワードを見直してください。</span>';
+          return;
+        }
+      }
+
+      const wantKwWord = $('#reskinKwWord').checked;
       const before = slots.map(s => s.text);
       const t0 = Date.now();
       const END = t0 + 9000;
       let best = null, bestScore = -Infinity, tried = 0;
 
-      out.textContent = '同じ形で、別の言葉の組み合わせをさがしています…';
+      out.textContent = useMine
+        ? '登録したワードとキーワードで、この形に入る組み合わせをさがしています…'
+        : '同じ形で、別の言葉の組み合わせをさがしています…';
       await tick();
 
       while (Date.now() < END) {
         tried++;
-        const res = fillSlots(slots, byLen, new Set(), Math.min(END, Date.now() + 2200));
+        const res = fillSlots(slots, byLen, fixed, required, Math.min(END, Date.now() + 2200));
         if (res) {
           const kw = keywordFromLetters(res.letters);
           const kwOk = kw.length >= 2 && dictSet.has(kw);
           const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
-          const avgRank = res.assign.reduce((a, w) => a + w.rank, 0) / res.assign.length;
+          const avgRank = res.assign.reduce((a2, w) => a2 + w.rank, 0) / res.assign.length;
+          if (useMine) {
+            best = { ...res, kw, kwOk, changed };
+            break;                       // 条件を満たす答えが出たら、それでよい
+          }
           // 前と同じキーワードにならないほうがうれしい（何問も作るための機能なので）
           const kwNew = kw !== state.keyword ? 800 : 0;
           const score = (kwOk ? 100000 : 0) + kwNew + changed * 300 - avgRank / 50;
           if (score > bestScore) { bestScore = score; best = { ...res, kw, kwOk, changed }; }
-          // キーワードもそろい、中身も十分に変わっていれば、そこで切り上げる
           if ((!wantKwWord || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)
               && (!marks.length || best.kw !== state.keyword)) break;
         }
-        out.textContent = '同じ形で、別の言葉の組み合わせをさがしています…（' + tried + '通りためしました）';
+        out.textContent = (useMine ? '登録したワードとキーワードで' : '同じ形で')
+          + '、入る組み合わせをさがしています…（' + tried + '通りためしました）';
         await tick();
       }
 
       if (!best) {
-        out.innerHTML = '<span style="color:var(--ng)">この形にぴったり入る別の組み合わせが見つかりませんでした。'
-          + 'むずかしさを「ふつう」にするか、形を少し変えてみてください。</span>';
+        out.innerHTML = useMine
+          ? '<span style="color:var(--ng)">この形に、登録したワードとキーワードを全部入れる組み合わせは'
+            + '見つかりませんでした。<br>次のどれかを試してください：'
+            + '①ことばでワードを減らす／むずかしさを「ふつう」にする／'
+            + 'キーワードを短くする／「おまかせ」で作ってから直す。</span>'
+          : '<span style="color:var(--ng)">この形にぴったり入る別の組み合わせが見つかりませんでした。'
+            + 'むずかしさを「ふつう」にするか、形を少し変えてみてください。</span>';
         return;
       }
 
@@ -6658,35 +6955,42 @@ var qrcode = function() {
       state.placed = slots.map((sl, i) => ({
         id: uid(), text: best.assign[i].t, r: sl.r, c: sl.c, dir: sl.dir
       }));
-      const texts = [...new Set(best.assign.map(w => w.t))];
-      state.words = texts.map(t => ({ id: uid(), text: t }));
-      best.assign.forEach(w => rememberWord(w.t, w.s));
-      // カギは語ごとに持っているので、新しい語のぶんはマイ辞書から自動で入る
+      const texts2 = [...new Set(best.assign.map(w => w.t))];
+      state.words = texts2.map(t => ({ id: uid(), text: t }));
+      best.assign.forEach(w => rememberWord(w.t, w.s || metaOf.get(w.t) || ''));
       state.selWordId = null; state.selPlacedId = null;
       clearCycle(); clueSig = ''; viewSig = '';
 
-      if (marks.length) {
+      if (marks.length && !(useMine && kwChars.length)) {
         state.keyword = best.kw;
         $('#keywordInput').value = state.keyword;
       }
+      const folder = prepareShapeFolder();
       pickHints(state.hintCount);
       refresh();
       showTab('build');
 
       let msg = '<strong>同じ形のまま、中身を作り直しました。</strong>'
         + '（' + slots.length + '語のうち ' + best.changed + '語が入れかわりました）';
-      if (marks.length) {
+      if (useMine) {
+        msg += ' 登録したワードは全部つかいました。'
+          + (kwChars.length ? 'キーワードは「' + escapeHtml(state.keyword) + '」のままです。' : '');
+      }
+      if (marks.length && !(useMine && kwChars.length)) {
         msg += ' 新しいキーワードは <strong>「' + escapeHtml(best.kw) + '」</strong>。';
         msg += best.kwOk
           ? ' <span style="color:var(--ok);font-weight:700;">辞書にある言葉です。</span>'
           : ' <span style="color:var(--ng)">辞書にない並びなので、そのまま使えるか確かめてください'
             + '（もう一度押すと、別の組み合わせをさがします）。</span>';
-      } else {
+      } else if (!marks.length) {
         msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。'
           + '③しあげで記号をふってから、もう一度押してください。</span>';
       }
+      msg += '<br><span style="color:var(--ok);font-weight:700;">'
+        + 'もとの作品は上書きされません。</span>保存すると「📁 ' + escapeHtml(folder)
+        + '」に「' + escapeHtml(state.title) + '」として入ります。';
       out.innerHTML = msg;
-      showMsg('同じ形で作り直しました。カギ（ヒント）は③しあげで書き直してください。', 'ok');
+      showMsg('同じ形で作り直しました。保存すると別の作品になります（もとの作品はそのままです）。', 'ok');
     }
 
     function findBridges(failedText) {
@@ -7711,6 +8015,7 @@ var qrcode = function() {
         if (saved.workId && loadWorks().some(w => w.id === saved.workId)) state.workId = saved.workId;
       } else { buildGrid(); refresh(); }
       bindEvents();
+      renderFolderSelect();
       setMode('place');
       showTab('words');
       markSaved();   // 今の内容を「保存済み」の基準にする（開いた直後にいきなり確認が出ないように）
