@@ -712,14 +712,21 @@
         <button id="btnReskin" class="sub">おまかせで中身を作り直す</button>
       </div>
       <div class="row" style="margin-top:6px;">
-        <label class="check"><input type="checkbox" id="reskinKwWord" checked>おまかせのとき、キーワードも言葉になるようにする</label>
+        <label class="check"><input type="checkbox" id="reskinKwWord" checked>
+          新しいキーワードが「意味のある言葉」になるまでさがす</label>
       </div>
+      <p class="hint-line" style="margin-top:2px;">
+        ↑「おまかせ」で使う設定です。おまかせでは<b>記号のマスに入った文字を続けて読んだものが、そのままキーワード</b>になります。
+        このチェックが入っていると、それが<b>辞書にある言葉</b>（例：せんせい）になる組み合わせだけを選びます。
+        外すと「せんかい」のような意味のない並びでもよくなり、そのぶん早く見つかります。
+      </p>
       <p id="reskinResult" class="hint-line"></p>
       <p class="hint-line">
         いまの<b>マスの並び（形）と記号の位置</b>はそのままに、<b>中の言葉だけ</b>を入れかえて別の問題を作ります。<br>
         ・<b>登録したワード・キーワードで作る</b>…①ことばで入れたワードを必ず使い、
         キーワードも入れたとおりにします。足りないところは辞書で補います。<br>
-        ・<b>おまかせ</b>…全部を辞書にまかせます。キーワードは記号のマスから自動で決まります。<br>
+        ・<b>おまかせ</b>…ワードもキーワードも全部辞書にまかせます。
+        キーワードは<b>記号のマスに入った文字を読んだもの</b>になります（あとから決まります）。<br>
         作り直した問題は、<b>もとの作品を上書きせず</b>、同じフォルダに<b>別の作品として</b>保存されます。
       </p>
     </div>
@@ -6806,39 +6813,45 @@ var qrcode = function() {
           + '（形をもとにして中身を入れかえる機能です）。</span>';
         return;
       }
+      // いまの内容がまだ保存されていなければ、消す前に「上書き／別の作品として／やめる」を聞く
+      if (!(await confirmDiscard('同じ形で新しく作る'))) return;
 
       // 交差の数を数える（同じマスを2つのわくが通っていれば交差）
       const useCount = new Map();
       slots.forEach(s => s.cells.forEach(ck => useCount.set(ck, (useCount.get(ck) || 0) + 1)));
       slots.forEach(s => { s.crossN = s.cells.filter(ck => useCount.get(ck) > 1).length; });
 
-      // 使える辞書を、長さごとに分けておく
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
-      const level = Number($('#findLevel').value) || 10000;
-      const onlyKyoiku = $('#findKyoiku').checked;
       const needLens = new Set(slots.map(s => s.len));
-      const byLen = new Map();
-      const dictSet = new Set();
-      const metaOf = new Map();
-      loadDict().forEach(d => {
-        if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) return;
-        if (mode === 'hira' && isLoanword(d)) return;
-        const t = conv(d.r);
-        const cs = chars(t);
-        dictSet.add(t);
-        if (!metaOf.has(t)) metaOf.set(t, d.s);
-        if (!needLens.has(cs.length)) return;
-        if (!byLen.has(cs.length)) byLen.set(cs.length, []);
-        byLen.get(cs.length).push({ t, cs, s: d.s, rank: d.rank });
-      });
-      const short = [...needLens].filter(n => !(byLen.get(n) || []).length);
-      if (short.length) {
-        out.innerHTML = '<span style="color:var(--ng)">' + short.join('・')
-          + '文字の語が、いまの「むずかしさ」の設定では足りません。'
-          + 'むずかしさを「ふつう」にしてみてください。</span>';
-        return;
+
+      // 使える辞書を、長さごとに分けて用意する
+      function buildTier(level, onlyKyoiku) {
+        const byLen = new Map();
+        const dictSet = new Set();
+        const metaOf = new Map();
+        loadDict().forEach(d => {
+          if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) return;
+          if (mode === 'hira' && isLoanword(d)) return;
+          const t = conv(d.r);
+          const cs = chars(t);
+          dictSet.add(t);
+          if (!metaOf.has(t)) metaOf.set(t, d.s);
+          if (!needLens.has(cs.length)) return;
+          if (!byLen.has(cs.length)) byLen.set(cs.length, []);
+          byLen.get(cs.length).push({ t, cs, s: d.s, rank: d.rank });
+        });
+        const missing = [...needLens].filter(n => !(byLen.get(n) || []).length);
+        return { byLen, dictSet, metaOf, missing };
       }
+
+      // 今の設定 → 漢字のしばりを外す → むずかしさを広げる、の順にためす。
+      // 「設定では足りません」で止めてしまうと使えないので、自動で広げて作りきる
+      const level0 = Number($('#findLevel').value) || 10000;
+      const kyoiku0 = $('#findKyoiku').checked;
+      const tiers = [{ level: level0, kyoiku: kyoiku0, note: '' }];
+      if (kyoiku0) tiers.push({ level: level0, kyoiku: false, note: '「小学校で習う漢字を使う語だけ」のしばりを外して' });
+      if (level0 < 10000) tiers.push({ level: 10000, kyoiku: false, note: 'むずかしさを「ふつう」まで広げて' });
 
       const marks = markCellsInOrder();
       const kwChars = chars(state.keyword);
@@ -6848,7 +6861,6 @@ var qrcode = function() {
       const fixed = new Map();
       if (useMine) {
         const texts = [...new Set(state.words.map(w => w.text).filter(t => chars(t).length >= 2))];
-        // わくの数より登録ワードが多い
         if (texts.length > slots.length) {
           out.innerHTML = '<span style="color:var(--ng)">この形のわくは <b>' + slots.length
             + '個</b> ですが、登録したワードが <b>' + texts.length + '語</b> あります。'
@@ -6856,15 +6868,11 @@ var qrcode = function() {
             + '「おまかせ」で作ってから手で入れかえてください。</span>';
           return;
         }
-        // 長さごとに、入るわくがあるか
         const slotLen = new Map();
         slots.forEach(s => slotLen.set(s.len, (slotLen.get(s.len) || 0) + 1));
-        const overflow = [];
         const needLen = new Map();
-        texts.forEach(t => {
-          const n = chars(t).length;
-          needLen.set(n, (needLen.get(n) || 0) + 1);
-        });
+        texts.forEach(t => { const n = chars(t).length; needLen.set(n, (needLen.get(n) || 0) + 1); });
+        const overflow = [];
         needLen.forEach((n, len) => {
           const have = slotLen.get(len) || 0;
           if (n > have) overflow.push(len + '文字のワードが ' + n + '語ありますが、'
@@ -6876,7 +6884,6 @@ var qrcode = function() {
             + 'ワードを減らすか、長さの合うワードに変えてください。</span>';
           return;
         }
-        // キーワードの文字数と記号の数
         if (kwChars.length && marks.length && kwChars.length !== marks.length) {
           out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
             + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。'
@@ -6888,11 +6895,8 @@ var qrcode = function() {
             + '③しあげで「記号を自動でふる」を押してから、もう一度押してください。</span>';
           return;
         }
-        // キーワードの文字を、記号のマスに先に置いておく
         marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
-        // 同じマスに違う文字を入れようとしていないか（記号が重なっているとき）
-        required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || metaOf.get(t) || '', rank: 0 }));
-        // 登録ワードが、キーワードを置いたあとの形に1つも入らない場合はここで気づける
+        required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || '', rank: 0 }));
         const noRoom = required.filter(w => !slots.some(sl => sl.len === w.cs.length
           && sl.cells.every((ck, i) => !fixed.has(ck) || fixed.get(ck) === w.cs[i])));
         if (noRoom.length) {
@@ -6906,47 +6910,62 @@ var qrcode = function() {
 
       const wantKwWord = $('#reskinKwWord').checked;
       const before = slots.map(s => s.text);
-      const t0 = Date.now();
-      const END = t0 + 9000;
+      const END = Date.now() + 12000;
       let best = null, bestScore = -Infinity, tried = 0;
+      let usedNote = '', usedTier = null, lastMissing = null;
 
       out.textContent = useMine
         ? '登録したワードとキーワードで、この形に入る組み合わせをさがしています…'
         : '同じ形で、別の言葉の組み合わせをさがしています…';
       await tick();
 
-      while (Date.now() < END) {
-        tried++;
-        const res = fillSlots(slots, byLen, fixed, required, Math.min(END, Date.now() + 2200));
-        if (res) {
-          const kw = keywordFromLetters(res.letters);
-          const kwOk = kw.length >= 2 && dictSet.has(kw);
-          const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
-          const avgRank = res.assign.reduce((a2, w) => a2 + w.rank, 0) / res.assign.length;
-          if (useMine) {
-            best = { ...res, kw, kwOk, changed };
-            break;                       // 条件を満たす答えが出たら、それでよい
+      for (const tier of tiers) {
+        const dict = buildTier(tier.level, tier.kyoiku);
+        if (dict.missing.length) { lastMissing = dict.missing; continue; }   // この設定では足りない長さがある
+        lastMissing = null;
+        // 1段階あたりの持ち時間（最後の段階は残り全部つかう）
+        const slice = tier === tiers[tiers.length - 1] ? END : Math.min(END, Date.now() + 4000);
+        while (Date.now() < slice) {
+          tried++;
+          const res = fillSlots(slots, dict.byLen, fixed, required, Math.min(slice, Date.now() + 2200));
+          if (res) {
+            const kw = keywordFromLetters(res.letters);
+            const kwOk = kw.length >= 2 && dict.dictSet.has(kw);
+            const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
+            const avgRank = res.assign.reduce((a2, w) => a2 + w.rank, 0) / res.assign.length;
+            if (useMine) {
+              best = { ...res, kw, kwOk, changed };
+              usedTier = dict; usedNote = tier.note;
+              break;
+            }
+            const kwNew = kw !== state.keyword ? 800 : 0;
+            const score = (kwOk ? 100000 : 0) + kwNew + changed * 300 - avgRank / 50;
+            if (score > bestScore) {
+              bestScore = score; best = { ...res, kw, kwOk, changed };
+              usedTier = dict; usedNote = tier.note;
+            }
+            if ((!wantKwWord || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)
+                && (!marks.length || best.kw !== state.keyword)) break;
           }
-          // 前と同じキーワードにならないほうがうれしい（何問も作るための機能なので）
-          const kwNew = kw !== state.keyword ? 800 : 0;
-          const score = (kwOk ? 100000 : 0) + kwNew + changed * 300 - avgRank / 50;
-          if (score > bestScore) { bestScore = score; best = { ...res, kw, kwOk, changed }; }
-          if ((!wantKwWord || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)
-              && (!marks.length || best.kw !== state.keyword)) break;
+          out.textContent = (useMine ? '登録したワードとキーワードで' : '同じ形で')
+            + '、入る組み合わせをさがしています…（' + tried + '通りためしました）';
+          await tick();
         }
-        out.textContent = (useMine ? '登録したワードとキーワードで' : '同じ形で')
-          + '、入る組み合わせをさがしています…（' + tried + '通りためしました）';
-        await tick();
+        // 見つかっていて、キーワードの条件も満たしていれば、次の段階には進まない
+        if (best && (useMine || !wantKwWord || best.kwOk)) break;
       }
 
       if (!best) {
-        out.innerHTML = useMine
-          ? '<span style="color:var(--ng)">この形に、登録したワードとキーワードを全部入れる組み合わせは'
-            + '見つかりませんでした。<br>次のどれかを試してください：'
-            + '①ことばでワードを減らす／むずかしさを「ふつう」にする／'
-            + 'キーワードを短くする／「おまかせ」で作ってから直す。</span>'
-          : '<span style="color:var(--ng)">この形にぴったり入る別の組み合わせが見つかりませんでした。'
-            + 'むずかしさを「ふつう」にするか、形を少し変えてみてください。</span>';
+        const lens = [...needLens].sort((x, y) => x - y).join('・');
+        out.innerHTML = '<span style="color:var(--ng)">'
+          + (lastMissing
+              ? '<b>' + lastMissing.join('・') + '文字</b>の語が辞書にありません'
+                + '（辞書ぜんぶを見てもです）。そのわくの長さを変えてください。'
+              : 'この形に入る組み合わせが見つかりませんでした。'
+                + '（この形のわくは ' + lens + ' 文字。'
+                + (useMine ? '登録ワードを減らすか、キーワードを短くしてみてください。'
+                           : 'もう一度押すか、②つくるの「別の形にする」で形を少し変えてみてください。') + '）')
+          + '</span>';
         return;
       }
 
@@ -6957,7 +6976,7 @@ var qrcode = function() {
       }));
       const texts2 = [...new Set(best.assign.map(w => w.t))];
       state.words = texts2.map(t => ({ id: uid(), text: t }));
-      best.assign.forEach(w => rememberWord(w.t, w.s || metaOf.get(w.t) || ''));
+      best.assign.forEach(w => rememberWord(w.t, w.s || (usedTier && usedTier.metaOf.get(w.t)) || ''));
       state.selWordId = null; state.selPlacedId = null;
       clearCycle(); clueSig = ''; viewSig = '';
 
@@ -6972,6 +6991,8 @@ var qrcode = function() {
 
       let msg = '<strong>同じ形のまま、中身を作り直しました。</strong>'
         + '（' + slots.length + '語のうち ' + best.changed + '語が入れかわりました）';
+      if (usedNote) msg += ' <span style="color:var(--ng)">※いまの設定では語が足りなかったので、'
+        + escapeHtml(usedNote) + 'さがしました。</span>';
       if (useMine) {
         msg += ' 登録したワードは全部つかいました。'
           + (kwChars.length ? 'キーワードは「' + escapeHtml(state.keyword) + '」のままです。' : '');
@@ -6980,7 +7001,7 @@ var qrcode = function() {
         msg += ' 新しいキーワードは <strong>「' + escapeHtml(best.kw) + '」</strong>。';
         msg += best.kwOk
           ? ' <span style="color:var(--ok);font-weight:700;">辞書にある言葉です。</span>'
-          : ' <span style="color:var(--ng)">辞書にない並びなので、そのまま使えるか確かめてください'
+          : ' <span style="color:var(--ng)">辞書にない並びです'
             + '（もう一度押すと、別の組み合わせをさがします）。</span>';
       } else if (!marks.length) {
         msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。'
