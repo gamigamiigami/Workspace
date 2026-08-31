@@ -704,6 +704,21 @@
       <div id="bridgeBox" style="display:none;"></div>
     </div>
 
+    <!-- 形はそのままで中身だけ変える（同じ盤面から何問も作る） -->
+    <div class="panel">
+      <h2>同じ形でもう1問つくる <span class="hint">マスの並びと記号はそのまま</span></h2>
+      <div class="row">
+        <button id="btnReskin" class="big">同じ形で中身を作り直す</button>
+        <label class="check"><input type="checkbox" id="reskinKwWord" checked>キーワードも言葉になるようにする</label>
+      </div>
+      <p id="reskinResult" class="hint-line"></p>
+      <p class="hint-line">
+        いまの<b>マスの並び（形）と記号の位置</b>はそのままに、<b>中の言葉だけ</b>を辞書から入れかえて、
+        別のクロスワードを作ります。<b>キーワードは記号のマスから自動で決まります</b>（新しい言葉になります）。<br>
+        同じ形で難易度ちがい・クラスちがいの問題をいくつも作れます。押すたびに別の中身になります。
+      </p>
+    </div>
+
     <div class="panel">
       <h2>手で置く <span class="hint">ワードをタップ → 光ったマスをタップ</span></h2>
       <div id="placeList"></div>
@@ -5710,6 +5725,10 @@ var qrcode = function() {
       $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
+      $('#btnReskin').addEventListener('click', () => {
+        $('#btnReskin').disabled = true;
+        reskinPuzzle().finally(() => { $('#btnReskin').disabled = false; });
+      });
       $('#btnClearMarks').addEventListener('click', () => {
         if (!confirm('記号を全部消します。よろしいですか？')) return;
         snapshot(); state.marks = {}; refresh(); showMsg('記号を消しました。');
@@ -6476,6 +6495,200 @@ var qrcode = function() {
     }
 
     // 入らなかった語と盤面の両方につながる語を辞書からさがし、実際に組めるか検証する
+    // ===== 同じ形のまま、中の言葉だけ入れかえる =====
+    // マスの並び（形）と記号の位置は動かさず、辞書の言葉で埋めなおす。
+    // キーワードは「記号のマスに入った文字」から自動で決まる。
+
+    // いまの盤面を「わく（スロット）」の形にする
+    function currentSlots() {
+      return state.placed.map(p => {
+        const len = chars(p.text).length;
+        const cells = [];
+        for (let i = 0; i < len; i++) {
+          cells.push(key(p.r + (p.dir === 'down' ? i : 0), p.c + (p.dir === 'across' ? i : 0)));
+        }
+        return { r: p.r, c: p.c, dir: p.dir, len, cells, text: p.text };
+      });
+    }
+
+    // 記号のマスを、記号の順（A・B・C… ／ 1・2・3…）に並べる
+    function markCellsInOrder() {
+      const list = Object.entries(state.marks).filter(([, v]) => v).map(([k, v]) => ({ k, mark: v }));
+      const allNum = list.length > 0 && list.every(x => /^\d+$/.test(x.mark));
+      list.sort((a, b) => allNum ? Number(a.mark) - Number(b.mark) : a.mark.localeCompare(b.mark, 'ja'));
+      return list;
+    }
+
+    // 決めた言葉の並びから、記号のマスを読んでキーワードを作る
+    function keywordFromLetters(letters) {
+      return markCellsInOrder().map(x => letters.get(x.k) || '').join('');
+    }
+
+    // わくを1つずつ埋めていく（うまくいかなければ戻ってやり直す＝バックトラック）
+    function fillSlots(slots, byLen, used0, deadline) {
+      const assign = new Array(slots.length).fill(null);
+      const letters = new Map();
+      const used = new Set(used0);
+      // 交差の多いわくから先に決める（あとで行きづまりにくい）
+      const order = slots.map((s, i) => i)
+        .sort((a, b) => slots[b].crossN - slots[a].crossN);
+
+      const rec = (k) => {
+        if (Date.now() > deadline) return false;
+        if (k >= order.length) return true;
+        const si = order[k];
+        const s = slots[si];
+        const pat = s.cells.map(ck => letters.get(ck) || null);
+        const pool = byLen.get(s.len) || [];
+        const cands = [];
+        for (const w of pool) {
+          if (used.has(w.t)) continue;
+          let fit = true;
+          for (let i = 0; i < pat.length; i++) {
+            if (pat[i] && pat[i] !== w.cs[i]) { fit = false; break; }
+          }
+          if (fit) cands.push(w);
+          if (cands.length >= 300) break;      // よく使う語から順に見ているので、ここで打ち切ってよい
+        }
+        if (!cands.length) return false;
+        // 上位のなかをまぜて、押すたびに違う中身になるようにする
+        const head = cands.slice(0, 40);
+        for (let i = head.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [head[i], head[j]] = [head[j], head[i]];
+        }
+        const tries = head.slice(0, 20);
+        for (const w of tries) {
+          const wrote = [];
+          for (let i = 0; i < s.cells.length; i++) {
+            const ck = s.cells[i];
+            if (!letters.has(ck)) { letters.set(ck, w.cs[i]); wrote.push(ck); }
+          }
+          used.add(w.t);
+          assign[si] = w;
+          if (rec(k + 1)) return true;
+          wrote.forEach(ck => letters.delete(ck));
+          used.delete(w.t);
+          assign[si] = null;
+        }
+        return false;
+      };
+
+      return rec(0) ? { assign, letters } : null;
+    }
+
+    async function reskinPuzzle() {
+      const out = $('#reskinResult');
+      const slots = currentSlots();
+      if (slots.length < 2) {
+        out.innerHTML = '<span style="color:var(--ng)">先にクロスワードを作ってください'
+          + '（形をもとにして中身を入れかえる機能です）。</span>';
+        return;
+      }
+
+      // 交差の数を数える（同じマスを2つのわくが通っていれば交差）
+      const useCount = new Map();
+      slots.forEach(s => s.cells.forEach(ck => useCount.set(ck, (useCount.get(ck) || 0) + 1)));
+      slots.forEach(s => { s.crossN = s.cells.filter(ck => useCount.get(ck) > 1).length; });
+
+      // 使える辞書を、長さごとに分けておく
+      const mode = kanaMode();
+      const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
+      const level = Number($('#findLevel').value) || 10000;
+      const onlyKyoiku = $('#findKyoiku').checked;
+      const needLens = new Set(slots.map(s => s.len));
+      const byLen = new Map();
+      const dictSet = new Set();
+      loadDict().forEach(d => {
+        if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) return;
+        if (mode === 'hira' && isLoanword(d)) return;
+        const t = conv(d.r);
+        const cs = chars(t);
+        dictSet.add(t);
+        if (!needLens.has(cs.length)) return;
+        if (!byLen.has(cs.length)) byLen.set(cs.length, []);
+        byLen.get(cs.length).push({ t, cs, s: d.s, rank: d.rank });
+      });
+      const short = [...needLens].filter(n => !(byLen.get(n) || []).length);
+      if (short.length) {
+        out.innerHTML = '<span style="color:var(--ng)">' + short.join('・')
+          + '文字の語が、いまの「むずかしさ」の設定では足りません。'
+          + 'むずかしさを「ふつう」にしてみてください。</span>';
+        return;
+      }
+
+      const wantKwWord = $('#reskinKwWord').checked;
+      const marks = markCellsInOrder();
+      const before = slots.map(s => s.text);
+      const t0 = Date.now();
+      const END = t0 + 9000;
+      let best = null, bestScore = -Infinity, tried = 0;
+
+      out.textContent = '同じ形で、別の言葉の組み合わせをさがしています…';
+      await tick();
+
+      while (Date.now() < END) {
+        tried++;
+        const res = fillSlots(slots, byLen, new Set(), Math.min(END, Date.now() + 2200));
+        if (res) {
+          const kw = keywordFromLetters(res.letters);
+          const kwOk = kw.length >= 2 && dictSet.has(kw);
+          const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
+          const avgRank = res.assign.reduce((a, w) => a + w.rank, 0) / res.assign.length;
+          // 前と同じキーワードにならないほうがうれしい（何問も作るための機能なので）
+          const kwNew = kw !== state.keyword ? 800 : 0;
+          const score = (kwOk ? 100000 : 0) + kwNew + changed * 300 - avgRank / 50;
+          if (score > bestScore) { bestScore = score; best = { ...res, kw, kwOk, changed }; }
+          // キーワードもそろい、中身も十分に変わっていれば、そこで切り上げる
+          if ((!wantKwWord || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)
+              && (!marks.length || best.kw !== state.keyword)) break;
+        }
+        out.textContent = '同じ形で、別の言葉の組み合わせをさがしています…（' + tried + '通りためしました）';
+        await tick();
+      }
+
+      if (!best) {
+        out.innerHTML = '<span style="color:var(--ng)">この形にぴったり入る別の組み合わせが見つかりませんでした。'
+          + 'むずかしさを「ふつう」にするか、形を少し変えてみてください。</span>';
+        return;
+      }
+
+      // 盤面に反映する（形と記号はそのまま、言葉とキーワードだけ入れかえる）
+      snapshot();
+      state.placed = slots.map((sl, i) => ({
+        id: uid(), text: best.assign[i].t, r: sl.r, c: sl.c, dir: sl.dir
+      }));
+      const texts = [...new Set(best.assign.map(w => w.t))];
+      state.words = texts.map(t => ({ id: uid(), text: t }));
+      best.assign.forEach(w => rememberWord(w.t, w.s));
+      // カギは語ごとに持っているので、新しい語のぶんはマイ辞書から自動で入る
+      state.selWordId = null; state.selPlacedId = null;
+      clearCycle(); clueSig = ''; viewSig = '';
+
+      if (marks.length) {
+        state.keyword = best.kw;
+        $('#keywordInput').value = state.keyword;
+      }
+      pickHints(state.hintCount);
+      refresh();
+      showTab('build');
+
+      let msg = '<strong>同じ形のまま、中身を作り直しました。</strong>'
+        + '（' + slots.length + '語のうち ' + best.changed + '語が入れかわりました）';
+      if (marks.length) {
+        msg += ' 新しいキーワードは <strong>「' + escapeHtml(best.kw) + '」</strong>。';
+        msg += best.kwOk
+          ? ' <span style="color:var(--ok);font-weight:700;">辞書にある言葉です。</span>'
+          : ' <span style="color:var(--ng)">辞書にない並びなので、そのまま使えるか確かめてください'
+            + '（もう一度押すと、別の組み合わせをさがします）。</span>';
+      } else {
+        msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。'
+          + '③しあげで記号をふってから、もう一度押してください。</span>';
+      }
+      out.innerHTML = msg;
+      showMsg('同じ形で作り直しました。カギ（ヒント）は③しあげで書き直してください。', 'ok');
+    }
+
     function findBridges(failedText) {
       const mode = kanaMode();
       const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
