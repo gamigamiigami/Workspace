@@ -807,6 +807,15 @@
           <label class="check"><input type="checkbox" id="reskinKwWord" checked>
             キーワードを自動で決めるときは「辞書にある言葉」だけにする</label>
         </div>
+        <div class="row">
+          <label class="check"><input type="checkbox" id="shapeRemark">
+            キーワードが入るように、<b>記号の位置は自動で決め直す</b></label>
+        </div>
+        <p class="hint-line" style="margin-top:2px;">
+          ↑ ふだんは<b>記号の位置はそのまま</b>で作ります。ただし、いまの位置だとキーワードが入らないとき
+          （「ん」が言葉のいちばん前のマスに当たっているときなど）は、これにチェックを入れると
+          <b>キーワードが入る場所へ記号をふり直して</b>作ります（マスの並び＝形は変わりません）。
+        </p>
         <p class="hint-line" style="margin-top:2px;">
           ↑ キーワードを自分で入れたときは、この設定は使いません（入れたとおりになります）。<br>
           チェックを入れていると、<b>意味のない文字の並びはキーワードにしません</b>。
@@ -3958,9 +3967,12 @@ var qrcode = function() {
         // ふだんはバッジを出さず、「どの語ともつながらない」ときだけ知らせる
         const alone = (shareCount.get(w.id) || 0) === 0 && state.words.length > 1;
         const meta = state.meta[w.text];
+        // 型モードで「辞書から自動で入った語」は、自分で登録した語と区別できるようにする
+        const autoHere = !!(state.shapeLock && (state.shapeLock.autoWords || []).includes(w.text));
         chip.innerHTML = '<span class="wtext">' + escapeHtml(w.text) + '</span>'
           + (meta ? '<span class="wmeta">' + escapeHtml(meta) + '</span>' : '')
-          + (alone ? '<span class="wbadge">つながらない</span>' : '')
+          + (autoHere ? '<span class="wbadge" style="background:#eef3fb;color:#5c6672;">辞書から自動</span>' : '')
+          + (alone && !autoHere ? '<span class="wbadge">つながらない</span>' : '')
           + (withDelete ? '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>' : '');
         return chip;
       };
@@ -4358,6 +4370,43 @@ var qrcode = function() {
       saveLocal();
     }
 
+    // 型モードのとき、この語を登録してよいかを調べる（ダメな理由を文で返す。OKなら空文字）
+    function shapeRejectReason(t, extraCount) {
+      const lock = state.shapeLock;
+      if (!lock) return '';
+      const n = chars(t).length;
+      if (n < 2) return '';
+      const need = new Map();
+      lock.slots.forEach(sl => need.set(sl.len, (need.get(sl.len) || 0) + 1));
+      const lens = [...need.keys()].sort((a, b) => a - b).join('・');
+      if (!need.has(n)) {
+        return '「' + t + '」は' + n + '文字ですが、この型には' + n + '文字の言葉が入る場所がありません'
+          + '（この型に入るのは ' + lens + ' 文字の言葉だけです）。';
+      }
+      const autoW = lock.autoWords || [];
+      const have = state.words.filter(w => !autoW.includes(w.text) && chars(w.text).length === n).length
+        + (extraCount && extraCount.get(n) ? extraCount.get(n) : 0);
+      if (have >= need.get(n)) {
+        return '「' + t + '」は' + n + '文字ですが、' + n + '文字が入る場所（' + need.get(n) + '個）は'
+          + 'もういっぱいです。ほかの語を消すか、別の長さの語にしてください。';
+      }
+      return '';
+    }
+
+    // ワードを1語だけ登録する（辞書の候補をタップしたときなど）。型に入らない語は登録しない
+    function addOneWord(t, meta) {
+      const text = String(t).normalize('NFC');
+      if (state.words.some(w => w.text === text)) return false;
+      const ng = shapeRejectReason(text);
+      if (ng) { showMsg('✗ ' + ng, 'ng'); return false; }
+      state.words.push({ id: uid(), text });
+      if (state.shapeLock && state.shapeLock.autoWords) {
+        state.shapeLock.autoWords = state.shapeLock.autoWords.filter(x => x !== text);
+      }
+      rememberWord(text, meta);
+      return true;
+    }
+
     // ===== ワードの登録・削除 =====
     function addWords(raw) {
       const parts = String(raw).split(/[\n,、,\s]+/).map(s => s.trim()).filter(Boolean);
@@ -4367,19 +4416,16 @@ var qrcode = function() {
       const need = new Map();
       if (lock) lock.slots.forEach(sl => need.set(sl.len, (need.get(sl.len) || 0) + 1));
       const autoW = (lock && lock.autoWords) || [];
-      const have = new Map();
-      if (lock) state.words.filter(w => !autoW.includes(w.text)).forEach(w => {
-        const n = chars(w.text).length;
-        have.set(n, (have.get(n) || 0) + 1);
-      });
+      const have = new Map();   // この登録で「これから足す」ぶんの数（すでに登録ずみの数は判定側で数える）
       const ngLen = [], ngFull = [];
       parts.forEach(text => {
         const t = text.normalize('NFC');
         if (state.words.some(w => w.text === t)) { skipped++; return; }
         if (lock) {
           const n = chars(t).length;
-          if (n >= 2 && !need.has(n)) { ngLen.push(t + '（' + n + '文字）'); return; }
-          if (n >= 2 && (have.get(n) || 0) >= need.get(n)) { ngFull.push(t + '（' + n + '文字）'); return; }
+          const ng = shapeRejectReason(t, have);
+          if (ng && !need.has(n)) { ngLen.push(ng); return; }
+          if (ng) { ngFull.push(ng); return; }
           if (n >= 2) have.set(n, (have.get(n) || 0) + 1);
         }
         state.words.push({ id: uid(), text: t });
@@ -4391,12 +4437,8 @@ var qrcode = function() {
         added++;
       });
       if (ngLen.length || ngFull.length) {
-        const lens = [...need.keys()].sort((a, b) => a - b).join('・');
-        const msgs = [];
-        if (ngLen.length) msgs.push('「' + ngLen.join('・') + '」は、この型に入るマスがありません'
-          + '（この型に入るのは ' + lens + ' 文字の語だけです）');
-        if (ngFull.length) msgs.push('「' + ngFull.join('・') + '」は、その長さのマスがもういっぱいです');
-        showMsg('✗ ' + msgs.join('／') + '。' + (added ? added + '語だけ登録しました。' : '登録していません。'), 'ng');
+        showMsg('✗ ' + ngLen.concat(ngFull).join(' ')
+          + (added ? added + '語だけ登録しました。' : '登録していません。'), 'ng');
         refresh();
         return;
       }
@@ -5587,8 +5629,7 @@ var qrcode = function() {
       if (!item) return;
       if (item.id !== state.workId
           && !(await confirmDiscard('「' + (item.title || '（無題）') + '」を開く'))) return;
-      applyData(item.data);
-      state.shapeLock = null;      // 別の作品を開いたら、型の固定は外す
+      applyData(item.data);        // その作品が型で作りかけなら、型もいっしょに読みこまれる
       renderShapeMode();
       state.workId = item.id;
       state.folder = item.folder || '';
@@ -6098,11 +6139,9 @@ var qrcode = function() {
         const chip = e.target.closest('.find-chip');
         if (!chip) return;
         const t = chip.dataset.text;
-        if (!state.words.some(w => w.text === t)) {
-          state.words.push({ id: uid(), text: t });
-          rememberWord(t, chip.dataset.meta);
-        }
+        if (!state.words.some(w => w.text === t) && !addOneWord(t, chip.dataset.meta)) return;
         $('#bridgeBox').style.display = 'none';
+        if (state.shapeLock) { showTab('build'); runShapeBuild(); return; }
         runGenerate();
       });
       ['#findLevel', '#findKyoiku', '#findKw', '#findCross', '#findLen'].forEach(sel => {
@@ -6114,8 +6153,7 @@ var qrcode = function() {
         if (!chip) return;
         const t = chip.dataset.text;
         if (state.words.some(w => w.text === t)) return;
-        state.words.push({ id: uid(), text: t });
-        rememberWord(t, chip.dataset.meta);
+        if (!addOneWord(t, chip.dataset.meta)) { refresh(); return; }   // 型に入らない語は登録しない
         chip.remove();
         refresh();
         showMsg('「' + t + '」を登録しました。', 'ok');
@@ -7204,6 +7242,32 @@ var qrcode = function() {
       return list;
     }
 
+    // 盤面の文字から、キーワードの文字を1つずつ置けるマスを見つける（左上から順に）
+    // 見つからなければ null。見つかれば、キーワードの順に並んだマスの並びを返す
+    function markPlanFor(kwCs, letters) {
+      const cells = [...letters.keys()].map(k => {
+        const [r, c] = k.split(',').map(Number);
+        return { k, r, c, ch: letters.get(k) };
+      }).sort((a, b) => a.r - b.r || a.c - b.c);
+      const used = new Set();
+      const plan = [];
+      for (const ch of kwCs) {
+        const hit = cells.find(x => x.ch === ch && !used.has(x.k));
+        if (!hit) return null;
+        used.add(hit.k);
+        plan.push(hit.k);
+      }
+      return plan;
+    }
+
+    // 決めた並びのとおりに、記号をふり直す
+    function applyMarkPlan(plan) {
+      const style = $('#markStyle') ? $('#markStyle').value : 'abc';
+      const label = (i) => (style === 'num' || i >= 26) ? String(i + 1) : String.fromCharCode(65 + i);
+      state.marks = {};
+      plan.forEach((k, i) => { state.marks[k] = label(i); });
+    }
+
     // 決めた言葉の並びから、記号のマスを読んでキーワードを作る
     function keywordFromLetters(letters) {
       return markCellsInOrder().map(x => letters.get(x.k) || '').join('');
@@ -7212,13 +7276,34 @@ var qrcode = function() {
     // わくを1つずつ埋めていく（うまくいかなければ戻ってやり直す＝バックトラック）
     // fixed    … 先に文字が決まっているマス（キーワードの記号マスなど）
     // required … 必ず使う言葉（①ことばで登録したワード）
-    function fillSlots(slots, byLen, fixed, required, deadline) {
+    function fillSlots(slots, byLen, fixed, required, deadline, wantChars) {
       const assign = new Array(slots.length).fill(null);
       const letters = new Map(fixed || []);
       const used = new Set();
       const req = required || [];
-      // 交差の多いわくから先に決める（あとで行きづまりにくい）
-      const order = slots.map((s, i) => i).sort((a2, b2) => slots[b2].crossN - slots[a2].crossN);
+      // 先に文字が決まっているマス（キーワードなど）を多く通るわくから決める。
+      // そのあとは交差の多いわく。こうすると、しばりのきついところから片づくので行きづまりにくい
+      const fixedN = slots.map(s => s.cells.filter(ck => letters.has(ck)).length);
+      const order = slots.map((s, i) => i)
+        .sort((a2, b2) => (fixedN[b2] - fixedN[a2]) || (slots[b2].crossN - slots[a2].crossN));
+      // キーワードの文字を「何個ずつ」そろえないといけないかを数えておく。
+      // （「しんぶん」なら ん が2個必要。交差した1マスは1個ぶんにしかならない）
+      const wantCount = new Map();
+      (wantChars || []).forEach(ch => wantCount.set(ch, (wantCount.get(ch) || 0) + 1));
+      const want = new Set(wantCount.keys());
+      const allCells = new Set();
+      slots.forEach(s => s.cells.forEach(ck => allCells.add(ck)));
+      const totalCells = allCells.size;
+
+      // まだ足りないキーワードの文字の数（残りのマス数より多ければ、その道は行きどまり）
+      const shortage = () => {
+        if (!want.size) return 0;
+        const have = new Map();
+        letters.forEach(ch => have.set(ch, (have.get(ch) || 0) + 1));
+        let short = 0;
+        wantCount.forEach((n, ch) => { short += Math.max(0, n - (have.get(ch) || 0)); });
+        return short;
+      };
 
       const fits = (w, pat) => {
         for (let i = 0; i < pat.length; i++) if (pat[i] && pat[i] !== w.cs[i]) return false;
@@ -7234,7 +7319,7 @@ var qrcode = function() {
 
       const rec = (k) => {
         if (Date.now() > deadline) return false;
-        if (k >= order.length) return req.every(w => used.has(w.t));
+        if (k >= order.length) return req.every(w => used.has(w.t)) && shortage() === 0;
         // 残っているわくより、まだ置けていない登録ワードが多ければ、この道は行きどまり
         const leftReq = req.filter(w => !used.has(w.t)).length;
         if (leftReq > order.length - k) return false;
@@ -7246,13 +7331,31 @@ var qrcode = function() {
         // 登録ワードを先に、そのあと辞書から
         const mine = shuffle(req.filter(w => !used.has(w.t) && w.cs.length === s.len && fits(w, pat)));
         const rest = [];
+        const wantHit = [];   // キーワードの文字を含む語（あとで先にためす）
         for (const w of (byLen.get(s.len) || [])) {
           if (used.has(w.t)) continue;
-          if (fits(w, pat)) rest.push(w);
-          if (rest.length >= 300) break;   // よく使う語から順に見ているので、ここで打ち切ってよい
+          if (!fits(w, pat)) continue;
+          if (want.size && w.cs.some(ch => want.has(ch))) wantHit.push(w);
+          else rest.push(w);
+          if (rest.length + wantHit.length >= 400) break;   // よく使う語から順に見ているので打ち切ってよい
         }
         // 上位のなかをまぜて、押すたびに違う中身になるようにする
-        const head = shuffle(rest.slice(0, 40)).slice(0, 20);
+        let head = shuffle(wantHit.slice(0, 80)).slice(0, 30)
+          .concat(shuffle(rest.slice(0, 60)).slice(0, 20));
+        if (want.size) {
+          // まだ足りない文字を多く埋められる語から先にためす
+          const have = new Map();
+          letters.forEach(ch => have.set(ch, (have.get(ch) || 0) + 1));
+          const shortOf = new Map();
+          wantCount.forEach((n, ch) => { const d = n - (have.get(ch) || 0); if (d > 0) shortOf.set(ch, d); });
+          const gain = (w) => {
+            const left = new Map(shortOf);
+            let g = 0;
+            w.cs.forEach(ch => { const d = left.get(ch); if (d > 0) { left.set(ch, d - 1); g++; } });
+            return g;
+          };
+          head = head.map(w => ({ w, g: gain(w) })).sort((a2, b2) => b2.g - a2.g).map(x => x.w);
+        }
         const tries = mine.concat(head);
         if (!tries.length) return false;
 
@@ -7264,7 +7367,8 @@ var qrcode = function() {
           }
           used.add(w.t);
           assign[si] = w;
-          if (rec(k + 1)) return true;
+          // キーワードの文字が、残りのマスではもうそろわないなら、この道はやめる
+          if (shortage() <= totalCells - letters.size && rec(k + 1)) return true;
           wrote.forEach(ck => letters.delete(ck));
           used.delete(w.t);
           assign[si] = null;
@@ -7546,7 +7650,8 @@ var qrcode = function() {
     }
 
     // 型で作る（形・記号は固定。ワード／キーワードは、ここで登録したものを使う）
-    async function buildFromShape() {
+    // forceRemark … いまの記号の位置では入らなかったので、位置を決め直してやり直すとき true
+    async function buildFromShape(forceRemark) {
       // メッセージは「同じ形」パネルだけでなく、②つくるの上の行（自動で作るボタンの下）にも出す。
       // ボタンから遠いところにだけ出すと、押しても何も起きていないように見えるため
       const out = {
@@ -7654,43 +7759,51 @@ var qrcode = function() {
           return;
         }
       }
-      if (kwChars.length && !marks.length) {
-        out.innerHTML = '<span style="color:var(--ng)">記号がありません。'
-          + '③しあげで「記号を自動でふる」を押してから、もう一度押してください。</span>';
-        return;
-      }
-      if (kwChars.length && kwChars.length !== marks.length) {
+      // 記号の位置をどう扱うか
+      // ・記号が無い → キーワードが入る場所に、あとから自動でふる
+      // ・チェックが入っている → いまの位置は使わず、入る場所にふり直す
+      // ・ふつう → いまの記号の位置に、キーワードの文字をはめこむ
+      const wantRemark = $('#shapeRemark') && $('#shapeRemark').checked;
+      let remark = kwChars.length > 0 && (marks.length === 0 || wantRemark || forceRemark);
+      if (kwChars.length && marks.length && !remark && kwChars.length !== marks.length) {
         out.innerHTML = '<span style="color:var(--ng)">記号が <b>' + marks.length
-          + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。'
-          + 'キーワードを ' + marks.length + '文字にするか、③しあげで記号をふり直してください。</span>';
+          + '個</b> なのに、キーワードは <b>' + kwChars.length + '文字</b> です。<br>'
+          + 'キーワードを ' + marks.length + '文字にするか、'
+          + '上の<b>「キーワードが入るように、記号の位置は自動で決め直す」</b>にチェックを入れて'
+          + 'もう一度押してください（記号の数もキーワードに合わせてふり直します）。</span>';
         return;
       }
       // 記号のマスが「語のはじめ」に当たっているか（「ん」「っ」などは語頭に来られない）
       const headCells = new Set(slots.map(sl => sl.cells[0]));
       const NG_HEAD = /[んっゃゅょぁぃぅぇぉゎーンッャュョァィゥェォヮ]/;
       const headAt = marks.map(m => headCells.has(m.k));
-      if (kwChars.length) {
+      if (kwChars.length && !remark) {
         const ngPos = [];
         kwChars.forEach((ch, i) => { if (headAt[i] && NG_HEAD.test(ch)) ngPos.push((i + 1) + '文字目の「' + ch + '」'); });
         if (ngPos.length) {
-          out.innerHTML = '<span style="color:var(--ng)">キーワード「' + escapeHtml(state.keyword) + '」の'
-            + escapeHtml(ngPos.join('・')) + ' が、<b>言葉のいちばん前のマス</b>に当たっています。'
-            + '「ん」「っ」「ゃ」などで始まる言葉は辞書にないので、この型では作れません。<br>'
-            + '別のキーワードにするか、③しあげで<b>記号の位置をふり直して</b>ください。</span>';
-          return;
+          // いまの記号の位置では入らないので、自動でふり直して作る（形は変わらない）
+          remark = true;
+          showMsg('キーワードの' + ngPos.join('・') + ' が言葉のいちばん前のマスに当たっているため、'
+            + '記号の位置を自動でふり直して作ります（マスの並びは変わりません）。', 'ok');
         }
       }
-      marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
+      // 記号の位置を決め直すときは、文字を先に決めずに作り、あとから記号をふる
+      if (!remark) marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
       if (texts.length) {
         required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || '', rank: 0 }));
         const noRoom = required.filter(w => !slots.some(sl => sl.len === w.cs.length
           && sl.cells.every((ck, i) => !fixed.has(ck) || fixed.get(ck) === w.cs[i])));
         if (noRoom.length) {
+          // キーワードの文字とぶつかっているだけなら、記号の位置を決め直せば入ることが多い
+          if (kwChars.length && !remark && !forceRemark) {
+            showMsg('いまの記号の位置では「' + noRoom.map(w => w.t).join('・')
+              + '」が入らないので、記号の位置を決め直して作ります（マスの並びは変わりません）。', 'ok');
+            return buildFromShape(true);
+          }
           out.innerHTML = '<span style="color:var(--ng)">「'
             + escapeHtml(noRoom.map(w => w.t).join('・'))
-            + '」は、この型' + (kwChars.length ? 'とキーワード' : '') + 'には入りません'
-            + '（長さが合わないか、キーワードの文字とぶつかります）。'
-            + 'ワードを変えるか、キーワードを見直してください。</span>';
+            + '」は、この型には入りません（長さの合うわくがありません）。'
+            + 'ワードを変えるか、減らしてください。</span>';
           return;
         }
       }
@@ -7699,7 +7812,7 @@ var qrcode = function() {
       const wantKwWord = $('#reskinKwWord').checked;
       const strictKw = kwAuto && marks.length > 0 && wantKwWord;   // 自動で決めるときだけ効く
       const END = Date.now() + 12000;
-      let best = null, bestScore = -Infinity, tried = 0;
+      let best = null, bestScore = -Infinity, tried = 0, planMiss = 0;
       let usedNote = '', usedTier = null, lastMissing = null;
 
       out.textContent = 'この型に入る組み合わせをさがしています…';
@@ -7734,18 +7847,22 @@ var qrcode = function() {
             tryFixed = new Map(fixed);
             marks.forEach((m, i) => tryFixed.set(m.k, cand[i]));
           }
-          const res = fillSlots(slots, dict.byLen, tryFixed, required, Math.min(slice, Date.now() + (strictKw ? 700 : 2200)));
+          const res = fillSlots(slots, dict.byLen, tryFixed, required,
+            Math.min(slice, Date.now() + (strictKw ? 700 : 2200)), remark ? kwChars : null);
           if (res) {
-            const kw = keywordFromLetters(res.letters);
-            const kwOk = kw.length >= 2 && dict.dictSet.has(kw);
+            // 記号をふり直すときは、キーワードの文字を置けるかどうかで合否を決める
+            const plan = remark ? markPlanFor(kwChars, res.letters) : null;
+            if (remark && !plan) { planMiss++; out.textContent = 'キーワード「' + state.keyword
+              + '」が入る組み合わせをさがしています…（' + tried + '通りためしました）'; await tick(); continue; }
+            const kw = remark ? state.keyword : keywordFromLetters(res.letters);
+            const kwOk = remark ? true : (kw.length >= 2 && dict.dictSet.has(kw));
             const changed = res.assign.filter((w, i) => w.t !== before[i]).length;
             const avgRank = res.assign.reduce((a2, w) => a2 + w.rank, 0) / res.assign.length;
-            const score = (kwOk ? 100000 : 0) + (kw !== before.join('') ? 0 : 0)
-              + changed * 300 - avgRank / 50;
+            const score = (kwOk ? 100000 : 0) + changed * 300 - avgRank / 50;
             // きびしくさがすときは、辞書にある言葉になったものだけを残す
             if ((!strictKw || kwOk) && score > bestScore) {
               bestScore = score;
-              best = { ...res, kw, kwOk, changed };
+              best = { ...res, kw, kwOk, changed, plan };
               usedTier = dict; usedNote = tier.note;
             }
             if (best && (!strictKw || best.kwOk) && best.changed >= Math.ceil(slots.length / 2)) break;
@@ -7757,6 +7874,12 @@ var qrcode = function() {
       }
 
       if (!best) {
+        // いまの記号の位置のせいで入らないことが多いので、位置を決め直してもう一度だけためす
+        if (kwChars.length && !remark && !forceRemark) {
+          showMsg('いまの記号の位置では入らなかったので、記号の位置を決め直してもう一度さがします'
+            + '（マスの並びは変わりません）。', 'ok');
+          return buildFromShape(true);
+        }
         const lens = [...needLens].sort((x, y) => x - y).join('・');
         out.innerHTML = '<span style="color:var(--ng)">'
           + (lastMissing
@@ -7770,10 +7893,16 @@ var qrcode = function() {
                     + 'のどれかをためしてください。<b>わけのわからないキーワードにはしませんでした。</b>'
                   : 'この型に入る組み合わせが見つかりませんでした。'
                     + '（この型のわくは ' + lens + ' 文字）<br>'
-                    + (kwChars.length
-                        ? 'キーワード「' + escapeHtml(state.keyword) + '」が入りにくいのかもしれません。'
-                          + '「ん」のように語のはじめに来にくい文字が記号のマスに当たると、とても作りにくくなります。'
-                          + '別のキーワードでためすか、③しあげで記号の位置をふり直してください。<br>'
+                    + (kwChars.length && !remark
+                        ? 'キーワード「' + escapeHtml(state.keyword) + '」が、いまの記号の位置に入りにくいようです。'
+                          + '上の<b>「キーワードが入るように、記号の位置は自動で決め直す」</b>に'
+                          + 'チェックを入れて、もう一度押してみてください。<br>'
+                        : '')
+                    + (kwChars.length && remark
+                        ? 'キーワード「' + escapeHtml(state.keyword) + '」の文字（'
+                          + escapeHtml(kwChars.join('・')) + '）が全部そろう組み合わせが見つかりませんでした。'
+                          + '同じ文字が何回も出てくるキーワードは、その回数だけ別のマスが要ります。'
+                          + '短いキーワードにするか、むずかしさを「ふつう」まで広げてためしてください。<br>'
                         : '')
                     + (texts.length ? '登録ワードを減らすのもききます。<br>' : '')
                     + 'むずかしさを「ふつう（中学生向け）」にすると、見つかりやすくなります。'
@@ -7802,7 +7931,10 @@ var qrcode = function() {
       state.selWordId = null; state.selPlacedId = null;
       clearCycle(); clueSig = ''; viewSig = '';
 
-      if (marks.length && kwAuto) {
+      if (best.plan) {
+        // キーワードが入る場所へ、記号をふり直す（マスの並び＝形は変えない）
+        applyMarkPlan(best.plan);
+      } else if (marks.length && kwAuto) {
         state.keyword = best.kw;
         $('#keywordInput').value = state.keyword;
       }
@@ -7816,7 +7948,12 @@ var qrcode = function() {
       if (usedNote) msg += ' <span style="color:var(--ng)">※いまの設定では語が足りなかったので、'
         + escapeHtml(usedNote) + 'さがしました。</span>';
       if (texts.length) msg += ' 登録したワード ' + texts.length + '語は全部つかいました。';
-      if (marks.length && !kwAuto) {
+      if (best.plan) {
+        msg += ' キーワードは入れたとおり <strong>「' + escapeHtml(state.keyword) + '」</strong> です。'
+          + '<span style="color:var(--ok);font-weight:700;">'
+          + 'キーワードが入る場所に記号を' + (marks.length ? 'ふり直しました' : 'ふりました') + '。</span>'
+          + '（マスの並び＝形は変わっていません。位置は③しあげで直せます）';
+      } else if (marks.length && !kwAuto) {
         msg += ' キーワードは入れたとおり <strong>「' + escapeHtml(state.keyword) + '」</strong> です。';
       } else if (marks.length) {
         msg += ' 新しいキーワードは <strong>「' + escapeHtml(best.kw) + '」</strong>。';
