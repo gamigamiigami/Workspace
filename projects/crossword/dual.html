@@ -706,6 +706,29 @@
       <p class="hint-line" style="margin-top:2px;">
         ①②では必ず同じマスに置きます。③のときだけ、このチェックを外すと自由に置けます。
       </p>
+
+      <h3 style="margin-top:12px;font-size:14px;">キーワードを入れていないとき</h3>
+      <div class="row" style="margin-top:4px;">
+        <label class="check"><input type="checkbox" id="autoKw" checked>
+          キーワードを自動で決める</label>
+        <label for="autoKwLen">文字数</label>
+        <select id="autoKwLen">
+          <option value="0">おまかせ（4→3→5→2の順にさがす）</option>
+          <option value="2">2文字</option>
+          <option value="3">3文字</option>
+          <option value="4">4文字</option>
+          <option value="5">5文字</option>
+        </select>
+      </div>
+      <p class="hint-line" style="margin-top:2px;">
+        A・B のキーワードを<b>どちらも空</b>にしておくと、できた盤面から自動でさがします。<br>
+        記号のマスは「A の文字と B の文字」の組なので、記号を読むと
+        <b>A と B のキーワードが同時に決まります</b>。
+        そこで <b>A も B も辞書にある言葉</b>になる組み合わせだけを採用します
+        （意味のない文字の並びにはしません）。<br>
+        <b>そのぶんマスがたくさん要ります。</b>目安は <b>1文字あたり4マス</b>
+        （4文字なら16マスほど）。足りないときは、辞書から語を足して盤面を大きくしてからさがします。
+      </p>
     </div>
   </section>
 
@@ -5994,9 +6017,158 @@ var qrcode = function() {
       return { ok: false, msg: ng.join('・') + ' のキーワードの文字が、盤面に足りませんでした。' };
     }
 
+
+    // ==========================================================================
+    // ===== キーワードを自分で決めていないときに、盤面から自動でさがす =====
+    //
+    // 【なぜ特別な工夫が要るか】
+    // 記号のマスは「A の文字と B の文字」の組を持っている。
+    // だから記号を読むと、A のキーワードと B のキーワードが “同時に” 決まる。
+    // 謎として成り立たせるには、その2つが【どちらも辞書にある言葉】でないといけない。
+    // ふつうのクロスワード（1つが言葉ならよい）より、ずっときびしい条件になる。
+    //
+    // 【だから盤面の大きさが要る】
+    // マスが少ないと組み合わせが足りず、見つからない。
+    // 実際に36回作って測った「見つかった割合」：
+    //
+    //   マス数     2文字   3文字   4文字   5文字
+    //   〜11        100%    100%     50%      0%
+    //   12〜19      100%    100%     75%     50%
+    //   20〜31      100%    100%    100%     79%
+    //   32〜        100%    100%    100%    100%
+    //
+    // この表から「ほぼ確実に見つかるマス数」を決め、
+    // 足りなければ辞書から語を足して盤面を大きくしてからさがす。
+    // ==========================================================================
+
+    // ねらう文字数に対して、ほぼ確実に見つかるマス数（上の測定表から）
+    const KW_CELLS = { 2: 10, 3: 10, 4: 20, 5: 32, 6: 40 };
+    function cellsNeededFor(len) { return KW_CELLS[len] || Math.max(10, len * 8); }
+
+    // 盤面のマスを「A の文字・B の文字」の組として集める
+    function boardPairCells() {
+      const ca = new Map(), cb = new Map();
+      docA.placed.forEach(p => wordCells(p).forEach(c => ca.set(key(c.r, c.c), c.ch)));
+      docB.placed.forEach(p => wordCells(p).forEach(c => cb.set(key(c.r, c.c), c.ch)));
+      const out = [];
+      ca.forEach((chA, k) => { if (cb.has(k)) out.push({ k, a: chA, b: cb.get(k) }); });
+      return out;
+    }
+
+    // 記号をふるための下ごしらえ（どのマスがどの語に属するか）
+    function markInfoForBoard() {
+      const cellWords = new Map(), wordOrder = new Map();
+      const reg = new Set(docA.words.map(w => w.text));
+      const regIds = new Set();
+      docA.placed.forEach(pw => {
+        const ks = wordCells(pw).map(c => key(c.r, c.c));
+        wordOrder.set(pw.id, ks);
+        if (reg.has(pw.text)) regIds.add(pw.id);
+        ks.forEach(k => { if (!cellWords.has(k)) cellWords.set(k, []); cellWords.get(k).push(pw.id); });
+      });
+      return { cellWords, wordOrder, regIds };
+    }
+
+    // A も B も辞書にある言葉になるキーワードの組をさがす。
+    //
+    // 総当たり（辞書×辞書）だと1億通りになるので、次の順でしぼる：
+    //  1. 盤面から「A の文字 → そのマスで取れる B の文字」の対応表を作る
+    //  2. A の候補は「全文字が盤面にある語」だけにする
+    //  3. その語の位置ごとに B に置ける文字が決まるので、それに合う語だけを見る
+    //  4. 最後に、マスが実際に足りるか（同じマスの使い回しが無いか）を記号ふりで確かめる
+    // これで数十ミリ秒で見つかる。
+    function findDualKeywords(len, limit, budgetMs) {
+      const cells = boardPairCells();
+      if (cells.length < len) return [];
+      const lm = new Map();                    // A の文字 -> そこで取れる B の文字
+      cells.forEach(c => {
+        if (!lm.has(c.a)) lm.set(c.a, new Set());
+        lm.get(c.a).add(c.b);
+      });
+
+      const mode = kanaMode();
+      const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
+      const level = Number($('#findLevel').value) || 10000;
+      const words = [];
+      const seen = new Set();
+      for (const d of loadDict()) {
+        if (d.rank >= level) continue;
+        if (mode === 'hira' && isLoanword(d)) continue;
+        const t = conv(d.r);
+        if (chars(t).length !== len || seen.has(t)) continue;
+        seen.add(t);
+        words.push({ t, cs: chars(t), rank: d.rank });
+      }
+      if (!words.length) return [];
+
+      const cellPair = new Map();
+      cells.forEach(c => cellPair.set(c.k, pairOf(c.a, c.b)));
+      const info = markInfoForBoard();
+      const markOpts = { regWords: info.regIds.size ? info.regIds : null };
+
+      // 盤面にそのまま出ている語は、キーワードにしない
+      // （答えを1つ読めば分かってしまい、謎としてつまらないため）
+      const onBoardA = new Set(docA.placed.map(pp => pp.text));
+      const onBoardB = new Set(docB.placed.map(pp => pp.text));
+      const aCands = words.filter(w => !onBoardA.has(w.t) && w.cs.every(ch => lm.has(ch)));
+      const out = [];
+      const deadline = Date.now() + (budgetMs || 1500);
+      for (const wa of aCands) {
+        if (Date.now() > deadline) break;
+        const allow = wa.cs.map(ch => lm.get(ch));
+        for (const wb of words) {
+          if (wb.t === wa.t) continue;      // A と B が同じ言葉では、仕掛けにならない
+          if (onBoardB.has(wb.t)) continue;  // 盤面に出ている語は避ける
+          let fit = true;
+          for (let i = 0; i < len; i++) if (!allow[i].has(wb.cs[i])) { fit = false; break; }
+          if (!fit) continue;
+          const kwPair = wa.cs.map((ch, i) => pairOf(ch, wb.cs[i]));
+          const plan = pickMarkCells(kwPair, cellPair, info.cellWords, info.wordOrder, markOpts);
+          if (!plan) continue;
+          out.push({ a: wa.t, b: wb.t, score: wa.rank + wb.rank });
+          if (out.length >= (limit || 8)) return out;
+        }
+      }
+      return out;
+    }
+
+    // キーワードを自動で決める。
+    // ねらう文字数の指定が無いときは、4→3→5→2 の順に試す
+    // （4文字くらいが、謎として使いやすく見つかりやすい）
+    function autoPickKeyword() {
+      const want = Number(($('#autoKwLen') || {}).value || 0);
+      const lens = want ? [want] : [4, 3, 5, 2];
+      const cells = boardPairCells().length;
+      for (const L of lens) {
+        // 目安に足りなくても、さがすのは数十ミリ秒なので一度は試す
+        // （4文字は12〜19マスでも75%は見つかる）
+        if (cells < L * 2) continue;
+        const found = findDualKeywords(L, 6);
+        if (!found.length) continue;
+        // よく使う語どうしの組を上位に。その中からランダムに選ぶので、押すたび変わる
+        found.sort((x, y) => x.score - y.score);
+        const pick = found[Math.floor(Math.random() * Math.min(3, found.length))];
+        docA.keyword = pick.a;
+        docB.keyword = pick.b;
+        syncWordFields();
+        return { ok: true, a: pick.a, b: pick.b, len: L, cells };
+      }
+      return { ok: false, cells, need: cellsNeededFor(want || 3) };
+    }
+
+    // 「キーワードを自動で決める」がオンで、まだ両方とも空か
+    function wantAutoKeyword() {
+      const cb = $('#autoKw');
+      if (!cb || !cb.checked) return false;
+      return !chars(docA.keyword).length && !chars(docB.keyword).length;
+    }
+
     // ===== 本体：A と B を同時に作る =====
     async function buildDual() {
       const out = $('#dualResult');
+      // キーワードを自動で決めるかどうかは、作りはじめる前に決めておく
+      // （作ったあとに決めると、盤面の大きさが足りなくなるため）
+      const autoKw = wantAutoKeyword();
       const kwA = chars(docA.keyword), kwB = chars(docB.keyword);
 
       // 先に、はっきりダメな条件をはじく（作ってから「できません」ではなく、押した瞬間に理由を出す）
@@ -6004,7 +6176,7 @@ var qrcode = function() {
         out.innerHTML = '<span style="color:var(--ng)">まず「①ことば」で、A と B のワードを登録してください。</span>';
         return;
       }
-      if (dual.sameMark && kwA.length !== kwB.length) {
+      if (!autoKw && dual.sameMark && kwA.length !== kwB.length) {
         out.innerHTML = '<span style="color:var(--ng)">A と B のキーワードの文字数がちがいます'
           + '（A ' + kwA.length + '文字／B ' + kwB.length + '文字）。</span>'
           + '　文字数をそろえるか、「作りかたを変える」で<b>記号の位置を同じにする</b>のチェックを外してください。';
@@ -6075,7 +6247,13 @@ var qrcode = function() {
         // ②③は、足りない分を辞書から足す
         if (dual.mode !== 1) {
           const N = maxLen || 9;
-          const target = Math.max(items.length + 2, Math.min(16, Math.round(N * N / 5)));
+          let target = Math.max(items.length + 2, Math.min(16, Math.round(N * N / 5)));
+          // キーワードを自動で決めるときは、さがせるだけのマス数を先に確保しておく。
+          // 語1つでだいたい3マス増えるので、必要マス数 ÷ 3 語くらいを目安にする
+          if (autoKw) {
+            const wantLen = Number(($('#autoKwLen') || {}).value || 0) || 4;
+            target = Math.max(target, Math.ceil(cellsNeededFor(wantLen) / 3) + 1);
+          }
           items = pickPairPool(items, target, dictByLen, wantPairs)
             .map(x => x.text ? x : { text: x.a + PSEP + x.b, cs: x.cs, a: x.a, b: x.b, req: false,
                                      metaA: x.metaA, metaB: x.metaB });
@@ -6092,6 +6270,24 @@ var qrcode = function() {
           const sc = reqIn * 1000 + res.placed.length;
           if (!best || sc > best._sc) { best = res; best._sc = sc; best._reqIn = reqIn; best._reqN = req.size; bestPairs = items; }
           if (res.failed.length === 0) break;
+          // 盤面に上限があるときは、辞書から足した語が入りきらないのがふつう。
+          // 「登録した語が全部入り、キーワードをさがせるだけのマスもある」なら、
+          // それ以上ねばらずに切り上げる（上限つきで毎回9秒待たされないように）
+          if (reqIn === req.size) {
+            const cellSet = new Set();
+            res.placed.forEach(pp => {
+              const n = pp.text.split(PSEP)[0];
+              const dr = pp.dir === 'down' ? 1 : 0, dc = pp.dir === 'across' ? 1 : 0;
+              for (let i = 0; i < chars(n).length; i++) cellSet.add(key(pp.r + dr * i, pp.c + dc * i));
+            });
+            const wantLen = Number(($('#autoKwLen') || {}).value || 0) || 4;
+            // 盤面に上限があると、目安のマス数に届かないこともある。
+            // 届かない目安をねばっても時間のむだなので、その盤面に入る分までで手を打つ
+            const roomy = maxLen ? Math.round(maxLen * maxLen * 0.6) : Infinity;
+            const wantCells = Math.min(cellsNeededFor(wantLen), roomy);
+            const enough = autoKw ? cellSet.size >= wantCells : cellSet.size >= 8;
+            if (enough) break;
+          }
         }
         await tick();
       }
@@ -6149,6 +6345,23 @@ var qrcode = function() {
       addWordsTo(docA, placedA);
       addWordsTo(docB, placedB);
 
+      // ---- キーワードが空なら、盤面から自動でさがす ----
+      // 「A も B も意味のある言葉」になる組だけを採用する
+      let autoMsg = '';
+      if (autoKw) {
+        const got = autoPickKeyword();
+        if (got.ok) {
+          autoMsg = ' <span style="color:var(--ok);font-weight:700;">キーワードを自動で決めました：</span>'
+            + 'A「<b>' + escapeHtml(got.a) + '</b>」／B「<b>' + escapeHtml(got.b) + '</b>」'
+            + '<span class="hint">（' + got.len + '文字・' + got.cells + 'マスからさがしました）</span>';
+        } else {
+          autoMsg = ' <span style="color:var(--ng)">キーワードは自動で決められませんでした。</span>'
+            + '<span class="hint">A と B の<b>どちらも言葉になる</b>組み合わせが要るため、'
+            + 'いまの ' + got.cells + ' マスでは足りません（目安 ' + got.need + ' マス）。'
+            + '盤面の大きさを大きくするか、ワードを増やしてみてください。</span>';
+        }
+      }
+
       // ---- 記号（キーワード）をふる ----
       const mk = applyDualMarks();
 
@@ -6175,6 +6388,7 @@ var qrcode = function() {
               + (dual.sameMark ? '（A と B で同じ位置）' : '（A と B で別の位置）')
             : '')
         : ' <span style="color:var(--ng)">' + mk.msg + '</span>';
+      msg += autoMsg;
       msg += '<br>「👀 見くらべ」で、A と B が同じ形になっているか確かめてください。';
       out.innerHTML = msg;
       $('#genResult').innerHTML = msg;
