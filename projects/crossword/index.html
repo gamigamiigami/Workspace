@@ -289,6 +289,8 @@
     /* 色は --cellbg で渡す（しあげタブの指定に打ち消されないようにするため） */
     .cell.filled { background: var(--cellbg, var(--paper)); box-shadow: inset 0 0 0 1px var(--navy); }
     .cell.blank-black { background: #22282f; }
+    /* 型モードで、まだ文字が入っていない「型のマス」 */
+    .cell.shapecell { background: #eef3fb; box-shadow: inset 0 0 0 2px #b9cbe6; }
     .cell.cand { background: #fff2cd; box-shadow: inset 0 0 0 2px var(--accent); cursor: pointer; }
     .cell.selword { background: #fff6e0; }
     .cell.conflict { background: var(--ng-bg); color: var(--ng); }
@@ -567,6 +569,7 @@
     <div class="panel" id="shapeBanner" hidden style="border:2px solid var(--ok);">
       <h2>🔒 いまは「型」で作っています <span class="hint">形と記号の位置は変わりません</span></h2>
       <p id="shapeBannerInfo" class="hint-line"></p>
+      <div id="shapeLenChips"></div>
       <p class="hint-line">
         ここで<b>使いたいワードを登録</b>したり、<b>キーワードを入れ直したり</b>してから、
         <b>②つくる</b>の「この型で作る」を押してください。<br>
@@ -644,6 +647,7 @@
 
     <div class="panel">
       <h2>ワード候補をさがす <span class="hint">国語辞書 約1万語＋マイ辞書から</span></h2>
+      <div id="shapeLenChips3"></div>
       <div class="row">
         <label for="findLen">文字数</label>
         <select id="findLen">
@@ -788,6 +792,7 @@
       <!-- 型モード中の表示 -->
       <div id="shapeOn" hidden>
         <p id="shapeInfo" class="hint-line"></p>
+        <div id="shapeLenChips2"></div>
         <div class="row">
           <button id="btnShapeWords" class="sub">① ことばへ（ワード・キーワードを入れる）</button>
           <button id="btnShapeBuild" class="big">② この型で作る</button>
@@ -3887,6 +3892,7 @@ var qrcode = function() {
       // 意図しない語のマス
       const badCells = new Set();
       badRuns.forEach(run => run.cells.forEach(x => badCells.add(key(x.r, x.c))));
+      const shapeSet = shapeCells();
       // ドラッグ中のプレビュー
       const prevMap = new Map();
       if (preview) preview.cells.forEach(x => prevMap.set(key(x.r, x.c), x.ch));
@@ -3900,6 +3906,7 @@ var qrcode = function() {
         const cls = ['cell'];
         let ch = '';
         if (cell) { cls.push('filled'); ch = state.hideLetters ? '' : cell.ch; }
+        else if (shapeSet.has(k)) cls.push('shapecell');   // 型のマス（まだ文字が入っていない）
         else if (state.blackFill) cls.push('blank-black');
         if (cell && state.puzzleType === 'skeleton' && state.hints.includes(k)) cls.push('hintcell');
         if (cell && state.colors[k]) cls.push('c-' + state.colors[k]);
@@ -3915,7 +3922,9 @@ var qrcode = function() {
         }
         el.className = cls.join(' ');
         el.querySelector('.ch').textContent = ch;
-        el.querySelector('.mark').textContent = cell ? (state.marks[k] || '') : '';
+        // 型のマス（まだ文字が無い）にも、記号は見せる（キーワードの場所が分かるように）
+        el.querySelector('.mark').textContent =
+          (cell || shapeSet.has(k)) ? (state.marks[k] || '') : '';
         el.querySelector('.num').textContent =
           (state.showNums && cell && numbers[idx(r, c)]) ? numbers[idx(r, c)] : '';
       }
@@ -4338,9 +4347,26 @@ var qrcode = function() {
     function addWords(raw) {
       const parts = String(raw).split(/[\n,、,\s]+/).map(s => s.trim()).filter(Boolean);
       let added = 0, skipped = 0;
+      // 型モードのときは、型に入らない長さのワードは登録しない（あとで「入りません」と言われないように）
+      const lock = state.shapeLock;
+      const need = new Map();
+      if (lock) lock.slots.forEach(sl => need.set(sl.len, (need.get(sl.len) || 0) + 1));
+      const autoW = (lock && lock.autoWords) || [];
+      const have = new Map();
+      if (lock) state.words.filter(w => !autoW.includes(w.text)).forEach(w => {
+        const n = chars(w.text).length;
+        have.set(n, (have.get(n) || 0) + 1);
+      });
+      const ngLen = [], ngFull = [];
       parts.forEach(text => {
         const t = text.normalize('NFC');
         if (state.words.some(w => w.text === t)) { skipped++; return; }
+        if (lock) {
+          const n = chars(t).length;
+          if (n >= 2 && !need.has(n)) { ngLen.push(t + '（' + n + '文字）'); return; }
+          if (n >= 2 && (have.get(n) || 0) >= need.get(n)) { ngFull.push(t + '（' + n + '文字）'); return; }
+          if (n >= 2) have.set(n, (have.get(n) || 0) + 1);
+        }
         state.words.push({ id: uid(), text: t });
         // 型モード中に自分で登録し直した語は、「かならず使うワード」にもどす
         if (state.shapeLock && state.shapeLock.autoWords) {
@@ -4349,6 +4375,16 @@ var qrcode = function() {
         rememberWord(t);
         added++;
       });
+      if (ngLen.length || ngFull.length) {
+        const lens = [...need.keys()].sort((a, b) => a - b).join('・');
+        const msgs = [];
+        if (ngLen.length) msgs.push('「' + ngLen.join('・') + '」は、この型に入るマスがありません'
+          + '（この型に入るのは ' + lens + ' 文字の語だけです）');
+        if (ngFull.length) msgs.push('「' + ngFull.join('・') + '」は、その長さのマスがもういっぱいです');
+        showMsg('✗ ' + msgs.join('／') + '。' + (added ? added + '語だけ登録しました。' : '登録していません。'), 'ng');
+        refresh();
+        return;
+      }
       showMsg(added + '語を登録しました。' + (skipped ? '（同じ語 ' + skipped + ' 件はとばしました）' : ''), 'ok');
       refresh();
     }
@@ -5827,9 +5863,18 @@ var qrcode = function() {
       return list;
     }
 
+    // 型モードで固定している「マスの位置」を全部集める
+    function shapeCells() {
+      const set = new Set();
+      if (!state.shapeLock) return set;
+      state.shapeLock.slots.forEach(sl => sl.cells.forEach(k => set.add(k)));
+      return set;
+    }
+
     function boundingBox() {
       let minR = GRID, maxR = -1, minC = GRID, maxC = -1;
-      for (const k of board.map.keys()) {
+      const keys = [...board.map.keys()].concat([...shapeCells()]);
+      for (const k of keys) {
         const [r, c] = k.split(',').map(Number);
         minR = Math.min(minR, r); maxR = Math.max(maxR, r);
         minC = Math.min(minC, c); maxC = Math.max(maxC, c);
@@ -6187,6 +6232,7 @@ var qrcode = function() {
           + (state.shapeLock ? '\n（型（形と記号の位置）は残ります）' : ''))) return;
         snapshot();
         state.words = []; state.placed = []; state.selWordId = null; state.selPlacedId = null;
+        if (state.shapeLock && state.shapeLock.marks) state.marks = JSON.parse(JSON.stringify(state.shapeLock.marks));
         if (state.shapeLock) state.shapeLock.autoWords = [];
         clearCycle(); refresh();
         showMsg('ワードと盤面を空にしました。' + (state.shapeLock ? '型はそのまま残っています。' : ''), 'ok');
@@ -6250,10 +6296,14 @@ var qrcode = function() {
         refresh();
       });
       $('#btnClearBoard').addEventListener('click', () => {
-        if (!confirm('盤面に置いた語と記号を全部消します。よろしいですか？（登録ワードは残ります）')) return;
+        const keepMarks = !!state.shapeLock;   // 型モードでは、記号は型の一部なので残す
+        if (!confirm('盤面に置いた語' + (keepMarks ? '' : 'と記号') + 'を全部消します。よろしいですか？'
+          + '（登録ワードは残ります' + (keepMarks ? '／型の形と記号もそのまま残ります' : '') + '）')) return;
         snapshot();
-        state.placed = []; state.marks = {}; state.selPlacedId = null;
+        state.placed = []; state.selPlacedId = null;
+        if (!keepMarks) state.marks = {};
         clearCycle(); refresh();
+        if (keepMarks) showMsg('盤面を空にしました。型（マスの並びと記号の位置）はそのまま残っています。', 'ok');
       });
       document.querySelectorAll('.tab-btn').forEach(b => {
         b.addEventListener('click', () => showTab(b.dataset.go));
@@ -7239,6 +7289,7 @@ var qrcode = function() {
       state.shapeLock = {
         slots: slots.map(s2 => ({ r: s2.r, c: s2.c, dir: s2.dir, len: s2.len, cells: s2.cells.slice() })),
         markCount: markCellsInOrder().length,
+        marks: JSON.parse(JSON.stringify(state.marks || {})),   // 記号も型の一部として覚えておく
         srcTitle: (src && src.title) || state.title || 'クロスワード'
       };
       // 中身（登録ワード・キーワード）はまっさらにする。形と記号はさわらない
@@ -7271,6 +7322,9 @@ var qrcode = function() {
       panelOff.hidden = on;
       panelOn.hidden = !on;
       banner.hidden = !on;
+      if (!on) ['#shapeLenChips', '#shapeLenChips2', '#shapeLenChips3'].forEach(sel => {
+        const el = $(sel); if (el) el.innerHTML = '';
+      });
       // 「作る」系のボタンは、型モード中も押せる（押すと“この型で作る”になる）。
       // 形そのものを変えてしまう「別の形にする」だけは止める。
       const relabel = (sel, onText) => {
@@ -7295,6 +7349,9 @@ var qrcode = function() {
       lock.slots.forEach(s2 => { lens[s2.len] = (lens[s2.len] || 0) + 1; });
       const lenText = Object.keys(lens).map(Number).sort((a, b) => a - b)
         .map(n => n + '文字が' + lens[n] + '個').join('／');
+      // 文字数ごとに「いくつ必要か／いま何語あるか」を出す
+      const need = new Map();
+      lock.slots.forEach(sl => need.set(sl.len, (need.get(sl.len) || 0) + 1));
       const kwNow = chars(state.keyword).length;
       const autoW = lock.autoWords || [];
       const myN = state.words.filter(w => !autoW.includes(w.text)).length;
@@ -7312,6 +7369,36 @@ var qrcode = function() {
         + (autoW.length ? '／辞書から自動で入った ' + autoW.length + '語 は数えません' : '') + '）';
       $('#shapeInfo').innerHTML = info;
       $('#shapeBannerInfo').innerHTML = info;
+
+      // 「5文字 0/2」のように、必要な数と登録した数をならべる
+      const have = new Map();
+      state.words.filter(w => !autoW.includes(w.text)).forEach(w => {
+        const n = chars(w.text).length;
+        have.set(n, (have.get(n) || 0) + 1);
+      });
+      const needLensList = [...need.keys()].sort((a, b) => a - b);
+      let chips = needLensList.map(n => {
+        const h = have.get(n) || 0, k2 = need.get(n);
+        const color = h === k2 ? 'var(--ok)' : (h > k2 ? '#b00' : '#5c6672');
+        return '<span style="display:inline-block;margin:2px 6px 2px 0;padding:3px 8px;border-radius:999px;'
+          + 'border:1px solid ' + color + ';color:' + color + ';font-weight:700;">'
+          + n + '文字 ' + h + '/' + k2 + '</span>';
+      }).join('');
+      // 型にない文字数の語が入っていたら、それも知らせる
+      const extraLens = [...have.keys()].filter(n => !need.has(n)).sort((a, b) => a - b);
+      if (extraLens.length) {
+        chips += '<span style="color:#b00;font-weight:700;">'
+          + extraLens.map(n => n + '文字の語は、この型には入りません').join('／') + '</span>';
+      }
+      const restN = lock.slots.length - state.words.filter(w => !autoW.includes(w.text)).length;
+      const note = '<div style="margin-top:4px;">' + chips
+        + '<span class="hint" style="margin-left:4px;">'
+        + (restN > 0 ? 'のこり ' + restN + '語は辞書から自動で入ります。' : '')
+        + '（「◯/◯」＝いま登録した数／この型に入る数）</span></div>';
+      $('#shapeLenChips').innerHTML = note;
+      $('#shapeLenChips2').innerHTML = note;
+      $('#shapeLenChips3').innerHTML = '<p class="hint-line" style="margin:0 0 4px;">'
+        + 'いま「型」で作っています。さがすときは、下の<b>文字数</b>を合わせると探しやすいです。</p>' + note;
     }
 
     // 「この型で作る」を押したときの入口（どのボタンから押しても同じ動きにする）
@@ -7327,7 +7414,20 @@ var qrcode = function() {
 
     // 型で作る（形・記号は固定。ワード／キーワードは、ここで登録したものを使う）
     async function buildFromShape() {
-      const out = $('#reskinResult');
+      // メッセージは「同じ形」パネルだけでなく、②つくるの上の行（自動で作るボタンの下）にも出す。
+      // ボタンから遠いところにだけ出すと、押しても何も起きていないように見えるため
+      const out = {
+        set innerHTML(v) {
+          $('#reskinResult').innerHTML = v;
+          $('#genResult').innerHTML = v;
+          const plain = String(v).replace(/<[^>]*>/g, '');
+          if (/color:var\(--ng\)/.test(v)) showMsg(plain.slice(0, 120), 'ng');
+        },
+        set textContent(v) {
+          $('#reskinResult').textContent = v;
+          $('#genResult').textContent = v;
+        }
+      };
       const lock = state.shapeLock;
       if (!lock) return;
 
@@ -7342,6 +7442,11 @@ var qrcode = function() {
       const texts = [...new Set(state.words.map(w => w.text)
         .filter(t => chars(t).length >= 2 && !autoW.includes(t)))];
       const kwChars = chars(state.keyword);
+      // 記号が消えていたら、型に入ったときの記号を戻す（記号も型の一部）
+      if (lock.marks && Object.keys(lock.marks).length
+          && !Object.values(state.marks || {}).some(v => v)) {
+        state.marks = JSON.parse(JSON.stringify(lock.marks));
+      }
       const marks = markCellsInOrder();
       const kwAuto = kwChars.length === 0;
 
