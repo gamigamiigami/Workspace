@@ -5001,6 +5001,16 @@ var qrcode = function() {
       el.innerHTML = msg;
     }
 
+    // 作り直すと記号（キーワードの位置）は消える。消える前に必ず知らせる
+    // （記号を残したまま中身だけ変えたいときは「型」で作る）
+    function okToDropMarks() {
+      if (!Object.values(state.marks || {}).some(v => v)) return true;
+      return confirm('作り直すと、いまの記号（キーワードの位置）は消えます。よろしいですか？\n\n'
+        + '※ 記号の位置をそのままにして、中の言葉だけ変えたいときは\n'
+        + '　「🏠 さいしょ」→「📐 同じ形で作る」を使ってください。\n'
+        + '（まちがえて消したときは「元に戻す」でもどせます）');
+    }
+
     // ===== 記号をキーワードの順に自動でふる =====
     function autoMark() {
       const kw = chars(state.keyword);
@@ -5090,6 +5100,7 @@ var qrcode = function() {
     // どちらも buildWithRequired() が満たす（必須語の不足 → キーワードの不足 の順で良さを比べている）。
     // ①の一番上のボタンも、キーワード欄のボタンも、この同じ処理を呼ぶ。
     async function autoBuild() {
+      if (!okToDropMarks()) return;
       const hasWords = state.words.length > 0;
       const hasKw = chars(state.keyword).length >= 2;
 
@@ -7898,6 +7909,7 @@ var qrcode = function() {
         $('#genResult').innerHTML = '<span style="color:var(--ng)">2文字以上のワードを2つ以上登録してください。</span>';
         return;
       }
+      if (!okToDropMarks()) return;
       const res = generateLayout(usable);
       if (!res) return;
       snapshot();
