@@ -535,6 +535,26 @@
     label.check.dualmode > span { flex: 1 1 auto; line-height: 1.6; }
     label.check.dualmode:has(input:checked) { border-color: var(--navy); background: #f3f7fc; }
 
+    /* ===== ①ことば：A と B を並べて入力する2列 ===== */
+    /* 画面がせまいとき（iPad縦など）は、自動で上下に積みかわる */
+    .ab2 { display: flex; flex-wrap: wrap; gap: 12px; }
+    .ab-col {
+      flex: 1 1 320px; min-width: 280px;
+      border: 2px solid var(--navy); border-radius: 10px; padding: 10px;
+      background: #fff;
+    }
+    .ab-col.b { border-color: #7a4b8f; }
+    .ab-col > h3 {
+      font-size: 15px; margin: -10px -10px 8px; padding: 6px 10px;
+      background: var(--navy); color: #fff; border-radius: 8px 8px 0 0;
+    }
+    .ab-col.b > h3 { background: #7a4b8f; }
+    .ab-col textarea { width: 100%; min-height: 86px; }
+    .ab-col .kwline { margin-top: 8px; }
+    .ab-col .kwline label { display: block; font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+    .ab-col .kwline input { width: 100%; }
+    .ab-col .wl { margin-top: 8px; }
+
     /* ===== 同時に2つ作るモード：A面／B面の切りかえバー ===== */
     #sideBar {
       display: flex; gap: 8px; align-items: center;
@@ -697,9 +717,6 @@
       <h2>A と B の登録ぐあい <span class="hint">文字数ごとに、数がそろっているか</span></h2>
       <div id="balanceChips"></div>
       <p id="balanceMsg" class="hint-line"></p>
-      <div class="row">
-        <button id="btnSwapSide" class="sub small">↔ もう片方（A⇄B）に切りかえて登録する</button>
-      </div>
     </div>
     <div class="panel">
       <div class="row">
@@ -736,38 +753,60 @@
     </div>
 
     <div class="panel">
-      <h2>ワードを登録する</h2>
-      <div class="row">
-        <textarea id="wordInput" rows="3" placeholder="あり&#10;りす&#10;すうち" style="flex:1 1 220px;min-height:86px;"></textarea>
-        <button id="btnAddWord">登録</button>
+      <h2>ワードとキーワードを登録する <span class="hint">A と B を並べて入れられます</span></h2>
+      <div class="ab2">
+        <!-- A の問題 -->
+        <div class="ab-col a">
+          <h3>A の問題</h3>
+          <textarea id="wordInput" rows="3" placeholder="りか&#10;すうがく"></textarea>
+          <div class="row" style="margin-top:6px;">
+            <button id="btnAddWord">A に登録</button>
+          </div>
+          <div class="kwline">
+            <label for="keywordInput">A のキーワード（答えにしたい言葉）</label>
+            <input type="text" id="keywordInput" placeholder="例：ありがとう">
+          </div>
+          <div id="kwChips"></div>
+          <p id="kwSummary"></p>
+          <div class="wl" id="wordList"></div>
+        </div>
+        <!-- B の問題 -->
+        <div class="ab-col b">
+          <h3>B の問題</h3>
+          <textarea id="wordInputB" rows="3" placeholder="ちり&#10;しゃかい"></textarea>
+          <div class="row" style="margin-top:6px;">
+            <button id="btnAddWordB">B に登録</button>
+          </div>
+          <div class="kwline">
+            <label for="keywordInputB">B のキーワード（答えにしたい言葉）</label>
+            <input type="text" id="keywordInputB" placeholder="例：さようなら">
+          </div>
+          <div id="kwChipsB"></div>
+          <p id="kwSummaryB"></p>
+          <div class="wl" id="wordListB"></div>
+        </div>
       </div>
+      <p class="hint-line" style="margin-top:8px;">
+        改行・スペース・「、」で区切ると、まとめて登録できます。<br>
+        <b>A と B の両方に同じ語</b>を入れると「共通ワード」になり、同じマスに置かれます（①②のとき）。
+      </p>
       <div class="row">
         <button id="btnClearWords2" class="danger small">登録ワードを全部消す</button>
         <button id="btnClearWordsBoard" class="danger small">ワードも盤面も全部消す</button>
-        <span class="hint">入れ直したいときに使います</span>
       </div>
-      <p class="hint-line">改行・スペース・「、」で区切ると、まとめて登録できます。</p>
-      <div id="wordList"></div>
       <p id="diag" class="diag"></p>
       <details id="pairDetails" hidden>
-        <summary>どの語とどの文字でつながるか見る</summary>
+        <summary>どの語とどの文字でつながるか見る（いま選んでいる面）</summary>
         <div id="pairList"></div>
       </details>
-    </div>
-
-    <div class="panel">
-      <h2>キーワード <span class="hint">答えにしたい言葉</span></h2>
-      <input type="text" id="keywordInput" placeholder="例：ありがとう" style="width:100%;">
-      <div id="kwChips"></div>
-      <p id="kwSummary"></p>
-      <div class="row">
-        <button id="btnFindForKeyword">足りない文字を含む語をさがす</button>
+      <div class="row" style="margin-top:6px;">
+        <button id="btnFindForKeyword" class="sub small">足りない文字を含む語をさがす（いま選んでいる面）</button>
       </div>
-      <p class="hint-line">足りない文字を含むワードを辞書から選んで、盤面と記号まで一気に作ります。</p>
     </div>
 
     <div class="panel">
-      <h2>ワード候補をさがす <span class="hint">国語辞書 約1万語＋マイ辞書から</span></h2>
+      <h2>ワード候補をさがす
+        <span class="hint">見つけた語は「いま選んでいる面」に登録されます（画面いちばん上の A / B）</span></h2>
       <div id="shapeLenChips3"></div>
       <div class="row">
         <label for="findLen">文字数</label>
@@ -3516,7 +3555,10 @@ var qrcode = function() {
     // 設定のしかたは server/README.md を参照。
     const SHARE_API = 'https://crossword-store.igamiigamiigami.workers.dev';
     
-    const STORAGE_KEY = 'crossword-supporter-v1';
+    // 保存場所は「ふつうに作る（index.html）」と分ける。
+    // 同じ場所にすると、このページを開いたときに、ふつうモードで作りかけの問題が
+    // そのまま出てきてしまう（＝新しく作り始められない）
+    const STORAGE_KEY = 'crossword-dual-v1';
     const TRY_KEY = 'crossword-from-try';   // 「解答モードを試す」から来たかどうかの印
     const GRID = 41;          // 内部の作業スペース（画面に見せるのは「使っている範囲」だけ）
     const VIEW_MARGIN = 2;    // 使っている範囲の外側に見せる余白（マス）
@@ -4124,12 +4166,18 @@ var qrcode = function() {
       clearCycle();
       viewSig = '';
       refresh();
-      // 入力欄は「いま見ている面」の中身に入れかえる
-      $('#keywordInput').value = state.keyword;
+      syncWordFields();
       $('#title').value = state.title;
       $('#genSize').value = String(state.maxSize);
       $('#genSize2').value = String(state.maxSize);
       saveLocal();
+    }
+
+    // A と B の入力欄を、いまの中身に合わせる（両方いつも見えているので、両方直す）
+    function syncWordFields() {
+      $('#keywordInput').value = docA.keyword;
+      const kb = $('#keywordInputB');
+      if (kb) kb.value = docB.keyword;
     }
 
     function renderSideBar() {
@@ -4357,14 +4405,36 @@ var qrcode = function() {
         return chip;
       };
 
-      // ①ことば：登録したワード全部（削除ボタンつき）
-      const box = $('#wordList');
-      box.innerHTML = '';
-      if (state.words.length === 0) {
-        box.innerHTML = '<p class="hint-line">まだワードがありません。</p>';
-      } else {
-        state.words.forEach(w => box.appendChild(makeChip(w, true)));
-      }
+      // ①ことば：A と B の登録ワードを、それぞれの欄に出す（削除ボタンつき）
+      // ここは「いま選んでいる面」ではなく、いつも A は A 欄・B は B 欄に出す
+      [['#wordList', docA], ['#wordListB', docB]].forEach(([sel, doc]) => {
+        const box = $(sel);
+        if (!box) return;
+        box.innerHTML = '';
+        if (doc.words.length === 0) {
+          box.innerHTML = '<p class="hint-line">まだワードがありません。</p>';
+          return;
+        }
+        // その面の語について、その面の中でのつながり具合を数える
+        withDocLight(doc, () => {
+          const cnt = sharedCounts();
+          const placedT = new Set(doc.placed.map(q => q.text));
+          doc.words.forEach(w => {
+            const chip = document.createElement('div');
+            chip.className = 'word-chip' + (placedT.has(w.text) ? ' placed' : '');
+            chip.dataset.wordId = w.id;
+            const alone = (cnt.get(w.id) || 0) === 0 && doc.words.length > 1;
+            const meta = doc.meta[w.text];
+            const isCommon = (doc === docA ? docB : docA).words.some(x => x.text === w.text);
+            chip.innerHTML = '<span class="wtext">' + escapeHtml(w.text) + '</span>'
+              + (meta ? '<span class="wmeta">' + escapeHtml(meta) + '</span>' : '')
+              + (isCommon ? '<span class="wbadge" style="background:#e3f3e9;color:var(--ok);">共通</span>' : '')
+              + (alone && !isCommon ? '<span class="wbadge">つながらない</span>' : '')
+              + '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>';
+            box.appendChild(chip);
+          });
+        });
+      });
 
       // 「2つの語をつなぐ語」用の選択肢
       ['#linkA', '#linkB'].forEach((sel, i) => {
@@ -4413,11 +4483,14 @@ var qrcode = function() {
     }
 
     // ===== ② 共通文字の診断 =====
+    // つながり具合の診断は「いま選んでいる面」について出す。
+    // A と B の両方が画面にあるので、どちらの話かを必ず書く
     function renderDiag() {
       const diag = $('#diag');
       const list = $('#pairList');
       list.innerHTML = '';
       const words = state.words;
+      const sideLabel = side + ' の問題：';
       const details = $('#pairDetails');
       if (words.length === 0) {
         diag.hidden = true;
@@ -4442,7 +4515,7 @@ var qrcode = function() {
 
       if (words.length === 1) {
         diag.className = 'diag ok';
-        diag.textContent = 'ワードが1つだけです。あと1つ以上登録すると共通文字を調べられます。';
+        diag.textContent = sideLabel + 'ワードが1つだけです。あと1つ以上登録すると共通文字を調べられます。';
       } else if (groups.size === 1) {
         // 共通文字があっても、実際に置けるとは限らない（クロスワードは形の制約が強い）
         const weak = words.filter(w => {
@@ -4455,17 +4528,17 @@ var qrcode = function() {
         });
         if (weak.length) {
           diag.className = 'diag ng';
-          diag.textContent = '△ ' + weak.map(w => '「' + w.text + '」').join('')
+          diag.textContent = sideLabel + '△ ' + weak.map(w => '「' + w.text + '」').join('')
             + ' は1種類の文字でしか他の語とつながりません。置けないことがあります'
             + '（そのときは②つくるで「つなぐ語をさがす」が出ます）。';
         } else {
           diag.className = 'diag ok';
-          diag.textContent = '◎ 全部のワードが共通の文字でつながっています（' + pairs.length + '組）。'
+          diag.textContent = sideLabel + '◎ 全部のワードが共通の文字でつながっています（' + pairs.length + '組）。'
             + '実際に組めるかは②つくるで確かめます。';
         }
       } else {
         diag.className = 'diag ng';
-        let t = '△ ' + groups.size + 'つのグループに分かれています。1つにつなぐには、橋わたしになるワードが必要です。';
+        let t = sideLabel + '△ ' + groups.size + 'つのグループに分かれています。1つにつなぐには、橋わたしになるワードが必要です。';
         if (alone.length) t += '　どのワードともつながらない：' + alone.map(w => w.text).join('・');
         diag.textContent = t;
       }
@@ -4532,13 +4605,23 @@ var qrcode = function() {
       return out;
     }
 
+    // A と B の両方のキーワードについて、文字がそろっているかを出す
     function renderKeyword() {
-      const box = $('#kwChips');
+      renderKeywordFor(docA, '#kwChips', '#kwSummary');
+      renderKeywordFor(docB, '#kwChipsB', '#kwSummaryB');
+    }
+
+    function renderKeywordFor(doc, chipSel, sumSel) {
+      const box = $(chipSel);
+      const sum = $(sumSel);
+      if (!box || !sum) return;
+      const state = doc;                    // 以下、この面について見る
+      const board = withDocLight(doc, () => buildBoard());
       box.innerHTML = '';
       const cs = chars(state.keyword);
       if (cs.length === 0) {
         box.innerHTML = '<p class="note">キーワードを入れると、登録ワードで使えている文字に色がつきます。</p>';
-        $('#kwSummary').textContent = '';
+        sum.textContent = '';
         return;
       }
       // 同じ文字が何回も出るキーワードに対応するため、使ったぶんを減らしながら見ていく
@@ -4574,7 +4657,7 @@ var qrcode = function() {
       } else {
         html += '　<span style="color:var(--ok);font-weight:700;">すべての文字がそろいました！</span>';
       }
-      $('#kwSummary').innerHTML = html;
+      sum.innerHTML = html;
     }
 
     // ②つくるの画面で、キーワードのマスがそろっているかをひと目で見せる。
@@ -4831,6 +4914,7 @@ var qrcode = function() {
     // ===== マイ辞書 =====
     // マイ辞書 ＝ ★お気に入り（全作品で共通） ＋ つかった語（その作品だけ）
     // ★は作品といっしょに保存せず、この端末の別の場所にしまう。だから作品を変えても残る。
+    // ★お気に入りだけは「ふつうに作る」と共通にする（語とカギの資産なので、分ける意味がない）
     const FAV_KEY = 'crossword-favdict-v1';
 
     function loadFav() {
@@ -5096,17 +5180,24 @@ var qrcode = function() {
 
     // ===== ワードチップの操作 =====
     function bindWordList() {
-      ['#wordList', '#placeList'].forEach(sel => bindWordBox($(sel)));
+      // #wordList は A の欄、#wordListB は B の欄、#placeList は「いま選んでいる面」
+      bindWordBox($('#wordList'), () => docA);
+      bindWordBox($('#wordListB'), () => docB);
+      bindWordBox($('#placeList'), () => state);
     }
 
-    function bindWordBox(box) {
+    // getDoc … この欄がどの面のものかを返す
+    function bindWordBox(box, getDoc) {
       if (!box) return;
       box.addEventListener('pointerdown', (e) => {
         if (e.target.closest('[data-del]')) return;
         const chip = e.target.closest('.word-chip');
         if (!chip) return;
-        const w = state.words.find(x => x.id === chip.dataset.wordId);
+        const doc = getDoc();
+        const w = doc.words.find(x => x.id === chip.dataset.wordId);
         if (!w) return;
+        // 盤面へ運べるのは「いま選んでいる面」の語だけ（形をそろえるため）
+        if (doc !== state) return;
         pending = { kind: 'word', text: w.text, wordId: w.id, x: e.clientX, y: e.clientY, el: chip, pointerId: e.pointerId };
         chip.setPointerCapture(e.pointerId);
       });
@@ -5114,27 +5205,31 @@ var qrcode = function() {
         const del = e.target.closest('[data-del]');
         if (!del) return;
         const id = del.dataset.del;
-        const w = state.words.find(x => x.id === id);
+        const doc = getDoc();
+        const w = doc.words.find(x => x.id === id);
         if (!w) return;
-        const onBoard = state.placed.filter(p => p.text === w.text).length;
+        const onBoard = doc.placed.filter(p => p.text === w.text).length;
         const ask = onBoard
           ? '「' + w.text + '」を登録から消します。盤面に置いてある分も外れます。よろしいですか？'
           : '「' + w.text + '」を登録から消します。よろしいですか？';
         if (!confirm(ask)) return;
         snapshot();
-        state.words = state.words.filter(x => x.id !== id);
-        if (state.selWordId === id) state.selWordId = null;
-        // 盤面から外れる語があるときは、相手の面の同じ場所の語もいっしょに外す
-        state.placed.filter(q => q.text === w.text).forEach(q => {
-          const mate = partnerOf(q);
-          if (!mate) return;
-          const you = other();
-          withDoc(you, () => {
-            you.placed = you.placed.filter(x => x.id !== mate.id);
-            syncBoardWithWords();
+        withDoc(doc, () => {
+          doc.words = doc.words.filter(x => x.id !== id);
+          if (doc.selWordId === id) doc.selWordId = null;
+          // 盤面から外れる語があるときは、相手の面の同じ場所の語もいっしょに外す
+          // （片方だけ外すと A と B の形がずれてしまう）
+          const you = (doc === docA) ? docB : docA;
+          doc.placed.filter(q => q.text === w.text).forEach(q => {
+            const mate = partnerOf(q, you);
+            if (!mate) return;
+            withDoc(you, () => {
+              you.placed = you.placed.filter(x => x.id !== mate.id);
+              syncBoardWithWords();
+            });
           });
+          syncBoardWithWords();
         });
-        syncBoardWithWords();
         refresh();
         if (onBoard) showMsg('「' + w.text + '」を登録と盤面の両方から外しました。', 'ok');
       });
@@ -5959,6 +6054,10 @@ var qrcode = function() {
             + '</span>';
           return;
         }
+        // 何回試しても作れない形かどうかを、ここで見きわめる（9秒待たせないため）
+        const blocked = dualBlockReason(pairs);
+        if (blocked) { out.innerHTML = blocked; bindGoFreeButton(); return; }
+
         // 組文字の並びを作る（文字数がちがう組ははじく）
         let items = [];
         let bad = null;
@@ -6003,11 +6102,13 @@ var qrcode = function() {
         const missing = best.failed.filter(t => (bestPairs || []).some(x => x.text === t && x.req));
         if (missing.length || best.placed.length < 2) {
           out.innerHTML = failReason(missing, bestPairs);
+          bindGoFreeButton();
           return;
         }
       }
       if (best && best.placed.length < 2) {
         out.innerHTML = failReason(best.failed, bestPairs);
+        bindGoFreeButton();
         return;
       }
 
@@ -6081,6 +6182,144 @@ var qrcode = function() {
       showTab('compare');
     }
 
+    // ===== 作る前の見きわめ（①②のとき）=====
+    //
+    // 組文字は「A の文字と B の文字の組」なので、ふつうの文字よりずっと交差しにくい。
+    // 次の2つがどちらも無いときは、何回試しても盤面が1つにつながらない。
+    //   ・組どうしが直接交差できる（同じ組文字を持っている）
+    //   ・②で足す語がくっつける場所がある（＝A と B で文字が同じマスがある）
+    // 見つけたら、待たせずにその場で理由と直し方を出す。
+    //
+    // 返り値：作れないと分かったときだけ、その説明（HTML）。作れそうなら空文字
+    function dualBlockReason(pairs) {
+        if (dual.mode === 3) return '';          // ③は辞書から自由に足せるので、この行きどまりは起きない
+        if (pairs.length < 2) return '';         // 組が1つだけなら、つなぐ必要がない
+
+        const csOf = (pr) => pairCs(pr.a, pr.b) || [];
+        // 組どうしが直接交差できるか
+        let canCross = false;
+        for (let i = 0; i < pairs.length && !canCross; i++) {
+          const si = new Set(csOf(pairs[i]));
+          for (let j = i + 1; j < pairs.length; j++) {
+            if (csOf(pairs[j]).some(ch => si.has(ch))) { canCross = true; break; }
+          }
+        }
+        if (canCross) return '';
+
+        // 「A と B で文字が同じマス」を持つ組（＝②で足す語がくっつける足がかり）
+        const sameCellOf = (pr) => {
+          const ca = chars(pr.a), cb = chars(pr.b);
+          const out = [];
+          for (let i = 0; i < Math.min(ca.length, cb.length); i++) if (ca[i] === cb[i]) out.push(ca[i]);
+          return out;
+        };
+        const withFoot = pairs.filter(pr => sameCellOf(pr).length > 0);
+        // ②なら、足がかりのある組が2つ以上あれば、足した語を橋にしてつなげる見こみがある
+        if (dual.mode === 2 && withFoot.length >= 2) return '';
+
+        // --- ここから下は「何回試しても無理」と分かった場合 ---
+        let h = '<span style="color:var(--ng);font-weight:700;">この組み合わせでは作れません。</span>'
+          + '（試した回数の問題ではなく、<b>原理的につながらない</b>ためです）<br><br>';
+
+        h += '<b>いま何が起きているか</b><br>';
+        h += '<table style="border-collapse:collapse;font-size:13px;margin:4px 0 8px;">';
+        pairs.forEach(pr => {
+          const ca = chars(pr.a), cb = chars(pr.b);
+          const cells = ca.map((c, i) => {
+            const same = c === cb[i];
+            return '<span style="display:inline-block;border:1px solid ' + (same ? 'var(--ok)' : 'var(--line)')
+              + ';border-radius:3px;padding:0 4px;margin-right:3px;'
+              + (same ? 'background:var(--ok-bg);font-weight:700;' : '') + '">'
+              + escapeHtml(c) + '<span style="color:var(--gray)">＝</span>' + escapeHtml(cb[i] || '') + '</span>';
+          }).join('');
+          const same = sameCellOf(pr);
+          h += '<tr><td style="padding:2px 8px 2px 0;white-space:nowrap;">A「<b>' + escapeHtml(pr.a)
+            + '</b>」×B「<b>' + escapeHtml(pr.b) + '</b>」</td><td style="padding:2px 0;">' + cells
+            + (same.length ? '' : ' <span style="color:var(--ng)">← 同じ文字のマスなし</span>') + '</td></tr>';
+        });
+        h += '</table>';
+
+        h += 'マスは「A の文字＝B の文字」という<b>組</b>になります。'
+          + '②のモードで辞書から足せるのは「<b>A も B も同じ語</b>」だけなので、'
+          + 'その語が通るマスは<b>かならず A と B で同じ文字</b>になります。<br>'
+          + '<span style="color:var(--ng)">いまはどの組にも「A と B で同じ文字のマス」が無いので、'
+          + '足した語をくっつける場所がありません。</span><br><br>';
+
+        // --- 具体的な直し方（実際に登録されている語から作って見せる）---
+        h += '<b>直し方</b><br>';
+        const sug = suggestSameCellWords(pairs);
+        if (sug.length) {
+          h += '① <b>A と B で「同じ位置に同じ文字」が来るようにする</b>（いちばん確実）<br>'
+            + '<span class="hint">いま登録している語を、こう変えるとつながります：</span>'
+            + '<ul style="margin:4px 0 8px 18px;">';
+          sug.forEach(x => {
+            h += '<li>' + x.side + '「<b>' + escapeHtml(x.from) + '</b>」→「<b>' + escapeHtml(x.to)
+              + '</b>」　<span class="hint">'
+              + (x.side === 'B' ? 'A' : 'B') + '「' + escapeHtml(x.mate) + '」と '
+              + x.pos + '文字目の「' + escapeHtml(x.ch) + '」がそろいます</span></li>';
+          });
+          h += '</ul>';
+        } else {
+          h += '① A と B で<b>同じ位置に同じ文字</b>が来る語の組を作ってください<br>'
+            + '<span class="hint">例：A「<b>り</b>か」／B「<b>り</b>く」→ 先頭の「り」でつながります</span><br>';
+        }
+        h += '② <b>③いちばん自由</b> にする'
+          + '<span class="hint">（A だけ・B だけに出る語を辞書から足せるので、この制限がなくなります）</span><br>'
+          + '<div class="row" style="margin-top:8px;">'
+          + '<button id="btnGoFree" class="big">③いちばん自由 にして、いま作る</button></div>';
+        return h;
+    }
+
+    // 「この語をこう変えれば、相手の語と同じ位置に同じ文字が来る」という候補を辞書からさがす。
+    // 行きどまりを知らせるだけでなく、そのまま直せる案を出すためのもの
+    function suggestSameCellWords(pairs) {
+      const dict = dualDict(state.maxSize || 0);
+      const byLen = new Map();
+      dict.forEach(d => { if (!byLen.has(d.len)) byLen.set(d.len, []); byLen.get(d.len).push(d); });
+      const regA = new Set(docA.words.map(w => w.text));
+      const regB = new Set(docB.words.map(w => w.text));
+      const out = [];
+      pairs.forEach(pr => {
+        const ca = chars(pr.a), cb = chars(pr.b);
+        const n = ca.length;
+        const list = byLen.get(n) || [];
+        let best = null;
+        for (const d of list) {
+          const cd = chars(d.text);
+          // B 側をこの語に変えたら、A の語と同じ位置に同じ文字が来るか
+          for (let i = 0; i < n; i++) {
+            if (cd[i] === ca[i] && d.text !== pr.a && !regB.has(d.text)) {
+              if (!best || d.rank < best.rank) best = { side: 'B', from: pr.b, to: d.text, mate: pr.a, pos: i + 1, ch: ca[i], rank: d.rank };
+              break;
+            }
+          }
+          // A 側を変える案も見る
+          for (let i = 0; i < n; i++) {
+            if (cd[i] === cb[i] && d.text !== pr.b && !regA.has(d.text)) {
+              if (!best || d.rank < best.rank) best = { side: 'A', from: pr.a, to: d.text, mate: pr.b, pos: i + 1, ch: cb[i], rank: d.rank };
+              break;
+            }
+          }
+        }
+        if (best) out.push(best);
+      });
+      return out;
+    }
+
+    // 「③いちばん自由 にして、いま作る」ボタンを効かせる。
+    // 行きどまりを知らせるだけで終わらせず、その場で作れるようにする
+    function bindGoFreeButton() {
+      const b = $('#btnGoFree');
+      if (!b) return;
+      b.addEventListener('click', () => {
+        dual.mode = 3;
+        renderDualOpts();
+        renderBalance();
+        saveLocal();
+        runDual();
+      });
+    }
+
     // なぜ作れなかったのかを、できるだけ具体的に伝える。
     // 「入りません」だけでは何を直せばよいか分からないので、原因ごとに書き分ける
     function failReason(missing, items) {
@@ -6127,7 +6366,9 @@ var qrcode = function() {
         + 'その語は交差の土台になるので、いちばん効きます。<br>'
         + '② A と B で<b>同じ位置に同じ文字が来る</b>ようにする。'
         + '<br>　例：A「<b>さ</b>くら」／B「<b>さ</b>かな」→ 先頭の「さ」のマスで、ほかの語と交差できます。<br>'
-        + '③ 「作りかたを変える」で <b>③いちばん自由</b> にする（A専用・B専用の語を辞書から足せます）。<br>'
+        + '③ <b>③いちばん自由</b> にする（A専用・B専用の語を辞書から足せます）。<br>'
+        + '<div class="row" style="margin-top:8px;">'
+        + '<button id="btnGoFree" class="big">③いちばん自由 にして、いま作る</button></div>'
         + (dual.mode === 2
             ? '<br>※②のモードで辞書から足せるのは「A も B も同じ語」だけです。'
               + 'その語がつながれるのは<b>A と B で文字が同じマス</b>だけなので、上の①②がとくに大事です。'
@@ -6365,7 +6606,7 @@ var qrcode = function() {
       clearCycle();
       clueSig = '';
       $('#title').value = state.title;
-      $('#keywordInput').value = state.keyword;
+      syncWordFields();
       $('#hideLetters').checked = state.hideLetters;
       $('#showNums').checked = state.showNums;
       $('#blackFill').checked = state.blackFill;
@@ -6468,11 +6709,11 @@ var qrcode = function() {
     }
 
     // ===== 作品として保存（名前つき・何個でも保存できる） =====
-    const WORKS_KEY = 'crossword-works-v1';
+    const WORKS_KEY = 'crossword-dual-works-v1';   // 作品一覧も、ふつうモードとは分ける
 
     // ===== フォルダ（作品の入れ物）=====
     // 1段だけの簡単なつくり。同じ形から作った作品を、自動で1つのフォルダにまとめる
-    const FOLDERS_KEY = 'crossword-folders-v1';
+    const FOLDERS_KEY = 'crossword-dual-folders-v1';
 
     function loadFolders() {
       try {
@@ -7218,13 +7459,17 @@ var qrcode = function() {
         if (e.key === 'Escape' && drag) endDrag(false);
       });
 
-      // ワード登録
-      $('#btnAddWord').addEventListener('click', () => {
-        const v = $('#wordInput').value;
-        if (!v.trim()) { showMsg('ワードを入力してください。', 'ng'); return; }
-        addWords(v);
-        $('#wordInput').value = '';
-      });
+      // ワード登録（A 欄・B 欄それぞれ。いま選んでいる面に関係なく、その欄の面に入る）
+      const addTo = (doc, inputSel, label) => {
+        const el = $(inputSel);
+        const v = el.value;
+        if (!v.trim()) { showMsg(label + ' のワードを入力してください。', 'ng'); return; }
+        withDoc(doc, () => addWords(v));
+        el.value = '';
+        refresh();
+      };
+      $('#btnAddWord').addEventListener('click', () => addTo(docA, '#wordInput', 'A'));
+      $('#btnAddWordB').addEventListener('click', () => addTo(docB, '#wordInputB', 'B'));
       $('#btnClearWords').addEventListener('click', () => {
         if (!confirm(side + ' の問題の登録ワードを全部消します。よろしいですか？（盤面はそのままです）')) return;
         state.words = []; state.selWordId = null; refresh();
@@ -7340,13 +7585,20 @@ var qrcode = function() {
       $('#btnAllKata').addEventListener('click', () => convertAllKana('kata'));
       $('#btnAllHira').addEventListener('click', () => convertAllKana('hira'));
 
-      // キーワード
-      $('#keywordInput').addEventListener('input', (e) => {
-        state.keyword = e.target.value.normalize('NFC');
-        board = buildBoard();
-        renderKeyword();
-        saveLocal();
-      });
+      // キーワード（A 欄・B 欄それぞれ）
+      const bindKw = (doc, sel) => {
+        const el = $(sel);
+        if (!el) return;
+        el.addEventListener('input', (e) => {
+          doc.keyword = e.target.value.normalize('NFC');
+          if (doc === state) board = buildBoard();
+          renderKeyword();
+          renderKwBoard();
+          saveLocal();
+        });
+      };
+      bindKw(docA, '#keywordInput');
+      bindKw(docB, '#keywordInputB');
 
       // 盤面ツール
       $('#modePlace').addEventListener('click', () => setMode('place'));
@@ -7383,11 +7635,6 @@ var qrcode = function() {
       // A / B の切りかえ
       $('#btnSideA').addEventListener('click', () => setSide('A'));
       $('#btnSideB').addEventListener('click', () => setSide('B'));
-      $('#btnSwapSide').addEventListener('click', () => {
-        setSide(side === 'A' ? 'B' : 'A');
-        renderBalance();
-        showMsg((side === 'A' ? 'A' : 'B') + ' の問題に切りかえました。', 'ok');
-      });
       // 作りかた（3つのモード・記号の位置・共通ワード）
       document.querySelectorAll('input[name="dualMode"]').forEach(r => {
         r.addEventListener('change', () => {
@@ -7810,7 +8057,7 @@ var qrcode = function() {
       state.placed.forEach(p => { p.text = conv(p.text); });
       state.used.forEach(m => { m.text = conv(m.text); });   // ★お気に入りは全作品で共通なので変えない
       state.keyword = conv(state.keyword);
-      $('#keywordInput').value = state.keyword;
+      syncWordFields();
       clueSig = '';
       clearCycle();
       refresh();
