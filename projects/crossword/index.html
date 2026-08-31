@@ -816,13 +816,27 @@
         <button id="btnDir" class="sub">向き：ヨコ →</button>
         <button id="btnRotate" class="sub" disabled>選んだ語を回転</button>
       </div>
+      <div class="row">
+        <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
+        <button id="btnClearBoard" class="danger small">盤面を空にする</button>
+        <button id="btnClearWords3" class="danger small">登録ワードを全部消す</button>
+      </div>
+      <p class="hint-line" style="margin-top:2px;">
+        盤面の語は<b>タップで選ぶ → もう一度タップで外す</b>こともできます
+        （交差しているマスは、タップのたびに選ぶ語が切り替わります）。
+      </p>
       <details>
         <summary>もっと細かく直す</summary>
         <div class="row">
-          <button id="btnRemoveWord" class="danger small" disabled>選んだ語を盤面から外す</button>
-          <button id="btnClearBoard" class="danger small">盤面を空にする</button>
           <label class="check"><input type="checkbox" id="freePlace">はなれた場所にも置く</label>
+          <label class="check"><input type="checkbox" id="allowAnyRun">辞書にない並びができても置く</label>
         </div>
+        <p class="note">
+          ふだんは、置いたときに<b>たて・よこに読めてしまう並び</b>もしらべています。<br>
+          ・辞書にない並びができる置き方 … <b>置けません</b>（光りません）<br>
+          ・辞書にある言葉ができる置き方 … <b>置けます</b>。その言葉は「できた言葉」として自動で登録され、カギ欄にも出ます<br>
+          辞書に無いけれど正しい言葉のときだけ、上のチェックを入れてください。
+        </p>
         <div id="placedList"></div>
         <p class="note">
           指でつまんで盤面へ運ぶこともできます（緑＝置ける／赤＝置けない）。置いた語も、つまんで動かせます。<br>
@@ -3567,7 +3581,60 @@ var qrcode = function() {
       if (others > 0 && cross === 0 && !state.freePlace) {
         return { ok: false, reason: 'ほかの語と交差していません（「はなれた場所にも置く」をONにすると置けます）' };
       }
-      return { ok: true, cross };
+
+      // 置いた結果、たて・よこに読めてしまう「言葉」を全部しらべる
+      // ・辞書にない並びができる → 置けない
+      // ・辞書にある言葉ができる → 置ける（その語は「できた言葉」として自動で登録する）
+      const runs = runsAfterPlacing(map, text, r, c, dir, ignoreId);
+      const anyRun = $('#allowAnyRun') && $('#allowAnyRun').checked;
+      const bad = anyRun ? null : runs.find(x => !x.known);
+      if (bad) {
+        return { ok: false, reason: 'ここに置くと「' + bad.text + '」という並びができてしまいます'
+          + '（辞書にない言葉です）。別の場所か、別の向きにしてください。' };
+      }
+      const extra = runs.filter(x => x.extra);
+      return { ok: true, cross, extra };
+    }
+
+    // 置いたあとに読めるようになる「2文字以上のつながり」を集めて、言葉かどうかを見る。
+    // 返すもの … { text, r, c, dir, known(辞書か登録ずみか), extra(新しくできた言葉か) }
+    function runsAfterPlacing(map, text, r, c, dir, ignoreId) {
+      const cs = chars(text);
+      const tmp = new Map(map);
+      const own = new Set();
+      for (let i = 0; i < cs.length; i++) {
+        const rr = r + (dir === 'down' ? i : 0);
+        const cc = c + (dir === 'across' ? i : 0);
+        tmp.set(key(rr, cc), { ch: cs[i] });
+        own.add(key(rr, cc));
+      }
+      // いま置いてある語（同じ場所・同じ向き・同じ文字なら「もとからある語」とみなす）
+      const placedSig = new Set(state.placed.filter(q => q.id !== ignoreId)
+        .map(q => q.dir + ':' + q.r + ':' + q.c + ':' + q.text));
+      placedSig.add(dir + ':' + r + ':' + c + ':' + text);
+
+      const seen = new Set();
+      const out = [];
+      const scanFrom = (r0, c0, d) => {
+        const dr = d === 'down' ? 1 : 0, dc = d === 'across' ? 1 : 0;
+        let sr = r0, sc = c0;
+        while (tmp.has(key(sr - dr, sc - dc))) { sr -= dr; sc -= dc; }
+        let er = sr, ec = sc, t = '';
+        while (tmp.has(key(er, ec))) { t += tmp.get(key(er, ec)).ch; er += dr; ec += dc; }
+        if (chars(t).length < 2) return;
+        const sig = d + ':' + sr + ':' + sc + ':' + t;
+        if (seen.has(sig)) return;
+        seen.add(sig);
+        if (placedSig.has(sig)) return;                 // もとからある語（何もしなくてよい）
+        const known = isDictWord(t) || state.words.some(w => w.text === t);
+        out.push({ text: t, r: sr, c: sc, dir: d, known, extra: true });
+      };
+      own.forEach(k2 => {
+        const [r2, c2] = k2.split(',').map(Number);
+        scanFrom(r2, c2, 'across');
+        scanFrom(r2, c2, 'down');
+      });
+      return out;
     }
 
     // クロスワードの番号を振る（左上から、語の始まりのマスに順番に）
@@ -3681,12 +3748,80 @@ var qrcode = function() {
       const p = { id: uid(), text: cand.text, r: cand.r, c: cand.c, dir: cand.dir };
       state.placed.push(p);
       state.selPlacedId = p.id;
+      absorbNewWords();
       return p;
     }
 
+    // 置いたせいで新しく読めるようになった言葉を、「できた言葉」として登録する。
+    // （auto: true ＝ ほかの語の文字だけでできている語。もとの語を外すと自動で消える）
+    function absorbNewWords() {
+      const map = buildBoard().map;
+      const sig = new Set(state.placed.map(q => q.dir + ':' + q.r + ':' + q.c + ':' + q.text));
+      const found = [];
+      const seen = new Set();
+      const scan = (d) => {
+        for (let o = 0; o < GRID; o++) {
+          let run = [];
+          for (let i = 0; i <= GRID; i++) {
+            const r = d === 'across' ? o : i;
+            const c = d === 'across' ? i : o;
+            const cell = i < GRID ? map.get(key(r, c)) : null;
+            if (cell) { run.push({ r, c, ch: cell.ch }); continue; }
+            if (run.length >= 2) {
+              const t = run.map(x => x.ch).join('');
+              const k2 = d + ':' + run[0].r + ':' + run[0].c + ':' + t;
+              if (!sig.has(k2) && !seen.has(k2) && isDictWord(t)) {
+                seen.add(k2);
+                found.push({ id: uid(), text: t, r: run[0].r, c: run[0].c, dir: d, auto: true });
+              }
+            }
+            run = [];
+          }
+        }
+      };
+      scan('across'); scan('down');
+      if (!found.length) return [];
+      found.forEach(f => {
+        state.placed.push(f);
+        if (!state.words.some(w => w.text === f.text)) {
+          state.words.push({ id: uid(), text: f.text });
+          rememberWord(f.text);
+        }
+        if (state.shapeLock && state.shapeLock.autoWords) state.shapeLock.autoWords.push(f.text);
+      });
+      return found.map(f => f.text);
+    }
+
+    // 「できた言葉」のうち、もう文字がそろわなくなったものを外す
+    function pruneAutoWords() {
+      const before = state.placed.filter(p => p.auto).map(p => p.text);
+      let changed = true;
+      while (changed) {
+        changed = false;
+        const base = new Map();
+        state.placed.filter(p => !p.auto).forEach(p => {
+          wordCells(p).forEach(cell => base.set(key(cell.r, cell.c), cell.ch));
+        });
+        const keep = state.placed.filter(p => {
+          if (!p.auto) return true;
+          return wordCells(p).every(cell => base.get(key(cell.r, cell.c)) === cell.ch);
+        });
+        if (keep.length !== state.placed.length) { state.placed = keep; changed = true; }
+      }
+      // 盤面から消えた「できた言葉」は、登録ワードの一覧からも外す
+      const now = new Set(state.placed.map(p => p.text));
+      before.filter(t => !now.has(t)).forEach(t => {
+        state.words = state.words.filter(w => w.text !== t);
+      });
+    }
+
     function removePlaced(id) {
+      const gone = state.placed.find(p => p.id === id);
       state.placed = state.placed.filter(p => p.id !== id);
       if (state.selPlacedId === id) state.selPlacedId = null;
+      pruneAutoWords();
+      // 盤面から外した語は、登録ワードの一覧にも残さない（「できた言葉」だったとき）
+      if (gone && gone.auto) state.words = state.words.filter(w => w.text !== gone.text);
     }
 
     function clearCycle() { cycle = { key: null, list: null, i: 0, placedId: null }; }
@@ -4575,13 +4710,28 @@ var qrcode = function() {
       }
       if (p.tapKind === 'cand') { placeFromCandidate(p.k); return; }
       if (p.tapKind === 'placed') {
-        // 同じマスに2語が交差しているときは、タップのたびに選ぶ語が切り替わる
         const ids = p.placedInfo.ids;
+        // すでに選んでいる語をもう一度タップ → 盤面から外す
+        if (ids.length === 1 && state.selPlacedId === ids[0]) {
+          const gone = state.placed.find(x => x.id === ids[0]);
+          snapshot();
+          removePlaced(ids[0]);
+          clearCycle();
+          refresh();
+          showMsg('「' + (gone ? gone.text : '') + '」を盤面から外しました。'
+            + '（「元に戻す」でもどせます）', 'ok');
+          return;
+        }
+        // 同じマスに2語が交差しているときは、タップのたびに選ぶ語が切り替わる
         const i = ids.indexOf(state.selPlacedId);
         state.selPlacedId = ids[(i + 1) % ids.length];
         state.selWordId = null;
         clearCycle();
         refresh();
+        const cur = state.placed.find(x => x.id === state.selPlacedId);
+        showMsg('「' + (cur ? cur.text : '') + '」を選びました。'
+          + (ids.length === 1 ? 'もう一度タップすると盤面から外せます。'
+                              : '「選んだ語を盤面から外す」で外せます。'), 'ok');
       }
     }
 
@@ -5983,10 +6133,7 @@ var qrcode = function() {
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
       // 型（同じ形）モード
-      $('#btnShapeBuild').addEventListener('click', () => {
-        $('#btnShapeBuild').disabled = true;
-        buildFromShape().finally(() => { $('#btnShapeBuild').disabled = false; renderShapeMode(); });
-      });
+      $('#btnShapeBuild').addEventListener('click', runShapeBuild);
       $('#btnShapeWords').addEventListener('click', () => showTab('words'));
       $('#btnGoStartShape').addEventListener('click', () => {
         showTab('start');
@@ -6025,6 +6172,7 @@ var qrcode = function() {
         startShapeMode().finally(() => { $('#btnShapePickNow').disabled = false; });
       });
       // 登録ワードの一括削除
+      $('#btnClearWords3').addEventListener('click', () => $('#btnClearWords2').click());
       $('#btnClearWords2').addEventListener('click', () => {
         if (!state.words.length) { showMsg('登録ワードはありません。', 'ng'); return; }
         if (!confirm('登録したワードを全部消します。よろしいですか？（盤面はそのままです）')) return;
@@ -6112,14 +6260,23 @@ var qrcode = function() {
       });
       $('#btnGoBuild').addEventListener('click', () => {
         showTab('build');
+        if (state.shapeLock) { runShapeBuild(); return; }
         runGenerate();
       });
-      $('#btnGenerate').addEventListener('click', runGenerate);
+      // 型モード中は「この型で作る」として動く
+      const runBuildOrGenerate = () => {
+        if (state.shapeLock) { showTab('build'); runShapeBuild(); return; }
+        runGenerate();
+      };
+      $('#btnGenerate').addEventListener('click', runBuildOrGenerate);
       $('#btnRegenerate').addEventListener('click', runGenerate);
       $('#blackFill').addEventListener('change', (e) => {
         state.blackFill = e.target.checked; refresh();
       });
-      $('#btnFitWords').addEventListener('click', () => runAutoBuild('#btnFitWords'));
+      $('#btnFitWords').addEventListener('click', () => {
+        if (state.shapeLock) { showTab('build'); runShapeBuild(); return; }
+        runAutoBuild('#btnFitWords');
+      });
       const syncSize = (v) => {
         state.maxSize = Number(v) || 0;
         $('#genSize').value = String(state.maxSize);
@@ -6961,7 +7118,8 @@ var qrcode = function() {
         saveWorks(list);
       }
       state.folder = folder;
-      state.workId = null;          // 上書きしない（別の作品として保存される）
+      // もとの作品のIDは残しておく。保存のときに「上書き／別の作品として」を選べるようにするため
+      // （タイトルは新しい番号にしてあるので、そのまま保存すれば別の作品になる）
       const same = loadWorks().filter(w => w.shapeId === state.shapeId).length;
       state.title = baseTitle + ' ' + (same + 1);
       $('#title').value = state.title;
@@ -7113,13 +7271,24 @@ var qrcode = function() {
       panelOff.hidden = on;
       panelOn.hidden = !on;
       banner.hidden = !on;
-      ['#btnGenerate', '#btnRegenerate', '#btnFitWords', '#btnGoBuild'].forEach(sel => {
+      // 「作る」系のボタンは、型モード中も押せる（押すと“この型で作る”になる）。
+      // 形そのものを変えてしまう「別の形にする」だけは止める。
+      const relabel = (sel, onText) => {
         const b = $(sel);
         if (!b) return;
-        b.disabled = on;
-        b.title = on ? '型で作っている間は使えません（形が変わってしまうため）。'
-                     + '「型をやめて、ふつうに作るにもどる」を押すと使えます。' : '';
-      });
+        if (!b.dataset.offLabel) b.dataset.offLabel = b.innerHTML;
+        b.innerHTML = on ? onText : b.dataset.offLabel;
+        b.title = on ? 'マスの並びと記号の位置はそのままで、中の言葉を作ります。' : '';
+      };
+      relabel('#btnGenerate', '📐 この型で作る');
+      relabel('#btnFitWords', '📐 この型で作る（登録した語は全部使う）→');
+      relabel('#btnGoBuild', '📐 この型で作る →');
+      const reg = $('#btnRegenerate');
+      if (reg) {
+        reg.disabled = on;
+        reg.title = on ? '型で作っている間は使えません（形が変わってしまうため）。'
+                       + '「型をやめて、ふつうに作るにもどる」を押すと使えます。' : '';
+      }
       if (!on) return;
       const lock = state.shapeLock;
       const lens = {};
@@ -7143,6 +7312,17 @@ var qrcode = function() {
         + (autoW.length ? '／辞書から自動で入った ' + autoW.length + '語 は数えません' : '') + '）';
       $('#shapeInfo').innerHTML = info;
       $('#shapeBannerInfo').innerHTML = info;
+    }
+
+    // 「この型で作る」を押したときの入口（どのボタンから押しても同じ動きにする）
+    function runShapeBuild() {
+      const btns = ['#btnShapeBuild', '#btnGenerate', '#btnFitWords', '#btnGoBuild']
+        .map(sel => $(sel)).filter(Boolean);
+      btns.forEach(b => { b.disabled = true; });
+      buildFromShape().finally(() => {
+        btns.forEach(b => { b.disabled = false; });
+        renderShapeMode();
+      });
     }
 
     // 型で作る（形・記号は固定。ワード／キーワードは、ここで登録したものを使う）
@@ -7412,12 +7592,13 @@ var qrcode = function() {
       } else {
         msg += ' <span style="color:var(--ng)">記号がないので、キーワードは決まりません。</span>';
       }
-      msg += '<br><span style="color:var(--ok);font-weight:700;">'
-        + 'もとの作品は上書きされません。</span>保存すると「📁 ' + escapeHtml(folder)
-        + '」に「' + escapeHtml(state.title) + '」として入ります。'
+      msg += '<br>③しあげで<b>保存</b>を押すと、<b>「上書き保存する／別の作品として保存する」</b>を選べます。'
+        + '<span style="color:var(--ok);font-weight:700;">もとの問題を残すなら「別の作品として保存する」</span>'
+        + 'を選んでください（「📁 ' + escapeHtml(folder) + '」に「'
+        + escapeHtml(state.title) + '」として入ります）。'
         + '<br>つづけて別の問題を作るときは、①ことばでワード・キーワードを入れかえて、もう一度このボタンを押してください。';
       out.innerHTML = msg;
-      showMsg('型で作りました。保存すると別の作品になります（もとの作品はそのままです）。', 'ok');
+      showMsg('型で作りました。③しあげの保存で「別の作品として保存する」を選ぶと、もとの問題も残ります。', 'ok');
     }
 
     function findBridges(failedText) {
