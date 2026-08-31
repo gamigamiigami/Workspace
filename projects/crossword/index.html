@@ -488,6 +488,10 @@
     #askText { font-size: 14px; color: #5c6672; line-height: 1.7; margin-bottom: 16px; white-space: pre-wrap; }
     #askBtns { display: flex; flex-direction: column; gap: 8px; }
     #askBtns button { width: 100%; min-height: 48px; font-size: 15px; }
+
+    /* さいしょページの大きな分岐ボタン（説明は下の行に置いて読みやすくする） */
+    .startbtn { flex: 1 1 260px; min-height: 76px; text-align: center; line-height: 1.5; padding: 12px 14px; }
+    .startbtn .hint { display: block; margin-top: 4px; font-size: 12px; font-weight: 400; color: #dfe6ef; }
   </style>
 </head>
 <body>
@@ -499,7 +503,8 @@
 
   <!-- ===== 手順タブ（作業を3つに分けて、画面をすっきりさせる） ===== -->
   <nav id="tabs" aria-label="作業の手順">
-    <button class="tab-btn" data-go="words" aria-pressed="true"><span class="no">1</span>ことば</button>
+    <button class="tab-btn" data-go="start" aria-pressed="true"><span class="no">🏠</span>さいしょ</button>
+    <button class="tab-btn" data-go="words" aria-pressed="false"><span class="no">1</span>ことば</button>
     <button class="tab-btn" data-go="build" aria-pressed="false"><span class="no">2</span>つくる</button>
     <button class="tab-btn" data-go="finish" aria-pressed="false"><span class="no">3</span>しあげ</button>
   </nav>
@@ -514,6 +519,47 @@
     <p id="boardMsg"></p>
     <div id="warnings"></div>
   </div>
+
+  <!-- ===== 0. さいしょ（作りかたを選ぶ）=====
+       「ふつうに作る」と「同じ形で作る」を、ここではっきり分ける -->
+  <section class="tab-panel" data-tab="start">
+    <div class="panel">
+      <h2>どちらの作り方にしますか？</h2>
+      <div class="row" style="margin-top:4px;">
+        <button id="btnStartNormal" class="big startbtn">
+          ✏️ ふつうに作る<span class="hint">まっさらから、形も自由に作る</span></button>
+        <button id="btnStartShape" class="big startbtn">
+          📐 同じ形で作る<span class="hint">前に作った問題と、同じ形・同じ記号の位置で作る</span></button>
+      </div>
+      <div class="row" id="startContinueRow" hidden style="margin-top:6px;">
+        <button id="btnStartContinue" class="sub">↩ いま開いている作品のつづきをする</button>
+        <span id="startContinueName" class="hint"></span>
+      </div>
+      <p class="hint-line" style="margin-top:8px;">
+        <b>ふつうに作る</b>…①ことばでワードとキーワードを登録 → ②つくるで自動作成 → ③しあげで仕上げ。<br>
+        <b>同じ形で作る</b>…先に「どの問題と同じ形にするか（＝型）」を選びます。
+        そのあとは<b>ふつうに作るときと同じ</b>で、ワードやキーワードを登録して作ります。
+        ちがうのは<b>マスの並びと記号の位置が動かない</b>ことだけです。
+      </p>
+    </div>
+
+    <!-- 型えらび（「同じ形で作る」を押すと出る） -->
+    <div class="panel" id="shapePickBox" hidden>
+      <h2>どの問題と同じ形にしますか？ <span class="hint">＝「型」を選ぶ</span></h2>
+      <div class="row" id="shapePickNowRow" hidden>
+        <button id="btnShapePickNow" class="big">いま画面にある問題の形を使う</button>
+        <span id="shapePickNowName" class="hint"></span>
+      </div>
+      <div id="shapePickList"></div>
+      <p class="hint-line">
+        保存した作品の中から選びます。選ぶと、その作品を開いて<b>形と記号だけを型として固定</b>し、
+        <b>①ことば</b>へ進みます（ワードとキーワードは空になります。もとの作品は消えません）。
+      </p>
+      <div class="row">
+        <button id="btnShapePickCancel" class="sub small">やめる</button>
+      </div>
+    </div>
+  </section>
 
   <!-- ===== 1. ことば ===== -->
   <section class="tab-panel" data-tab="words">
@@ -570,6 +616,11 @@
       <div class="row">
         <textarea id="wordInput" rows="3" placeholder="あり&#10;りす&#10;すうち" style="flex:1 1 220px;min-height:86px;"></textarea>
         <button id="btnAddWord">登録</button>
+      </div>
+      <div class="row">
+        <button id="btnClearWords2" class="danger small">登録ワードを全部消す</button>
+        <button id="btnClearWordsBoard" class="danger small">ワードも盤面も全部消す</button>
+        <span class="hint">入れ直したいときに使います</span>
       </div>
       <p class="hint-line">改行・スペース・「、」で区切ると、まとめて登録できます。</p>
       <div id="wordList"></div>
@@ -724,15 +775,14 @@
 
       <!-- ふだんの表示：型モードに入るボタンだけ（ふつうに作るときと混ざらないように） -->
       <div id="shapeOff">
-        <div class="row">
-          <button id="btnShapeStart" class="big">この形を「型」にして、別の問題を作る →</button>
-        </div>
         <p class="hint-line">
-          いま画面にあるクロスワードの<b>形（マスの並び）と記号の位置だけ</b>を残して、
-          <b>中の言葉は全部あたらしく</b>作りなおすモードです。<br>
-          押すと、まず<b>いまの作品を保存</b>します（保存しないと先へ進みません。もとの作品は消えません）。<br>
-          そのあと<b>①ことば</b>でワードやキーワードを入れて、ここへ戻って「この型で作る」を押します。
+          いまは<b>ふつうに作る</b>モードです（形も自由に変えられます）。<br>
+          <b>前に作った問題と同じ形</b>で作りたいときは、いちばん上の「🏠 さいしょ」から
+          <b>「📐 同じ形で作る」</b>を選んでください。
         </p>
+        <div class="row">
+          <button id="btnGoStartShape" class="sub">🏠 さいしょへ（同じ形で作る）</button>
+        </div>
       </div>
 
       <!-- 型モード中の表示 -->
@@ -3384,10 +3434,11 @@ var qrcode = function() {
         sec.hidden = sec.dataset.tab !== name;
       });
       // 盤面は「つくる」「しあげ」で表示する
-      const showBoard = (name !== 'words');
+      const showBoard = (name !== 'words' && name !== 'start');
       $('#boardArea').hidden = !showBoard;
       $('#boardArea').classList.toggle('plain', name === 'finish');
       if (name === 'words' || name === 'build') setMode('place');
+      if (name === 'start') renderStartPage();
       if (showBoard) { viewSig = ''; renderGrid(); }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -4005,9 +4056,15 @@ var qrcode = function() {
       const done = cs.length - missing.length;
       if (!missing.length) {
         msg.className = 'ok';
+        const known = isDictWord(state.keyword);
         msg.innerHTML = '✓ キーワード「' + escapeHtml(state.keyword) + '」は、'
           + cs.length + '文字ぶんのマスが全部そろっています。'
-          + '<span class="sub2">③しあげの「記号を自動でふる」で、この順に記号がふれます。</span>';
+          + '<span class="sub2">③しあげの「記号を自動でふる」で、この順に記号がふれます。'
+          + (known ? ''
+                   : '<br><b style="color:#b00">※この並びは辞書にありません。</b>'
+                     + '意味のない文字の並びになっていないか、確かめてください'
+                     + '（自分で入れ直せます）。')
+          + '</span>';
         return;
       }
       // 足りない文字が「キーワードの中で2回以上出てくる文字」なら、交差が原因のことが多い
@@ -5926,15 +5983,66 @@ var qrcode = function() {
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
       // 型（同じ形）モード
-      $('#btnShapeStart').addEventListener('click', () => {
-        $('#btnShapeStart').disabled = true;
-        startShapeMode().finally(() => { $('#btnShapeStart').disabled = false; renderShapeMode(); });
-      });
       $('#btnShapeBuild').addEventListener('click', () => {
         $('#btnShapeBuild').disabled = true;
         buildFromShape().finally(() => { $('#btnShapeBuild').disabled = false; renderShapeMode(); });
       });
       $('#btnShapeWords').addEventListener('click', () => showTab('words'));
+      $('#btnGoStartShape').addEventListener('click', () => {
+        showTab('start');
+        $('#shapePickBox').hidden = false;
+        renderShapePick();
+      });
+      // さいしょページ（作りかたの分かれ道）
+      $('#btnStartNormal').addEventListener('click', async () => {
+        $('#shapePickBox').hidden = true;
+        if (state.shapeLock) exitShapeMode(true);
+        if (state.placed.length || state.words.length) {
+          const go = await askChoice(
+            'ふつうに作ります',
+            'まっさらから作りますか？　いまの内容を残したまま、つづきを直すこともできます。',
+            [
+              { label: 'まっさらから作る', value: 'new', kind: '' },
+              { label: 'いまの内容のつづきをする', value: 'keep', kind: 'sub' },
+              { label: 'やめる', value: null, kind: 'sub' }
+            ]
+          );
+          if (!go) return;
+          if (go === 'new') { await newWork(); return; }
+        }
+        showTab('words');
+      });
+      $('#btnStartShape').addEventListener('click', () => {
+        $('#shapePickBox').hidden = false;
+        renderShapePick();
+        $('#shapePickBox').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      });
+      $('#btnStartContinue').addEventListener('click', () => showTab('words'));
+      $('#btnShapePickCancel').addEventListener('click', () => { $('#shapePickBox').hidden = true; });
+      $('#btnShapePickNow').addEventListener('click', () => {
+        $('#shapePickBox').hidden = true;
+        $('#btnShapePickNow').disabled = true;
+        startShapeMode().finally(() => { $('#btnShapePickNow').disabled = false; });
+      });
+      // 登録ワードの一括削除
+      $('#btnClearWords2').addEventListener('click', () => {
+        if (!state.words.length) { showMsg('登録ワードはありません。', 'ng'); return; }
+        if (!confirm('登録したワードを全部消します。よろしいですか？（盤面はそのままです）')) return;
+        snapshot();
+        state.words = []; state.selWordId = null;
+        if (state.shapeLock) state.shapeLock.autoWords = [];
+        refresh();
+        showMsg('登録ワードを全部消しました。', 'ok');
+      });
+      $('#btnClearWordsBoard').addEventListener('click', () => {
+        if (!confirm('登録ワードも、盤面に置いた語も全部消します。よろしいですか？'
+          + (state.shapeLock ? '\n（型（形と記号の位置）は残ります）' : ''))) return;
+        snapshot();
+        state.words = []; state.placed = []; state.selWordId = null; state.selPlacedId = null;
+        if (state.shapeLock) state.shapeLock.autoWords = [];
+        clearCycle(); refresh();
+        showMsg('ワードと盤面を空にしました。' + (state.shapeLock ? '型はそのまま残っています。' : ''), 'ok');
+      });
       $('#btnShapeGoBuild').addEventListener('click', () => showTab('build'));
       $('#btnShapeExit').addEventListener('click', () => exitShapeMode());
       $('#btnShapeExit2').addEventListener('click', () => { exitShapeMode(); showTab('build'); });
@@ -6122,6 +6230,18 @@ var qrcode = function() {
         return { r: body.slice(0, j), s: body.slice(j + 1), rank: i, kyoiku };
       });
       return DICT;
+    }
+
+    // 辞書にある言葉かどうか（ひらがな・カタカナのどちらでも調べられるようにする）
+    let DICT_WORDS = null;
+    function isDictWord(t) {
+      const w = String(t || '');
+      if (chars(w).length < 2) return false;
+      if (!DICT_WORDS) {
+        DICT_WORDS = new Set();
+        loadDict().forEach(d => { DICT_WORDS.add(toHira(d.r)); });
+      }
+      return DICT_WORDS.has(toHira(w));
     }
 
     // カタカナで書くのがふつうの語（外来語）かどうか。ひらがなで作るときは避ける
@@ -6883,6 +7003,68 @@ var qrcode = function() {
       return !hasUnsavedChanges();
     }
 
+    // ===== さいしょページ（ふつうに作る／同じ形で作る の分かれ道）=====
+    function renderStartPage() {
+      const has = state.placed.length > 0;
+      $('#startContinueRow').hidden = !has;
+      $('#startContinueName').textContent = has
+        ? '（' + (state.title || '無題の作品') + '／' + state.placed.length + '語）' : '';
+      $('#shapePickNowRow').hidden = !has;
+      $('#shapePickNowName').textContent = has
+        ? '（' + (state.title || '無題の作品') + '）' : '';
+    }
+
+    // 型に使えそうな作品の一覧を出す
+    function renderShapePick() {
+      const box = $('#shapePickList');
+      box.innerHTML = '';
+      const list = loadWorks().filter(w => w.data && Array.isArray(w.data.placed) && w.data.placed.length >= 2);
+      if (!list.length) {
+        box.innerHTML = '<p class="hint-line" style="color:var(--ng)">'
+          + '保存した作品がまだありません。まずは「✏️ ふつうに作る」で1つ作って、'
+          + '③しあげで<b>保存</b>してください。そのあと、その形を型として使えます。</p>';
+        return;
+      }
+      list.forEach(item => {
+        const d = item.data;
+        const marks = Object.values(d.marks || {}).filter(v => v).length;
+        const row = document.createElement('div');
+        row.className = 'row';
+        row.style.cssText = 'align-items:center;border-bottom:1px solid #e6e6e6;padding:6px 0;';
+        const info = document.createElement('span');
+        info.style.cssText = 'flex:1 1 180px;';
+        info.innerHTML = '<b>' + escapeHtml(item.title || '（無題）') + '</b>'
+          + (item.folder ? ' <span class="hint">📁 ' + escapeHtml(item.folder) + '</span>' : '')
+          + '<br><span class="hint">ワード ' + d.placed.length + '語／記号 ' + marks + '個'
+          + (marks ? '（キーワード ' + marks + '文字）' : '（記号なし）') + '</span>';
+        const btn = document.createElement('button');
+        btn.className = 'small';
+        btn.textContent = 'この形を使う';
+        btn.addEventListener('click', () => useWorkAsShape(item.id));
+        row.appendChild(info); row.appendChild(btn);
+        box.appendChild(row);
+      });
+    }
+
+    // 選んだ作品を開いて、その形を型にする
+    async function useWorkAsShape(id) {
+      const item = loadWorks().find(w => w.id === id);
+      if (!item) return;
+      if (item.id !== state.workId
+          && !(await confirmDiscard('「' + (item.title || '（無題）') + '」の形を型にする'))) return;
+      applyData(item.data);
+      state.shapeLock = null;
+      state.workId = item.id;
+      state.folder = item.folder || '';
+      state.shapeId = item.shapeId || null;
+      renderFolderSelect();
+      history = [];
+      markSaved();
+      saveLocal();
+      $('#shapePickBox').hidden = true;
+      await startShapeMode();
+    }
+
     // 型モードに入る（いまの形と記号を写し取り、中身の登録だけ空にする）
     async function startShapeMode() {
       const out = $('#reskinResult');
@@ -7005,6 +7187,7 @@ var qrcode = function() {
         const byLen = new Map();
         const dictSet = new Set();
         const metaOf = new Map();
+        const kwCands = [];   // キーワードの候補（記号の数と同じ長さの、辞書にある言葉）
         loadDict().forEach(d => {
           if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) return;
           if (mode === 'hira' && isLoanword(d)) return;
@@ -7012,12 +7195,13 @@ var qrcode = function() {
           const cs = chars(t);
           dictSet.add(t);
           if (!metaOf.has(t)) metaOf.set(t, d.s);
+          if (marks.length && cs.length === marks.length) kwCands.push(t);
           if (!needLens.has(cs.length)) return;
           if (!byLen.has(cs.length)) byLen.set(cs.length, []);
           byLen.get(cs.length).push({ t, cs, s: d.s, rank: d.rank });
         });
         const missing = [...needLens].filter(n => !(byLen.get(n) || []).length);
-        return { byLen, dictSet, metaOf, missing };
+        return { byLen, dictSet, metaOf, missing, kwCands };
       }
 
       // 今の設定 → 漢字のしばりを外す → むずかしさを広げる、の順にためす
@@ -7066,6 +7250,21 @@ var qrcode = function() {
           + 'キーワードを ' + marks.length + '文字にするか、③しあげで記号をふり直してください。</span>';
         return;
       }
+      // 記号のマスが「語のはじめ」に当たっているか（「ん」「っ」などは語頭に来られない）
+      const headCells = new Set(slots.map(sl => sl.cells[0]));
+      const NG_HEAD = /[んっゃゅょぁぃぅぇぉゎーンッャュョァィゥェォヮ]/;
+      const headAt = marks.map(m => headCells.has(m.k));
+      if (kwChars.length) {
+        const ngPos = [];
+        kwChars.forEach((ch, i) => { if (headAt[i] && NG_HEAD.test(ch)) ngPos.push((i + 1) + '文字目の「' + ch + '」'); });
+        if (ngPos.length) {
+          out.innerHTML = '<span style="color:var(--ng)">キーワード「' + escapeHtml(state.keyword) + '」の'
+            + escapeHtml(ngPos.join('・')) + ' が、<b>言葉のいちばん前のマス</b>に当たっています。'
+            + '「ん」「っ」「ゃ」などで始まる言葉は辞書にないので、この型では作れません。<br>'
+            + '別のキーワードにするか、③しあげで<b>記号の位置をふり直して</b>ください。</span>';
+          return;
+        }
+      }
       marks.forEach((m, i) => { if (kwChars[i]) fixed.set(m.k, kwChars[i]); });
       if (texts.length) {
         required = texts.map(t => ({ t, cs: chars(t), s: state.meta[t] || '', rank: 0 }));
@@ -7096,9 +7295,31 @@ var qrcode = function() {
         if (dict.missing.length) { lastMissing = dict.missing; continue; }
         lastMissing = null;
         const slice = tier === tiers[tiers.length - 1] ? END : Math.min(END, Date.now() + 4000);
+        // 「意味のある言葉」しばりのときは、先にキーワードを辞書から1つ選んでから中身を埋める。
+        // あとから読んで言葉になるのを待つより、ずっと早く・確実に見つかる
+        // よく使う語ほど当てはまりやすいので、上位2000語の中からためす。
+        // 「ん」などが語のはじめのマスに来る候補は、はじめから外す（どうやっても入らないため）
+        const cands = strictKw
+          ? dict.kwCands.filter(t => {
+              const cs = chars(t);
+              return !headAt.some((h, i) => h && NG_HEAD.test(cs[i]));
+            }).slice(0, 2000)
+          : [];
+        let ci = 0;
+        for (let i = cands.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [cands[i], cands[j]] = [cands[j], cands[i]];
+        }
         while (Date.now() < slice) {
           tried++;
-          const res = fillSlots(slots, dict.byLen, fixed, required, Math.min(slice, Date.now() + 2200));
+          let tryFixed = fixed;
+          if (strictKw) {
+            if (ci >= cands.length) break;             // 候補を出しつくした
+            const cand = chars(cands[ci++]);
+            tryFixed = new Map(fixed);
+            marks.forEach((m, i) => tryFixed.set(m.k, cand[i]));
+          }
+          const res = fillSlots(slots, dict.byLen, tryFixed, required, Math.min(slice, Date.now() + (strictKw ? 700 : 2200)));
           if (res) {
             const kw = keywordFromLetters(res.letters);
             const kwOk = kw.length >= 2 && dict.dictSet.has(kw);
@@ -7143,6 +7364,14 @@ var qrcode = function() {
                     + 'むずかしさを「ふつう（中学生向け）」にすると、見つかりやすくなります。'
                     + 'もう一度押すと、別の組み合わせをさがします。'))
           + '</span>';
+        return;
+      }
+
+      // 念のためのたしかめ：「辞書にある言葉だけ」のときに、そうでないものを採用しない
+      if (strictKw && !best.kwOk) {
+        out.innerHTML = '<span style="color:var(--ng)">意味のある言葉になるキーワードが見つかりませんでした。'
+          + 'キーワードを自分で入れるか、上のチェックを外してためしてください。'
+          + '（わけのわからないキーワードにはしませんでした）</span>';
         return;
       }
 
@@ -8215,7 +8444,7 @@ var qrcode = function() {
       bindEvents();
       renderFolderSelect();
       setMode('place');
-      showTab('words');
+      showTab('start');   // まず「ふつうに作る／同じ形で作る」を選んでもらう
       markSaved();   // 今の内容を「保存済み」の基準にする（開いた直後にいきなり確認が出ないように）
     }
 
