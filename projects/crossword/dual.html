@@ -525,6 +525,16 @@
     #askBtns { display: flex; flex-direction: column; gap: 8px; }
     #askBtns button { width: 100%; min-height: 48px; font-size: 15px; }
 
+    /* 作りかた（3つのモード）の選びかた。説明が長いので、丸印は左上にそろえる */
+    label.check.dualmode {
+      display: flex; align-items: flex-start; gap: 10px;
+      width: 100%; min-height: 0; margin-bottom: 10px;
+      padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+    }
+    label.check.dualmode input { margin-top: 3px; flex: 0 0 auto; }
+    label.check.dualmode > span { flex: 1 1 auto; line-height: 1.6; }
+    label.check.dualmode:has(input:checked) { border-color: var(--navy); background: #f3f7fc; }
+
     /* ===== 同時に2つ作るモード：A面／B面の切りかえバー ===== */
     #sideBar {
       display: flex; gap: 8px; align-items: center;
@@ -1117,7 +1127,7 @@
       <p id="cmpCheck"></p>
       <div class="row">
         <button id="btnCmpPrint" class="sub small">🖨 見くらべを印刷（解答つき）</button>
-        <button id="btnCmpRefresh" class="sub small">↻ 표示を作り直す</button>
+        <button id="btnCmpRefresh" class="sub small">↻ 表示を作り直す</button>
       </div>
       <p class="hint-line" style="margin-top:4px;">
         <b>うすい黄色</b>のマス＝A と B で文字がちがうところ。<b>うすい青</b>のマス＝A と B で文字が同じところ。<br>
@@ -5671,7 +5681,7 @@ var qrcode = function() {
     // ・ちがう組どうしが「同じ組文字」を持っていれば、そこで交差できる（これがいちばん大事）
     // ・組の中で A と B の文字が同じ位置（例：「さくら」と「さかな」の "さ"）は、
     //   ②のモードで足す語（AもBも同じ語）と交差できる場所になる
-    function scorePairing(pairs) {
+    function scorePairing(pairs, wantPairs) {
       const sets = pairs.map(pr => {
         const cs = pairCs(pr.a, pr.b);
         return cs ? new Set(cs) : new Set();
@@ -5690,16 +5700,25 @@ var qrcode = function() {
         const ca = chars(pr.a), cb = chars(pr.b);
         for (let i = 0; i < Math.min(ca.length, cb.length); i++) if (ca[i] === cb[i]) sameCells++;
       });
-      return cross * 4 + sameCells * (dual.mode === 2 ? 6 : 1);
+      // キーワードに必要な組文字を、この組み方でいくつ用意できるか（個数で数える）
+      let kwHit = 0;
+      if (wantPairs && wantPairs.length) {
+        const have = new Map();
+        sets.forEach(st => st.forEach(ch => have.set(ch, (have.get(ch) || 0) + 1)));
+        const need = new Map();
+        wantPairs.forEach(ch => need.set(ch, (need.get(ch) || 0) + 1));
+        need.forEach((n, ch) => { kwHit += Math.min(n, have.get(ch) || 0); });
+      }
+      return kwHit * 60 + cross * 4 + sameCells * (dual.mode === 2 ? 6 : 1);
     }
 
     // 何通りか組み方を作って、いちばん点数の高いものを返す
-    function bestPairing(dictByLen, tries) {
+    function bestPairing(dictByLen, tries, wantPairs) {
       let best = null;
       for (let t = 0; t < (tries || 40); t++) {
         const r = makeRequiredPairs(dictByLen);
         if (r.short.length) return r;   // 数が足りないのは、組み方を変えても直らない
-        const sc = scorePairing(r.pairs);
+        const sc = scorePairing(r.pairs, wantPairs);
         if (!best || sc > best.score) best = { pairs: r.pairs, short: r.short, score: sc };
       }
       return best || { pairs: [], short: [], score: 0 };
@@ -5776,7 +5795,7 @@ var qrcode = function() {
       while (pool.length < target && guard++ < 80) {
         let best = null;
         // 何通りか候補を作って、いちばん良さそうなものを1つ足す
-        for (let t = 0; t < 220; t++) {
+        for (let t = 0; t < 400; t++) {
           const n = lens[Math.floor(Math.random() * lens.length)];
           const list = dictByLen.get(n) || [];
           if (!list.length) continue;
@@ -5789,7 +5808,12 @@ var qrcode = function() {
           const share = cs.filter(ch => cov.has(ch)).length;
           if (pool.length && share === 0) continue;   // どこにもつながらない語は足しても意味がない
           const hitKw = cs.filter(ch => need.has(ch)).length;
+          // ③のモードでは「A と B でちがう語」を高く評価する。
+          // 同じ語（AもBも同じ）ばかりだと交差はしやすいが、
+          // 「答えが変わる」という仕掛けが弱くなってしまうため
+          const differs = da.text !== db.text;
           const score = hitKw * 1000 + share * 40
+            + (dual.mode === 3 && differs ? 260 : 0)
             + Math.max(0, 100 - (da.rank + db.rank) / 200) + Math.random() * 25;
           if (!best || score > best.score) best = { a: da.text, b: db.text, cs, score, metaA: da.meta, metaB: db.meta };
         }
@@ -5928,7 +5952,7 @@ var qrcode = function() {
       while (Date.now() - t0 < BUDGET) {
         round++;
         // 交差できる組み方を先に選んでから、形を組む（ここを適当にすると、まず組み上がらない）
-        const { pairs, short } = bestPairing(dictByLen, dual.mode === 3 ? 12 : 60);
+        const { pairs, short } = bestPairing(dictByLen, dual.mode === 3 ? 40 : 80, wantPairs);
         if (dual.mode !== 3 && short.length) {
           out.innerHTML = '<span style="color:var(--ng)">作れませんでした：'
             + short.map(x => x.len + '文字の語が ' + x.side + ' にあと ' + x.n + '語 必要です').join('／')
