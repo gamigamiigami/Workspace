@@ -1,5 +1,46 @@
 # 失敗・ハマりポイント集
 
+## 面をまたいだ語の使い回し：「代入先の面」を逆にするとバグる（dual.html `pickPairPool`）
+
+**症状：** ことばかける君 dual.html で、辞書から足す語をできるだけ共通ワード（A・B両方に同じ語）に
+する機能を作ったとき、「B で既に使った語を今回は A の語として使い回す」という実装をしたのに、
+毎回 100% 空振りし、候補が 0 のままだった。
+
+**原因（1回目の誤り）：** 「使った語を、もう一度その面の代入先に入れてしまった」。
+```js
+// ✗ 間違い：Bで使った語を、また db（Bの候補）に代入してしまう
+const rt = [...usedB][0];
+db = { text: rt, ... };
+// 直後の重複チェック usedB.has(db.text) に必ず引っかかり、毎回 continue で捨てられる
+if (usedA.has(da.text) || usedB.has(db.text)) continue;
+```
+「B で使った語」は、次は **A の候補（da）** に代入しないといけない。反対の面に入れて初めて、
+直後の重複チェック（`usedA.has(da.text)`）を通過できる。
+
+**実際の直し方（dual.html `pickPairPool` 内）：**
+```js
+const reuseFromB = [...usedB].filter(t2 => chars(t2).length === n);
+const reuseFromA = [...usedA].filter(t2 => chars(t2).length === n);
+if (reuseFromB.length && roll < 0.5) {
+  const rt = reuseFromB[Math.floor(Math.random() * reuseFromB.length)];
+  da = { text: rt, meta: metaOf(rt, n), rank: da.rank };   // ← Bで使った語を A の候補に
+} else if (reuseFromA.length && roll < 0.8) {
+  const rt = reuseFromA[Math.floor(Math.random() * reuseFromA.length)];
+  db = { text: rt, meta: metaOf(rt, n), rank: da.rank };   // ← Aで使った語を B の候補に
+}
+```
+
+**検出方法：** テストで「各パターン 10+ 回実行」して候補の出現率を計測すると、
+デタラメな実装は共通語の出現率が 0% のまま変わらないことですぐ気づける。
+
+**再発防止：**
+1. 面をまたぐ再利用ロジックでは、「どちらの面で使った語か」と「代入先はどちらの面か」を逆にする
+2. 直後の重複チェック（`usedA.has/usedB.has`）が何を防ぐためのものかを先に確認してから代入する
+
+**タグ：** #dual.html #共通語 #面・マッピング #重複チェック
+
+---
+
 ## 複数単位での数え間違い：「語の文字数」と「マス数」を混同すると判定が狂う
 
 **症状：** ことばかける君で、ユーザーにタップして語を盤面に配置させると、

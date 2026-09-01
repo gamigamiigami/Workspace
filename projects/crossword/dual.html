@@ -136,7 +136,9 @@
     label.check input { width: 22px; height: 22px; }
 
     /* ===== ワード一覧（チップ） ===== */
-    #wordList { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    /* B のワード一覧（#wordListB）も同じ見た目にする。以前 #kwChipsB で起きたのと同じ
+       コピペ漏れ（IDだけに効かせてしまう）で、Bの語だけ1行ずつ縦積みになっていた */
+    #wordList, #wordListB { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     .word-chip {
       display: flex; align-items: center; gap: 6px;
       background: var(--paper);
@@ -5988,26 +5990,43 @@ var qrcode = function() {
           let da = list[Math.floor(Math.random() * list.length)];
           let db = da;
           if (dual.mode === 3) {
-            // 「もう片方の面ですでに使っている語」を、こんどは逆の面で使い直す。
-            // 例：B ですでに使っている語を、今回は A の語として使う
-            //     → その語は A にも B にも現れることになり、共通ワードになる
-            // （db 側にそのまま入れると「B で二重に使う」ことになってしまい、
-            //   　あとの重複チェックで必ずはじかれてしまうので、必ず逆の面に入れる）
-            const reuseFromB = [...usedB].filter(t2 => chars(t2).length === n);
-            const reuseFromA = [...usedA].filter(t2 => chars(t2).length === n);
-            const roll = Math.random();
-            if (reuseFromB.length && roll < 0.5) {
-              const rt = reuseFromB[Math.floor(Math.random() * reuseFromB.length)];
-              da = { text: rt, meta: metaOf(rt, n), rank: da.rank };
-              db = list[Math.floor(Math.random() * list.length)];
-            } else if (reuseFromA.length && roll < 0.8) {
-              const rt = reuseFromA[Math.floor(Math.random() * reuseFromA.length)];
-              db = { text: rt, meta: metaOf(rt, n), rank: da.rank };
+            if (dual.commonSame) {
+              // 「共通ワードを同じマスに置く」がオンのときは、
+              // ときどき「同じ語」候補（＝同じマスでの共通ワード）も試す。
+              // 毎回それだけにすると、盤面をつなげるための「ふつうの別の語」が
+              // 無くなって作れなくなってしまうので、多くはふつうの別の語のままにする。
+              // （前は mode===3 のときだけ下の「使い回し」を無条件で行っていて、
+              //   commonSame オンでも共通ワードがちがうマスに入ってしまっていた。
+              //   逆に「使い回しを丸ごと止める」だけの直し方だと、今度はふつうの語も
+              //   足せなくなって作れなくなる事故になったため、この形にした）
+              if (Math.random() >= 0.35) db = list[Math.floor(Math.random() * list.length)];
             } else {
-              db = list[Math.floor(Math.random() * list.length)];
+              // オフのときは、面をまたいだ使い回しで「ちがう位置の共通ワード」を狙う。
+              // 例：B ですでに使っている語を、今回は A の語として使う
+              //     → その語は A にも B にも現れることになり、共通ワードになる
+              // （db 側にそのまま入れると「B で二重に使う」ことになってしまい、
+              //   　あとの重複チェックで必ずはじかれてしまうので、必ず逆の面に入れる）
+              const reuseFromB = [...usedB].filter(t2 => chars(t2).length === n);
+              const reuseFromA = [...usedA].filter(t2 => chars(t2).length === n);
+              const roll = Math.random();
+              if (reuseFromB.length && roll < 0.5) {
+                const rt = reuseFromB[Math.floor(Math.random() * reuseFromB.length)];
+                da = { text: rt, meta: metaOf(rt, n), rank: da.rank };
+                db = list[Math.floor(Math.random() * list.length)];
+              } else if (reuseFromA.length && roll < 0.8) {
+                const rt = reuseFromA[Math.floor(Math.random() * reuseFromA.length)];
+                db = { text: rt, meta: metaOf(rt, n), rank: da.rank };
+              } else {
+                db = list[Math.floor(Math.random() * list.length)];
+              }
             }
           }
           if (usedA.has(da.text) || usedB.has(db.text)) continue;
+          // 「同じマスに置く」がオンのときは、たまたま別の語として選んだ2語が
+          // 偶然おなじ文字列だった場合も、ちがうマスの共通ワードになってしまうので止める
+          // （同じマスにする共通ワードは、上の da===db の候補だけに限る）
+          if (dual.commonSame && da.text !== db.text
+            && (usedB.has(da.text) || usedA.has(db.text))) continue;
           const cs = pairCs(da.text, db.text);
           if (!cs) continue;
           const share = cs.filter(ch => cov.has(ch)).length;
