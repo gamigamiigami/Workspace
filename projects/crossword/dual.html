@@ -208,7 +208,10 @@
     }
 
     /* ===== キーワード ===== */
-    #kwChips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    /* B のキーワード欄（#kwChipsB）も同じ見た目にする。ID指定だと2つ書く必要があるので、
+       クラスにしてA・B両方に効かせる（今までは #kwChips にしか効いておらず、
+       B側はブロック要素のまま縦に積まれて見えていた） */
+    #kwChips, #kwChipsB { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
     /* ===== 記号の並び（上＝記号、下＝そのマスの文字） ===== */
     .mk-strip { display: inline-flex; gap: 4px; flex-wrap: wrap; vertical-align: middle; margin-left: 8px; }
     .mk-cell {
@@ -505,6 +508,10 @@
       #printArea .cmp-col h3 { font-size: 3.6mm; margin-bottom: 1mm; }
       #printArea .cmp-clues li { list-style: none; }
       #printArea .cmp-kw { font-weight: 700; margin-bottom: 1mm; }
+      #printArea .cmp-clues .cmn {
+        display: inline-block; font-size: 2.4mm; font-weight: 700; border: 0.3mm solid #000;
+        border-radius: 0.6mm; padding: 0 0.6mm; margin-left: 0.6mm;
+      }
     }
 
     /* ===== 選択ダイアログ（保存しますか？ などを3択で聞く） ===== */
@@ -597,6 +604,10 @@
       position: absolute; top: -1px; left: 1px; font-size: 8px; font-weight: 700; color: var(--ok);
     }
     .cmp-kw { font-size: 18px; font-weight: 700; letter-spacing: .15em; margin-bottom: 6px; }
+    .cmp-clues .cmn {
+      display: inline-block; font-size: 10px; font-weight: 700; color: var(--ok);
+      background: var(--ok-bg); border-radius: 3px; padding: 0 4px; margin-left: 3px;
+    }
     .cmp-clues { font-size: 13px; line-height: 1.7; }
     .cmp-clues li { list-style: none; margin-bottom: 2px; }
     #cmpCheck { font-size: 14px; line-height: 1.8; margin-bottom: 10px; }
@@ -4459,7 +4470,10 @@ var qrcode = function() {
             const alone = (cnt.get(w.id) || 0) === 0 && doc.words.length > 1;
             const meta = doc.meta[w.text];
             const mate = (doc === docA ? docB : docA);
-            const isCommon = !w.auto && ownWords(mate).some(x => x.text === w.text);
+            // 共通ワードは「自分で登録した語」どうしだけでなく、
+            // 辞書から自動で足した語がたまたま同じになったときも印を付ける
+            // （「辞書から足す語は、できるだけ共通にする」設定にしたため）
+            const isCommon = mate.words.some(x => x.text === w.text);
             chip.innerHTML = '<span class="wtext">' + escapeHtml(w.text) + '</span>'
               + (meta ? '<span class="wmeta">' + escapeHtml(meta) + '</span>' : '')
               + (w.auto ? '<span class="wbadge" style="background:#eef3fb;color:#5c6672;">辞書から</span>' : '')
@@ -5933,6 +5947,20 @@ var qrcode = function() {
     // ②…AもBも同じ語 (w, w) だけ／③…ちがう語 (a, b) でもよい
     // 盤面につながりやすい（すでにある組文字を含む）ものと、
     // キーワードのために足りない組文字を持つものを高く評価する
+    // 辞書から足す語を、できるだけ「A と B 両方に入る共通ワード」にする。
+    //
+    // 【なぜ「同じマスに同じ語」を狙うだけでは足りないか】
+    // このページは「Aの文字＋Bの文字」の組を1つの文字として扱っている（PSEP のしくみ）。
+    // 交差は組文字どうしが完全に一致するときだけ起きるので、
+    // 新しく足す語をいきなり(同じ語,同じ語)にしても、盤面にまだ無い組文字
+    // （例：「さ＝さ」）を最初から持ち込むことになり、既存の語と交差できず、はじかれてしまう。
+    //
+    // 【できる工夫】
+    // 新しい語を、もう片方の面で「すでに使われている語」から選び直す。
+    // 例：A側の語として、B側ですでに使った語をもう一度使う。
+    // その語自身は（Aの新しい語）×（Bの別の語）という、いつも通り非対称な組で足されるので、
+    // 既存の組文字とふつうに交差できる。それでいて、同じ文字列が
+    // 「A面のどこか」と「B面のどこか」の両方に現れることになり、結果として共通ワードになる。
     function pickPairPool(base, target, dictByLen, wantPairs) {
       const pool = base.slice();
       const cov = new Set();
@@ -5941,6 +5969,12 @@ var qrcode = function() {
       const usedB = new Set(pool.map(p => p.b));
       const need = new Map();
       (wantPairs || []).forEach(ch => need.set(ch, (need.get(ch) || 0) + 1));
+
+      // 語の文字数ごとに引ける辞書リスト（再利用する語の meta を探すのに使う）
+      const metaOf = (text, n) => {
+        const hit = (dictByLen.get(n) || []).find(d => d.text === text);
+        return hit ? hit.meta : '';
+      };
 
       const lens = [...dictByLen.keys()];
       let guard = 0;
@@ -5951,21 +5985,42 @@ var qrcode = function() {
           const n = lens[Math.floor(Math.random() * lens.length)];
           const list = dictByLen.get(n) || [];
           if (!list.length) continue;
-          const da = list[Math.floor(Math.random() * list.length)];
+          let da = list[Math.floor(Math.random() * list.length)];
           let db = da;
-          if (dual.mode === 3) db = list[Math.floor(Math.random() * list.length)];
+          if (dual.mode === 3) {
+            // 「もう片方の面ですでに使っている語」を、こんどは逆の面で使い直す。
+            // 例：B ですでに使っている語を、今回は A の語として使う
+            //     → その語は A にも B にも現れることになり、共通ワードになる
+            // （db 側にそのまま入れると「B で二重に使う」ことになってしまい、
+            //   　あとの重複チェックで必ずはじかれてしまうので、必ず逆の面に入れる）
+            const reuseFromB = [...usedB].filter(t2 => chars(t2).length === n);
+            const reuseFromA = [...usedA].filter(t2 => chars(t2).length === n);
+            const roll = Math.random();
+            if (reuseFromB.length && roll < 0.5) {
+              const rt = reuseFromB[Math.floor(Math.random() * reuseFromB.length)];
+              da = { text: rt, meta: metaOf(rt, n), rank: da.rank };
+              db = list[Math.floor(Math.random() * list.length)];
+            } else if (reuseFromA.length && roll < 0.8) {
+              const rt = reuseFromA[Math.floor(Math.random() * reuseFromA.length)];
+              db = { text: rt, meta: metaOf(rt, n), rank: da.rank };
+            } else {
+              db = list[Math.floor(Math.random() * list.length)];
+            }
+          }
           if (usedA.has(da.text) || usedB.has(db.text)) continue;
           const cs = pairCs(da.text, db.text);
           if (!cs) continue;
           const share = cs.filter(ch => cov.has(ch)).length;
           if (pool.length && share === 0) continue;   // どこにもつながらない語は足しても意味がない
           const hitKw = cs.filter(ch => need.has(ch)).length;
-          // ③のモードでは「A と B でちがう語」を高く評価する。
-          // 同じ語（AもBも同じ）ばかりだと交差はしやすいが、
-          // 「答えが変わる」という仕掛けが弱くなってしまうため
-          const differs = da.text !== db.text;
+          // 辞書から足す語は、できるだけ「A・B両方に入る共通ワード」になるよう優先する。
+          // 成り立たないとき（交差できない・キーワードの文字を含まない）は、
+          // ちがう語のままでも作る（「できるだけ」なので必須ではない）
+          const sameWord = da.text === db.text;
+          const reused = da.text === db.text
+            || usedB.has(da.text) || usedA.has(db.text);
           const score = hitKw * 1000 + share * 40
-            + (dual.mode === 3 && differs ? 260 : 0)
+            + (sameWord ? 300 : 0) + (reused ? 220 : 0)
             + Math.max(0, 100 - (da.rank + db.rank) / 200) + Math.random() * 25;
           if (!best || score > best.score) best = { a: da.text, b: db.text, cs, score, metaA: da.meta, metaB: db.meta };
         }
@@ -6690,6 +6745,10 @@ var qrcode = function() {
         if (!cb.has(k)) return;
         if (cb.get(k) === ch) sameN++; else diffN++;
       });
+      // 「同じ言葉」が A・B 両方に入っているかを数える（位置がずれていても、語として同じなら数える）
+      const textsA = new Set(docA.placed.map(pp => pp.text));
+      const textsB = new Set(docB.placed.map(pp => pp.text));
+      const commonWordsInGrid = [...textsA].filter(t => textsB.has(t));
       const badge = (ok, okText, ngText) =>
         '<span class="' + (ok ? 'ok2' : 'ng2') + '">' + (ok ? '○ ' + okText : '✗ ' + ngText) + '</span>';
       chk.innerHTML =
@@ -6701,7 +6760,11 @@ var qrcode = function() {
             + '「②つくる」でもう一度<b>同時に作る</b>を押してください。</span>')
         + (!sameMarkPos && (markKeysA.length || markKeysB.length)
             ? '<br><span class="hint">※記号の位置がちがう設定になっています'
-              + '（「作りかたを変える」で同じ位置にできます）。</span>' : '');
+              + '（「作りかたを変える」で同じ位置にできます）。</span>' : '')
+        + (commonWordsInGrid.length
+            ? '<br>A と B 両方に入っている言葉：<b>' + commonWordsInGrid.length + '語</b>'
+              + '<span class="hint">（下のカギ一覧の緑の「共通」印。' + escapeHtml(commonWordsInGrid.join('・')) + '）</span>'
+            : '');
 
       // ---- 2つの盤面を並べる ----
       const gridHtml = (doc, cells, otherCells) => {
@@ -6738,11 +6801,16 @@ var qrcode = function() {
         return list.map(x => x.ch).join('');
       };
 
-      const cluesHtml = (doc, nums) => {
+      // 「共通」バッジ … A の言葉が B のどこかにもそのまま入っているか（位置がずれていても対象）
+      const cmnBadge = (t, otherTexts) => otherTexts.has(t) ? ' <span class="cmn">共通</span>' : '';
+
+      const cluesHtml = (doc, nums, otherDoc) => {
+        const otherTexts = new Set(otherDoc.placed.map(pp => pp.text));
         if (doc.puzzleType === 'skeleton') {
           const bank = withDoc(doc, () => wordBank());
           return '<div class="cmp-clues"><b>語群</b><ul>'
-            + bank.map(g => '<li>' + g.n + '文字：' + g.ws.map(escapeHtml).join('・') + '</li>').join('')
+            + bank.map(g => '<li>' + g.n + '文字：'
+              + g.ws.map(w => escapeHtml(w) + cmnBadge(w, otherTexts)).join('・') + '</li>').join('')
             + '</ul></div>';
         }
         const items = doc.placed.map(p => ({ p, no: nums.get(slotKey(p)) || 0 }))
@@ -6752,7 +6820,7 @@ var qrcode = function() {
           if (!list.length) return '';
           return '<b>' + label + '</b><ul>' + list.map(x =>
             '<li>' + x.no + '. ' + escapeHtml(clueFor(doc, x.p, x.no) || '（カギ未記入）')
-            + '　【' + escapeHtml(x.p.text) + '】</li>').join('') + '</ul>';
+            + '　【' + escapeHtml(x.p.text) + '】' + cmnBadge(x.p.text, otherTexts) + '</li>').join('') + '</ul>';
         };
         return '<div class="cmp-clues">' + col('ヨコのカギ', 'across') + col('タテのカギ', 'down') + '</div>';
       };
@@ -6761,11 +6829,11 @@ var qrcode = function() {
         '<div class="cmp-col"><h3>A の問題' + (docA.title ? '：' + escapeHtml(docA.title) : '') + '</h3>'
         + gridHtml(docA, ca, cb)
         + '<div class="cmp-kw">キーワード：' + (escapeHtml(kwOf(docA)) || '（なし）') + '</div>'
-        + cluesHtml(docA, numA) + '</div>'
+        + cluesHtml(docA, numA, docB) + '</div>'
         + '<div class="cmp-col b"><h3>B の問題' + (docB.title ? '：' + escapeHtml(docB.title) : '') + '</h3>'
         + gridHtml(docB, cb, ca)
         + '<div class="cmp-kw">キーワード：' + (escapeHtml(kwOf(docB)) || '（なし）') + '</div>'
-        + cluesHtml(docB, numB) + '</div>';
+        + cluesHtml(docB, numB, docA) + '</div>';
     }
 
     // ===== カギ（ヒント）=====
