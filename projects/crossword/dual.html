@@ -4223,10 +4223,13 @@ var qrcode = function() {
       $('#btnSideA').setAttribute('aria-pressed', String(side === 'A'));
       $('#btnSideB').setAttribute('aria-pressed', String(side === 'B'));
       const me = state, you = other();
+      // 「登録ワード」は自分で登録した語だけを数える（辞書から自動で足した語は含めない）。
+      // .words.length をそのまま使うと自動で足された語も混じって数がずれて見える
+      const meOwn = ownWords(me).length, youOwn = ownWords(you).length;
       $('#sideNote').innerHTML = 'いま <b>' + side + ' の問題</b>を編集しています'
-        + '（登録ワード ' + me.words.length + '語／盤面 ' + me.placed.length + '語）。'
+        + '（登録ワード ' + meOwn + '語／盤面 ' + me.placed.length + '語）。'
         + 'もう片方（' + (side === 'A' ? 'B' : 'A') + '）は '
-        + you.words.length + '語／' + you.placed.length + '語です。';
+        + youOwn + '語／' + you.placed.length + '語です。';
     }
 
     // ===== 語のペア（同じマスに置かれている、AとBの語）=====
@@ -5963,12 +5966,85 @@ var qrcode = function() {
     // その語自身は（Aの新しい語）×（Bの別の語）という、いつも通り非対称な組で足されるので、
     // 既存の組文字とふつうに交差できる。それでいて、同じ文字列が
     // 「A面のどこか」と「B面のどこか」の両方に現れることになり、結果として共通ワードになる。
+    // 孤立した「必ず使いたい語（登録した語）」を、辞書の橋わたし語でつなげる。
+    // pickPairPool の的当てまかせな候補さがしだと、たまたま孤立した組を選ばずに
+    // 終わってしまうことがある（登録ワードが多いほど起きやすい）ので、
+    // 最後にもう一度、狙って橋をさがす（見つからなければ何もしない＝あとで正直に報告する）
+    function bridgeRequiredGroups(pool, dictByLen, usedA, usedB, autoA, autoB, regA, regB) {
+      if (pool.length < 2) return pool;
+      const parent = pool.map((_, i) => i);
+      const root = (x) => (parent[x] === x ? x : (parent[x] = root(parent[x])));
+      const charOwner = new Map();
+      pool.forEach((p, i) => (p.cs || []).forEach(ch => {
+        if (charOwner.has(ch)) {
+          const a = root(i), b = root(charOwner.get(ch));
+          if (a !== b) parent[a] = b;
+        } else charOwner.set(ch, i);
+      }));
+      const compMap = new Map();
+      pool.forEach((_, i) => {
+        const r = root(i);
+        if (!compMap.has(r)) compMap.set(r, []);
+        compMap.get(r).push(i);
+      });
+      const groups = [...compMap.values()];
+      if (groups.length <= 1) return pool;
+      groups.sort((a, b) => b.length - a.length);
+      const mainIdx = new Set(groups[0]);
+      const charsOf = (idxs) => {
+        const s = new Set();
+        idxs.forEach(i => (pool[i].cs || []).forEach(ch => s.add(ch)));
+        return s;
+      };
+      const lens = [...dictByLen.keys()];
+      for (let gi = 1; gi < groups.length; gi++) {
+        const grp = groups[gi];
+        if (!grp.some(i => pool[i].req)) continue;   // 辞書だけの孤立グループは、無理につながなくてよい
+        const mainChars = charsOf([...mainIdx]);
+        const isoChars = charsOf(grp);
+        let bridge = null;
+        for (let t = 0; t < 800 && !bridge && lens.length; t++) {
+          const n = lens[Math.floor(Math.random() * lens.length)];
+          const list = dictByLen.get(n) || [];
+          if (!list.length) continue;
+          const da = list[Math.floor(Math.random() * list.length)];
+          const db = list[Math.floor(Math.random() * list.length)];
+          if (usedA.has(da.text) || usedB.has(db.text)) continue;
+          if ((regA.has(db.text) && !regB.has(db.text))
+            || (regB.has(da.text) && !regA.has(da.text))) continue;
+          const cs = pairCs(da.text, db.text);
+          if (!cs) continue;
+          if (cs.some(ch => mainChars.has(ch)) && cs.some(ch => isoChars.has(ch))) {
+            bridge = { a: da.text, b: db.text, cs, metaA: da.meta, metaB: db.meta };
+          }
+        }
+        if (bridge) {
+          pool.push(bridge);
+          usedA.add(bridge.a); usedB.add(bridge.b);
+          autoA.add(bridge.a); autoB.add(bridge.b);
+          grp.forEach(i => mainIdx.add(i));
+          mainIdx.add(pool.length - 1);
+        }
+      }
+      return pool;
+    }
+
     function pickPairPool(base, target, dictByLen, wantPairs) {
       const pool = base.slice();
       const cov = new Set();
       pool.forEach(p => (p.cs || []).forEach(ch => cov.add(ch)));
       const usedA = new Set(pool.map(p => p.a));
       const usedB = new Set(pool.map(p => p.b));
+      // 「使い回し」で相手の面に足してよいのは、ここで辞書から自動で足した語だけ。
+      // ユーザーが登録した語（base＝req:true）は、絶対に相手の面へ自動で持っていかない
+      // （登録してもいない言葉が、いつのまにか反対の面にも増えるという事故になるため）
+      const autoA = new Set();
+      const autoB = new Set();
+      // ユーザーが実際に①ことばで登録した語（req のペアには、あまった登録語を辞書語と
+      // やむを得ず組んだものも混ざっており、その辞書語の方は「登録した語」ではないので、
+      // req フラグではなく実際の登録リストで判定する）
+      const regA = new Set(ownWords(docA).map(w => w.text));
+      const regB = new Set(ownWords(docB).map(w => w.text));
       const need = new Map();
       (wantPairs || []).forEach(ch => need.set(ch, (need.get(ch) || 0) + 1));
 
@@ -6006,8 +6082,8 @@ var qrcode = function() {
               //     → その語は A にも B にも現れることになり、共通ワードになる
               // （db 側にそのまま入れると「B で二重に使う」ことになってしまい、
               //   　あとの重複チェックで必ずはじかれてしまうので、必ず逆の面に入れる）
-              const reuseFromB = [...usedB].filter(t2 => chars(t2).length === n);
-              const reuseFromA = [...usedA].filter(t2 => chars(t2).length === n);
+              const reuseFromB = [...autoB].filter(t2 => chars(t2).length === n);
+              const reuseFromA = [...autoA].filter(t2 => chars(t2).length === n);
               const roll = Math.random();
               if (reuseFromB.length && roll < 0.5) {
                 const rt = reuseFromB[Math.floor(Math.random() * reuseFromB.length)];
@@ -6022,6 +6098,11 @@ var qrcode = function() {
             }
           }
           if (usedA.has(da.text) || usedB.has(db.text)) continue;
+          // ユーザーが片方の面にだけ登録した語は、もう片方の面の語としては絶対に使わない
+          // （辞書から足す語どうしが共通になるのは意図した機能だが、ユーザーが打ち込んだ語が
+          // 気づかないうちに反対の面にも増えるのは事故なので、これは常に止める）
+          if ((regA.has(db.text) && !regB.has(db.text))
+            || (regB.has(da.text) && !regA.has(da.text))) continue;
           // 「同じマスに置く」がオンのときは、たまたま別の語として選んだ2語が
           // 偶然おなじ文字列だった場合も、ちがうマスの共通ワードになってしまうので止める
           // （同じマスにする共通ワードは、上の da===db の候補だけに限る）
@@ -6046,9 +6127,10 @@ var qrcode = function() {
         if (!best) break;
         pool.push({ a: best.a, b: best.b, cs: best.cs, metaA: best.metaA, metaB: best.metaB });
         usedA.add(best.a); usedB.add(best.b);
+        autoA.add(best.a); autoB.add(best.b);
         best.cs.forEach(ch => cov.add(ch));
       }
-      return pool;
+      return bridgeRequiredGroups(pool, dictByLen, usedA, usedB, autoA, autoB, regA, regB);
     }
 
     // ===== 記号（キーワード）を、できあがった盤面にふる =====
@@ -6400,9 +6482,11 @@ var qrcode = function() {
         await tick();
       }
 
-      // ①②は「登録した語が全部入る」ことが約束なので、1語でも入らなければ作らない。
-      // （1語だけの盤面を「できました」と見せるのは、うそになる）
-      if (best && dual.mode !== 3) {
+      // 「登録した語が全部入る」ことは①②③どのモードでも約束する。1語でも入らなければ作らない。
+      // 辞書から自動で足す語は入っても入らなくてもよいが、ユーザーが登録した語は必ず使う
+      // （③だけこの約束を外していたのが以前の実装で、「登録16語のうち9語しか盤面に無い」のに
+      // 「できました」と表示してしまう事故になっていた）
+      if (best) {
         const missing = best.failed.filter(t => (bestPairs || []).some(x => x.text === t && x.req));
         if (missing.length || best.placed.length < 2) {
           out.innerHTML = failReason(missing, bestPairs);
@@ -6689,11 +6773,18 @@ var qrcode = function() {
         + '① <b>共通ワード</b>を1〜2語入れる（A と B の両方に、まったく同じ語を登録する）。'
         + 'その語は交差の土台になるので、いちばん効きます。<br>'
         + '② A と B で<b>同じ位置に同じ文字が来る</b>ようにする。'
-        + '<br>　例：A「<b>さ</b>くら」／B「<b>さ</b>かな」→ 先頭の「さ」のマスで、ほかの語と交差できます。<br>'
-        + '③ <b>③いちばん自由</b> にする（A専用・B専用の語を辞書から足せます）。<br>'
-        + '<div class="row" style="margin-top:8px;">'
-        + '<button id="btnGoFree" class="big">③いちばん自由 にして、いま作る</button></div>'
-        + (dual.mode === 2
+        + '<br>　例：A「<b>さ</b>くら」／B「<b>さ</b>かな」→ 先頭の「さ」のマスで、ほかの語と交差できます。<br>';
+      if (dual.mode === 3) {
+        // すでに③（いちばん自由）なので、③にする案は出さない。
+        // 辞書の橋わたし語も試したうえで入らなかった、という前提の案内にする
+        h += '③ 盤面の大きさの上限をゆるめる（上限があると、橋わたしの語が入りきらないことがあります）。<br>'
+          + '④ 登録した語をいくつか減らす、または<b>同じ文字を含む語</b>に変える。<br>';
+      } else {
+        h += '③ <b>③いちばん自由</b> にする（A専用・B専用の語を辞書から足せます）。<br>'
+          + '<div class="row" style="margin-top:8px;">'
+          + '<button id="btnGoFree" class="big">③いちばん自由 にして、いま作る</button></div>';
+      }
+      h += (dual.mode === 2
             ? '<br>※②のモードで辞書から足せるのは「A も B も同じ語」だけです。'
               + 'その語がつながれるのは<b>A と B で文字が同じマス</b>だけなので、上の①②がとくに大事です。'
             : '');
