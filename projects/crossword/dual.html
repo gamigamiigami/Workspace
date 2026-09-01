@@ -704,7 +704,10 @@
           共通ワード（A・B両方に登録した語）は、同じマスに置く</label>
       </div>
       <p class="hint-line" style="margin-top:2px;">
-        ①②では必ず同じマスに置きます。③のときだけ、このチェックを外すと自由に置けます。
+        <b>①②③どれでも</b>切りかえられます。<br>
+        <b>チェックあり</b>…A と B の両方に登録した同じ語は、<b>同じマス</b>に入ります（分かりやすい）。<br>
+        <b>チェックなし</b>…同じ語が <b>A と B でちがう場所</b>に入ることがあります。
+        「答えの言葉は同じなのに、入る場所が変わる」という仕掛けが作れます。
       </p>
 
       <h3 style="margin-top:12px;font-size:14px;">キーワードを入れていないとき</h3>
@@ -4041,7 +4044,7 @@ var qrcode = function() {
           if (fits(d.text)) {
             withDoc(you, () => {
               if (!you.words.some(w => w.text === d.text)) {
-                you.words.push({ id: uid(), text: d.text });
+                you.words.push({ id: uid(), text: d.text, auto: true });
                 rememberWord(d.text, d.meta);
               }
             });
@@ -4238,10 +4241,13 @@ var qrcode = function() {
       });
     }
 
-    // ===== 共通ワード（A・B両方に登録されている語）=====
+    // 自分で登録した語だけ（辞書から自動で足した語は数えない）
+    const ownWords = (doc) => doc.words.filter(w => !w.auto);
+
+    // ===== 共通ワード（A・B両方に「自分で」登録されている語）=====
     function commonWordTexts() {
-      const bs = new Set(docB.words.map(w => w.text));
-      return docA.words.filter(w => bs.has(w.text)).map(w => w.text);
+      const bs = new Set(ownWords(docB).map(w => w.text));
+      return ownWords(docA).filter(w => bs.has(w.text)).map(w => w.text);
     }
 
     // ===== 文字数ごとの「つり合い」＝ ①②のモードで作れるかどうかの前提 =====
@@ -4257,8 +4263,8 @@ var qrcode = function() {
         });
         return m;
       };
-      const aOnly = docA.words.map(w => w.text).filter(t => !common.has(t));
-      const bOnly = docB.words.map(w => w.text).filter(t => !common.has(t));
+      const aOnly = ownWords(docA).map(w => w.text).filter(t => !common.has(t));
+      const bOnly = ownWords(docB).map(w => w.text).filter(t => !common.has(t));
       const ca = cnt(aOnly), cb = cnt(bOnly), cc = cnt([...common]);
       const lens = [...new Set([...ca.keys(), ...cb.keys(), ...cc.keys()])].sort((x, y) => x - y);
       return lens.map(n => ({
@@ -4283,6 +4289,7 @@ var qrcode = function() {
         return;
       }
       const strict = dual.mode !== 3;   // ①②は数がそろっている必要がある
+      const autoN = docA.words.filter(w => w.auto).length + docB.words.filter(w => w.auto).length;
       let bad = 0;
       rows.forEach(r => {
         const ok = r.diff === 0;
@@ -4297,17 +4304,20 @@ var qrcode = function() {
           + (ok ? '' : '<span class="wbadge">' + (r.diff > 0 ? 'B' : 'A') + 'があと' + Math.abs(r.diff) + '語</span>');
         box.appendChild(chip);
       });
+      const autoNote = autoN
+        ? '<br><span class="hint">※この数は<b>自分で登録した語</b>だけです'
+          + '（辞書から自動で足した ' + autoN + ' 語は数えていません）。</span>' : '';
       if (!strict) {
         msg.innerHTML = 'いまは<b>③いちばん自由</b>のモードなので、数がそろっていなくても作れます'
-          + '（足りない分は辞書から足します）。';
+          + '（足りない分は辞書から足します）。' + autoNote;
       } else if (bad === 0) {
         msg.innerHTML = '<span style="color:var(--ok);font-weight:700;">○ 数はそろっています。</span>'
-          + '「②つくる」の「同時に作る」を押せます。';
+          + '「②つくる」の「同時に作る」を押せます。' + autoNote;
       } else {
         msg.innerHTML = '<span style="color:var(--ng);font-weight:700;">△ 数がそろっていません。</span>'
           + 'いまのモード（' + (dual.mode === 1 ? '①登録した言葉だけ' : '②登録＋AB共通の言葉')
           + '）では、<b>同じ文字数の語が A と B に同じ数だけ</b>必要です。'
-          + '足りない方に語を足すか、<b>③いちばん自由</b>のモードにしてください。';
+          + '足りない方に語を足すか、<b>③いちばん自由</b>のモードにしてください。' + autoNote;
       }
     }
 
@@ -4448,11 +4458,13 @@ var qrcode = function() {
             chip.dataset.wordId = w.id;
             const alone = (cnt.get(w.id) || 0) === 0 && doc.words.length > 1;
             const meta = doc.meta[w.text];
-            const isCommon = (doc === docA ? docB : docA).words.some(x => x.text === w.text);
+            const mate = (doc === docA ? docB : docA);
+            const isCommon = !w.auto && ownWords(mate).some(x => x.text === w.text);
             chip.innerHTML = '<span class="wtext">' + escapeHtml(w.text) + '</span>'
               + (meta ? '<span class="wmeta">' + escapeHtml(meta) + '</span>' : '')
+              + (w.auto ? '<span class="wbadge" style="background:#eef3fb;color:#5c6672;">辞書から</span>' : '')
               + (isCommon ? '<span class="wbadge" style="background:#e3f3e9;color:var(--ok);">共通</span>' : '')
-              + (alone && !isCommon ? '<span class="wbadge">つながらない</span>' : '')
+              + (alone && !isCommon && !w.auto ? '<span class="wbadge">つながらない</span>' : '')
               + '<button class="wdel" data-del="' + w.id + '" aria-label="削除">×</button>';
             box.appendChild(chip);
           });
@@ -4925,7 +4937,12 @@ var qrcode = function() {
       let added = 0, skipped = 0;
       parts.forEach(text => {
         const t = text.normalize('NFC');
-        if (state.words.some(w => w.text === t)) { skipped++; return; }
+        const already = state.words.find(w => w.text === t);
+        if (already) {
+          // 辞書から自動で入った語を、自分で登録し直したときは「自分の語」に格上げする
+          if (already.auto) { delete already.auto; added++; } else skipped++;
+          return;
+        }
         state.words.push({ id: uid(), text: t });
         rememberWord(t);
         added++;
@@ -5818,6 +5835,18 @@ var qrcode = function() {
         const ca = chars(pr.a), cb = chars(pr.b);
         for (let i = 0; i < Math.min(ca.length, cb.length); i++) if (ca[i] === cb[i]) sameCells++;
       });
+      // 「共通ワードを同じマスに置かない」設定のときは、
+      // わざとちがう相手と組ませた案を高く評価する。
+      // そうしないと、下の sameCells の加点のせいで
+      // いつも「同じ語どうしの組」＝同じマス、が選ばれてしまう
+      let mixBonus = 0;
+      if (!dual.commonSame) {
+        const commonSet = new Set(commonWordTexts());
+        pairs.forEach(pr => {
+          if (pr.a !== pr.b && commonSet.has(pr.a) && commonSet.has(pr.b)) mixBonus++;
+        });
+      }
+
       // キーワードに必要な組文字を、この組み方でいくつ用意できるか（個数で数える）
       let kwHit = 0;
       if (wantPairs && wantPairs.length) {
@@ -5827,7 +5856,10 @@ var qrcode = function() {
         wantPairs.forEach(ch => need.set(ch, (need.get(ch) || 0) + 1));
         need.forEach((n, ch) => { kwHit += Math.min(n, have.get(ch) || 0); });
       }
-      return kwHit * 60 + cross * 4 + sameCells * (dual.mode === 2 ? 6 : 1);
+      // 交差できるかどうかを最優先にする。
+      // ここを弱くすると「同じマスに置かない」を選んだときに、
+      // 交差できない組み方が選ばれて作れなくなってしまう
+      return cross * 100 + kwHit * 60 + sameCells * (dual.mode === 2 ? 6 : 1) + mixBonus * 40;
     }
 
     // 何通りか組み方を作って、いちばん点数の高いものを返す
@@ -5846,12 +5878,14 @@ var qrcode = function() {
     function makeRequiredPairs(dictByLen) {
       const common = commonWordTexts();
       const commonSet = new Set(common);
-      const fixCommon = (dual.mode !== 3) || dual.commonSame;
+      // 共通ワードを同じマスに置くかどうかは、①②③のどれでも自由に決められる。
+      // オフにすると、同じ語が A と B でちがう場所に入る（それ自体が仕掛けになる）
+      const fixCommon = dual.commonSame;
       const pairs = [];
       const short = [];
 
-      let aList = docA.words.map(w => w.text).filter(t => chars(t).length >= 2);
-      let bList = docB.words.map(w => w.text).filter(t => chars(t).length >= 2);
+      let aList = ownWords(docA).map(w => w.text).filter(t => chars(t).length >= 2);
+      let bList = ownWords(docB).map(w => w.text).filter(t => chars(t).length >= 2);
       if (fixCommon) {
         common.forEach(t => pairs.push({ a: t, b: t, req: true }));
         aList = aList.filter(t => !commonSet.has(t));
@@ -6338,7 +6372,9 @@ var qrcode = function() {
         list.forEach(p => {
           if (known.has(p.text)) return;
           known.add(p.text);
-          doc.words.push({ id: uid(), text: p.text });
+          // auto: true ＝ 自分で登録したのではなく、辞書から自動で足した語。
+          // 「登録ぐあい」の数には入れない（自分が登録した数が見えなくなるため）
+          doc.words.push({ id: uid(), text: p.text, auto: true });
           withDoc(doc, () => rememberWord(p.text, metaOf.get(p.text) || ''));
         });
       };
@@ -6904,7 +6940,7 @@ var qrcode = function() {
       if (r) r.checked = true;
       const sm = $('#dualSameMark'); if (sm) sm.checked = dual.sameMark;
       const cs = $('#dualCommonSame');
-      if (cs) { cs.checked = dual.commonSame; cs.disabled = dual.mode !== 3; }
+      if (cs) cs.checked = dual.commonSame;   // ①②③どれでも切りかえられる
       const now = $('#dualModeNow');
       if (now) {
         const names = { 1: '① 登録した言葉だけで作る', 2: '② 登録した言葉 ＋ AとB共通の言葉', 3: '③ いちばん自由' };
