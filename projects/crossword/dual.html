@@ -5932,14 +5932,19 @@ var qrcode = function() {
         const restA = av.slice(k), restB = bv.slice(k);
         if (restA.length || restB.length) {
           if (dual.mode === 3) {
-            // ③は、あまった語を辞書の語と組ませてよい
-            const pool = shuffleArr((dictByLen.get(n) || []).map(d => d.text));
-            restA.forEach((t, i) => { if (pool[i]) pairs.push({ a: t, b: pool[i], req: true }); });
-            const pool2 = shuffleArr((dictByLen.get(n) || []).map(d => d.text));
-            restB.forEach((t, i) => { if (pool2[i]) pairs.push({ a: pool2[i], b: t, req: true }); });
-            if (!pool.length && (restA.length || restB.length)) {
-              short.push({ len: n, side: 'dict', n: restA.length + restB.length });
+            // ③は、あまった語を辞書の語と組ませてよい。
+            // 登録した語は絶対に使う約束なので、辞書の語が足りないときに登録語を黙って
+            // 捨てるのは禁止。1つの辞書リストから過不足なく配り、足りない分は short で報告する
+            // （前は restA 用・restB 用に別々のシャッフル済みリストを使っていたため、
+            //   同じ辞書語が両方に配られたり、片方が尽きても気づけなかったりしていた）
+            const needDict = restA.length + restB.length;
+            const poolAll = shuffleArr((dictByLen.get(n) || []).map(d => d.text));
+            if (poolAll.length < needDict) {
+              short.push({ len: n, side: 'dict', n: needDict - poolAll.length });
             }
+            let pi = 0;
+            restA.forEach((t) => { if (poolAll[pi]) pairs.push({ a: t, b: poolAll[pi++], req: true }); });
+            restB.forEach((t) => { if (poolAll[pi]) pairs.push({ a: poolAll[pi++], b: t, req: true }); });
           } else {
             short.push({ len: n, side: restA.length ? 'B' : 'A', n: restA.length || restB.length });
           }
@@ -6410,10 +6415,22 @@ var qrcode = function() {
         round++;
         // 交差できる組み方を先に選んでから、形を組む（ここを適当にすると、まず組み上がらない）
         const { pairs, short } = bestPairing(dictByLen, dual.mode === 3 ? 40 : 80, wantPairs);
-        if (dual.mode !== 3 && short.length) {
-          out.innerHTML = '<span style="color:var(--ng)">作れませんでした：'
-            + short.map(x => x.len + '文字の語が ' + x.side + ' にあと ' + x.n + '語 必要です').join('／')
-            + '</span>';
+        if (short.length) {
+          // 登録した語は絶対に使う約束なので、A・Bの数が合わない（①②）ときも、
+          // ③で「あまった登録語と組む辞書語が足りない」ときも、黙って進めず理由を出して止める
+          const dictShort = short.filter(x => x.side === 'dict');
+          const countShort = short.filter(x => x.side !== 'dict');
+          out.innerHTML = '<span style="color:var(--ng)">作れませんでした：</span><br>'
+            + (countShort.length
+                ? countShort.map(x => '・' + x.len + '文字の語が ' + x.side + ' にあと ' + x.n + '語 必要です').join('<br>') + '<br>'
+                : '')
+            + (dictShort.length
+                ? dictShort.map(x => '・' + x.len + '文字の辞書の語が足りず、登録した語（あと'
+                    + x.n + '語ぶん）と組む相手が見つかりません').join('<br>')
+                  + '<br><span class="hint">直し方：この文字数の語を、もう片方の面にも直接登録してください'
+                  + '（辞書にまかせず、A・Bの両方に同じ文字数の語を用意すれば確実です）。'
+                  + '「さがす」のむずかしさ設定をゆるめると辞書の候補が増えることもあります。</span>'
+                : '');
           return;
         }
         // 何回試しても作れない形かどうかを、ここで見きわめる（9秒待たせないため）
