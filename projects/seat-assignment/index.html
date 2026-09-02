@@ -659,6 +659,10 @@
         <button id="btnClearPins">📌 今回だけの固定をぜんぶ消す</button>
         <span class="hint">📌は「💾記録する」で自動的に消えます</span>
       </div>
+      <div class="row">
+        <button id="btnClearSeats" title="今の座席をぜんぶ空にします。記録した回や📌はそのままです">🧹 今の座席を空にする</button>
+        <span class="hint">記録した回・NG設定・📌は消えません</span>
+      </div>
     </div>
 
     <!-- 前回とならべて見くらべるモード -->
@@ -669,21 +673,21 @@
         <button id="btnCompareClear">えらび直す</button>
       </div>
       <p class="hint">どちらの座席表でも生徒をタップすると、その子が両方で光ります。<br>
-      上の「🔀入れかえ」「📌今回だけ固定」をえらぶと、ならべたまま<strong>右（今回）</strong>を手なおしできます。</p>
+      上の「🔀入れかえ」「📌今回だけ固定」をえらぶと、ならべたまま<strong>左（今回）</strong>を手なおしできます。</p>
       <div class="row"><strong id="compareWho"></strong></div>
       <div class="compare-wrap">
-        <div class="compare-col">
-          <h3 id="comparePrevTitle">前回</h3>
-          <div class="room-view" id="comparePrevRoom">
-            <div class="board-label">黒　板</div>
-            <div class="seat-grid-wrap"><div id="comparePrevGrid" class="seat-grid"></div></div>
-          </div>
-        </div>
         <div class="compare-col">
           <h3 id="compareNowTitle">今回</h3>
           <div class="room-view" id="compareNowRoom">
             <div class="board-label">黒　板</div>
             <div class="seat-grid-wrap"><div id="compareNowGrid" class="seat-grid"></div></div>
+          </div>
+        </div>
+        <div class="compare-col">
+          <h3 id="comparePrevTitle">前回</h3>
+          <div class="room-view" id="comparePrevRoom">
+            <div class="board-label">黒　板</div>
+            <div class="seat-grid-wrap"><div id="comparePrevGrid" class="seat-grid"></div></div>
           </div>
         </div>
       </div>
@@ -1840,7 +1844,7 @@
               }
 
               // 今回だけの固定📌。席替え前（席が空のとき）にも見えるようにする
-              const pinnedSid = (mode === 'seating' && cr.tempFixed) ? cr.tempFixed[key] : null;
+              const pinnedSid = (mode === 'seating' && cr.tempFixed && !extra.pastRecord) ? cr.tempFixed[key] : null;
               if (pinnedSid) {
                 cell.classList.add('pinned');
                 extras += '<span class="pin-mark">📌</span>';
@@ -2747,6 +2751,20 @@
         }, '決定');
     }
 
+    // 今の座席をぜんぶ空にする（記録した回・NG設定・📌はそのまま）
+    document.getElementById('btnClearSeats').addEventListener('click', () => {
+      const cr = getActiveClassroom();
+      const n = Object.keys(cr.currentSeats || {}).length;
+      if (n === 0) { alert('今の座席はもう空です'); return; }
+      if (!confirm('今の座席をぜんぶ空にします。よろしいですか？\n' +
+                   '（記録した回・NG設定・📌の固定は消えません）')) return;
+      cr.currentSeats = null;
+      swapFirstKey = null;
+      compareStudentId = null;
+      saveState();
+      renderShuffleTab();
+    });
+
     document.getElementById('btnClearPins').addEventListener('click', () => {
       const cr = getActiveClassroom();
       const n = Object.keys(cr.tempFixed || {}).length;
@@ -2857,16 +2875,18 @@
         renderShuffleTab();
       };
 
-      // 左（過去の回）は記録なので、いつでも「えらぶ」だけ
+      // 右（過去の回）は記録なので、いつでも「えらぶ」だけ。
+      // pastRecord をつけて、今回の📌固定が過去の座席表に出ないようにする
       renderGrid('comparePrevGrid', cr, 'seating', {
         seats: target.seats,
         plain: true,                       // 男女・班の色を出さない
+        pastRecord: true,
         highlightStudentId: compareStudentId,
         flip: flip,
         onTap: pick(target.seats)
       });
 
-      // 右（今回）は、手なおしモード中ならならべたまま入れかえ・固定ができる
+      // 左（今回）は、手なおしモード中ならならべたまま入れかえ・固定ができる
       const editing = (shuffleTool === 'swap' || shuffleTool === 'pin');
       document.getElementById('compareNowTitle').textContent =
         '今回' + (editing ? (shuffleTool === 'swap' ? '（🔀入れかえできます）' : '（📌固定できます）') : '');
