@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>📋 席替えツール</title>
+  <title>📋 席替え屋さん</title>
   <style>
     /* ===== テーマ変数 ===== */
     :root {
@@ -498,7 +498,7 @@
 
   <!-- ===== ヘッダー：年度・クラスの選択・作成・バックアップ ===== -->
   <header>
-    <span class="app-title">📋 席替えツール</span>
+    <span class="app-title">📋 席替え屋さん</span>
     <select id="classroomSelect" aria-label="クラスの選択"></select>
     <button id="btnNewClassroom">＋年度・クラスを開く/作る</button>
     <button id="btnEditClassroom" title="年度・クラス名の修正や削除">✏️編集</button>
@@ -3508,7 +3508,7 @@
       const stamp = d.getFullYear() +
         String(d.getMonth() + 1).padStart(2, '0') +
         String(d.getDate()).padStart(2, '0');
-      downloadFile('席替えツール-バックアップ-' + stamp + '.json', JSON.stringify(state, null, 2));
+      downloadFile('席替え屋さん-バックアップ-' + stamp + '.json', JSON.stringify(state, null, 2));
     }
     document.getElementById('btnExport').addEventListener('click', exportData);
 
@@ -3533,7 +3533,7 @@
           renderAll();
           alert('読み込みました');
         } catch (e) {
-          alert('読み込みに失敗しました。席替えツールのバックアップJSONか確認してください。');
+          alert('読み込みに失敗しました。席替え屋さんのバックアップJSONか確認してください。');
         }
       };
       reader.readAsText(file);

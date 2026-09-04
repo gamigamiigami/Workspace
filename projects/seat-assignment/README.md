@@ -1,4 +1,4 @@
-# 席替えツール（seat-assignment）
+# 席替え屋さん（seat-assignment）
 
 学校の先生が最小限の操作で席替えを考えて決定できるツール。
 
