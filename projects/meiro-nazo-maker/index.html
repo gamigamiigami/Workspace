@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>迷路謎メーカー｜連鎖する迷路謎をGUIだけで作る</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%231f2937'/%3E%3Cpath d='M6 6h20v4H10v4h12v4H10v4h16v4H6z' fill='%23f76707'/%3E%3C/svg%3E">
+<style>
+  /* ===== リセット・基本 ===== */
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #22272e;
+    background: #eef1f5;
+    /* ダブルタップ拡大だけを止める。連続タップやドラッグはそのまま通す */
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
+    overflow: hidden;
+  }
+  button, select, input, textarea { font-family: inherit; font-size: 15px; color: inherit; }
+  button {
+    border: 1px solid #cfd6de; background: #fff; border-radius: 8px;
+    padding: 8px 12px; cursor: pointer; min-height: 40px;
+  }
+  button:hover { background: #f4f7fa; }
+  button:active { transform: scale(0.97); }
+  button.on { background: #1c7ed6; border-color: #1c7ed6; color: #fff; }
+  button.primary { background: #2f9e44; border-color: #2f9e44; color: #fff; font-weight: 700; }
+  button.primary:hover { background: #2b8a3e; }
+  button.danger { color: #c92a2a; border-color: #ffc9c9; }
+  button:disabled { opacity: .4; cursor: default; }
+  input[type=text], input[type=number], select, textarea {
+    border: 1px solid #cfd6de; border-radius: 8px; padding: 8px 10px; background: #fff; width: 100%;
+  }
+  label { font-size: 14px; }
+  h2 { font-size: 15px; font-weight: 700; letter-spacing: .04em; color: #4b5563; }
+
+  /* ===== 全体レイアウト ===== */
+  #app { height: 100%; display: flex; flex-direction: column; }
+  .topbar {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+    padding: 8px 12px; background: #1f2937; color: #fff;
+  }
+  .brand { font-weight: 700; font-size: 17px; white-space: nowrap; }
+  .brand small { font-weight: 400; opacity: .7; font-size: 12px; margin-left: 6px; }
+  .top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
+  .topbar button {
+    background: #374151; border-color: #4b5563; color: #fff; padding: 7px 10px; min-height: 38px; font-size: 14px;
+  }
+  .topbar button:hover { background: #4b5563; }
+  .topbar button.primary { background: #2f9e44; border-color: #2f9e44; }
+
+  .panetabs { display: none; gap: 4px; padding: 6px 8px; background: #e2e8f0; }
+  .panetabs button { flex: 1; border-radius: 8px; min-height: 44px; }
+
+  .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px 1fr 330px; gap: 8px; padding: 8px; }
+  .pane { background: #fff; border-radius: 12px; overflow: auto; padding: 12px; }
+  .pane-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* ===== ツールバー ===== */
+  .toolbar {
+    display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
+    padding: 8px; border-bottom: 1px solid #e5e9ef; background: #fbfcfd;
+  }
+  .toolbar .sep { width: 1px; height: 28px; background: #e0e5ec; margin: 0 3px; }
+  .tool {
+    display: flex; flex-direction: column; align-items: center; gap: 1px;
+    min-width: 52px; min-height: 46px; padding: 4px 6px; font-size: 11px; line-height: 1.2;
+  }
+  .tool .ic { font-size: 17px; }
+  .swatches { display: flex; gap: 4px; }
+  .sw { width: 30px; height: 30px; min-height: 30px; min-width: 30px; border-radius: 50%; padding: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #cfd6de; }
+  .sw.on { box-shadow: 0 0 0 3px #1c7ed6; }
+
+  /* ===== キャンバス ===== */
+  .canvas-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #eef1f5; }
+  #board { display: block; touch-action: none; cursor: crosshair; }
+  .cell-input {
+    position: absolute; display: none; z-index: 20; text-align: center;
+    border: 2px solid #1c7ed6; border-radius: 4px; padding: 0; background: #fff;
+    box-shadow: 0 2px 10px rgba(0,0,0,.2);
+  }
+  .viewbadge {
+    position: absolute; top: 8px; left: 8px; z-index: 10;
+    background: rgba(31,41,55,.88); color: #fff; padding: 5px 10px; border-radius: 999px; font-size: 12px;
+    display: none;
+  }
+  .viewbadge.show { display: block; }
+  .statusbar {
+    padding: 6px 12px; border-top: 1px solid #e5e9ef; background: #fbfcfd;
+    font-size: 13px; color: #4b5563; min-height: 32px; display: flex; align-items: center; gap: 10px;
+  }
+
+  /* ===== 右パネル ===== */
+  details { border: 1px solid #e5e9ef; border-radius: 10px; margin-bottom: 8px; }
+  details > summary {
+    cursor: pointer; padding: 10px 12px; font-weight: 700; font-size: 14px; color: #374151;
+    list-style: none; display: flex; align-items: center; gap: 6px;
+  }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: '▸'; color: #9aa5b1; }
+  details[open] > summary::before { content: '▾'; }
+  .body { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .row > label { white-space: nowrap; }
+  .row.grow > * { flex: 1; }
+  .hint { font-size: 12px; color: #6b7280; line-height: 1.5; }
+  .num { width: 74px; }
+
+  /* ===== STEP一覧 ===== */
+  .step {
+    border: 1px solid #e5e9ef; border-radius: 10px; margin-bottom: 6px; background: #fff; overflow: hidden;
+  }
+  .step.sel { border-color: #1c7ed6; box-shadow: 0 0 0 2px rgba(28,126,214,.15); }
+  .step-head { display: flex; align-items: center; gap: 6px; padding: 8px 10px; cursor: pointer; }
+  .step-no { font-size: 11px; font-weight: 700; color: #fff; background: #64748b; border-radius: 6px; padding: 2px 6px; white-space: nowrap; }
+  .step.err .step-no { background: #e03131; }
+  .step.warn .step-no { background: #e8a300; }
+  .step-title { flex: 1; font-size: 13px; font-weight: 600; }
+  .step-log { font-size: 11px; color: #6b7280; padding: 0 10px 8px; word-break: break-all; }
+  .step-body { padding: 8px 10px 10px; border-top: 1px dashed #e5e9ef; display: flex; flex-direction: column; gap: 6px; }
+  .step-body.hide { display: none; }
+  .step-mini { display: flex; gap: 4px; }
+  .step-mini button { padding: 4px 8px; min-height: 30px; font-size: 12px; }
+  .flowbox { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 8px; padding: 8px; font-size: 12px; }
+
+  /* ===== チェック結果 ===== */
+  .check { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; padding: 4px 0; border-bottom: 1px dotted #eef1f5; }
+  .check .mk { flex: none; font-weight: 700; }
+  .check.ok .mk { color: #2f9e44; }
+  .check.warn .mk { color: #e8a300; }
+  .check.ng .mk { color: #e03131; }
+  .check.ng { color: #c92a2a; }
+
+  /* ===== こたえ表示 ===== */
+  .answer-box { margin-top: 10px; background: #f1f8f3; border: 1px solid #c8e6cf; border-radius: 10px; padding: 10px; font-size: 14px; }
+  .answer-box b { font-size: 18px; letter-spacing: .08em; word-break: break-all; }
+
+  /* ===== モーダル・プレイヤー画面 ===== */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(17,24,39,.55); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .overlay[hidden] { display: none; }
+  .sheet { background: #fff; border-radius: 14px; padding: 18px; width: 100%; max-width: 520px; max-height: 88vh; overflow: auto; }
+  .sheet h3 { font-size: 17px; margin-bottom: 10px; }
+  .sheet .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  .work-list { max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
+  .work-item { display: flex; align-items: center; gap: 8px; border: 1px solid #e5e9ef; border-radius: 8px; padding: 10px; }
+  .work-item .nm { flex: 1; font-weight: 600; word-break: break-all; }
+  .work-item .dt { font-size: 11px; color: #6b7280; }
+
+  #playerView { background: #f8fafc; flex-direction: column; padding: 0; }
+  .player-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #1f2937; color: #fff; flex-wrap: wrap; }
+  .player-bar .ttl { font-weight: 700; }
+  .player-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; text-align: center; }
+  .player-body img { max-width: 100%; height: auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+  .player-note { max-width: 720px; margin: 12px auto; text-align: left; font-size: 14px; color: #374151; }
+
+  /* ===== 印刷 ===== */
+  #printArea { display: none; }
+  #printArea img { max-width: 100%; }
+  @media print {
+    body { overflow: visible; background: #fff; }
+    #app, .overlay { display: none !important; }
+    #printArea { display: block !important; }
+    #printArea .sheet-page { page-break-after: always; text-align: center; }
+    #printArea .sheet-page:last-child { page-break-after: auto; }
+    #printArea h2 { font-size: 16px; margin-bottom: 8px; text-align: left; }
+  }
+
+  /* ===== せまい画面（iPad縦持ち・スマホ） ===== */
+  @media (max-width: 900px) {
+    .panetabs { display: flex; }
+    .layout { grid-template-columns: 1fr; padding: 6px; }
+    .pane { display: none; }
+    .pane.show { display: block; }
+    .pane-canvas.show { display: flex; }
+    .brand small { display: none; }
+    .topbar button { font-size: 13px; padding: 6px 8px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ===== 上のバー ===== -->
+  <header class="topbar">
+    <div class="brand">🧩 迷路謎メーカー<small>解き方から迷路を作る</small></div>
+    <div class="top-actions">
+      <button id="btnUndo" title="もとにもどす（Ctrl+Z）">↶ もどす</button>
+      <button id="btnRedo" title="やりなおす（Ctrl+Y）">↷ すすむ</button>
+      <button id="btnPlay" class="primary">▶ 解いてみる</button>
+      <button id="btnPrint">🖨 印刷</button>
+      <button id="btnPng">🖼 画像で保存</button>
+      <button id="btnSave">💾 保存</button>
+      <button id="btnOpen">📂 開く</button>
+      <button id="btnHelp">？ 使い方</button>
+    </div>
+  </header>
+
+  <!-- ===== せまい画面用のタブ ===== -->
+  <nav class="panetabs" id="paneTabs">
+    <button data-pane="steps">① STEP</button>
+    <button data-pane="canvas" class="on">② 迷路</button>
+    <button data-pane="side">③ 設定</button>
+  </nav>
+
+  <main class="layout">
+
+    <!-- ===== 左：STEP一覧 ===== -->
+    <aside class="pane" id="paneSteps">
+      <h2>STEP（謎の流れ）</h2>
+      <p class="hint" id="stepHint" style="margin:6px 0 10px">
+        上から順に実行されます。STEPを押すと、その時点の盤面を見られます。
+      </p>
+      <div id="stepList"></div>
+      <div class="row" style="margin-top:8px">
+        <select id="stepType" style="flex:1"></select>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnAddStep" style="flex:1">＋ STEPを足す</button>
+        <button id="btnViewMaze" title="編集できる設計図にもどる">設計図にもどる</button>
+      </div>
+      <div class="answer-box">
+        最後に出てくる文字：<br><b id="answerText">—</b>
+      </div>
+      <div class="flowbox" id="flowBox" style="margin-top:8px"></div>
+    </aside>
+
+    <!-- ===== 中央：迷路 ===== -->
+    <section class="pane pane-canvas show" id="paneCanvas">
+      <div class="toolbar" id="toolbar">
+        <button class="tool on" data-tool="select"><span class="ic">↖</span>えらぶ</button>
+        <button class="tool" data-tool="wall"><span class="ic">▮</span>かべ</button>
+        <button class="tool" data-tool="route"><span class="ic">✏</span>ルート</button>
+        <button class="tool" data-tool="text"><span class="ic">あ</span>もじ</button>
+        <button class="tool" data-tool="symbol"><span class="ic">○</span>きごう</button>
+        <button class="tool" data-tool="start"><span class="ic">Ⓢ</span>START</button>
+        <button class="tool" data-tool="goal"><span class="ic">Ⓖ</span>GOAL</button>
+        <button class="tool" data-tool="oneway"><span class="ic">➜</span>一方通行</button>
+        <button class="tool" data-tool="cellcolor"><span class="ic">▨</span>マスの色</button>
+        <button class="tool" data-tool="erase"><span class="ic">🧽</span>けす</button>
+        <button class="tool" data-tool="pan"><span class="ic">✋</span>うごかす</button>
+        <span class="sep"></span>
+        <span class="swatches" id="swatches"></span>
+        <span class="sep"></span>
+        <select id="symbolPick" style="width:70px" title="置く記号"></select>
+        <select id="rolePick" style="width:130px" title="記号のはたらき">
+          <option value="none">ふつうの記号</option>
+          <option value="must">必ず通る（○）</option>
+          <option value="avoid">通らない（×）</option>
+          <option value="warp">ワープ</option>
+        </select>
+        <span class="sep"></span>
+        <button id="btnZoomOut" title="小さく">－</button>
+        <button id="btnZoomIn" title="大きく">＋</button>
+        <button id="btnFit" title="全体を表示">全体</button>
+      </div>
+      <div class="canvas-wrap" id="canvasWrap">
+        <canvas id="board"></canvas>
+        <input id="cellInput" class="cell-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <div class="viewbadge" id="viewBadge"></div>
+      </div>
+      <div class="statusbar"><span id="statusText">「ルート」で正解の道を描いてから、右の「このルートを正解にする」を押してみてください。</span></div>
+    </section>
+
+    <!-- ===== 右：設定 ===== -->
+    <aside class="pane" id="paneSide">
+
+      <details open>
+        <summary>① 盤面</summary>
+        <div class="body">
+          <div class="row">
+            <label>たて<input type="number" id="inRows" class="num" min="2" max="40" value="10"></label>
+            <label>よこ<input type="number" id="inCols" class="num" min="2" max="40" value="10"></label>
+            <button id="btnResize">変える</button>
+          </div>
+          <div class="row">
+            <label style="flex:1">マスの大きさ <input type="range" id="inCell" min="18" max="72" value="40" style="width:100%"></label>
+          </div>
+          <div class="row grow">
+            <button id="btnAllWalls">全部かべにする</button>
+            <button id="btnBorderOnly">外わくだけ</button>
+          </div>
+          <button id="btnRandomMaze">迷路をおまかせで作る</button>
+          <div class="row"><label><input type="checkbox" id="ckGrid" checked> うすいマス目を出す</label></div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>② 正解ルート（ここが要）</summary>
+        <div class="body">
+          <p class="hint">
+            ツールバーの「ルート」で、STARTからGOALまで通したい道を指でなぞってください。<br>
+            すでに通ったマスをもう一度押すと、そこから先を描き直せます。
+          </p>
+          <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
+          <button id="btnMakeMaze" class="primary">このルートを正解にする（迷路を作る）</button>
+          <div class="row">
+            <label style="flex:1">わき道の多さ
+              <input type="range" id="inBranch" min="0" max="40" value="12" style="width:100%">
+            </label>
+          </div>
+          <p class="hint">わき道を増やすほど難しくなります。増やしても「正解ルートが1本だけ」は必ず保たれます。</p>
+          <div class="row grow">
+            <button id="btnOpenRoute">今の迷路に道だけ通す</button>
+            <button id="btnClearRoute" class="danger">ルートを消す</button>
+          </div>
+          <div class="row grow">
+            <button id="btnRouteToSG">ルートの両はしをSTART/GOALにする</button>
+          </div>
+          <div class="row"><label><input type="checkbox" id="ckShowRoute" checked> 正解ルートを画面に出す</label></div>
+          <div class="row"><label><input type="checkbox" id="ckShowShortest"> 今の最短ルートを出す</label></div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>③ 文字を置く</summary>
+        <div class="body">
+          <label>ルートの上に置く文章
+            <input type="text" id="inPhrase" placeholder="例：あかいせんをけせ">
+          </label>
+          <div class="row">
+            <select id="inPlaceMode" style="flex:1">
+              <option value="from-start">始めから順に置く</option>
+              <option value="from-goal">終わりから逆に置く</option>
+              <option value="even">等間かくに置く</option>
+            </select>
+            <select id="inPhraseColor" style="width:90px"></select>
+          </div>
+          <button id="btnPlaceText" class="primary">ルートの上に置く</button>
+          <p class="hint">置いたあとは1文字ずつ動かしたり、色を変えたりできます（「えらぶ」で選択）。</p>
+          <hr style="border:none;border-top:1px dashed #e5e9ef">
+          <label>ダミー文字をまく（これが無いと答えが丸見えになります）</label>
+          <div class="row">
+            <label style="flex:1">こさ <input type="range" id="inDensity" min="0" max="100" value="55" style="width:100%"></label>
+          </div>
+          <div class="row">
+            <select id="inDummyPool" style="flex:1">
+              <option value="same">ルートに置いた文字と同じ字を使う（いちばん紛れる）</option>
+              <option value="hiragana">ひらがな</option>
+              <option value="katakana">カタカナ</option>
+              <option value="number">数字</option>
+              <option value="alpha">アルファベット</option>
+              <option value="symbol">記号</option>
+            </select>
+          </div>
+          <div class="row" id="dummyColors"></div>
+          <div class="row grow">
+            <button id="btnScatter">ダミーをまく</button>
+            <button id="btnClearDummy" class="danger">ダミーを消す</button>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>④ 選んだものを直す</summary>
+        <div class="body">
+          <p class="hint" id="selInfo">「えらぶ」で文字や記号をクリックしてください。ドラッグで動かせます。<br>範囲をドラッグすればまとめて選べます。</p>
+          <div class="row" id="selColors"></div>
+          <div class="row">
+            <label style="flex:1">大きさ <input type="range" id="inSelSize" min="50" max="180" value="100" style="width:100%"></label>
+          </div>
+          <div class="row grow">
+            <button id="btnDup">複製（Ctrl+D）</button>
+            <button id="btnDel" class="danger">消す（Delete）</button>
+          </div>
+        </div>
+      </details>
+
+      <details>
+        <summary>⑤ 読み取りのお試し</summary>
+        <div class="body">
+          <p class="hint">STEPを組む前に、ここで「どう読めるか」をすぐ試せます。</p>
+          <div class="row">
+            <select id="tryFilterMode" style="width:120px">
+              <option value="none">色でしぼらない</option>
+              <option value="include">この色だけ</option>
+              <option value="exclude">この色いがい</option>
+            </select>
+            <select id="tryColor" style="flex:1"></select>
+          </div>
+          <div class="row">
+            <select id="tryOrder" style="flex:1"></select>
+            <select id="tryParity" style="width:110px"></select>
+          </div>
+          <div class="flowbox" id="tryResult">—</div>
+          <button id="btnTryToStep">この読み方でSTEPを作る</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>⑥ 別の盤面（文字盤）</summary>
+        <div class="body">
+          <p class="hint">迷路のルートの形を、この文字盤に重ねて文字を読ませられます。</p>
+          <div class="row">
+            <label>たて<input type="number" id="inSubRows" class="num" min="2" max="20" value="6"></label>
+            <label>よこ<input type="number" id="inSubCols" class="num" min="2" max="20" value="6"></label>
+            <button id="btnMakeSub">作る</button>
+          </div>
+          <label>文字盤の中身（1行ずつ、1文字ずつ書く）
+            <textarea id="inSubText" rows="6" placeholder="あいうえおか&#10;きくけこさし"></textarea>
+          </label>
+          <div class="row grow">
+            <button id="btnFillSub">文字盤に反映</button>
+            <button id="btnRandSub">ランダムで埋める</button>
+          </div>
+          <div class="row"><label><input type="checkbox" id="ckShowSub"> 文字盤を画面に出す</label></div>
+        </div>
+      </details>
+
+      <details open>
+        <summary>⑦ チェック（謎として成立しているか）</summary>
+        <div class="body">
+          <div id="checkList"></div>
+          <button id="btnRecheck">もう一度しらべる</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>⑧ 印刷・画像で保存</summary>
+        <div class="body">
+          <div class="row"><label><input type="checkbox" id="ckMono"> 白黒で印刷する（色を線のもようで見分ける）</label></div>
+          <div class="row"><label><input type="checkbox" id="ckLegend"> 色の凡例をつける</label></div>
+          <div class="row"><label><input type="checkbox" id="ckPrintAnswer"> 答え（正解ルート）も出す</label></div>
+          <div class="row"><label><input type="checkbox" id="ckPrintSteps" checked> STEPごとの盤面をぜんぶ出す</label></div>
+          <div class="row">
+            <label style="flex:1">印刷の大きさ <input type="range" id="inPrintCell" min="24" max="80" value="46" style="width:100%"></label>
+          </div>
+          <div class="row grow">
+            <button id="btnPrint2">🖨 印刷する</button>
+            <button id="btnPng2">🖼 画像で保存</button>
+          </div>
+          <hr style="border:none;border-top:1px dashed #e5e9ef">
+          <div class="row grow">
+            <button id="btnExport">ファイルに書き出す</button>
+            <button id="btnImport">ファイルから読む</button>
+          </div>
+          <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+        </div>
+      </details>
+
+    </aside>
+  </main>
+</div>
+
+<!-- ===== プレイヤー画面（制作者むけの情報はぜんぶ隠す） ===== -->
+<div id="playerView" class="overlay" hidden>
+  <div class="player-bar">
+    <span class="ttl">▶ プレイヤー画面</span>
+    <span id="playerStep">STEP 1</span>
+    <button id="btnPlayerPrev">◀ 前</button>
+    <button id="btnPlayerNext">次 ▶</button>
+    <button id="btnPlayerAnswer">こたえを見る</button>
+    <button id="btnPlayerClose" style="margin-left:auto">✕ 制作にもどる</button>
+  </div>
+  <div class="player-body" id="playerBody"></div>
+</div>
+
+<!-- ===== 保存ダイアログ ===== -->
+<div id="saveModal" class="overlay" hidden>
+  <div class="sheet">
+    <h3>作品として保存</h3>
+    <input type="text" id="saveTitle" placeholder="作品の名前を入れてください">
+    <p class="hint" style="margin-top:8px">このブラウザの中に保存されます。別の端末に持っていくときは「ファイルに書き出す」を使ってください。</p>
+    <div class="foot">
+      <button id="btnSaveCancel">やめる</button>
+      <button id="btnSaveDo" class="primary">保存する</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 読み込みダイアログ ===== -->
+<div id="openModal" class="overlay" hidden>
+  <div class="sheet">
+    <h3>保存した作品をひらく</h3>
+    <div class="work-list" id="workList"></div>
+    <div class="foot"><button id="btnOpenCancel">閉じる</button></div>
+  </div>
+</div>
+
+<!-- ===== 使い方 ===== -->
+<div id="helpModal" class="overlay" hidden>
+  <div class="sheet">
+    <h3>使い方（はじめての方へ）</h3>
+    <div class="hint" style="font-size:14px;color:#374151">
+      <p><b>このツールは「迷路を作る道具」ではなく「謎のしくみを作る道具」です。</b>
+      ふつうの迷路メーカーと順番が逆で、先に答えの道を決めます。</p>
+      <ol style="margin:10px 0 10px 18px; display:flex; flex-direction:column; gap:6px">
+        <li>ツールバーの<b>「ルート」</b>で、通してほしい道を指でなぞる</li>
+        <li>右の<b>「このルートを正解にする」</b>を押す → その道が答えになる迷路ができる</li>
+        <li>右の<b>「文字を置く」</b>で文章を入れて、ルートの上に自動で並べる</li>
+        <li><b>「ダミーをまく」</b>で、まわりにまぎらわしい文字をちらす</li>
+        <li>左の<b>STEP</b>を足して、「赤だけ読む」「赤い線を消す」…と つなげていく</li>
+        <li>右の<b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
+      </ol>
+      <p><b>覚えておくと便利</b></p>
+      <ul style="margin:6px 0 10px 18px">
+        <li>もどす＝Ctrl+Z ／ すすむ＝Ctrl+Y ／ 消す＝Delete ／ 複製＝Ctrl+D</li>
+        <li>文字は「もじ」ツールでマスを押すとその場で打てます。Enterで右へ進みます</li>
+        <li>指2本で拡大・移動できます</li>
+        <li>STEPを押すと「その時点の盤面」が見られます。編集は「設計図にもどる」から</li>
+      </ul>
+    </div>
+    <div class="foot"><button id="btnHelpClose" class="primary">とじる</button></div>
+  </div>
+</div>
+
+<!-- ===== 印刷用（画面には出ない） ===== -->
+<div id="printArea"></div>
+
+<script src="js/model.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/generate.js"></script>
+<script src="js/render.js"></script>
+<script src="js/ops.js"></script>
+<script src="js/steps.js"></script>
+<script src="js/editor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

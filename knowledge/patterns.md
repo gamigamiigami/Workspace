@@ -1,8 +1,94 @@
 # 成功パターン集
 
-最終更新：2026-09-01
+最終更新：2026-09-05
 
 新しいパターンは **先頭に追加** する。プロジェクト名を必ず記載。
+
+---
+
+### [アルゴリズム] 「答えの道」を先に決めて、それが唯一の正解になる迷路を作る — meiro-nazo-maker
+
+**概要：** 迷路をランダムに作ってから答えを調べるのではなく、**先に正解ルートを描かせて、
+そのルートが「たった1本の最短ルート」になる迷路を生成する**。謎解き制作では答えが1つに
+決まらないと問題として成立しないため、これが成否を分ける。
+
+**手順：**
+1. いったん全部のマスのあいだに壁を立てる
+2. 描いてもらったルートの上だけ壁をこわして道にし、そのマスを「訪問済み」にする
+3. 残りを **ランダムPrim法**（訪問済みマスに隣接する未訪問マスをランダムに選んで壁を1枚こわす）で掘る
+
+```js
+while (frontier.length) {
+  const i = Math.floor(Math.random() * frontier.length);
+  const e = frontier[i];
+  frontier[i] = frontier[frontier.length - 1]; frontier.pop();
+  if (visited[key(e.tr, e.tc)]) continue;   // ここが肝：既に道なら掘らない＝輪ができない
+  delete walls[edgeBetween(e.fr, e.fc, e.tr, e.tc)];
+  visited[key(e.tr, e.tc)] = true;
+  addFrontier(e.tr, e.tc);
+}
+```
+
+**なぜ効くか：** 「未訪問のマスにしか掘らない」ので閉路（ぐるっと回れる道）が一度もできない。
+閉路のない迷路ではどの2点をとっても道は必ず1本なので、**描いたルートが自動的に唯一の最短ルートになる**。
+「最短が複数あります」という警告を、後から検査するのではなく**構造で防いでいる**のがポイント。
+
+**難易度調整：** わき道（閉路）を足したいときは、壁を1枚消すたびに
+`最短経路が正解ルートのままか && 本数が1か` を検算して、崩れたら元に戻す。
+保証を壊さずに難しさだけ上げられる。
+
+**応用範囲：** 「答えが一意でないと成立しない」パズル全般（迷路・一筆書き・数字つなぎ）。
+
+**タグ：** #アルゴリズム #迷路 #一意性 #謎解き #meiro-nazo-maker
+
+---
+
+### [設計] 画面・印刷・画像書き出しの描画関数を1本にまとめる — meiro-nazo-maker
+
+**概要：** 同じ盤面を「画面／印刷／PNG／プレイヤー画面」の4通りで出す必要があるとき、
+描画関数を**1つだけ**にして、違いは引数（opts）で表す。
+
+```js
+MZ.render.drawBoard(ctx, board, {
+  cellPx, showRoute, routePath, showRoles, showGhost, mono, legend, showGrid
+});
+// 画面      → drawBoard(画面のctx, board, {showRoles:true, showGhost:true})
+// 印刷/PNG  → drawBoard(裏キャンバスのctx, board, {cellPx:46, showRoles:false}) → toDataURL()
+// プレイヤー→ drawBoard(裏キャンバスのctx, board, {showRoute:false, showRoles:false})
+```
+
+**なぜ：** failures.md の「画面用と印刷用でマスを別々に描いていると、片方だけ要素が抜ける」
+（ことばかける君で印刷にだけ番号が無かった件）を**構造で再発不能にする**ため。
+描き分けが1か所しかないので、要素を足せば全部に反映される。
+
+**おまけの利点：** 印刷は「大きい cellPx で裏キャンバスに描いて `toDataURL()` した画像を
+印刷領域に差し込む」だけでよく、`@media print` の調整がほぼ要らない。PNG保存も同じ経路で済む。
+
+**タグ：** #描画 #印刷 #重複実装の防止 #meiro-nazo-maker
+
+---
+
+### [設計] ギミックを「入力→処理→出力」の部品として登録制にする — meiro-nazo-maker
+
+**概要：** 機能ごとに if 文で場合分けせず、全部を同じ形の部品にして登録所に入れる。
+
+```js
+MZ.ops.register({
+  id: 'filter-color', label: '色でしぼる', group: 'よむ',
+  inputs: '文字 + 色', outputs: '文字',
+  defaults: { mode: 'include', colors: ['red'] },
+  describe: (p) => '赤だけ読む',              // 一覧に出す短い説明
+  run: (ctx, p) => ({ chars, text, log })     // 前のSTEPの結果を受け取り、次に渡すものを返す
+});
+```
+
+STEPの実行側は `ops.get(type).run(ctx, params)` を順に呼ぶだけ。
+`{board, path, chars, text, shape}` を次のSTEPに受けわたすので、**新しいギミックは
+register を1つ足すだけで増える**（UIのフォームも `FORMS` に1行足すだけ）。
+
+**効いた場面：** 「記号でGOALを指定する」を後から足したとき、既存コードを一切さわらずに済んだ。
+
+**タグ：** #設計 #拡張性 #レジストリ #meiro-nazo-maker
 
 ---
 
