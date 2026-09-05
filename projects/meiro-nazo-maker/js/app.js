@@ -302,7 +302,7 @@
     /* ---- ② 正解ルート ---- */
     $('#btnMakeMaze').addEventListener('click', makeMazeFromRoute);
     $('#btnOpenRoute').addEventListener('click', function () {
-      const rt = A.maze.routes[0];
+      const rt = A.maze.routes[ED.state.routeIndex];
       if (!rt) { setStatus('先にルートを描いてください'); return; }
       ED.pushHistory();
       const res = G.openRoute(A.maze, rt.cells);
@@ -310,10 +310,32 @@
       afterEdit();
     });
     $('#btnClearRoute').addEventListener('click', function () {
-      ED.pushHistory(); A.maze.routes = []; afterEdit();
+      ED.pushHistory();
+      const rt = A.maze.routes[ED.state.routeIndex];
+      if (rt) rt.cells = [];
+      afterEdit();
+    });
+    $('#btnLengthen').addEventListener('click', lengthenRoute);
+    $('#routePick').addEventListener('change', function () {
+      ED.state.routeIndex = +this.value;
+      updateRouteView(); updateRouteLen(); renderTargets();
+    });
+    $('#btnAddRoute').addEventListener('click', function () {
+      ED.pushHistory();
+      A.maze.routes.push(M.makeRoute([]));
+      ED.state.routeIndex = A.maze.routes.length - 1;
+      setStatus('ルート' + A.maze.routes.length + ' を作りました。「ルート」ツールで描いてください');
+      afterEdit();
+    });
+    $('#btnDelRoute').addEventListener('click', function () {
+      if (!A.maze.routes.length) return;
+      ED.pushHistory();
+      A.maze.routes.splice(ED.state.routeIndex, 1);
+      ED.state.routeIndex = Math.max(0, ED.state.routeIndex - 1);
+      afterEdit();
     });
     $('#btnRouteToSG').addEventListener('click', function () {
-      const rt = A.maze.routes[0];
+      const rt = A.maze.routes[ED.state.routeIndex];
       if (!rt || rt.cells.length < 2) { setStatus('先にルートを描いてください'); return; }
       ED.pushHistory();
       const a = rt.cells[0], b = rt.cells[rt.cells.length - 1];
@@ -443,28 +465,50 @@
     }
     ED.clearDisplay();
     $('#viewBadge').className = 'viewbadge';
-    const rt = A.maze.routes[0];
     if ($('#ckShowShortest').checked) {
       const s = E.solve(A.maze, { useAvoid: true });
       opts.routePath = s.ok ? s.path : null;
+      opts.routePaths = null;
       opts.showRoute = s.ok;
       opts.routeColor = '#1c7ed6';
       setStatus(s.ok ? '最短ルート：' + s.dist + 'マス' + (s.multiple ? '／同じ長さの道が' + (s.capped ? 'たくさん' : s.count) + '通りあります' : '／1本だけです') : s.reason);
-    } else if ($('#ckShowRoute').checked && rt) {
-      opts.routePath = rt.cells;
+    } else if ($('#ckShowRoute').checked && A.maze.routes.length) {
+      // 描いたルートは全部見せる。いま描いているものを濃く、ほかは薄く
+      const active = ED.state.routeIndex;
+      opts.routePaths = A.maze.routes.map(function (r, i) {
+        return { path: r.cells, color: i === active ? '#f76707' : '#9aa5b1',
+                 alpha: i === active ? 0.35 : 0.22, width: i === active ? 1 : 0.7 };
+      });
+      opts.routePath = null;
       opts.showRoute = true;
-      opts.routeColor = '#f76707';
     } else {
       opts.routePath = null;
+      opts.routePaths = null;
       opts.showRoute = false;
     }
     ED.draw();
   }
 
   function updateRouteLen() {
-    const rt = A.maze.routes[0];
+    // ルートの選択肢を組み直す
+    const sel = $('#routePick');
+    const idx = Math.min(ED.state.routeIndex, Math.max(0, A.maze.routes.length - 1));
+    ED.state.routeIndex = idx;
+    sel.textContent = '';
+    if (!A.maze.routes.length) {
+      const o = el('option', '', 'ルート1（まだ描いていません）'); o.value = '0'; sel.appendChild(o);
+    } else {
+      A.maze.routes.forEach(function (rt, i) {
+        const o = el('option', '', 'ルート' + (i + 1) + '（' + rt.cells.length + 'マス）');
+        o.value = String(i); sel.appendChild(o);
+      });
+    }
+    sel.value = String(idx);
+    $('#btnDelRoute').disabled = A.maze.routes.length < 1;
+
+    const rt = A.maze.routes[idx];
     const n = rt ? rt.cells.length : 0;
-    $('#routeLen').textContent = 'ルートの長さ：' + n + 'マス' + (n > 1 ? '（' + (n - 1) + '歩）' : '');
+    $('#routeLen').textContent = '「ルート' + (idx + 1) + '」の長さ：' + n + 'マス' + (n > 1 ? '（' + (n - 1) + '歩）' : '');
     if (ED.state.renderOpts.showRoute) ED.draw();
   }
 
@@ -483,7 +527,7 @@
    * ② 正解ルートから迷路を作る
    * ===================================================================== */
   function makeMazeFromRoute() {
-    const rt = A.maze.routes[0];
+    const rt = A.maze.routes[ED.state.routeIndex];
     if (!rt || rt.cells.length < 2) { setStatus('先に「ルート」ツールで道を描いてください'); return; }
     const chk = G.checkRoute(A.maze, rt.cells);
     if (!chk.ok) { setStatus('⚠ ' + chk.reason); return; }
@@ -500,11 +544,46 @@
     afterEdit();
   }
 
+  /* -----------------------------------------------------------------------
+   * ルートを遠回りにする
+   *   次の段で「壁を消して近道を作る」余地を空けるための機能。
+   *   置いてある文字の並び順と、いまのSTEPの答えは変えない。
+   * --------------------------------------------------------------------- */
+  function stepTexts() {
+    return JSON.stringify(ST.runSteps(A.maze, A.steps).map(function (r) { return r.text || ''; }));
+  }
+
+  function lengthenRoute() {
+    const sv = E.solve(A.maze, { useAvoid: true });
+    if (!sv.ok) { setStatus('⚠ ' + sv.reason); return; }
+
+    // 今のSTEPの答えと、チェックの結果を控えておく。
+    // 答えが変わる案も、チェックが悪くなる案も採らない。
+    const before = stepTexts();
+    const beforeBad = ST.validateAll(A.maze, A.steps).filter(function (c) { return c.level !== 'ok'; }).length;
+    const accept = function () {
+      if (A.steps.length && stepTexts() !== before) return false;
+      const bad = ST.validateAll(A.maze, A.steps).filter(function (c) { return c.level !== 'ok'; }).length;
+      return bad <= beforeBad;
+    };
+
+    ED.pushHistory();
+    setStatus('⏳ 遠回りにできる場所をさがしています…');
+    const res = G.lengthenRoute(A.maze, sv.path, { accept: accept });
+    if (!res.ok) {
+      ED.undo();
+      setStatus('⚠ ' + res.reason);
+      return;
+    }
+    setStatus('✓ ルートを ' + res.gain + 'マス 遠回りにしました（文字の並びと答えはそのままです）');
+    afterEdit();
+  }
+
   /* =======================================================================
    * ③ 文字を置く / ダミーをまく
    * ===================================================================== */
   function currentPath() {
-    const rt = A.maze.routes[0];
+    const rt = A.maze.routes[ED.state.routeIndex];
     if (rt && rt.cells.length > 1) return rt.cells;
     const s = E.solve(A.maze, { useAvoid: true });
     return s.ok ? s.path : null;
@@ -845,8 +924,9 @@
   /** 読む対象にできるルートの一覧（描いたルート＋各STEPの通り道） */
   function routeSources() {
     const out = [];
-    const rt = A.maze.routes[0];
-    if (rt && rt.cells.length > 1) out.push({ id: 'drawn', label: '描いた正解ルート', path: rt.cells });
+    A.maze.routes.forEach(function (rt, i) {
+      if (rt.cells.length > 1) out.push({ id: 'drawn' + i, label: '描いたルート' + (i + 1), path: rt.cells });
+    });
     A.results.forEach(function (r) {
       if (!r.step || !r.path) return;
       if (r.step.type !== 'solve' && r.step.type !== 'route-drawn') return;

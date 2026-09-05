@@ -32,30 +32,50 @@
     const grid = $('#packGrid');
     grid.textContent = '';
     P.PARTS.forEach(function (def) {
+      const wrap = el('div', 'pack-wrap');
       const b = el('button', 'pack');
       b.dataset.id = def.id;
       b.appendChild(el('div', 'em', def.emoji));
       b.appendChild(el('div', 'nm', def.name));
       b.appendChild(el('div', 'sm', def.summary));
       b.appendChild(el('span', 'lv', def.level));
-      b.addEventListener('click', function () { togglePart(def.id); });
-      grid.appendChild(b);
+      b.addEventListener('click', function () { addPart(def.id); });
+      wrap.appendChild(b);
+      // 個数のバッジ（同じしかけを何回でも重ねられる）
+      const badge = el('div', 'pack-count');
+      badge.dataset.for = def.id;
+      const minus = el('button', 'cnt-btn', '−');
+      minus.title = '1つ減らす';
+      minus.addEventListener('click', function (e) { e.stopPropagation(); removePart(def.id); });
+      const num = el('span', 'cnt-num', '');
+      badge.appendChild(minus);
+      badge.appendChild(num);
+      wrap.appendChild(badge);
+      grid.appendChild(wrap);
     });
     updateCards();
   }
 
-  function togglePart(id) {
-    const at = W.parts.indexOf(id);
-    if (at >= 0) W.parts.splice(at, 1);
-    else {
-      // 段を増やすしかけは、多すぎると作れないので4段までにする
+  /** しかけを1つ足す（同じものを何回でも足せる） */
+  function addPart(id) {
+    if (!P.canAdd(W.parts, id)) {
       const def = P.part(id);
-      if (def.kind === 'stage' && P.stageCount(W.parts) >= P.MAX_STAGES) {
-        setNote('段は' + P.MAX_STAGES + 'つまでです。ほかのしかけを外してから選んでください');
-        return;
-      }
-      W.parts.push(id);
+      setNote(def.kind === 'solve'
+        ? 'この しかけ は1回だけ選べます'
+        : '段は' + P.MAX_STAGES + 'つまでです。ほかの しかけ を減らしてから選んでください');
+      return;
     }
+    W.parts.push(id);
+    afterPartChange();
+  }
+  /** しかけを1つ減らす（同じものが複数あれば最後の1つ） */
+  function removePart(id) {
+    const at = W.parts.lastIndexOf(id);
+    if (at < 0) return;
+    W.parts.splice(at, 1);
+    afterPartChange();
+  }
+  function afterPartChange() {
     updateCards();
     buildInputs();
     $('#wizResult').textContent = '';
@@ -65,19 +85,29 @@
     const n = P.stageCount(W.parts);
     const colorForced = n > 1;
     document.querySelectorAll('.pack').forEach(function (b) {
-      const on = W.parts.indexOf(b.dataset.id) >= 0;
-      b.classList.toggle('on', on || (b.dataset.id === 'read-color' && colorForced));
-      b.classList.toggle('auto', b.dataset.id === 'read-color' && colorForced && !on);
+      const id = b.dataset.id;
+      const cnt = P.countOf(W.parts, id);
+      b.classList.toggle('on', cnt > 0 || (id === 'read-color' && colorForced));
+      b.classList.toggle('auto', id === 'read-color' && colorForced && cnt === 0);
+      b.classList.toggle('full', cnt > 0 && !P.canAdd(W.parts, id));
+    });
+    document.querySelectorAll('.pack-count').forEach(function (badge) {
+      const cnt = P.countOf(W.parts, badge.dataset.for);
+      badge.classList.toggle('show', cnt > 0);
+      badge.querySelector('.cnt-num').textContent = '×' + cnt;
     });
     const info = $('#stageInfo');
     if (n === 1 && !W.parts.length) {
-      info.textContent = 'しかけを選ばないと「最短ルートを通って、通ったマスの文字を読む」だけの1段の謎になります。';
+      info.textContent = 'しかけを選ばないと「最短ルートを通って、通ったマスの文字を読む」だけの1段の謎になります。カードは何回でも押せます。';
     } else {
-      info.textContent = n + '段の謎になります。' +
+      const kinds = P.stageParts(W.parts);
+      const how = kinds.map(function (k) {
+        return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
+                 'move-both': 'STARTもGOALも変わる', 'next-color': '色を変えて読み直す' }[k] || k;
+      });
+      info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
         (colorForced ? '段ごとに 赤 → 青 → 緑 → 紫 と文字の色が変わります。' : '');
     }
-    $('#wizStep2').classList.toggle('off', false);
-    $('#wizStep3').classList.toggle('off', false);
     $('#btnGenerate').disabled = false;
   }
 
@@ -268,7 +298,7 @@
       MZ.app.setTool('route');
       MZ.app.setStatus('「ルート」で正解にしたい道をなぞってから、右の「このルートが最短になる迷路を作る」を押してください');
     });
-    MZ.wizard = { show: show, hide: hide, generate: generate, toggle: togglePart };
+    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

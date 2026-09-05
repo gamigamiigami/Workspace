@@ -205,6 +205,16 @@
   .wiz-base { background: #f0f7ff; border: 1px solid #cfe3fb; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; margin-bottom: 12px; }
   .pack.auto { border-color: #a5c9ec; background: #f7fbff; }
   .pack.auto::after { content: '（自動でON）'; display: block; font-size: 11px; color: #1c7ed6; margin-top: 4px; }
+  .pack.full { opacity: .82; }
+  /* 同じしかけを何回でも重ねられる。個数のバッジをカードの右上に出す */
+  .pack-wrap { position: relative; }
+  .pack-wrap .pack { width: 100%; }
+  .pack-count { position: absolute; top: 6px; right: 6px; display: none; align-items: center; gap: 4px; }
+  .pack-count.show { display: flex; }
+  .pack-count .cnt-num { background: #1c7ed6; color: #fff; border-radius: 999px; font-size: 12px;
+                         font-weight: 700; padding: 3px 9px; }
+  .pack-count .cnt-btn { min-height: 26px; min-width: 26px; padding: 0; border-radius: 50%;
+                         font-size: 15px; line-height: 1; background: #fff; }
   /* 答えの段を切りかえるタブ。1つの迷路の上でルートだけ差しかえる */
   .ans-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
   .ans-tabs button { flex: 0 0 auto; min-width: 104px; }
@@ -456,6 +466,13 @@
             ツールバーの「ルート」で、STARTからGOALまで通したい道を指でなぞってください。<br>
             すでに通ったマスをもう一度押すと、そこから先を描き直せます。
           </p>
+          <div class="row">
+            <label style="flex:1">どのルートを描く
+              <select id="routePick"></select>
+            </label>
+            <button id="btnAddRoute" title="ルートをもう1本ふやす">＋</button>
+            <button id="btnDelRoute" class="danger" title="このルートを消す">✕</button>
+          </div>
           <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
           <button id="btnMakeMaze" class="primary">このルートが最短になる迷路を作る</button>
           <div class="row">
@@ -468,6 +485,12 @@
             <button id="btnOpenRoute">今の迷路に道だけ通す</button>
             <button id="btnClearRoute" class="danger">ルートを消す</button>
           </div>
+          <hr style="border:none;border-top:1px dashed #e5e9ef">
+          <button id="btnLengthen">🔀 ルートを遠回りにする</button>
+          <p class="hint">
+            今の最短ルートだけを長くします。<b>置いてある文字の並び順とSTEPの答えは変わりません。</b><br>
+            次の段で「壁を消して近道を作る」余地がないときに使ってください。
+          </p>
           <div class="row grow">
             <button id="btnRouteToSG">ルートの両はしをSTART/GOALにする</button>
           </div>
