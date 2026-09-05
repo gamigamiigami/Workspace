@@ -153,11 +153,18 @@
   .work-item .nm { flex: 1; font-weight: 600; word-break: break-all; }
   .work-item .dt { font-size: 11px; color: #6b7280; }
 
-  #playerView { background: #f8fafc; flex-direction: column; padding: 0; }
+  /* プレイヤー画面は上下いっぱいに広げる（.overlay の中央よせを打ち消す） */
+  #playerView { background: #f8fafc; flex-direction: column; padding: 0; align-items: stretch; justify-content: flex-start; }
   .player-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: #1f2937; color: #fff; flex-wrap: wrap; }
+  /* 共通のボタン（白地・文字色は継承）のままだと、白地に白文字になって読めない */
+  .player-bar button { background: #374151; border-color: #4b5563; color: #fff; font-size: 14px; }
+  .player-bar button:hover { background: #4b5563; }
+  .player-bar button:disabled { opacity: .45; }
   .player-bar .ttl { font-weight: 700; }
   .player-body { flex: 1; min-height: 0; overflow: auto; padding: 12px; text-align: center; }
-  .player-body img { max-width: 100%; height: auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
+  /* 画面に収まるように、たてよこ両方で縮める（迷路の形はくずさない） */
+  .player-body img { max-width: 100%; max-height: calc(100vh - 150px); width: auto; height: auto;
+                     object-fit: contain; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
   .player-note { max-width: 720px; margin: 12px auto; text-align: left; font-size: 14px; color: #374151; }
 
   /* ===== 印刷 ===== */
