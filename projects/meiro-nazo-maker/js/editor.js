@@ -241,6 +241,18 @@ MZ.editor = (function () {
   function cellOf(e) { return R.cellAt(shownBoard(), boardPoint(e).x, boardPoint(e).y, baseOpts()); }
   function edgeOf(e) { return R.edgeAt(shownBoard(), boardPoint(e).x, boardPoint(e).y, baseOpts()); }
 
+  /** 押した場所が、盤（白い紙）の外かどうか */
+  function outsideBoard(e) {
+    const b = shownBoard();
+    if (!b) return true;
+    const m = R.measure(b, baseOpts());
+    const p = boardPoint(e);
+    const slack = m.cell * 0.35;
+    return p.x < m.pad - slack || p.y < m.originY - slack ||
+           p.x > m.pad + b.cols * m.cell + slack ||
+           p.y > m.originY + b.rows * m.cell + slack;
+  }
+
   function elementAt(board, r, c) {
     const list = board.elements.filter(function (el) { return el.r === r && el.c === c; });
     return list.length ? list[list.length - 1] : null;
@@ -269,7 +281,9 @@ MZ.editor = (function () {
     if (n > 2) return;
 
     closeInlineInput();
-    if (S.tool === 'pan' || e.button === 1) {
+    // 盤の外側をつかんだら画面を動かす（「うごかす」道具をなくしたかわり）
+    // 指2本でも動かせるが、マウスの人はこちらのほうが分かりやすい
+    if (e.button === 1 || outsideBoard(e)) {
       S.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, tx: S.view.tx, ty: S.view.ty };
       return;
     }

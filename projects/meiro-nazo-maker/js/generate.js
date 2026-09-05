@@ -63,6 +63,19 @@ MZ.generate = (function () {
     return res.ok && res.count === 1 && MZ.engine.samePath(res.path, cells);
   }
 
+  /**
+   * 「1本だけ」に加えて「次に短い道との差」も足りているか
+   * 差が小さいと、解く人が どっちが最短か 数えないと分からなくなる
+   */
+  function routeIsClearlyShortest(maze, walls, cells, needMargin) {
+    if (!routeIsUniqueShortest(maze, walls, cells)) return false;
+    if (!needMargin) return true;
+    const probe = makeProbe(maze, walls);
+    probe.starts = [{ id: 's', r: cells[0].r, c: cells[0].c, label: 'S', color: 'black' }];
+    probe.goals = [{ id: 'g', r: cells[cells.length - 1].r, c: cells[cells.length - 1].c, label: 'G', color: 'black' }];
+    return MZ.engine.routeMargin(probe, cells).margin >= needMargin;
+  }
+
   function shuffle(arr) {
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -125,7 +138,7 @@ MZ.generate = (function () {
    * 行き止まりを減らして「ぐるっと回れる道」を少し足す
    * 足すたびに検算して、正解ルートが1本のままのときだけ採用する
    * --------------------------------------------------------------------- */
-  function addLoops(maze, walls, cells, amount) {
+  function addLoops(maze, walls, cells, amount, needMargin) {
     if (!amount || amount <= 0 || !cells || cells.length < 2) return 0;
     const candidates = [];
     Object.keys(walls).forEach(function (k) {
@@ -138,10 +151,10 @@ MZ.generate = (function () {
       const k = candidates[i];
       const saved = walls[k];
       delete walls[k];
-      if (routeIsUniqueShortest(maze, walls, cells)) {
+      if (routeIsClearlyShortest(maze, walls, cells, needMargin)) {
         added++;
       } else {
-        walls[k] = saved;   // 正解が崩れたので元に戻す
+        walls[k] = saved;   // 正解が崩れた（または差が縮んだ）ので元に戻す
       }
     }
     return added;
@@ -155,17 +168,25 @@ MZ.generate = (function () {
     const chk = checkRoute(maze, cells);
     if (!chk.ok) return chk;
 
+    const need = (opts.margin === undefined) ? MZ.engine.MARGIN_GOOD : opts.margin;
     const walls = carve(maze, cells);
-    const loops = addLoops(maze, walls, cells, opts.branchiness || 0);
+    const loops = addLoops(maze, walls, cells, opts.branchiness || 0, need);
     const okUnique = routeIsUniqueShortest(maze, walls, cells);
+
+    // できあがった迷路で「次に短い道」との差を測って報告する
+    const probe = makeProbe(maze, walls);
+    probe.starts = [{ id: 's', r: cells[0].r, c: cells[0].c, label: 'S', color: 'black' }];
+    probe.goals = [{ id: 'g', r: cells[cells.length - 1].r, c: cells[cells.length - 1].c, label: 'G', color: 'black' }];
+    const mg = MZ.engine.routeMargin(probe, cells).margin;
 
     return {
       ok: true,
       walls: walls,
       loops: loops,
       unique: okUnique,
+      margin: mg,
       message: okUnique
-        ? '正解ルート（' + cells.length + 'マス）が、たった1本の最短ルートになりました'
+        ? '正解ルート（' + cells.length + 'マス）が、たった1本の最短ルートになりました（' + MZ.engine.marginText(mg) + '）'
         : '迷路はできましたが、最短ルートが正解と一致していません。もう一度お試しください'
     };
   }
@@ -199,6 +220,10 @@ MZ.generate = (function () {
     fromRoute: fromRoute,
     random: random,
     openRoute: openRoute,
-    routeIsUniqueShortest: routeIsUniqueShortest
+    carve: carve,
+    addLoops: addLoops,
+    makeProbe: makeProbe,
+    routeIsUniqueShortest: routeIsUniqueShortest,
+    routeIsClearlyShortest: routeIsClearlyShortest
   };
 })();
