@@ -127,6 +127,15 @@
   .step-mini button { padding: 4px 8px; min-height: 30px; font-size: 12px; }
   .flowbox { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 8px; padding: 8px; font-size: 12px; }
 
+  /* ねらった答えにする — 1行ぶんの入力 */
+  .tgt { border: 1px solid #e5e9ef; border-radius: 10px; padding: 8px; margin-bottom: 8px; background: #fbfcfd; }
+  .tgt .row { margin-bottom: 6px; }
+  .tgt .row:last-child { margin-bottom: 0; }
+  .tgt .no { font-size: 11px; font-weight: 700; color: #fff; background: #64748b; border-radius: 6px; padding: 2px 6px; }
+  .tgt .del { padding: 4px 8px; min-height: 30px; font-size: 12px; }
+  .tgt-ok { color: #2f9e44; font-weight: 700; }
+  .tgt-ng { color: #e03131; font-weight: 700; }
+
   /* ===== チェック結果 ===== */
   .check { display: flex; gap: 6px; align-items: flex-start; font-size: 13px; padding: 4px 0; border-bottom: 1px dotted #eef1f5; }
   .check .mk { flex: none; font-weight: 700; }
@@ -193,6 +202,17 @@
   .wiz-field .ex { font-size: 12px; color: #6b7280; margin-top: 3px; }
   .big-primary { width: 100%; min-height: 58px; font-size: 18px; font-weight: 700; background: #2f9e44; color: #fff; border-color: #2f9e44; }
   .big-primary:hover { background: #2b8a3e; }
+  .wiz-base { background: #f0f7ff; border: 1px solid #cfe3fb; border-radius: 10px; padding: 9px 12px; font-size: 13.5px; margin-bottom: 12px; }
+  .pack.auto { border-color: #a5c9ec; background: #f7fbff; }
+  .pack.auto::after { content: '（自動でON）'; display: block; font-size: 11px; color: #1c7ed6; margin-top: 4px; }
+  /* 答えの段を切りかえるタブ。1つの迷路の上でルートだけ差しかえる */
+  .ans-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+  .ans-tabs button { flex: 0 0 auto; min-width: 104px; }
+  .ans-tabs button.on { background: #1c7ed6; border-color: #1c7ed6; color: #fff; }
+  .ans-view { margin-top: 10px; text-align: center; background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; }
+  .ans-view img { max-width: 100%; height: auto; }
+  .ans-note { font-size: 13px; color: #4b5563; margin-top: 8px; text-align: left; line-height: 1.7; }
+
   .wiz-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .wiz-card { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; text-align: center; }
   .wiz-card h3 { font-size: 13px; color: #4b5563; margin-bottom: 6px; }
@@ -253,13 +273,18 @@
 
   <div class="wiz-wrap">
     <section class="wiz-step" id="wizStep1">
-      <h2><span class="no">1</span> どんな謎にしますか？</h2>
+      <h2><span class="no">1</span> どんなしかけを入れますか？<small style="font-weight:400;font-size:13px;color:#6b7280">（いくつでも組み合わせられます）</small></h2>
+      <p class="wiz-base">🏁 <b>「STARTからGOALまで、いちばん短い道を通る」</b>は、どの謎にも必ず入ります。</p>
       <div class="pack-grid" id="packGrid"></div>
+      <p class="hint" id="stageInfo" style="margin-top:10px"></p>
+      <div class="row" style="margin-top:10px">
+        <button id="btnDrawSelf" style="flex:1">✏️ じぶんで道を描きたい（編集画面へ）</button>
+      </div>
     </section>
 
-    <section class="wiz-step off" id="wizStep2">
-      <h2><span class="no">2</span> こたえになる文章を入れる</h2>
-      <div id="packInputs"><p class="hint">まず上で謎をえらんでください。</p></div>
+    <section class="wiz-step" id="wizStep2">
+      <h2><span class="no">2</span> 段ごとの文章を入れる</h2>
+      <div id="packInputs"></div>
       <details class="wiz-more">
         <summary>もっと細かく決める（ふつうはそのままでOK）</summary>
         <div class="body">
@@ -303,9 +328,9 @@
       </details>
     </section>
 
-    <section class="wiz-step off" id="wizStep3">
+    <section class="wiz-step" id="wizStep3">
       <h2><span class="no">3</span> 作る</h2>
-      <button id="btnGenerate" class="big-primary" disabled>✨ 自動で作る</button>
+      <button id="btnGenerate" class="big-primary">✨ 自動で作る</button>
       <div id="wizResult"></div>
     </section>
   </div>
@@ -451,8 +476,26 @@
         </div>
       </details>
 
+      <details open>
+        <summary>③ ねらった答えにする</summary>
+        <div class="body">
+          <p class="hint">
+            「このルートを、この色で読んだら、この言葉になる」を書いて
+            <b>「この通りに置く」</b>を押すと、<b>全部が同時に成り立つように</b>文字を置き直します。<br>
+            例：1行めに「最短ルート／赤／あかいせんをけせ」、2行めに「赤い線を消したあとの最短ルート／青／なぞがとけた」
+          </p>
+          <div id="targetRows"></div>
+          <div class="row grow">
+            <button id="btnAddTarget">＋ 行を足す</button>
+            <button id="btnPlaceTargets" class="primary">✨ この通りに置く</button>
+          </div>
+          <div class="row"><label><input type="checkbox" id="ckTargetFill" checked> まぎらわしい文字も一緒に置く</label></div>
+          <div class="flowbox" id="targetResult">—</div>
+        </div>
+      </details>
+
       <details>
-        <summary>③ 文字を置く</summary>
+        <summary>④ 文字を手で置く</summary>
         <div class="body">
           <label>ルートの上に置く文章
             <input type="text" id="inPhrase" placeholder="例：あかいせんをけせ">
@@ -491,7 +534,7 @@
       </details>
 
       <details>
-        <summary>④ 選んだものを直す</summary>
+        <summary>⑤ 選んだものを直す</summary>
         <div class="body">
           <p class="hint" id="selInfo">「えらぶ」で文字や記号をクリックしてください。ドラッグで動かせます。<br>範囲をドラッグすればまとめて選べます。</p>
           <div class="row" id="selColors"></div>
@@ -506,7 +549,7 @@
       </details>
 
       <details>
-        <summary>⑤ 読み取りのお試し</summary>
+        <summary>⑥ 読み取りのお試し</summary>
         <div class="body">
           <p class="hint">STEPを組む前に、ここで「どう読めるか」をすぐ試せます。</p>
           <div class="row">
@@ -527,7 +570,7 @@
       </details>
 
       <details>
-        <summary>⑥ 別の盤面（文字盤）</summary>
+        <summary>⑦ 別の盤面（文字盤）</summary>
         <div class="body">
           <p class="hint">迷路のルートの形を、この文字盤に重ねて文字を読ませられます。</p>
           <div class="row">
@@ -547,7 +590,7 @@
       </details>
 
       <details open>
-        <summary>⑦ チェック（謎として成立しているか）</summary>
+        <summary>⑧ チェック（謎として成立しているか）</summary>
         <div class="body">
           <div id="checkList"></div>
           <button id="btnRecheck">もう一度しらべる</button>
@@ -555,7 +598,7 @@
       </details>
 
       <details>
-        <summary>⑧ 印刷・画像で保存</summary>
+        <summary>⑨ 印刷・画像で保存</summary>
         <div class="body">
           <div class="row"><label><input type="checkbox" id="ckMono"> 白黒で印刷する（色を線のもようで見分ける）</label></div>
           <div class="row"><label><input type="checkbox" id="ckLegend"> 色の凡例をつける</label></div>

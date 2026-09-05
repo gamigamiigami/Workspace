@@ -117,6 +117,10 @@ MZ.steps = (function () {
       if (main.ok && main.multiple) warn('最短ルートが' + (main.capped ? 'たくさん' : main.count + '通り') + '存在します');
       else if (main.ok) {
         ok('最短ルートは1本だけです');
+        // 絶対条件：同じ通路を行って戻る道は、謎として成立しない（交差はOK）
+        const rt2 = MZ.engine.retracedEdges(main.path).length;
+        if (rt2) ng('同じ通路を ' + rt2 + 'か所 なぞり返さないと解けません（交差はOKですが、行って戻るのはNG）');
+        else ok('同じ通路を2回通らずに解けます');
         // 「1本だけ」でも、次に短い道と1〜2マスしか違わないと解く人は迷う
         // （○を通る条件つきのときは長さの意味が変わるので、この見方はしない）
         if (!hasMust) {

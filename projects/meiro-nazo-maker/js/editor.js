@@ -378,9 +378,10 @@ MZ.editor = (function () {
       pushHistory();
       let rt = board.routes[0];
       if (!rt) { rt = M.makeRoute([]); board.routes = [rt]; }
-      const at = indexInRoute(rt.cells, cell);
+      const at = lastIndexInRoute(rt.cells, cell);
       if (at >= 0) {
         // すでに通っているマスを押した → そこから先を消して描き直せるようにする
+        // （交差もできるので、いちばん後ろに通ったところから切る）
         rt.cells = rt.cells.slice(0, at + 1);
       } else if (!rt.cells.length || adjacent(rt.cells[rt.cells.length - 1], cell)) {
         rt.cells.push({ r: cell.r, c: cell.c });
@@ -495,7 +496,8 @@ MZ.editor = (function () {
       const prev = rt.cells[rt.cells.length - 2];
       if (prev && prev.r === cell.r && prev.c === cell.c) { rt.cells.pop(); draw(); return; }  // 引き返し
       if (!adjacent(last, cell)) return;
-      if (indexInRoute(rt.cells, cell) >= 0) return;   // 交差はさせない
+      // 交差（同じマスを別の向きで通る）はOK。同じ通路をなぞり返すのだけNG。
+      if (edgeAlreadyUsed(rt.cells, last, cell)) { status('同じ通路は2回通れません（交差はできます）'); return; }
       rt.cells.push({ r: cell.r, c: cell.c });
       draw();
       if (S.hooks.onRoute) S.hooks.onRoute();
@@ -601,6 +603,20 @@ MZ.editor = (function () {
   function indexInRoute(cells, p) {
     for (let i = 0; i < cells.length; i++) if (cells[i].r === p.r && cells[i].c === p.c) return i;
     return -1;
+  }
+  /** いちばん後ろに通った位置（交差できるので同じマスが複数あり得る） */
+  function lastIndexInRoute(cells, p) {
+    for (let i = cells.length - 1; i >= 0; i--) if (cells[i].r === p.r && cells[i].c === p.c) return i;
+    return -1;
+  }
+  /** その一歩が「すでに通った通路」かどうか（交差は通路が別なのでOK） */
+  function edgeAlreadyUsed(cells, from, to) {
+    const key = M.edgeBetween(from.r, from.c, to.r, to.c);
+    if (!key) return false;
+    for (let i = 0; i + 1 < cells.length; i++) {
+      if (M.edgeBetween(cells[i].r, cells[i].c, cells[i + 1].r, cells[i + 1].c) === key) return true;
+    }
+    return false;
   }
 
   /* =======================================================================
