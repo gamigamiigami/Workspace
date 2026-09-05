@@ -364,6 +364,29 @@ MZ.engine = (function () {
     return n;
   }
 
+  /* -----------------------------------------------------------------------
+   * 「同じ道を2回通っていないか」を調べる（絶対条件）
+   *
+   *   交差（同じマスを、別の向きで通りぬける）は OK。
+   *   なぞり返し（同じ通路を行って戻る）は NG。
+   *   ＝ 同じ「マスとマスのあいだ」を2回使っていないか、で判定する。
+   * --------------------------------------------------------------------- */
+  function retracedEdges(path) {
+    const out = [];
+    if (!path || path.length < 2) return out;
+    const used = {};
+    for (let i = 0; i + 1 < path.length; i++) {
+      const key = M.edgeBetween(path[i].r, path[i].c, path[i + 1].r, path[i + 1].c);
+      if (!key) continue;                 // ワープなど、となり合っていない移動は数えない
+      if (used[key]) out.push(key);
+      used[key] = true;
+    }
+    return out;
+  }
+
+  /** 同じ通路をなぞり返しているか（true なら謎として成立しない） */
+  function retracesEdge(path) { return retracedEdges(path).length > 0; }
+
   /** 2つの道すじが同じかどうか */
   function samePath(a, b) {
     if (!a || !b || a.length !== b.length) return false;
@@ -396,6 +419,7 @@ MZ.engine = (function () {
     solve: solve, bfs: bfs, tracePath: tracePath,
     reachableCount: reachableCount, samePath: samePath, pathIsWalkable: pathIsWalkable,
     routeMargin: routeMargin, marginText: marginText, MARGIN_GOOD: 4,
+    retracedEdges: retracedEdges, retracesEdge: retracesEdge,
     idxOf: idxOf, rcOf: rcOf, MUST_LIMIT: MUST_LIMIT
   };
 })();

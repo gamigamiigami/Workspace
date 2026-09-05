@@ -27,21 +27,25 @@ MZ.generate = (function () {
     if (!cells || cells.length < 2) {
       return { ok: false, reason: 'ルートが短すぎます。2マス以上つなげてください' };
     }
-    const seen = {};
+    const seenCell = {}, seenEdge = {};
+    let crosses = false;
     for (let i = 0; i < cells.length; i++) {
       const p = cells[i];
       if (!M.inside(maze, p.r, p.c)) return { ok: false, reason: 'ルートが盤面の外に出ています' };
       const k = M.cellKey(p.r, p.c);
-      if (seen[k]) return { ok: false, reason: '同じマスを2回通っています。ルートは枝分かれ・交差しない一本道にしてください' };
-      seen[k] = true;
+      if (seenCell[k]) crosses = true;        // 交差そのものは反則ではない
+      seenCell[k] = true;
       if (i > 0) {
         const q = cells[i - 1];
         if (Math.abs(p.r - q.r) + Math.abs(p.c - q.c) !== 1) {
           return { ok: false, reason: 'ルートがとぎれています。となり合ったマスでつないでください' };
         }
+        const ek = M.edgeBetween(q.r, q.c, p.r, p.c);
+        if (seenEdge[ek]) return { ok: false, reason: '同じ通路を2回なぞっています。交差はできますが、行って戻るのはできません' };
+        seenEdge[ek] = true;
       }
     }
-    return { ok: true };
+    return { ok: true, crosses: crosses };
   }
 
   /* 検算用のかんたんな盤面を作る（探索エンジンに渡すため） */
@@ -167,6 +171,10 @@ MZ.generate = (function () {
     opts = opts || {};
     const chk = checkRoute(maze, cells);
     if (!chk.ok) return chk;
+    // 交差している道は、交差点で角を切られてしまうので「いちばん短い道」にはできない
+    if (chk.crosses) {
+      return { ok: false, reason: '交差しているルートは最短にできません（交差点で近道されてしまいます）。交差を使いたいときは「○を全部通る」などのしかけと組み合わせてください' };
+    }
 
     const need = (opts.margin === undefined) ? MZ.engine.MARGIN_GOOD : opts.margin;
     const walls = carve(maze, cells);

@@ -420,7 +420,9 @@ MZ.ops = (function () {
       const mg = p.useMust ? null
         : MZ.engine.routeMargin(ctx.board, res.path, { useAvoid: p.useAvoid !== false }).margin;
       let warn = null;
-      if (res.multiple) warn = '最短ルートが複数あります';
+      const retraced = MZ.engine.retracedEdges(res.path).length;
+      if (retraced) warn = '同じ通路を ' + retraced + 'か所 なぞり返す必要があります（交差はOKですが、行って戻るのはNG）';
+      else if (res.multiple) warn = '最短ルートが複数あります';
       else if (mg !== null && mg < MZ.engine.MARGIN_GOOD) {
         warn = '次に短い道との差が ' + mg + 'マス しかありません（' + MZ.engine.MARGIN_GOOD + 'マス以上を推奨）';
       }

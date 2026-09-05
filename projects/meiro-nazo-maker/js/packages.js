@@ -1,10 +1,15 @@
 /* ===========================================================================
- * packages.js — 「謎の型」から迷路をまるごと自動で作る
+ * packages.js — 「しかけ」を組み合わせて、迷路をまるごと自動で作る
  *
- * ★このファイルが第2弾の主役★
- *   これまでは「できた迷路に条件をあてると、どんな答えになるか」を見る道具だった。
- *   ここでは逆に「こういう謎にしたい」を先に決めて、
- *   その条件を全部満たす迷路のほうを作り出す。
+ * ★考え方★
+ *   「最短ルートを通る」は謎の土台なので、選ぶものではなく always ON。
+ *   そのうえに「しかけ」を好きな数だけ重ねる。
+ *
+ *     赤い文字だけ読む            → 1段の謎
+ *     赤い文字だけ読む ＋ 線を消す → 2段の謎
+ *     ＋ STARTが変わる            → 3段の謎
+ *
+ *   段が増えるごとに、その段の文字の色が 赤 → 青 → 緑 → 紫 と変わる。
  *
  * 作ったものは必ず MZ.steps.validateAll に通し、
  * 警告が1つでも出たら捨てて作り直す。だから出てきたものは必ず解ける。
@@ -15,26 +20,116 @@ MZ.packages = (function () {
   'use strict';
   const M = MZ.model, E = MZ.engine, G = MZ.generate, O = MZ.ops, ST = MZ.steps;
 
-  /* まわりにまく文字の量 */
-  const DENSITY = { few: 0.28, normal: 0.42, many: 0.60 };
+  /* まわりにまく文字の量（第3弾で1段階ずつ減らした） */
+  const DENSITY = { few: 0.15, normal: 0.28, many: 0.42 };
   /* わき道（ぐるっと回れる道）の量。既定は「なし」＝道が1本しかない迷路 */
   const LOOPS = { none: 0, some: 0.12, many: 0.32 };
 
-  const BUILD_TRIES = 40;     // 条件を満たすまで作り直す回数
-  const CORNER_TRIES = 20;    // 「左上→右下」で長さが足りるかを試す回数（超えたらおまかせに切りかえ）
+  /* 段ごとの文字の色。1段め＝赤、2段め＝青、3段め＝緑、4段め＝紫 */
+  const STAGE_COLORS = ['red', 'blue', 'green', 'purple'];
+  const MAX_STAGES = STAGE_COLORS.length;
+
+  const BUILD_TRIES = 40;
+  const CORNER_TRIES = 20;
+
+  /** 色を「あかい」「みどりの」のような言い方にする */
+  function colorAdj(c) {
+    return { red: 'あかい', blue: 'あおい', yellow: 'きいろい',
+             green: 'みどりの', purple: 'むらさきの', black: 'くろい' }[c] || 'その';
+  }
+  function colorLabel(c) { return M.COLORS[c] ? M.COLORS[c].label : c; }
 
   /* =======================================================================
-   * 型の登録所
+   * しかけの部品（かんたん作成のカードになる）
+   *   kind: 'read'  … 読み方を変える
+   *         'solve' … 道の決まりを変える（全部の段にかかる）
+   *         'stage' … 段を1つ増やす
    * ===================================================================== */
-  const registry = {};
-  const order = [];
-  function register(def) { registry[def.id] = def; order.push(def.id); return def; }
-  function list() { return order.map(function (id) { return registry[id]; }); }
-  function get(id) { return registry[id]; }
+  const PARTS = [
+    {
+      id: 'read-color', kind: 'read', emoji: '🔴', name: '色でしぼって読む',
+      summary: '通った道の「赤い文字だけ」を読みます。2段以上のときは自動でこうなります',
+      level: 'ふつう'
+    },
+    {
+      id: 'must-circles', kind: 'solve', emoji: '⭕', name: '○を全部通る',
+      summary: '○のマスを全部通ってからGOALへ。まっすぐではない道が正解になります',
+      level: 'ふつう'
+    },
+    {
+      id: 'avoid-cross', kind: 'solve', emoji: '❌', name: '×を通らない',
+      summary: '×のマスを避けて進みます。まっすぐの道がふさがれます',
+      level: 'ふつう'
+    },
+    {
+      id: 'erase-wall', kind: 'stage', emoji: '✂️', name: '線を消して次の段へ',
+      summary: '読んだ指示どおりに色つきの線を消すと道が変わり、もう一度解きます',
+      level: 'むずかしい'
+    },
+    {
+      id: 'move-start', kind: 'stage', emoji: '⭐', name: 'STARTが変わって次の段へ',
+      summary: '読んだ指示どおりに★から出発しなおして、もう一度解きます',
+      level: 'むずかしい'
+    },
+    {
+      id: 'move-goal', kind: 'stage', emoji: '🔷', name: 'GOALが変わって次の段へ',
+      summary: '読んだ指示どおりに■を新しいGOALにして、もう一度解きます',
+      level: 'むずかしい'
+    }
+  ];
 
+  function part(id) { return PARTS.filter(function (p) { return p.id === id; })[0]; }
+  function stageParts(parts) {
+    return (parts || []).filter(function (id) { const p = part(id); return p && p.kind === 'stage'; });
+  }
+  function stageCount(parts) { return Math.min(MAX_STAGES, stageParts(parts).length + 1); }
+  function usesColor(parts) { return (parts || []).indexOf('read-color') >= 0 || stageCount(parts) > 1; }
+
+  /** その段の文章の、はじめから入れておく例 */
+  function defaultText(parts, i) {
+    const st = stageParts(parts);
+    const n = stageCount(parts);
+    if (i === n - 1) return 'なぞがとけた';
+    const kind = st[i];
+    if (kind === 'erase-wall') return colorAdj(STAGE_COLORS[i]) + 'せんをけせ';
+    if (kind === 'move-start') return colorAdj(STAGE_COLORS[i + 1]) + 'ほしからよめ';
+    if (kind === 'move-goal') return colorAdj(STAGE_COLORS[i + 1]) + 'しかくがごーる';
+    return 'つぎへすすめ';
+  }
+
+  /** 問題用紙にのる「解く人がやること」 */
+  function instruction(parts) {
+    const st = stageParts(parts);
+    const n = stageCount(parts);
+    const color = usesColor(parts);
+    const lines = [];
+    const rule = [];
+    if ((parts || []).indexOf('must-circles') >= 0) rule.push('○のマスを全部通り');
+    if ((parts || []).indexOf('avoid-cross') >= 0) rule.push('×のマスは通らずに');
+    const how = rule.length ? rule.join('、') + '、' : '';
+
+    for (let i = 0; i < n; i++) {
+      const head = (n > 1 ? '（' + (i + 1) + '） ' : '');
+      const read = color ? colorLabel(STAGE_COLORS[i]) + 'い文字だけ' : '通ったマスの文字を';
+      const from = (i === 0) ? 'STARTから' : '新しいSTARTから';
+      lines.push(head + from + how + 'GOALまでいちばん短く進み、' +
+                 (color ? '通った道の' + colorLabel(STAGE_COLORS[i]) + '色の文字だけ' : '通ったマスの文字') +
+                 'を順に読みます。');
+      if (st[i] === 'erase-wall') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i]) + '線を消してください。');
+      if (st[i] === 'move-start') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i + 1]) + '★から出発しなおしてください。');
+      if (st[i] === 'move-goal') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i + 1]) + '■を新しいGOALにしてください。');
+    }
+    lines.push('最後に読めた言葉がこたえです。');
+    lines.push('※ 同じ通路を行って戻ることはありません（交差はします）。');
+    return lines.join('');
+  }
+
+  /* =======================================================================
+   * 共通の道具
+   * ===================================================================== */
   function defaults(recipe) {
     const r = Object.assign({
-      rows: 12, cols: 12, density: 'normal', sg: 'corners', loops: 'none', texts: {}
+      rows: 12, cols: 12, density: 'normal', sg: 'corners', loops: 'none', parts: [], texts: {}
     }, recipe || {});
     r.rows = clamp(r.rows, 6, 20);
     r.cols = clamp(r.cols, 6, 20);
@@ -45,12 +140,19 @@ MZ.packages = (function () {
   function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; }
   function pick(a) { return a[Math.floor(Math.random() * a.length)]; }
 
-  /* =======================================================================
-   * 1. 迷路の種をつくる
-   *    ・完全迷路（輪っかが無い）を掘る → どの2点も道は必ず1本
-   *    ・文章がちょうど載る長さになるように GOAL を選ぶ
-   *    ・わき道を足すときも「次に短い道と4マス以上ちがう」ものだけ採用
-   * ===================================================================== */
+  function uniqueCells(path) {
+    const out = [], seen = {};
+    (path || []).forEach(function (p) {
+      const k = M.cellKey(p.r, p.c);
+      if (seen[k]) return;
+      seen[k] = true; out.push({ r: p.r, c: p.c });
+    });
+    return out;
+  }
+
+  /* -----------------------------------------------------------------------
+   * 迷路の種：ぐねぐね曲がった一本道を先に描き、その道が最短になる迷路を作る
+   * --------------------------------------------------------------------- */
   function seed(rc, minCells, tries) {
     tries = tries || 30;
     for (let t = 0; t < tries; t++) {
@@ -60,7 +162,6 @@ MZ.packages = (function () {
       const route = randomPath(maze, start, goal, minCells);
       if (!route) continue;
 
-      // 「この道が正解になる迷路」を作る（v1からある仕組みをそのまま使う）
       const gen = G.fromRoute(maze, route, { branchiness: LOOPS[rc.loops] || 0 });
       if (!gen.ok || !gen.unique) continue;
       maze.walls = gen.walls;
@@ -77,7 +178,6 @@ MZ.packages = (function () {
     return null;
   }
 
-  /** GOALのマスを決める。STARTから遠いふちのマスにする */
   function pickGoalCell(rc, maze, attempt) {
     const rows = maze.rows, cols = maze.cols;
     if (rc.sg === 'corners' || attempt < 3) return { r: rows - 1, c: cols - 1 };
@@ -85,19 +185,13 @@ MZ.packages = (function () {
     for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
       if (r === 0 && c === 0) continue;
       if (!(r === 0 || r === rows - 1 || c === 0 || c === cols - 1)) continue;
-      if (r + c < Math.round((rows + cols) / 2)) continue;    // STARTに近すぎるマスは使わない
+      if (r + c < Math.round((rows + cols) / 2)) continue;
       cands.push({ r: r, c: c });
     }
     return cands.length ? pick(cands) : { r: rows - 1, c: cols - 1 };
   }
 
-  /**
-   * ぐねぐね曲がった一本道をつくる（同じマスは2回通らない）
-   *
-   * まっすぐな道だと「消すと近道になる壁」も「文字を置く場所」も足りない。
-   * わざと遠回りさせることで、謎に使える道になる。
-   * 行き止まりに入ったら1歩もどってやり直す。
-   */
+  /** ぐねぐね曲がった一本道をつくる（同じマスは2回通らない） */
   function randomPath(maze, start, goal, minCells) {
     const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     const path = [{ r: start.r, c: start.c }];
@@ -107,8 +201,7 @@ MZ.packages = (function () {
 
     for (let step = 0; step < maxSteps; step++) {
       const cur = path[path.length - 1];
-      const atGoal = (cur.r === goal.r && cur.c === goal.c);
-      if (atGoal && path.length >= minCells) return path;
+      if (cur.r === goal.r && cur.c === goal.c && path.length >= minCells) return path;
 
       let opts = [];
       dirs.forEach(function (d) {
@@ -117,20 +210,17 @@ MZ.packages = (function () {
         if (used[M.cellKey(nr, nc)]) return;
         opts.push({ r: nr, c: nc });
       });
-      // まだ短いうちは GOAL に入らない（長さをかせぐため）
       if (path.length < minCells) {
         const away = opts.filter(function (p) { return !(p.r === goal.r && p.c === goal.c); });
         if (away.length) opts = away;
       } else {
-        // 長さが足りたら GOAL のほうへ寄せる
         const near = opts.filter(function (p) {
           return Math.abs(p.r - goal.r) + Math.abs(p.c - goal.c) <
                  Math.abs(cur.r - goal.r) + Math.abs(cur.c - goal.c);
         });
         if (near.length && Math.random() < 0.75) opts = near;
       }
-
-      if (!opts.length) {                       // 行き止まり → 1歩もどる
+      if (!opts.length) {
         const dead = path.pop();
         if (!path.length) return null;
         delete used[M.cellKey(dead.r, dead.c)];
@@ -143,22 +233,9 @@ MZ.packages = (function () {
     return null;
   }
 
-  /* =======================================================================
-   * 2. 文字を置く道具
-   * ===================================================================== */
-
-  /** 通ったマスを、重複なしの並びにする */
-  function uniqueCells(path) {
-    const out = [], seen = {};
-    (path || []).forEach(function (p) {
-      const k = M.cellKey(p.r, p.c);
-      if (seen[k]) return;
-      seen[k] = true; out.push({ r: p.r, c: p.c });
-    });
-    return out;
-  }
-
-  /** まだ何も置かれていないマスだけを使って、文章を等間隔に置く */
+  /* -----------------------------------------------------------------------
+   * 文字を置く
+   * --------------------------------------------------------------------- */
   function placeOnFree(maze, path, text, color) {
     const chs = letters(text);
     if (!chs.length) return false;
@@ -169,14 +246,12 @@ MZ.packages = (function () {
     cells.forEach(function (p, i) { if (!occupied[M.cellKey(p.r, p.c)]) free.push(i); });
     if (free.length < chs.length) return false;
 
-    // 等間隔に選び、かぶったら次の空きへずらす
     const used = {}, picked = [];
     for (let i = 0; i < chs.length; i++) {
       const want = free[chs.length === 1 ? 0 : Math.round(i * (free.length - 1) / (chs.length - 1))];
       let j = free.indexOf(want);
       while (j < free.length && used[free[j]]) j++;
       if (j >= free.length) {
-        // 後ろが尽きたら前から空きを探す
         j = 0;
         while (j < free.length && used[free[j]]) j++;
         if (j >= free.length) return false;
@@ -191,7 +266,6 @@ MZ.packages = (function () {
     return !!res.ok;
   }
 
-  /** 通り道の空きマスに、まぎらわしい文字を置く（本命を目立たせないため） */
   function fillGaps(maze, paths, color, ratio, pool) {
     const occupied = {};
     maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
@@ -212,7 +286,6 @@ MZ.packages = (function () {
     }
   }
 
-  /** 通り道の外にダミーをまく */
   function scatterOutside(maze, paths, rc, colors) {
     let all = [];
     paths.forEach(function (p) { all = all.concat(p || []); });
@@ -222,7 +295,6 @@ MZ.packages = (function () {
     });
   }
 
-  /** 置いてある文字を、まぎらわし用の文字プールにする */
   function poolFrom(texts) {
     const set = {}, out = [];
     texts.forEach(function (t) {
@@ -231,317 +303,11 @@ MZ.packages = (function () {
     return out.length >= 4 ? out : O.POOLS.hiragana;
   }
 
-  /* =======================================================================
-   * 3. 仕上げ — 検証を通ったものだけ返す
-   * ===================================================================== */
-  function finish(maze, steps, expect, def, rc) {
-    maze.meta.title = def.name;
-    maze.meta.instruction = def.instruction(rc);
-    const results = ST.runSteps(maze, steps);
-    const answer = ST.finalText(results);
-    if (answer !== expect) return null;
-    const checks = ST.validateAll(maze, steps);
-    if (checks.some(function (c) { return c.level !== 'ok'; })) return null;
-    return { ok: true, maze: maze, steps: steps, answer: answer, checks: checks };
-  }
+  /* -----------------------------------------------------------------------
+   * 道を変える部品
+   * --------------------------------------------------------------------- */
 
-  /** 何度でも作り直して、条件を満たすものが出るまでねばる */
-  function build(recipe) {
-    const rc = defaults(recipe);
-    const def = get(rc.packageId);
-    if (!def) return { ok: false, reason: 'その謎の型は見つかりません' };
-    const need = def.check ? def.check(rc) : null;
-    if (need) return { ok: false, reason: need };
-    for (let t = 0; t < BUILD_TRIES; t++) {
-      let out = null;
-      try { out = def.make(rc); } catch (e) { out = null; }
-      if (out) { out.tries = t + 1; return out; }
-    }
-    return { ok: false, reason: 'この条件では作れませんでした。文章を短くするか、盤面を大きくしてみてください' };
-  }
-
-  /** 文章がその盤面に入りきるか、あらかじめ見ておく */
-  function lengthCheck(rc, texts, slack) {
-    const need = texts.reduce(function (a, t) { return a + letters(t).length; }, 0);
-    const room = rc.rows * rc.cols;
-    if (!need) return '文章を入れてください';
-    if (need + (slack || 0) > room * 0.6) {
-      return '文章が長すぎます（' + need + '文字）。盤面を大きくするか、文章を短くしてください';
-    }
-    return null;
-  }
-
-  /* =======================================================================
-   * 4. 謎の型（6つ）
-   * ===================================================================== */
-
-  /* ---------- ① ルートの文字を読む ---------- */
-  register({
-    id: 'read-route', emoji: '🔤', name: 'ルートの文字を読む',
-    summary: '最短ルートを通って、通ったマスの文字を順に読む',
-    level: 'やさしい',
-    inputs: [{ k: 'msg1', label: 'こたえになる文章', example: 'まいにちがんばろう' }],
-    instruction: function () {
-      return 'STARTからGOALまで、いちばん短い道を通りましょう。通ったマスの文字を、順に読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1], 0); },
-    make: function (rc) {
-      const msg = rc.texts.msg1;
-      const s = seed(rc, letters(msg).length + 2);
-      if (!s) return null;
-      const maze = s.maze;
-      if (!placeOnFree(maze, s.route, msg, 'black')) return null;
-      scatterOutside(maze, [s.route], rc, ['black']);
-      const steps = [
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('answer', { expected: letters(msg).join('') })
-      ];
-      return finish(maze, steps, letters(msg).join(''), this, rc);
-    }
-  });
-
-  /* ---------- ② 赤い文字だけ読む ---------- */
-  register({
-    id: 'read-red', emoji: '🔴', name: '赤い文字だけ読む',
-    summary: '最短ルートを通って、通った道の赤い文字だけを読む',
-    level: 'ふつう',
-    inputs: [{ k: 'msg1', label: 'こたえになる文章', example: 'あかいもじをよめ' }],
-    instruction: function () {
-      return 'STARTからGOALまで、いちばん短い道を通りましょう。通った道にある赤い文字だけを、順に読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1], 4); },
-    make: function (rc) {
-      const msg = rc.texts.msg1;
-      const s = seed(rc, letters(msg).length + 4);
-      if (!s) return null;
-      const maze = s.maze;
-      if (!placeOnFree(maze, s.route, msg, 'red')) return null;
-      // 通り道の空きは黒でうめる（赤だけ読む、を成立させるため）
-      fillGaps(maze, [s.route], 'black', 1, poolFrom([msg]));
-      scatterOutside(maze, [s.route], rc, ['black', 'red', 'blue']);
-      const steps = [
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('filter-color', { mode: 'include', colors: ['red'] }),
-        ST.makeStep('answer', { expected: letters(msg).join('') })
-      ];
-      return finish(maze, steps, letters(msg).join(''), this, rc);
-    }
-  });
-
-  /* ---------- ③ 赤い線を消して2段階 ---------- */
-  register({
-    id: 'erase-red-wall', emoji: '✂️', name: '赤い線を消して2段階',
-    summary: '赤い文字の指示どおり赤い線を消すと、道が変わってもう一度解ける',
-    level: 'むずかしい',
-    inputs: [
-      { k: 'msg1', label: '1段めの指示（赤で置く）', example: 'あかいせんをけせ' },
-      { k: 'msg2', label: '2段めのこたえ（青で置く）', example: 'よくできました' }
-    ],
-    instruction: function () {
-      return '① STARTからGOALまで、いちばん短い道を通り、赤い文字だけを読みます。'
-           + '② 書いてあるとおりにしてから、もう一度いちばん短い道を通り、青い文字だけを読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1, rc.texts.msg2], 6); },
-    make: function (rc) {
-      const msg1 = rc.texts.msg1, msg2 = rc.texts.msg2;
-      const n1 = letters(msg1).length, n2 = letters(msg2).length;
-      // 2段階ぶんの文字が入るように、長めの道をつくる
-      const s = seed(rc, n1 + n2 + 4);
-      if (!s) return null;
-      const maze = s.maze;
-
-      // 「消すと近道になる壁」をさがす。
-      // 道の上で となり合っているのに 道づたいだと遠い 2マスの間の壁が、それにあたる。
-      const shortcut = pickShortcut(maze, s.route);
-      if (!shortcut) return null;
-
-      // 赤い線を消したあとの新しい道
-      maze.walls[shortcut.key].disabled = true;
-      const s2 = E.solve(maze, {});
-      const ok2 = s2.ok && s2.count === 1 &&
-                  E.routeMargin(maze, s2.path).margin >= E.MARGIN_GOOD &&
-                  uniqueCells(s2.path).length >= n2 + 1;
-      maze.walls[shortcut.key].disabled = false;
-      if (!ok2) return null;
-
-      // 2段めの文章を先に置く（あとから置くと場所が足りなくなるため）
-      if (!placeOnFree(maze, s2.path, msg2, 'blue')) return null;
-      // 1段めの指示は、残った空きマスに置く
-      if (!placeOnFree(maze, s.route, msg1, 'red')) return null;
-
-      // 本命の1本に、消しても答えが変わらない「おとりの赤い線」を足す
-      const reds = paintRedWalls(maze, shortcut.key, s2.path, 3);
-
-      fillGaps(maze, [s.route, s2.path], 'black', 1, poolFrom([msg1, msg2]));
-      scatterOutside(maze, [s.route, s2.path], rc, ['black', 'red', 'blue']);
-
-      const steps = [
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('filter-color', { mode: 'include', colors: ['red'] }),
-        ST.makeStep('remove-walls', { colors: ['red'] }),
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('filter-color', { mode: 'include', colors: ['blue'] }),
-        ST.makeStep('answer', { expected: letters(msg2).join('') })
-      ];
-      return finish(maze, steps, letters(msg2).join(''), this, rc);
-    }
-  });
-
-  /**
-   * 「消すと近道になる壁」をさがす。
-   *
-   * 迷路の道はぐねぐね曲がっているので、
-   * 「となり合っているのに、道づたいだと遠回りしないと行けない2マス」がある。
-   * そのあいだの壁を消せば、その遠回りをまるごと飛ばせる＝近道になる。
-   * 飛ばせる長さ（gain）が4マス以上あるものだけを使う。
-   */
-  function pickShortcut(maze, route) {
-    const at = {};
-    route.forEach(function (p, i) { at[M.cellKey(p.r, p.c)] = i; });
-    const found = [];
-    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-    route.forEach(function (p, i) {
-      dirs.forEach(function (d) {
-        const nr = p.r + d[0], nc = p.c + d[1];
-        if (!M.inside(maze, nr, nc)) return;
-        const j = at[M.cellKey(nr, nc)];
-        if (j === undefined || j - i < E.MARGIN_GOOD + 1) return;   // 近すぎる
-        const key = M.edgeBetween(p.r, p.c, nr, nc);
-        if (!maze.walls[key]) return;                                // すでに通れる
-        found.push({ key: key, gain: (j - i) - 1 });
-      });
-    });
-    if (!found.length) return null;
-    found.sort(function (a, b) { return b.gain - a.gain; });
-    return pick(found.slice(0, Math.min(3, found.length)));
-  }
-
-  /**
-   * 本命の赤い線に、「消しても答えが変わらないおとり」を足す。
-   * 赤い線が1本だけだと、どこを消せばいいか丸わかりになってしまうため。
-   */
-  function paintRedWalls(maze, realKey, expectPath, decoys) {
-    const chosen = [realKey];
-    const keys = shuffle(Object.keys(maze.walls).filter(function (k) {
-      return k !== realKey && !M.isBorderKey(maze, k);
-    }));
-    for (let i = 0; i < keys.length && chosen.length < 1 + decoys; i++) {
-      const cand = chosen.concat([keys[i]]);
-      cand.forEach(function (k) { maze.walls[k].disabled = true; });
-      const res = E.solve(maze, {});
-      const same = res.ok && res.count === 1 && E.samePath(res.path, expectPath) &&
-                   E.routeMargin(maze, res.path).margin >= E.MARGIN_GOOD;
-      cand.forEach(function (k) { maze.walls[k].disabled = false; });
-      if (same) chosen.push(keys[i]);
-    }
-    chosen.forEach(function (k) { maze.walls[k].color = 'red'; });
-    return chosen;
-  }
-
-  /* ---------- ④ ○を全部通ってから読む ---------- */
-  register({
-    id: 'visit-circles', emoji: '⭕', name: '○を全部通ってから読む',
-    summary: '○のマスを全部通りながらGOALへ。通ったマスの文字を順に読む',
-    level: 'ふつう',
-    inputs: [{ k: 'msg1', label: 'こたえになる文章', example: 'まるをすべてとおれ' }],
-    instruction: function () {
-      return '○のマスを全部通って、GOALまでいちばん短く進みましょう。通ったマスの文字を、順に読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1], 4); },
-    make: function (rc) {
-      const msg = rc.texts.msg1;
-      const need = letters(msg).length;
-      // ○の分の遠回りで道は長くなるので、まっすぐの道は短めでよい
-      const s = seed(rc, Math.max(5, Math.round(need * 0.6)));
-      if (!s) return null;
-      const maze = s.maze;
-      const onRoute = {};
-      s.route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
-
-      // ルートから外れたマスを○の候補にする
-      const cands = [];
-      for (let r = 0; r < maze.rows; r++) for (let c = 0; c < maze.cols; c++) {
-        if (onRoute[M.cellKey(r, c)]) continue;
-        cands.push({ r: r, c: c });
-      }
-      if (cands.length < 2) return null;
-      shuffle(cands);
-
-      const nCircle = 2 + Math.floor(Math.random() * 2);   // 2〜3個
-      const spots = cands.slice(0, nCircle);
-      spots.forEach(function (p) {
-        maze.elements.push(M.makeElement(p.r, p.c, '○', { role: 'must', color: 'black' }));
-      });
-
-      const res = E.solve(maze, { useMust: true });
-      if (!res.ok || res.count !== 1) return null;
-      // ○のマスは記号でふさがっているので、文章はそれ以外の空きマスに入る必要がある
-      const cells = uniqueCells(res.path);
-      if (cells.length < need + nCircle + 1) return null;
-
-      maze.routes = [M.makeRoute(res.path)];
-      if (!placeOnFree(maze, res.path, msg, 'black')) return null;
-      scatterOutside(maze, [res.path], rc, ['black']);
-
-      const steps = [
-        ST.makeStep('solve', { useMust: true }),
-        // ○の記号そのものは読まない（文字と数字だけ拾う）
-        ST.makeStep('extract', { kinds: ['text', 'number'] }),
-        ST.makeStep('answer', { expected: letters(msg).join('') })
-      ];
-      return finish(maze, steps, letters(msg).join(''), this, rc);
-    }
-  });
-
-  /* ---------- ⑤ ×を避けて進む ---------- */
-  register({
-    id: 'avoid-cross', emoji: '❌', name: '×を避けて進む',
-    summary: '×のマスを通らずにGOALへ。通ったマスの文字を順に読む',
-    level: 'ふつう',
-    inputs: [{ k: 'msg1', label: 'こたえになる文章', example: 'ばつをさけてすすめ' }],
-    instruction: function () {
-      return '×のマスを通らずに、GOALまでいちばん短く進みましょう。通ったマスの文字を、順に読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1], 4); },
-    make: function (rc) {
-      const msg = rc.texts.msg1;
-      const need = letters(msg).length;
-      const s = seed(Object.assign({}, rc, { loops: 'none' }), need + 2);
-      if (!s) return null;
-      const maze = s.maze;
-
-      // ×でふさいでも進めるように、まわり道を1本ずつ足していく。
-      // 一気にたくさん作ると迷路が開けすぎて「同じ長さの道が何本も」になってしまう。
-      const inner = s.route.slice(1, s.route.length - 1);
-      if (inner.length < 3) return null;
-      let placed = null;
-      for (let round = 0; round < 6 && !placed; round++) {
-        if (!addOneBypass(maze, s.route)) break;
-        placed = findCrossSpot(maze, inner, need);
-      }
-      if (!placed) return null;
-
-      maze.routes = [M.makeRoute(placed.path)];
-      if (!placeOnFree(maze, placed.path, msg, 'black')) return null;
-      scatterOutside(maze, [placed.path], rc, ['black']);
-
-      const steps = [
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('answer', { expected: letters(msg).join('') })
-      ];
-      return finish(maze, steps, letters(msg).join(''), this, rc);
-    }
-  });
-
-  /**
-   * まわり道を1本だけ足す（正解ルートが1本の最短のままであることは守る）
-   * ×でふさいでも進めるようにするために使う
-   */
+  /** まわり道を1本だけ足す（正解ルートが1本の最短のままなのは守る） */
   function addOneBypass(maze, route) {
     const keys = shuffle(Object.keys(maze.walls).filter(function (k) { return !M.isBorderKey(maze, k); }));
     for (let i = 0; i < keys.length; i++) {
@@ -553,94 +319,362 @@ MZ.packages = (function () {
     return false;
   }
 
-  /** ×を置ける場所をさがす。置いたあとの道が「1本だけ・差4以上」になる所だけ採る */
-  function findCrossSpot(maze, inner, need) {
-    const spots = shuffle(inner.slice());
-    for (let i = 0; i < spots.length; i++) {
-      const p = spots[i];
-      const el = M.makeElement(p.r, p.c, '×', { role: 'avoid', color: 'black' });
-      maze.elements.push(el);
-      const res = E.solve(maze, { useAvoid: true });
-      const good = res.ok && res.count === 1 &&
-                   E.routeMargin(maze, res.path, { useAvoid: true }).margin >= E.MARGIN_GOOD &&
-                   uniqueCells(res.path).length >= need + 1;
-      if (good) return res;
-      maze.elements = maze.elements.filter(function (x) { return x.id !== el.id; });
+  /**
+   * 「消すと近道になる壁」をさがす。
+   * 道の上でとなり合っているのに、道づたいだと遠い2マスのあいだの壁がそれにあたる。
+   */
+  function pickShortcut(maze, route) {
+    const at = {};
+    route.forEach(function (p, i) { at[M.cellKey(p.r, p.c)] = i; });
+    const found = [];
+    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+    route.forEach(function (p, i) {
+      dirs.forEach(function (d) {
+        const nr = p.r + d[0], nc = p.c + d[1];
+        if (!M.inside(maze, nr, nc)) return;
+        const j = at[M.cellKey(nr, nc)];
+        if (j === undefined || j - i < E.MARGIN_GOOD + 1) return;
+        const key = M.edgeBetween(p.r, p.c, nr, nc);
+        if (!maze.walls[key]) return;
+        found.push({ key: key, gain: (j - i) - 1 });
+      });
+    });
+    if (!found.length) return null;
+    found.sort(function (a, b) { return b.gain - a.gain; });
+    return pick(found.slice(0, Math.min(3, found.length)));
+  }
+
+  /** 本命の線に、消しても答えが変わらない「おとりの線」を足す */
+  function paintWalls(work, maze, realKey, expectPath, decoys, color) {
+    const chosen = [realKey];
+    const keys = shuffle(Object.keys(work.walls).filter(function (k) {
+      return k !== realKey && !M.isBorderKey(work, k);
+    }));
+    for (let i = 0; i < keys.length && chosen.length < 1 + decoys; i++) {
+      const cand = chosen.concat([keys[i]]);
+      cand.forEach(function (k) { work.walls[k].disabled = true; });
+      const res = E.solve(work, {});
+      const same = res.ok && res.count === 1 && E.samePath(res.path, expectPath) &&
+                   E.routeMargin(work, res.path).margin >= E.MARGIN_GOOD;
+      cand.forEach(function (k) { work.walls[k].disabled = false; });
+      if (same) chosen.push(keys[i]);
+    }
+    chosen.forEach(function (k) {
+      work.walls[k].color = color;
+      if (maze.walls[k]) maze.walls[k].color = color;
+    });
+    return chosen;
+  }
+
+  /** 道すじが謎として成立しているか（1本だけ・差4以上・なぞり返しなし） */
+  function routeIsGood(board, res, needCells) {
+    if (!res || !res.ok || res.count !== 1) return false;
+    if (E.retracesEdge(res.path)) return false;
+    if (E.routeMargin(board, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) return false;
+    if (needCells && uniqueCells(res.path).length < needCells) return false;
+    return true;
+  }
+
+  /* =======================================================================
+   * 組み立て本体
+   * ===================================================================== */
+  function makeOne(rc) {
+    const parts = rc.parts || [];
+    const st = stageParts(parts);
+    const n = stageCount(parts);
+    const color = usesColor(parts);
+    const needMust = parts.indexOf('must-circles') >= 0;
+    const needAvoid = parts.indexOf('avoid-cross') >= 0;
+    const texts = [];
+    for (let i = 0; i < n; i++) texts.push(letters(rc.texts['s' + (i + 1)] || '').join(''));
+
+    /* ---- ① 種の迷路 ---- */
+    const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
+    const minCells = texts[0].length + (color ? 4 : 2);
+    const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
+    if (!s) return null;
+    const maze = s.maze;
+    const work = M.cloneBoard(maze);      // 段の変化を積み上げていく作業用の盤面
+
+    /* ---- ② ○ / × を置いて、1段めの道を決める ---- */
+    let route1 = s.route;
+    if (needAvoid || needMust) {
+      const built = buildConstrainedRoute(maze, work, s.route, needMust, needAvoid, texts[0].length + 2);
+      if (!built) return null;
+      route1 = built;
+    }
+    maze.routes = [M.makeRoute(route1)];
+
+    /* ---- ③ 段を進める ---- */
+    const routes = [route1];
+    const solveOpts = { useMust: needMust, useAvoid: true };
+    const transitions = [];
+    for (let i = 0; i < st.length; i++) {
+      const nextNeed = texts[i + 1].length + 1;
+      let out = null;
+      if (st[i] === 'erase-wall') out = doEraseWall(maze, work, routes[i], STAGE_COLORS[i], solveOpts, nextNeed);
+      if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], STAGE_COLORS[i + 1], solveOpts, nextNeed);
+      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], STAGE_COLORS[i + 1], solveOpts, nextNeed);
+      if (!out) return null;
+      transitions.push(out);
+      routes.push(out.path);
+    }
+
+    /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ---- */
+    for (let i = n - 1; i >= 0; i--) {
+      const c = color ? STAGE_COLORS[i] : 'black';
+      if (!placeOnFree(maze, routes[i], texts[i], c)) return null;
+    }
+
+    /* ---- ⑤ まぎらわしい文字 ---- */
+    if (color) {
+      fillGaps(maze, routes, 'black', 1, poolFrom(texts));
+      const outColors = ['black'].concat(STAGE_COLORS.slice(0, n));
+      scatterOutside(maze, routes, rc, outColors);
+    } else {
+      // 全部読む謎では、道の上に余計な文字を置いてはいけない
+      scatterOutside(maze, routes, rc, ['black']);
+    }
+
+    /* ---- ⑥ STEPを組む ---- */
+    const steps = [];
+    // 記号（○ × ★）は読み上げの対象にしない。
+    // ★はSTARTの目印として道の上に乗るので、入れてしまうと答えに混ざる。
+    const readKinds = ['text', 'number'];
+    for (let i = 0; i < n; i++) {
+      if (i > 0) {
+        const tr = transitions[i - 1];
+        if (tr.kind === 'erase-wall') steps.push(ST.makeStep('remove-walls', { colors: [tr.color] }));
+        if (tr.kind === 'move-start') steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
+        if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: '■', symbolColor: tr.color }));
+      }
+      steps.push(ST.makeStep('solve', { useMust: needMust }));
+      steps.push(ST.makeStep('extract', { kinds: readKinds }));
+      if (color) steps.push(ST.makeStep('filter-color', { mode: 'include', colors: [STAGE_COLORS[i]] }));
+    }
+    steps.push(ST.makeStep('answer', { expected: texts[n - 1] }));
+
+    /* ---- ⑦ 検証を通ったものだけ返す ---- */
+    maze.meta.title = titleOf(parts);
+    maze.meta.instruction = instruction(parts);
+    const results = ST.runSteps(maze, steps);
+    if (ST.finalText(results) !== texts[n - 1]) return null;
+    const checks = ST.validateAll(maze, steps);
+    if (checks.some(function (c) { return c.level !== 'ok'; })) return null;
+
+    return { ok: true, maze: maze, steps: steps, answer: texts[n - 1], checks: checks, stages: n, routes: routes };
+  }
+
+  /** ○ / × を置いて、まっすぐではない道を正解にする */
+  function buildConstrainedRoute(maze, work, route, needMust, needAvoid, needCells) {
+    const inner = route.slice(1, route.length - 1);
+    if (inner.length < 3) return null;
+
+    for (let round = 0; round < 6; round++) {
+      if (!addOneBypass(maze, route)) break;
+      work.walls = M.cloneBoard(maze).walls;
+
+      // ふさぐマスを1つ選ぶ → まわり道が正解になる
+      const spots = shuffle(inner.slice());
+      for (let i = 0; i < spots.length; i++) {
+        const p = spots[i];
+        if (needAvoid) {
+          const el = M.makeElement(p.r, p.c, '×', { role: 'avoid', color: 'black' });
+          maze.elements.push(el);
+          const res = E.solve(maze, { useAvoid: true });
+          if (routeIsGood(maze, res, needCells)) {
+            if (needMust && !addCircles(maze, res.path, route)) {
+              maze.elements = maze.elements.filter(function (x) { return x.id !== el.id; });
+              continue;
+            }
+            const fin = E.solve(maze, { useMust: needMust, useAvoid: true });
+            if (routeIsGood(maze, fin, needCells)) { work.walls = M.cloneBoard(maze).walls; return fin.path; }
+          }
+          maze.elements = maze.elements.filter(function (x) { return x.id !== el.id; });
+        } else {
+          // ○だけのとき：まわり道の上に○を置いて、そちらを通らせる
+          const blocked = M.cloneBoard(maze);
+          blocked.elements.push(M.makeElement(p.r, p.c, '×', { role: 'avoid' }));
+          const alt = E.solve(blocked, { useAvoid: true });
+          if (!alt.ok || E.retracesEdge(alt.path)) continue;
+          if (!addCircles(maze, alt.path, route)) continue;
+          const fin = E.solve(maze, { useMust: true, useAvoid: true });
+          if (fin.ok && fin.count === 1 && !E.retracesEdge(fin.path) &&
+              uniqueCells(fin.path).length >= needCells) {
+            work.walls = M.cloneBoard(maze).walls;
+            return fin.path;
+          }
+          maze.elements = maze.elements.filter(function (x) { return x.role !== 'must'; });
+        }
+      }
     }
     return null;
   }
 
-  /* ---------- ⑥ STARTが変わる2段階 ---------- */
-  register({
-    id: 'move-start', emoji: '⭐', name: 'STARTが変わる2段階',
-    summary: '赤い文字の指示で、赤い★から出発しなおしてもう一度解く',
-    level: 'むずかしい',
-    inputs: [
-      { k: 'msg1', label: '1段めの指示（赤で置く）', example: 'あかいほしからあおをよめ' },
-      { k: 'msg2', label: '2段めのこたえ（青で置く）', example: 'なぞがとけた' }
-    ],
-    instruction: function () {
-      return '① STARTからGOALまで、いちばん短い道を通り、赤い文字だけを読みます。'
-           + '② 書いてあるとおりにしてから、もう一度いちばん短い道を通り、青い文字だけを読むとこたえになります。';
-    },
-    check: function (rc) { return lengthCheck(rc, [rc.texts.msg1, rc.texts.msg2], 6); },
-    make: function (rc) {
-      const msg1 = rc.texts.msg1, msg2 = rc.texts.msg2;
-      const need2 = letters(msg2).length;
-      const s = seed(rc, letters(msg1).length + 3);
-      if (!s) return null;
-      const maze = s.maze;
-      if (!placeOnFree(maze, s.route, msg1, 'red')) return null;
-
-      const onRoute = {};
-      s.route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
-      const goal = maze.goals[0];
-
-      // ★を置ける場所（そこからGOALまでの道が1本だけ・差も十分・文章が載る長さ）
-      const cands = [];
-      for (let r = 0; r < maze.rows; r++) for (let c = 0; c < maze.cols; c++) {
-        if (onRoute[M.cellKey(r, c)]) continue;
-        cands.push({ r: r, c: c });
-      }
-      shuffle(cands);
-      let star = null, route2 = null;
-      for (let i = 0; i < cands.length && i < 40; i++) {
-        const p = cands[i];
-        const res = E.solve(maze, { start: p, goal: { r: goal.r, c: goal.c } });
-        if (!res.ok || res.count !== 1) continue;
-        if (E.routeMargin(maze, res.path).margin < E.MARGIN_GOOD) continue;
-        // ★のマスには★を置くので、文章はそれ以外の空きマスに入る必要がある
-        const free = uniqueCells(res.path).filter(function (q) {
-          if (q.r === p.r && q.c === p.c) return false;
-          return !maze.elements.some(function (e) { return e.r === q.r && e.c === q.c; });
-        });
-        if (free.length < need2) continue;
-        star = p; route2 = res.path; break;
-      }
-      if (!star) return null;
-
-      maze.elements.push(M.makeElement(star.r, star.c, '★', { color: 'red' }));
-      if (!placeOnFree(maze, route2, msg2, 'blue')) return null;
-      fillGaps(maze, [s.route, route2], 'black', 1, poolFrom([msg1, msg2]));
-      scatterOutside(maze, [s.route, route2], rc, ['black', 'red', 'blue']);
-
-      const steps = [
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('filter-color', { mode: 'include', colors: ['red'] }),
-        ST.makeStep('set-start', { symbol: '★', symbolColor: 'red' }),
-        ST.makeStep('solve', {}),
-        ST.makeStep('extract', {}),
-        ST.makeStep('filter-color', { mode: 'include', colors: ['blue'] }),
-        ST.makeStep('answer', { expected: letters(msg2).join('') })
-      ];
-      return finish(maze, steps, letters(msg2).join(''), this, rc);
+  /** まわり道の上（もとの最短からは外れたマス）に○を置く */
+  function addCircles(maze, altPath, baseRoute) {
+    const onBase = {};
+    baseRoute.forEach(function (p) { onBase[M.cellKey(p.r, p.c)] = true; });
+    const cands = uniqueCells(altPath).filter(function (p) {
+      if (onBase[M.cellKey(p.r, p.c)]) return false;
+      return !maze.elements.some(function (e) { return e.r === p.r && e.c === p.c; });
+    });
+    if (cands.length < 2) return false;
+    shuffle(cands);
+    const nC = Math.min(cands.length, 2 + Math.floor(Math.random() * 2));
+    for (let i = 0; i < nC; i++) {
+      maze.elements.push(M.makeElement(cands[i].r, cands[i].c, '○', { role: 'must', color: 'black' }));
     }
-  });
+    return true;
+  }
+
+  /** 線を消して次の段へ */
+  function doEraseWall(maze, work, route, color, solveOpts, needCells) {
+    const sc = pickShortcut(work, route);
+    if (!sc) return null;
+    work.walls[sc.key].disabled = true;
+    const res = E.solve(work, solveOpts);
+    const good = routeIsGood(work, res, needCells);
+    if (!good) { work.walls[sc.key].disabled = false; return null; }
+    work.walls[sc.key].disabled = false;
+    const keys = paintWalls(work, maze, sc.key, res.path, 3, color);
+    keys.forEach(function (k) { work.walls[k].disabled = true; });
+    return { kind: 'erase-wall', color: color, path: res.path, keys: keys };
+  }
+
+  /** STARTを★に変えて次の段へ */
+  function doMoveStart(maze, work, route, color, solveOpts, needCells) {
+    const onRoute = {};
+    route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const goal = work.goals[0];
+    const cands = [];
+    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
+      if (onRoute[M.cellKey(r, c)]) continue;
+      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
+      cands.push({ r: r, c: c });
+    }
+    shuffle(cands);
+    for (let i = 0; i < cands.length && i < 40; i++) {
+      const p = cands[i];
+      const res = E.solve(work, Object.assign({}, solveOpts, { start: p, goal: { r: goal.r, c: goal.c } }));
+      if (!routeIsGood(work, res, needCells + 1)) continue;
+      maze.elements.push(M.makeElement(p.r, p.c, '★', { color: color }));
+      work.elements.push(M.makeElement(p.r, p.c, '★', { color: color }));
+      work.starts = [M.makeStart(p.r, p.c)];
+      return { kind: 'move-start', color: color, path: res.path, star: p };
+    }
+    return null;
+  }
+
+  /** GOALを■に変えて次の段へ */
+  function doMoveGoal(maze, work, route, color, solveOpts, needCells) {
+    const onRoute = {};
+    route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const start = work.starts[0];
+    const cands = [];
+    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
+      if (onRoute[M.cellKey(r, c)]) continue;
+      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
+      cands.push({ r: r, c: c });
+    }
+    shuffle(cands);
+    for (let i = 0; i < cands.length && i < 40; i++) {
+      const p = cands[i];
+      const res = E.solve(work, Object.assign({}, solveOpts, { start: { r: start.r, c: start.c }, goal: p }));
+      if (!routeIsGood(work, res, needCells + 1)) continue;
+      maze.elements.push(M.makeElement(p.r, p.c, '■', { color: color }));
+      work.elements.push(M.makeElement(p.r, p.c, '■', { color: color }));
+      work.goals = [M.makeGoal(p.r, p.c)];
+      return { kind: 'move-goal', color: color, path: res.path, goal: p };
+    }
+    return null;
+  }
+
+  function titleOf(parts) {
+    const n = stageCount(parts);
+    const names = (parts || []).map(function (id) { const p = part(id); return p ? p.name : ''; }).filter(Boolean);
+    if (!names.length) return '迷路謎（最短ルート）';
+    return (n > 1 ? n + '段の迷路謎：' : '迷路謎：') + names.join(' ＋ ');
+  }
+
+  /* =======================================================================
+   * 入口
+   * ===================================================================== */
+  function checkRecipe(rc) {
+    const n = stageCount(rc.parts);
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const t = letters(rc.texts['s' + (i + 1)] || '');
+      if (!t.length) return (n > 1 ? (i + 1) + '段めの' : '') + '文章を入れてください';
+      total += t.length;
+    }
+    const room = rc.rows * rc.cols;
+    if (total + n * 3 > room * 0.55) {
+      return '文章が長すぎます（合計' + total + '文字）。迷路を大きくするか、文章を短くしてください';
+    }
+    return null;
+  }
+
+  function build(recipe) {
+    const rc = defaults(recipe);
+    const bad = checkRecipe(rc);
+    if (bad) return { ok: false, reason: bad };
+    for (let t = 0; t < BUILD_TRIES; t++) {
+      let out = null;
+      try { out = makeOne(rc); } catch (e) { out = null; }
+      if (out) { out.tries = t + 1; return out; }
+    }
+    return { ok: false, reason: 'この組み合わせでは作れませんでした。文章を短くするか、迷路を大きくするか、しかけを減らしてみてください' };
+  }
+
+  /* =======================================================================
+   * 編集画面から使う：ねらった答えになるように置く
+   *   rows = [{ path, color（null なら全部読む）, text }]
+   *   空きマスの少ないルートから先に置く
+   * ===================================================================== */
+  function placeTargets(maze, rows, opts) {
+    opts = opts || {};
+    if (!rows || !rows.length) return { ok: false, reason: '行がありません' };
+    for (let i = 0; i < rows.length; i++) {
+      if (!rows[i].path || rows[i].path.length < 2) return { ok: false, reason: (i + 1) + '行めのルートが取れませんでした' };
+      if (!letters(rows[i].text).length) return { ok: false, reason: (i + 1) + '行めの答えを入れてください' };
+    }
+    // 対象のルート上にある古い文字を片づける（記号やチェックポイントは残す）
+    const onPath = {};
+    rows.forEach(function (r) { uniqueCells(r.path).forEach(function (p) { onPath[M.cellKey(p.r, p.c)] = true; }); });
+    maze.elements = maze.elements.filter(function (e) {
+      if (e.role !== 'none') return true;
+      return !onPath[M.cellKey(e.r, e.c)];
+    });
+
+    const order = rows.map(function (r, i) { return { r: r, i: i, n: uniqueCells(r.path).length }; })
+                      .sort(function (a, b) { return a.n - b.n; });
+    for (let k = 0; k < order.length; k++) {
+      const row = order[k].r;
+      if (!placeOnFree(maze, row.path, row.text, row.color || 'black')) {
+        return { ok: false, reason: (order[k].i + 1) + '行め「' + row.text + '」を置く場所が足りません。迷路を大きくするか、文章を短くしてください' };
+      }
+    }
+    // まぎらわしい文字（「全部読む」の行があるルートには置かない）
+    const allReadPaths = rows.filter(function (r) { return !r.color; }).map(function (r) { return r.path; });
+    const fillable = rows.filter(function (r) { return !!r.color; }).map(function (r) { return r.path; });
+    if (opts.fill !== false && fillable.length) {
+      const blocked = {};
+      allReadPaths.forEach(function (p) { uniqueCells(p).forEach(function (q) { blocked[M.cellKey(q.r, q.c)] = true; }); });
+      const safe = fillable.map(function (p) {
+        return uniqueCells(p).filter(function (q) { return !blocked[M.cellKey(q.r, q.c)]; });
+      });
+      fillGaps(maze, safe, 'black', 1, poolFrom(rows.map(function (r) { return r.text; })));
+    }
+    return { ok: true, placed: rows.length };
+  }
 
   return {
-    register: register, list: list, get: get, build: build,
-    seed: seed, DENSITY: DENSITY, LOOPS: LOOPS, letters: letters,
-    placeOnFree: placeOnFree, fillGaps: fillGaps, scatterOutside: scatterOutside
+    PARTS: PARTS, part: part, stageParts: stageParts, stageCount: stageCount,
+    usesColor: usesColor, defaultText: defaultText, instruction: instruction, titleOf: titleOf,
+    STAGE_COLORS: STAGE_COLORS, MAX_STAGES: MAX_STAGES, DENSITY: DENSITY, LOOPS: LOOPS,
+    build: build, checkRecipe: checkRecipe, seed: seed, letters: letters,
+    placeOnFree: placeOnFree, fillGaps: fillGaps, scatterOutside: scatterOutside,
+    placeTargets: placeTargets, uniqueCells: uniqueCells, colorAdj: colorAdj
   };
 })();
