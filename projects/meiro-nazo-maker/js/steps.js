@@ -75,7 +75,7 @@ MZ.steps = (function () {
         board: ctx.board, path: ctx.path, chars: ctx.chars, text: ctx.text, shape: ctx.shape,
         cells: out.cells || null,
         log: out.log || '', warn: out.warn || null, error: out.error || null,
-        info: out.info || null
+        info: out.info || null, margin: (out.margin === undefined) ? null : out.margin
       });
     });
     return results;
@@ -103,12 +103,28 @@ MZ.steps = (function () {
     if (!maze.starts.length) { ng('STARTが置かれていません'); return out; }
     if (!maze.goals.length) { ng('GOALが置かれていません'); return out; }
 
+    // 盤面に○（必ず通る）が置いてあれば、「正解の道」はそれを通る道のこと
+    const musts = M.cellsWithRole(maze, 'must');
+    const avoids = M.cellsWithRole(maze, 'avoid');
+    const hasMust = musts.length > 0 && musts.length <= MZ.engine.MUST_LIMIT;
+
     const base = MZ.engine.solve(maze, { useAvoid: true });
+    const main = hasMust ? MZ.engine.solve(maze, { useMust: true, useAvoid: true }) : base;
+
     if (!base.ok) { ng(base.reason); }
     else {
       ok('STARTからGOALへ到達できます（最短 ' + base.dist + 'マス）');
-      if (base.multiple) warn('最短ルートが' + (base.capped ? 'たくさん' : base.count + '通り') + '存在します');
-      else ok('最短ルートは1本だけです');
+      if (main.ok && main.multiple) warn('最短ルートが' + (main.capped ? 'たくさん' : main.count + '通り') + '存在します');
+      else if (main.ok) {
+        ok('最短ルートは1本だけです');
+        // 「1本だけ」でも、次に短い道と1〜2マスしか違わないと解く人は迷う
+        // （○を通る条件つきのときは長さの意味が変わるので、この見方はしない）
+        if (!hasMust) {
+          const mg = MZ.engine.routeMargin(maze, main.path).margin;
+          if (mg >= MZ.engine.MARGIN_GOOD) ok(MZ.engine.marginText(mg) + 'ので、見て分かります');
+          else warn('次に短い道との差が ' + mg + 'マス しかありません。解く人が数えないと分かりません（' + MZ.engine.MARGIN_GOOD + 'マス以上あると安心）');
+        }
+      }
     }
 
     /* --- 描いた正解ルート --- */
@@ -118,13 +134,13 @@ MZ.steps = (function () {
       if (!walkable) ng('描いた正解ルートは、今の壁では通れません（「このルートを正解にする」を押してください）');
       else {
         ok('描いた正解ルートは通れます（' + (rt.cells.length - 1) + 'マス）');
-        if (base.ok) {
-          if (rt.cells.length - 1 === base.dist) {
-            if (MZ.engine.samePath(base.path, rt.cells) && !base.multiple) ok('正解ルートは最短です（ほかに同じ長さの道はありません）');
-            else if (base.multiple) warn('正解ルートは最短ですが、同じ長さの別の道もあります');
+        if (main.ok) {
+          if (rt.cells.length - 1 === main.dist) {
+            if (MZ.engine.samePath(main.path, rt.cells) && !main.multiple) ok('正解ルートは最短です（ほかに同じ長さの道はありません）');
+            else if (main.multiple) warn('正解ルートは最短ですが、同じ長さの別の道もあります');
             else warn('同じ長さの別の道が最短として見つかりました');
-          } else if (rt.cells.length - 1 > base.dist) {
-            warn('正解ルートより短い道（' + base.dist + 'マス）があります。プレイヤーはそちらを通ってしまいます');
+          } else if (rt.cells.length - 1 > main.dist) {
+            warn('正解ルートより短い道（' + main.dist + 'マス）があります。プレイヤーはそちらを通ってしまいます');
           }
         }
       }
@@ -133,8 +149,6 @@ MZ.steps = (function () {
     }
 
     /* --- ○を通る / ×を避ける --- */
-    const musts = M.cellsWithRole(maze, 'must');
-    const avoids = M.cellsWithRole(maze, 'avoid');
     if (musts.length) {
       if (musts.length > MZ.engine.MUST_LIMIT) {
         warn('必ず通る○が多すぎます（' + MZ.engine.MUST_LIMIT + '個まで）。順番を決める設定にしてください');

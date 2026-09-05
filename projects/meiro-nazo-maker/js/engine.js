@@ -269,6 +269,92 @@ MZ.engine = (function () {
     };
   }
 
+  /* -----------------------------------------------------------------------
+   * 「次に短い道」との差を測る
+   *
+   * 解く人が「最短はこっちだ」と自信を持てるように、正解ルートと
+   * 2番目に短い道の差（マス数）を出す。差が4以上あれば見て分かる。
+   *
+   * さがし方（ヤンの方法の考え方）
+   *   正解ルートを S=p0 → p1 → … → pn=G とする。
+   *   正解と違う道は、必ずどこか pi で「正解とは別の方向」に分かれる。
+   *   そこで pi ごとに
+   *     ・pi → pi+1 の辺を通れなくする
+   *     ・p0〜pi-1 のマスを通れなくする（同じ所を2回通る「歩き方」を別の道と数えないため）
+   *   として pi から GOAL までの最短を測り、i を足す。その最小が2番目に短い道。
+   *
+   * 一方通行は無視して数える（無視したほうが差は小さく出る＝控えめな見積もり）。
+   * --------------------------------------------------------------------- */
+  function buildUndirectedAdj(board, ctx) {
+    const n = board.rows * board.cols;
+    const adj = new Array(n);
+    for (let i = 0; i < n; i++) adj[i] = [];
+    for (let r = 0; r < board.rows; r++) for (let c = 0; c < board.cols; c++) {
+      if (ctx.blocked[M.cellKey(r, c)]) continue;
+      const i = idxOf(board, r, c);
+      [[0, 1], [1, 0]].forEach(function (d) {
+        const nr = r + d[0], nc = c + d[1];
+        if (!M.inside(board, nr, nc) || ctx.blocked[M.cellKey(nr, nc)]) return;
+        const w = board.walls[M.edgeBetween(r, c, nr, nc)];
+        if (w && !w.disabled) return;
+        const j = idxOf(board, nr, nc);
+        adj[i].push(j); adj[j].push(i);
+      });
+    }
+    return adj;
+  }
+
+  /** src から dst までの最短。banned のマスと、1本の辺は通らない */
+  function bfsBlocked(adj, n, src, dst, banned, skipA, skipB) {
+    const dist = new Int32Array(n).fill(-1);
+    dist[src] = 0;
+    const q = [src]; let h = 0;
+    while (h < q.length) {
+      const u = q[h++];
+      if (u === dst) return dist[u];
+      const list = adj[u];
+      for (let k = 0; k < list.length; k++) {
+        const v = list[k];
+        if (dist[v] !== -1) continue;
+        if (banned[v]) continue;
+        if ((u === skipA && v === skipB) || (u === skipB && v === skipA)) continue;
+        dist[v] = dist[u] + 1;
+        q.push(v);
+      }
+    }
+    return dist[dst];
+  }
+
+  function routeMargin(board, route, opts) {
+    opts = opts || {};
+    if (!route || route.length < 2) return { margin: Infinity, alt: Infinity, d0: 0, weakEdge: null };
+    const n = board.rows * board.cols;
+    const ctx = makeContext(board, { useAvoid: opts.useAvoid !== false, useWarp: false });
+    const adj = buildUndirectedAdj(board, ctx);
+    const goalIdx = idxOf(board, route[route.length - 1].r, route[route.length - 1].c);
+    const d0 = route.length - 1;
+    const banned = new Uint8Array(n);
+    let best = Infinity, weak = null;
+
+    for (let i = 0; i < route.length - 1; i++) {
+      const from = idxOf(board, route[i].r, route[i].c);
+      const to = idxOf(board, route[i + 1].r, route[i + 1].c);
+      const d = bfsBlocked(adj, n, from, goalIdx, banned, from, to);
+      if (d >= 0 && i + d < best) {
+        best = i + d;
+        weak = M.edgeBetween(route[i].r, route[i].c, route[i + 1].r, route[i + 1].c);
+      }
+      banned[from] = 1;
+    }
+    return { margin: best === Infinity ? Infinity : best - d0, alt: best, d0: d0, weakEdge: weak };
+  }
+
+  /** 差を人に見せる文にする */
+  function marginText(m) {
+    if (m === Infinity) return 'ほかに行ける道がないので、まちがえようがありません';
+    return '次に短い道より ' + m + 'マス 短い';
+  }
+
   /** STARTから行けるマスの数（一方通行の詰まり確認用） */
   function reachableCount(board, start, opts) {
     const ctx = makeContext(board, opts || {});
@@ -309,6 +395,7 @@ MZ.engine = (function () {
     canPass: canPass, neighbors: neighbors, makeContext: makeContext,
     solve: solve, bfs: bfs, tracePath: tracePath,
     reachableCount: reachableCount, samePath: samePath, pathIsWalkable: pathIsWalkable,
+    routeMargin: routeMargin, marginText: marginText, MARGIN_GOOD: 4,
     idxOf: idxOf, rcOf: rcOf, MUST_LIMIT: MUST_LIMIT
   };
 })();

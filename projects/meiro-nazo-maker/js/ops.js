@@ -415,10 +415,22 @@ MZ.ops = (function () {
         useMust: p.useMust, ordered: p.ordered, useAvoid: p.useAvoid !== false, useWarp: p.useWarp
       });
       if (!res.ok) return { error: res.reason };
+      // 「次に短い道」との差も見る。差が小さいと解く人が数えないと分からない
+      // （○を全部通る条件つきのときは道の長さの意味が変わるので、この見方はしない）
+      const mg = p.useMust ? null
+        : MZ.engine.routeMargin(ctx.board, res.path, { useAvoid: p.useAvoid !== false }).margin;
+      let warn = null;
+      if (res.multiple) warn = '最短ルートが複数あります';
+      else if (mg !== null && mg < MZ.engine.MARGIN_GOOD) {
+        warn = '次に短い道との差が ' + mg + 'マス しかありません（' + MZ.engine.MARGIN_GOOD + 'マス以上を推奨）';
+      }
       return {
         path: res.path,
-        log: '長さ ' + res.dist + 'マス' + (res.multiple ? '／同じ長さの道が ' + (res.capped ? 'たくさん' : res.count) + '通りあります' : '／道は1本だけ'),
-        warn: res.multiple ? '最短ルートが複数あります' : null,
+        log: '長さ ' + res.dist + 'マス' +
+             (res.multiple ? '／同じ長さの道が ' + (res.capped ? 'たくさん' : res.count) + '通りあります'
+                           : (mg === null ? '／条件どおりの道は1本だけ' : '／' + MZ.engine.marginText(mg))),
+        warn: warn,
+        margin: mg,
         info: res
       };
     }

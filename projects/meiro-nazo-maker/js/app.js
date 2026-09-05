@@ -26,6 +26,7 @@
     results: [],
     checks: [],
     selStep: -1,            // -1 = 設計図（編集できる） / 0以上 = そのSTEPの結果を見ている
+    stepHistory: [],        // STEPの操作だけの「もどす」履歴（迷路の履歴とは別に持つ）
     dummyColors: ['black'],
     player: { index: 0, showAnswer: false, screens: [] },
     openId: null
@@ -50,12 +51,11 @@
       { k: 'colors', t: 'colors', label: '色' }
     ],
     'reorder': [{ k: 'order', t: 'order' }, { k: 'parity', t: 'parity' }],
-    'remove-walls': [{ k: 'colors', t: 'colors', label: '消す線の色' }, { k: 'mode', t: 'delmode' }],
+    'remove-walls': [{ k: 'colors', t: 'colors', label: '消す線の色' }],
     'remove-elements': [
       { k: 'colors', t: 'colors', label: '消す色（選ばなければ色は問わない）' },
       { k: 'kinds', t: 'kinds', label: '消す種類' },
-      { k: 'values', t: 'text', label: 'この文字だけ消す（空ならすべて）' },
-      { k: 'mode', t: 'delmode' }
+      { k: 'values', t: 'text', label: 'この文字だけ消す（空ならすべて）' }
     ],
     'set-start': [
       { k: 'symbol', t: 'text', label: 'この記号をSTARTにする（例：★）' },
@@ -93,9 +93,58 @@
       }
     });
     wire();
-    if (!restoreAuto()) loadSample();
+    restoreAuto();          // 前回のつづきがあれば編集画面に入れておく
     refresh();
-    ED.fit();
+    // 最初に出るのは「かんたん作成」画面（index.html で show 済み）
+  }
+
+  /* 外（かんたん作成画面）から呼ぶための窓口 */
+  MZ.app = {
+    applyBuilt: applyBuilt,
+    showEditor: showEditor,
+    showWizard: showWizard,
+    doPrint: function () { doPrint(); },
+    doPng: function () { doPng(); },
+    setTool: setTool,
+    setStatus: setStatus
+  };
+
+  /** かんたん作成で出来たものを、編集画面の状態として受けとる */
+  function applyBuilt(maze, steps) {
+    ED.replaceMaze(M.normalize(maze));
+    A.maze = ED.getMaze();
+    A.steps = steps;
+    A.stepHistory = [];
+    A.selStep = -1;
+    A.openId = null;
+    ED.state.history = []; ED.state.future = [];
+    ED.clearDisplay();
+    $('#inRows').value = A.maze.rows;
+    $('#inCols').value = A.maze.cols;
+    refresh();
+  }
+
+  function showEditor() {
+    if (MZ.wizard) MZ.wizard.hide();
+    refresh();
+    setTimeout(function () { ED.fit(); }, 30);
+  }
+  function showWizard() {
+    if (MZ.wizard) MZ.wizard.show();
+  }
+
+  /** ツールを外から選ぶ */
+  function setTool(name) {
+    document.querySelectorAll('.tool').forEach(function (x) {
+      x.classList.toggle('on', x.dataset.tool === name);
+    });
+    ED.set('tool', name);
+    if (name === 'route') {
+      $('#ckShowShortest').checked = false;
+      $('#ckShowRoute').checked = true;
+      updateRouteView();
+    }
+    setStatus(TOOL_HINT[name] || '');
   }
 
   /* =======================================================================
@@ -175,21 +224,17 @@
   function wire() {
     // ツール
     document.querySelectorAll('.tool').forEach(function (b) {
-      b.addEventListener('click', function () {
-        document.querySelectorAll('.tool').forEach(function (x) { x.classList.remove('on'); });
-        b.classList.add('on');
-        ED.set('tool', b.dataset.tool);
-        // ルートを描くときは、描いている線が見えないと困るので表示を合わせる
-        if (b.dataset.tool === 'route') {
-          $('#ckShowShortest').checked = false;
-          $('#ckShowRoute').checked = true;
-          updateRouteView();
-        }
-        setStatus(TOOL_HINT[b.dataset.tool] || '');
-      });
+      b.addEventListener('click', function () { setTool(b.dataset.tool); });
     });
     $('#symbolPick').addEventListener('change', function () { ED.set('symbol', this.value); });
-    $('#rolePick').addEventListener('change', function () { ED.set('role', this.value); });
+    $('#rolePick').addEventListener('change', function () {
+      ED.set('role', this.value);
+      // ワープのときだけ「どの組か」を聞く（A・B・C・D。同じ組どうしがつながる）
+      $('#warpGroup').style.display = (this.value === 'warp') ? '' : 'none';
+    });
+    $('#warpGroup').addEventListener('change', function () { ED.set('warpGroup', this.value); });
+    $('#btnHome').addEventListener('click', showWizard);
+    $('#btnUndoStep').addEventListener('click', undoStep);
     $('#btnZoomIn').addEventListener('click', function () { ED.zoom(1.2); });
     $('#btnZoomOut').addEventListener('click', function () { ED.zoom(1 / 1.2); });
     $('#btnFit').addEventListener('click', function () { ED.fit(); });
@@ -349,8 +394,7 @@
     goal: 'マスを押すとGOAL。もう一度押すと消えます（複数置けます）',
     oneway: '壁のない境目を押すと、通れる向きが 片方 → 逆 → なし と切りかわります',
     cellcolor: 'マスに色をつけます。同じ色をもう一度押すと消えます',
-    erase: '壁・文字・記号・START/GOAL を消します',
-    pan: '画面をドラッグして動かせます（指2本でも動かせます）'
+    erase: '壁・文字・記号・START/GOAL を消します。ルートの上を押すと、そこから先のルートを消します'
   };
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, isNaN(v) ? a : v)); }
@@ -371,6 +415,7 @@
     updateRouteView();
     $('#btnUndo').disabled = !ED.canUndo();
     $('#btnRedo').disabled = !ED.canRedo();
+    $('#btnUndoStep').disabled = !A.stepHistory.length;
     $('#answerText').textContent = ST.finalText(A.results) || '—';
     renderFlow();
     saveAuto();
@@ -436,10 +481,11 @@
     const res = G.fromRoute(A.maze, rt.cells, { branchiness: (+$('#inBranch').value) / 100 });
     if (!res.ok) { setStatus('⚠ ' + res.reason); return; }
     A.maze.walls = res.walls;
-    // START / GOAL をルートの両はしに合わせる（置いていなければ自動で置く）
+    // START / GOAL は必ずルートの両はしに置き直す
+    // （別の場所に残っていると「描いた道が最短ではない」ことになってしまう）
     const a = rt.cells[0], b = rt.cells[rt.cells.length - 1];
-    if (!A.maze.starts.length) A.maze.starts = [M.makeStart(a.r, a.c)];
-    if (!A.maze.goals.length) A.maze.goals = [M.makeGoal(b.r, b.c)];
+    A.maze.starts = [M.makeStart(a.r, a.c)];
+    A.maze.goals = [M.makeGoal(b.r, b.c)];
     setStatus((res.unique ? '✓ ' : '⚠ ') + res.message);
     afterEdit();
   }
@@ -549,7 +595,23 @@
   /* =======================================================================
    * STEP
    * ===================================================================== */
+  /** STEPをいじる前に、いまの並びを覚えておく（迷路の「もどす」とは別の履歴） */
+  function pushStepHistory() {
+    A.stepHistory.push(JSON.stringify(A.steps));
+    if (A.stepHistory.length > 50) A.stepHistory.shift();
+  }
+
+  function undoStep() {
+    if (!A.stepHistory.length) { setStatus('もどせるSTEPの変更がありません'); return; }
+    A.steps = JSON.parse(A.stepHistory.pop());
+    A.selStep = -1;
+    ED.clearDisplay();
+    refresh();
+    setStatus('STEPをひとつ前にもどしました（迷路は変わっていません）');
+  }
+
   function addStep(type, params, quiet) {
+    pushStepHistory();
     const st = ST.makeStep(type, params);
     A.steps.push(st);
     if (!quiet) { A.selStep = A.steps.length - 1; refresh(); showStepBoard(A.selStep); }
@@ -587,10 +649,14 @@
         mini.appendChild(mkBtn('↑', function () { moveStep(i, -1); }));
         mini.appendChild(mkBtn('↓', function () { moveStep(i, 1); }));
         mini.appendChild(mkBtn('複製', function () {
+          pushStepHistory();
           A.steps.splice(i + 1, 0, ST.makeStep(st.type, JSON.parse(JSON.stringify(st.params))));
           A.selStep = i + 1; refresh();
         }));
-        const del = mkBtn('消す', function () { A.steps.splice(i, 1); A.selStep = -1; refresh(); ED.clearDisplay(); });
+        const del = mkBtn('消す', function () {
+          pushStepHistory();
+          A.steps.splice(i, 1); A.selStep = -1; refresh(); ED.clearDisplay();
+        });
         del.className = 'danger';
         mini.appendChild(del);
         body.appendChild(mini);
@@ -605,6 +671,7 @@
   function moveStep(i, d) {
     const j = i + d;
     if (j < 0 || j >= A.steps.length) return;
+    pushStepHistory();
     const t = A.steps[i]; A.steps[i] = A.steps[j]; A.steps[j] = t;
     A.selStep = j; refresh(); showStepBoard(j);
   }
@@ -629,7 +696,12 @@
     }
     fields.forEach(function (f) {
       const row = el('div', 'row');
-      const upd = function (v) { st.params[f.k] = v; refresh(); if (A.selStep >= 0) showStepBoard(A.selStep); };
+      const upd = function (v) {
+        pushStepHistory();
+        st.params[f.k] = v;
+        refresh();
+        if (A.selStep >= 0) showStepBoard(A.selStep);
+      };
 
       if (f.t === 'check') {
         const lb = el('label');
@@ -860,6 +932,11 @@
     pages.forEach(function (sc, i) {
       const page = el('div', 'sheet-page');
       page.appendChild(el('h2', '', (A.maze.meta.title || '迷路謎') + '　' + sc.title));
+      // 問題用紙には「解く人がやること」を必ず刷る。これが無いと解きようがない
+      if (i === 0 && A.maze.meta.instruction) {
+        const inst = el('p', 'print-inst', A.maze.meta.instruction);
+        page.appendChild(inst);
+      }
       const o = printOpts(false);
       o.routePath = null;
       const img = document.createElement('img');
@@ -942,6 +1019,7 @@
       return st;
     });
     A.selStep = -1;
+    A.stepHistory = [];
     ED.clearDisplay();
     $('#inRows').value = A.maze.rows;
     $('#inCols').value = A.maze.cols;
@@ -1028,84 +1106,6 @@
     };
     rd.readAsText(f);
     e.target.value = '';
-  }
-
-  /* =======================================================================
-   * はじめて開いたときの見本
-   *   このツールが何をするものかを、動く形で見てもらうため
-   * ===================================================================== */
-  function loadSample() {
-    const maze = A.maze;
-    M.resize(maze, 10, 10);
-    // ぐねぐねした一本道
-    const cells = [];
-    let r = 0, c = 0;
-    cells.push({ r: r, c: c });
-    const legs = [[0, 1, 9], [1, 0, 3], [0, -1, 9], [1, 0, 3], [0, 1, 9]];
-    legs.forEach(function (lg) {
-      for (let i = 0; i < lg[2]; i++) { r += lg[0]; c += lg[1]; cells.push({ r: r, c: c }); }
-    });
-    maze.routes = [M.makeRoute(cells)];
-    const gen = G.fromRoute(maze, cells, { branchiness: 0.12 });
-    maze.walls = gen.walls;
-    maze.starts = [M.makeStart(cells[0].r, cells[0].c)];
-    maze.goals = [M.makeGoal(cells[cells.length - 1].r, cells[cells.length - 1].c)];
-
-    // 1つめのメッセージを赤で置く
-    O.autoPlaceText(maze, cells, 'あかいせんをけせ', { mode: 'even', color: 'red' });
-
-    // 赤い線を消すと「近道ができて、しかもその近道が1本だけ」になるように壁をえらぶ
-    // （近道が何通りもあると、2段階目が「どの道が正解か分からない」謎になってしまう）
-    const dist0 = E.solve(maze, {}).dist;
-    const keys = Object.keys(maze.walls).filter(function (k) { return !M.isBorderKey(maze, k); });
-    for (let i = keys.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = keys[i]; keys[i] = keys[j]; keys[j] = t; }
-    const reds = [];
-    let bestDist = dist0;
-    const setDisabled = function (list, v) { list.forEach(function (k) { maze.walls[k].disabled = v; }); };
-    for (let i = 0; i < keys.length && reds.length < 6; i++) {
-      const cand = reds.concat([keys[i]]);
-      setDisabled(cand, true);
-      const res = E.solve(maze, {});
-      setDisabled(cand, false);          // 判定のあとは必ずもどす（設計図は無傷のまま保つ）
-      if (res.ok && res.dist < bestDist && res.count === 1) {
-        reds.push(keys[i]);
-        bestDist = res.dist;
-      }
-    }
-    reds.forEach(function (k) { maze.walls[k].color = 'red'; });
-
-    // 近道ができたときの新しい最短ルートを調べて、そこに2つめのメッセージを置く
-    const probe = M.cloneBoard(maze);
-    Object.keys(probe.walls).forEach(function (k) { if (probe.walls[k].color === 'red') probe.walls[k].disabled = true; });
-    const s2 = E.solve(probe, {});
-    if (s2.ok) {
-      const used = {};
-      maze.elements.forEach(function (e) { used[M.cellKey(e.r, e.c)] = true; });
-      const free = [];
-      s2.path.forEach(function (p, i) { if (!used[M.cellKey(p.r, p.c)]) free.push(i); });
-      const msg2 = Array.from('よくできました');
-      if (free.length >= msg2.length) {
-        const picked = [];
-        for (let i = 0; i < msg2.length; i++) picked.push(free[Math.round(i * (free.length - 1) / (msg2.length - 1))]);
-        O.autoPlaceText(maze, s2.path, msg2.join(''), { mode: 'picked', pickedIndices: picked, color: 'yellow', overwrite: false });
-      }
-    }
-    // まわりにダミーをまく
-    O.scatterDummies(maze, null, { density: 0.45, colors: ['black', 'blue'] });
-
-    A.steps = [
-      ST.makeStep('solve', {}),
-      ST.makeStep('extract', {}),
-      ST.makeStep('filter-color', { mode: 'include', colors: ['red'] }),
-      ST.makeStep('remove-walls', { colors: ['red'], mode: 'disable' }),
-      ST.makeStep('solve', {}),
-      ST.makeStep('extract', {}),
-      ST.makeStep('filter-color', { mode: 'include', colors: ['yellow'] }),
-      ST.makeStep('answer', {})
-    ];
-    maze.meta.title = '見本：2段階の迷路謎';
-    $('#inPhrase').value = 'あかいせんをけせ';
-    setStatus('見本を読みこみました。左のSTEPを押すと、盤面がどう変わるか見られます');
   }
 
   /* ===================================================================== */

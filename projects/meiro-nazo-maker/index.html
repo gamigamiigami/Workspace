@@ -167,6 +167,45 @@
                      object-fit: contain; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
   .player-note { max-width: 720px; margin: 12px auto; text-align: left; font-size: 14px; color: #374151; }
 
+  /* ===== かんたん作成画面（最初に出る画面） ===== */
+  #wizardView { position: fixed; inset: 0; z-index: 50; background: #eef1f5; overflow: auto; display: none; }
+  #wizardView.show { display: block; }
+  #app { display: none; }
+  #app.show { display: flex; }
+  .wiz-wrap { max-width: 920px; margin: 0 auto; padding: 14px; }
+  .wiz-step { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .wiz-step h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; color: #22272e; margin-bottom: 12px; letter-spacing: 0; }
+  .wiz-step h2 .no {
+    width: 28px; height: 28px; border-radius: 50%; background: #1c7ed6; color: #fff;
+    display: grid; place-items: center; font-size: 15px; flex: none;
+  }
+  .wiz-step.off { opacity: .45; }
+  .pack-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+  .pack { text-align: left; padding: 13px; border: 2px solid #e5e9ef; border-radius: 12px; background: #fff; display: block; min-height: 44px; }
+  .pack:hover { background: #f7fafd; }
+  .pack.on { border-color: #1c7ed6; background: #f0f7ff; }
+  .pack .em { font-size: 25px; line-height: 1; }
+  .pack .nm { font-weight: 700; margin-top: 6px; font-size: 15px; }
+  .pack .sm { font-size: 12.5px; color: #6b7280; margin-top: 4px; line-height: 1.5; }
+  .pack .lv { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #eef1f5; color: #4b5563; margin-top: 8px; }
+  .wiz-field { margin-bottom: 12px; }
+  .wiz-field > label { display: block; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .wiz-field .ex { font-size: 12px; color: #6b7280; margin-top: 3px; }
+  .big-primary { width: 100%; min-height: 58px; font-size: 18px; font-weight: 700; background: #2f9e44; color: #fff; border-color: #2f9e44; }
+  .big-primary:hover { background: #2b8a3e; }
+  .wiz-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
+  .wiz-card { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; text-align: center; }
+  .wiz-card h3 { font-size: 13px; color: #4b5563; margin-bottom: 6px; }
+  .wiz-card img { max-width: 100%; height: auto; }
+  .wiz-answer { margin-top: 12px; background: #f1f8f3; border: 1px solid #c8e6cf; border-radius: 10px; padding: 12px; font-size: 14px; }
+  .wiz-answer b { font-size: 19px; letter-spacing: .08em; word-break: break-all; }
+  .wiz-inst { margin-top: 10px; background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #374151; }
+  .wiz-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .wiz-actions button { flex: 1; min-width: 132px; }
+  .wiz-note { font-size: 13px; color: #7c5a00; background: #fffbea; border: 1px solid #ffe8a3; border-radius: 10px; padding: 10px; margin-top: 10px; }
+  .wiz-more { margin-top: 6px; }
+  .wiz-more .body { padding-top: 6px; }
+
   /* ===== 印刷 ===== */
   #printArea { display: none; }
   #printArea img { max-width: 100%; }
@@ -177,9 +216,17 @@
     #printArea .sheet-page { page-break-after: always; text-align: center; }
     #printArea .sheet-page:last-child { page-break-after: auto; }
     #printArea h2 { font-size: 16px; margin-bottom: 8px; text-align: left; }
+    #printArea .print-inst {
+      text-align: left; font-size: 13px; line-height: 1.7; margin-bottom: 10px;
+      border: 1px solid #999; border-radius: 6px; padding: 8px 10px;
+    }
   }
 
   /* ===== せまい画面（iPad縦持ち・スマホ） ===== */
+  @media (max-width: 700px) {
+    .wiz-preview { grid-template-columns: 1fr; }
+  }
+
   @media (max-width: 900px) {
     .panetabs { display: flex; }
     .layout { grid-template-columns: 1fr; padding: 6px; }
@@ -187,11 +234,82 @@
     .pane.show { display: block; }
     .pane-canvas.show { display: flex; }
     .brand small { display: none; }
-    .topbar button { font-size: 13px; padding: 6px 8px; }
+    /* 指で押すので、せまい画面でも高さは44px以上を保つ */
+    .topbar button { font-size: 13px; padding: 6px 10px; min-height: 44px; }
   }
 </style>
 </head>
 <body>
+
+<!-- ===== かんたん作成（最初に出る画面） ===== -->
+<div id="wizardView" class="show">
+  <header class="topbar">
+    <div class="brand">🧩 迷路謎メーカー<small>かんたん作成</small></div>
+    <div class="top-actions">
+      <button id="btnWizHelp">？ 使い方</button>
+      <button id="btnToEditor">✏️ くわしく直す</button>
+    </div>
+  </header>
+
+  <div class="wiz-wrap">
+    <section class="wiz-step" id="wizStep1">
+      <h2><span class="no">1</span> どんな謎にしますか？</h2>
+      <div class="pack-grid" id="packGrid"></div>
+    </section>
+
+    <section class="wiz-step off" id="wizStep2">
+      <h2><span class="no">2</span> こたえになる文章を入れる</h2>
+      <div id="packInputs"><p class="hint">まず上で謎をえらんでください。</p></div>
+      <details class="wiz-more">
+        <summary>もっと細かく決める（ふつうはそのままでOK）</summary>
+        <div class="body">
+          <div class="row">
+            <label style="flex:1">迷路の大きさ
+              <select id="wizSize">
+                <option value="10">小さめ（10×10）</option>
+                <option value="12" selected>ふつう（12×12）</option>
+                <option value="14">大きめ（14×14）</option>
+                <option value="16">とても大きい（16×16）</option>
+              </select>
+            </label>
+            <label style="flex:1">まわりの文字の量
+              <select id="wizDensity">
+                <option value="few">少なめ（見やすい）</option>
+                <option value="normal" selected>ふつう</option>
+                <option value="many">多め（むずかしい）</option>
+              </select>
+            </label>
+          </div>
+          <div class="row" style="margin-top:8px">
+            <label style="flex:1">STARTとGOALの場所
+              <select id="wizSG">
+                <option value="corners" selected>左上から右下へ</option>
+                <option value="auto">おまかせ</option>
+              </select>
+            </label>
+            <label style="flex:1">わき道（ぐるっと回れる道）
+              <select id="wizLoops">
+                <option value="none" selected>なし（道が1本しかない）</option>
+                <option value="some">少し</option>
+                <option value="many">多め</option>
+              </select>
+            </label>
+          </div>
+          <p class="hint" style="margin-top:8px">
+            「わき道なし」だと、行き止まりはあってもぐるっと回れる道はできません。
+            解く人が「最短はこっちだ」と迷わずに決められます。
+          </p>
+        </div>
+      </details>
+    </section>
+
+    <section class="wiz-step off" id="wizStep3">
+      <h2><span class="no">3</span> 作る</h2>
+      <button id="btnGenerate" class="big-primary" disabled>✨ 自動で作る</button>
+      <div id="wizResult"></div>
+    </section>
+  </div>
+</div>
 
 <div id="app">
 
@@ -199,8 +317,9 @@
   <header class="topbar">
     <div class="brand">🧩 迷路謎メーカー<small>解き方から迷路を作る</small></div>
     <div class="top-actions">
-      <button id="btnUndo" title="もとにもどす（Ctrl+Z）">↶ もどす</button>
-      <button id="btnRedo" title="やりなおす（Ctrl+Y）">↷ すすむ</button>
+      <button id="btnHome">🏠 かんたん作成</button>
+      <button id="btnUndo" title="迷路の変更をもとにもどす（Ctrl+Z）">↶ 迷路をもどす</button>
+      <button id="btnRedo" title="迷路の変更をやりなおす（Ctrl+Y）">↷ 迷路をすすむ</button>
       <button id="btnPlay" class="primary">▶ 解いてみる</button>
       <button id="btnPrint">🖨 印刷</button>
       <button id="btnPng">🖼 画像で保存</button>
@@ -231,7 +350,10 @@
       </div>
       <div class="row" style="margin-top:6px">
         <button id="btnAddStep" style="flex:1">＋ STEPを足す</button>
-        <button id="btnViewMaze" title="編集できる設計図にもどる">設計図にもどる</button>
+        <button id="btnUndoStep" title="STEPの追加・削除・設定をもとにもどす">↶ STEPをもどす</button>
+      </div>
+      <div class="row" style="margin-top:6px">
+        <button id="btnViewMaze" style="flex:1" title="編集できる設計図にもどる">設計図にもどる</button>
       </div>
       <div class="answer-box">
         最後に出てくる文字：<br><b id="answerText">—</b>
@@ -252,7 +374,6 @@
         <button class="tool" data-tool="oneway"><span class="ic">➜</span>一方通行</button>
         <button class="tool" data-tool="cellcolor"><span class="ic">▨</span>マスの色</button>
         <button class="tool" data-tool="erase"><span class="ic">🧽</span>けす</button>
-        <button class="tool" data-tool="pan"><span class="ic">✋</span>うごかす</button>
         <span class="sep"></span>
         <span class="swatches" id="swatches"></span>
         <span class="sep"></span>
@@ -262,6 +383,10 @@
           <option value="must">必ず通る（○）</option>
           <option value="avoid">通らない（×）</option>
           <option value="warp">ワープ</option>
+        </select>
+        <select id="warpGroup" style="width:96px; display:none" title="ワープの組（同じ組どうしがつながります）">
+          <option value="A">A組</option><option value="B">B組</option>
+          <option value="C">C組</option><option value="D">D組</option>
         </select>
         <span class="sep"></span>
         <button id="btnZoomOut" title="小さく">－</button>
@@ -279,7 +404,7 @@
     <!-- ===== 右：設定 ===== -->
     <aside class="pane" id="paneSide">
 
-      <details open>
+      <details>
         <summary>① 盤面</summary>
         <div class="body">
           <div class="row">
@@ -307,7 +432,7 @@
             すでに通ったマスをもう一度押すと、そこから先を描き直せます。
           </p>
           <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
-          <button id="btnMakeMaze" class="primary">このルートを正解にする（迷路を作る）</button>
+          <button id="btnMakeMaze" class="primary">このルートが最短になる迷路を作る</button>
           <div class="row">
             <label style="flex:1">わき道の多さ
               <input type="range" id="inBranch" min="0" max="40" value="12" style="width:100%">
@@ -326,7 +451,7 @@
         </div>
       </details>
 
-      <details open>
+      <details>
         <summary>③ 文字を置く</summary>
         <div class="body">
           <label>ルートの上に置く文章
@@ -345,7 +470,7 @@
           <hr style="border:none;border-top:1px dashed #e5e9ef">
           <label>ダミー文字をまく（これが無いと答えが丸見えになります）</label>
           <div class="row">
-            <label style="flex:1">こさ <input type="range" id="inDensity" min="0" max="100" value="55" style="width:100%"></label>
+            <label style="flex:1">こさ <input type="range" id="inDensity" min="0" max="100" value="42" style="width:100%"></label>
           </div>
           <div class="row">
             <select id="inDummyPool" style="flex:1">
@@ -497,21 +622,37 @@
     <h3>使い方（はじめての方へ）</h3>
     <div class="hint" style="font-size:14px;color:#374151">
       <p><b>このツールは「迷路を作る道具」ではなく「謎のしくみを作る道具」です。</b>
-      ふつうの迷路メーカーと順番が逆で、先に答えの道を決めます。</p>
-      <ol style="margin:10px 0 10px 18px; display:flex; flex-direction:column; gap:6px">
-        <li>ツールバーの<b>「ルート」</b>で、通してほしい道を指でなぞる</li>
-        <li>右の<b>「このルートを正解にする」</b>を押す → その道が答えになる迷路ができる</li>
-        <li>右の<b>「文字を置く」</b>で文章を入れて、ルートの上に自動で並べる</li>
-        <li><b>「ダミーをまく」</b>で、まわりにまぎらわしい文字をちらす</li>
-        <li>左の<b>STEP</b>を足して、「赤だけ読む」「赤い線を消す」…と つなげていく</li>
-        <li>右の<b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
+      条件を先に決めると、その条件を全部みたす迷路のほうを自動で作ります。</p>
+
+      <p style="margin-top:10px"><b>いちばんかんたんな使い方（3ステップ）</b></p>
+      <ol style="margin:6px 0 10px 18px; display:flex; flex-direction:column; gap:6px">
+        <li><b>どんな謎にするか</b>をカードから選ぶ</li>
+        <li><b>こたえになる文章</b>を入れる（例：あかいもじをよめ）</li>
+        <li><b>「✨ 自動で作る」</b>を押す → 印刷する</li>
       </ol>
-      <p><b>覚えておくと便利</b></p>
+      <p>できあがった迷路は、かならず次の条件を満たしています。</p>
       <ul style="margin:6px 0 10px 18px">
-        <li>もどす＝Ctrl+Z ／ すすむ＝Ctrl+Y ／ 消す＝Delete ／ 複製＝Ctrl+D</li>
-        <li>文字は「もじ」ツールでマスを押すとその場で打てます。Enterで右へ進みます</li>
-        <li>指2本で拡大・移動できます</li>
-        <li>STEPを押すと「その時点の盤面」が見られます。編集は「設計図にもどる」から</li>
+        <li>STARTからGOALへの道は<b>1本だけ</b>（または次に短い道と4マス以上ちがう）</li>
+        <li>入れた文章が、そのとおりに読める</li>
+        <li>2段階の謎なら、指示どおりにすると本当に道が変わる</li>
+      </ul>
+
+      <p style="margin-top:10px"><b>くわしく直したいとき</b></p>
+      <ul style="margin:6px 0 10px 18px">
+        <li>右上の<b>「✏️ くわしく直す」</b>で編集画面に移ります</li>
+        <li><b>「ルート」</b>で道をなぞり、<b>「このルートが最短になる迷路を作る」</b>を押すと、その道が正解の迷路ができます</li>
+        <li>左のSTEPを押すと「その時点の盤面」が見られます</li>
+        <li>右の<b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
+        <li>右上の<b>「🏠 かんたん作成」</b>でいつでも戻れます</li>
+      </ul>
+
+      <p style="margin-top:10px"><b>覚えておくと便利</b></p>
+      <ul style="margin:6px 0 10px 18px">
+        <li><b>迷路をもどす</b>＝Ctrl+Z／<b>STEPをもどす</b>は左のボタン（別々です）</li>
+        <li>消す＝Delete ／ 複製＝Ctrl+D</li>
+        <li>文字は「もじ」でマスを押すとその場で打てます。Enterで右へ進みます</li>
+        <li>文字や記号は「えらぶ」でドラッグして動かします</li>
+        <li>画面じたいを動かすときは、<b>指2本</b>か<b>盤の外側をドラッグ</b></li>
       </ul>
     </div>
     <div class="foot"><button id="btnHelpClose" class="primary">とじる</button></div>
@@ -527,7 +668,9 @@
 <script src="js/render.js"></script>
 <script src="js/ops.js"></script>
 <script src="js/steps.js"></script>
+<script src="js/packages.js"></script>
 <script src="js/editor.js"></script>
 <script src="js/app.js"></script>
+<script src="js/wizard.js"></script>
 </body>
 </html>
