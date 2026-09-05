@@ -29,7 +29,7 @@ MZ.packages = (function () {
   const STAGE_COLORS = ['red', 'blue', 'green', 'purple'];
   const MAX_STAGES = STAGE_COLORS.length;
 
-  const BUILD_TRIES = 40;
+  const BUILD_TRIES = 60;
   const CORNER_TRIES = 20;
 
   /** 色を「あかい」「みどりの」のような言い方にする */
@@ -48,7 +48,7 @@ MZ.packages = (function () {
   const PARTS = [
     {
       id: 'read-color', kind: 'read', emoji: '🔴', name: '色でしぼって読む',
-      summary: '通った道の「赤い文字だけ」を読みます。2段以上のときは自動でこうなります',
+      summary: '通った道の「赤い文字だけ」を読みます。2回えらぶと 赤→青 と読み直す段が増えます',
       level: 'ふつう'
     },
     {
@@ -72,18 +72,58 @@ MZ.packages = (function () {
       level: 'むずかしい'
     },
     {
-      id: 'move-goal', kind: 'stage', emoji: '🔷', name: 'GOALが変わって次の段へ',
-      summary: '読んだ指示どおりに■を新しいGOALにして、もう一度解きます',
+      id: 'move-goal', kind: 'stage', emoji: '🎯', name: 'GOALが変わって次の段へ',
+      summary: '読んだ指示どおりに☆を新しいGOALにして、もう一度解きます',
       level: 'むずかしい'
     }
   ];
 
   function part(id) { return PARTS.filter(function (p) { return p.id === id; })[0]; }
+
+  /**
+   * 選んだ部品を「段のつなぎ方」の並びに変える。
+   * 同じ部品を何回でも選べる。
+   *   ・段を足す部品は、選んだ回数だけ段が増える
+   *   ・「色でしぼって読む」は、2回目からが段になる（同じ道を色を変えて読み直す）
+   *   ・STARTを変える と GOALを変える がとなり合っていたら、1つにまとめて「ほしからほしへ」にする
+   */
   function stageParts(parts) {
-    return (parts || []).filter(function (id) { const p = part(id); return p && p.kind === 'stage'; });
+    const raw = [];
+    let colorSeen = 0;
+    (parts || []).forEach(function (id) {
+      const p = part(id);
+      if (!p) return;
+      if (p.kind === 'stage') raw.push(id);
+      else if (id === 'read-color') { colorSeen++; if (colorSeen > 1) raw.push('next-color'); }
+    });
+    // となり合った START変更 と GOAL変更 は1つにまとめる
+    const out = [];
+    for (let i = 0; i < raw.length; i++) {
+      const a = raw[i], b = raw[i + 1];
+      if ((a === 'move-start' && b === 'move-goal') || (a === 'move-goal' && b === 'move-start')) {
+        out.push('move-both'); i++;
+      } else out.push(a);
+    }
+    return out.slice(0, MAX_STAGES - 1);
   }
   function stageCount(parts) { return Math.min(MAX_STAGES, stageParts(parts).length + 1); }
   function usesColor(parts) { return (parts || []).indexOf('read-color') >= 0 || stageCount(parts) > 1; }
+
+  /** その部品をあと何個えらべるか */
+  function canAdd(parts, id) {
+    const p = part(id);
+    if (!p) return false;
+    if (p.kind === 'solve') return (parts || []).indexOf(id) < 0;        // ○・×は1回だけ
+    if (stageCount(parts) >= MAX_STAGES) {
+      // 段が上限。ただし「色でしぼって読む」の1個目は段を増やさないので足せる
+      if (id === 'read-color' && (parts || []).indexOf('read-color') < 0) return true;
+      return false;
+    }
+    return true;
+  }
+  function countOf(parts, id) {
+    return (parts || []).filter(function (x) { return x === id; }).length;
+  }
 
   /** その段の文章の、はじめから入れておく例 */
   function defaultText(parts, i) {
@@ -92,8 +132,10 @@ MZ.packages = (function () {
     if (i === n - 1) return 'なぞがとけた';
     const kind = st[i];
     if (kind === 'erase-wall') return colorAdj(STAGE_COLORS[i]) + 'せんをけせ';
-    if (kind === 'move-start') return colorAdj(STAGE_COLORS[i + 1]) + 'ほしからよめ';
-    if (kind === 'move-goal') return colorAdj(STAGE_COLORS[i + 1]) + 'しかくがごーる';
+    if (kind === 'move-start') return 'ほしからやりなおし';
+    if (kind === 'move-goal') return 'ほしまでいけ';
+    if (kind === 'move-both') return 'ほしからほしへ';
+    if (kind === 'next-color') return colorAdj(STAGE_COLORS[i + 1]) + 'もじだけよめ';
     return 'つぎへすすめ';
   }
 
@@ -111,13 +153,20 @@ MZ.packages = (function () {
     for (let i = 0; i < n; i++) {
       const head = (n > 1 ? '（' + (i + 1) + '） ' : '');
       const read = color ? colorLabel(STAGE_COLORS[i]) + 'い文字だけ' : '通ったマスの文字を';
-      const from = (i === 0) ? 'STARTから' : '新しいSTARTから';
+      const prev = (i > 0) ? st[i - 1] : null;
+      const from = (i === 0) ? 'STARTから'
+        : (prev === 'next-color') ? '同じ道をもう一度たどり、'
+        : (prev === 'move-goal') ? 'STARTから新しいGOALまで'
+        : '新しいSTARTから';
       lines.push(head + from + how + 'GOALまでいちばん短く進み、' +
                  (color ? '通った道の' + colorLabel(STAGE_COLORS[i]) + '色の文字だけ' : '通ったマスの文字') +
                  'を順に読みます。');
+      const nc = colorAdj(STAGE_COLORS[i + 1]);
       if (st[i] === 'erase-wall') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i]) + '線を消してください。');
-      if (st[i] === 'move-start') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i + 1]) + '★から出発しなおしてください。');
-      if (st[i] === 'move-goal') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i + 1]) + '■を新しいGOALにしてください。');
+      if (st[i] === 'move-start') lines.push('　→ 読めた指示どおりに、' + nc + '★から出発しなおしてください。');
+      if (st[i] === 'move-goal') lines.push('　→ 読めた指示どおりに、' + nc + '☆を新しいGOALにしてください。');
+      if (st[i] === 'move-both') lines.push('　→ 読めた指示どおりに、' + nc + '★から ' + nc + '☆まで進みなおしてください。');
+      if (st[i] === 'next-color') lines.push('　→ 同じ道をもう一度たどり、今度は' + colorLabel(STAGE_COLORS[i + 1]) + '色の文字だけを読みます。');
     }
     lines.push('最後に読めた言葉がこたえです。');
     lines.push('※ 同じ通路を行って戻ることはありません（交差はします）。');
@@ -323,7 +372,10 @@ MZ.packages = (function () {
    * 「消すと近道になる壁」をさがす。
    * 道の上でとなり合っているのに、道づたいだと遠い2マスのあいだの壁がそれにあたる。
    */
-  function pickShortcut(maze, route) {
+  function pickShortcut(maze, route) { const l = listShortcuts(maze, route); return l.length ? pick(l.slice(0, 3)) : null; }
+
+  /** 「消すと近道になる壁」を、良い順に全部あつめる */
+  function listShortcuts(maze, route) {
     const at = {};
     route.forEach(function (p, i) { at[M.cellKey(p.r, p.c)] = i; });
     const found = [];
@@ -335,20 +387,20 @@ MZ.packages = (function () {
         const j = at[M.cellKey(nr, nc)];
         if (j === undefined || j - i < E.MARGIN_GOOD + 1) return;
         const key = M.edgeBetween(p.r, p.c, nr, nc);
-        if (!maze.walls[key]) return;
+        // すでに無い壁・すでに消してある壁は、消しても何も起きない
+        if (!maze.walls[key] || maze.walls[key].disabled) return;
         found.push({ key: key, gain: (j - i) - 1 });
       });
     });
-    if (!found.length) return null;
     found.sort(function (a, b) { return b.gain - a.gain; });
-    return pick(found.slice(0, Math.min(3, found.length)));
+    return found;
   }
 
   /** 本命の線に、消しても答えが変わらない「おとりの線」を足す */
   function paintWalls(work, maze, realKey, expectPath, decoys, color) {
     const chosen = [realKey];
     const keys = shuffle(Object.keys(work.walls).filter(function (k) {
-      return k !== realKey && !M.isBorderKey(work, k);
+      return k !== realKey && !M.isBorderKey(work, k) && !work.walls[k].disabled;
     }));
     for (let i = 0; i < keys.length && chosen.length < 1 + decoys; i++) {
       const cand = chosen.concat([keys[i]]);
@@ -390,7 +442,11 @@ MZ.packages = (function () {
 
     /* ---- ① 種の迷路 ---- */
     const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
-    const minCells = texts[0].length + (color ? 4 : 2);
+    let need0 = texts[0].length;
+    for (let j = 0; j < st.length && st[j] === 'next-color'; j++) need0 += texts[j + 1].length;
+    // 「線を消して近道を作る」段は、道が長いほど作りやすい（近道になる壁が増える）
+    const eraseCount = st.filter(function (k) { return k === 'erase-wall'; }).length;
+    const minCells = need0 + (color ? 4 : 2) + eraseCount * 6;
     const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
     if (!s) return null;
     const maze = s.maze;
@@ -410,11 +466,21 @@ MZ.packages = (function () {
     const solveOpts = { useMust: needMust, useAvoid: true };
     const transitions = [];
     for (let i = 0; i < st.length; i++) {
-      const nextNeed = texts[i + 1].length + 1;
+      // その段のあとに「色を変えて読み直す」段が続くなら、同じ道に文字がもっと要る
+      let nextNeed = texts[i + 1].length;
+      for (let j = i + 1; j < st.length && st[j] === 'next-color'; j++) nextNeed += texts[j + 1].length;
+      nextNeed += 1;
+
+      const nc = STAGE_COLORS[i + 1];
       let out = null;
       if (st[i] === 'erase-wall') out = doEraseWall(maze, work, routes[i], STAGE_COLORS[i], solveOpts, nextNeed);
-      if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], STAGE_COLORS[i + 1], solveOpts, nextNeed);
-      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], STAGE_COLORS[i + 1], solveOpts, nextNeed);
+      if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], nc, solveOpts, nextNeed);
+      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], nc, solveOpts, nextNeed);
+      if (st[i] === 'move-both') out = doMoveBoth(maze, work, routes[i], nc, solveOpts, nextNeed);
+      if (st[i] === 'next-color') {
+        // 盤面は変えない。同じ道を、次の色でもう一度読むだけ
+        out = { kind: 'next-color', color: nc, path: routes[i] };
+      }
       if (!out) return null;
       transitions.push(out);
       routes.push(out.path);
@@ -446,7 +512,12 @@ MZ.packages = (function () {
         const tr = transitions[i - 1];
         if (tr.kind === 'erase-wall') steps.push(ST.makeStep('remove-walls', { colors: [tr.color] }));
         if (tr.kind === 'move-start') steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
-        if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: '■', symbolColor: tr.color }));
+        if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
+        if (tr.kind === 'move-both') {
+          steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
+          steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
+        }
+        // next-color は盤面を変えないので、変換のSTEPは要らない
       }
       steps.push(ST.makeStep('solve', { useMust: needMust }));
       steps.push(ST.makeStep('extract', { kinds: readKinds }));
@@ -530,16 +601,20 @@ MZ.packages = (function () {
 
   /** 線を消して次の段へ */
   function doEraseWall(maze, work, route, color, solveOpts, needCells) {
-    const sc = pickShortcut(work, route);
-    if (!sc) return null;
-    work.walls[sc.key].disabled = true;
-    const res = E.solve(work, solveOpts);
-    const good = routeIsGood(work, res, needCells);
-    if (!good) { work.walls[sc.key].disabled = false; return null; }
-    work.walls[sc.key].disabled = false;
-    const keys = paintWalls(work, maze, sc.key, res.path, 3, color);
-    keys.forEach(function (k) { work.walls[k].disabled = true; });
-    return { kind: 'erase-wall', color: color, path: res.path, keys: keys };
+    // 近道になりそうな壁を、良い順にいくつも試す（1本だけ試すと作れないことが多い）
+    const cands = listShortcuts(work, route).slice(0, 8);
+    for (let i = 0; i < cands.length; i++) {
+      const sc = cands[i];
+      work.walls[sc.key].disabled = true;
+      const res = E.solve(work, solveOpts);
+      const good = routeIsGood(work, res, needCells);
+      work.walls[sc.key].disabled = false;
+      if (!good) continue;
+      const keys = paintWalls(work, maze, sc.key, res.path, 3, color);
+      keys.forEach(function (k) { work.walls[k].disabled = true; });
+      return { kind: 'erase-wall', color: color, path: res.path, keys: keys };
+    }
+    return null;
   }
 
   /** STARTを★に変えて次の段へ */
@@ -582,19 +657,57 @@ MZ.packages = (function () {
       const p = cands[i];
       const res = E.solve(work, Object.assign({}, solveOpts, { start: { r: start.r, c: start.c }, goal: p }));
       if (!routeIsGood(work, res, needCells + 1)) continue;
-      maze.elements.push(M.makeElement(p.r, p.c, '■', { color: color }));
-      work.elements.push(M.makeElement(p.r, p.c, '■', { color: color }));
+      maze.elements.push(M.makeElement(p.r, p.c, '☆', { color: color }));
+      work.elements.push(M.makeElement(p.r, p.c, '☆', { color: color }));
       work.goals = [M.makeGoal(p.r, p.c)];
       return { kind: 'move-goal', color: color, path: res.path, goal: p };
     }
     return null;
   }
 
+  /** STARTもGOALも変えて次の段へ（★から☆へ） */
+  function doMoveBoth(maze, work, route, color, solveOpts, needCells) {
+    const onRoute = {};
+    route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const free = [];
+    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
+      if (onRoute[M.cellKey(r, c)]) continue;
+      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
+      free.push({ r: r, c: c });
+    }
+    shuffle(free);
+    for (let i = 0; i < free.length && i < 30; i++) {
+      for (let j = 0; j < free.length && j < 30; j++) {
+        if (i === j) continue;
+        const a = free[i], b = free[j];
+        const res = E.solve(work, Object.assign({}, solveOpts, { start: a, goal: b }));
+        if (!routeIsGood(work, res, needCells + 2)) continue;
+        maze.elements.push(M.makeElement(a.r, a.c, '★', { color: color }));
+        maze.elements.push(M.makeElement(b.r, b.c, '☆', { color: color }));
+        work.elements.push(M.makeElement(a.r, a.c, '★', { color: color }));
+        work.elements.push(M.makeElement(b.r, b.c, '☆', { color: color }));
+        work.starts = [M.makeStart(a.r, a.c)];
+        work.goals = [M.makeGoal(b.r, b.c)];
+        return { kind: 'move-both', color: color, path: res.path, star: a, goal: b };
+      }
+    }
+    return null;
+  }
+
   function titleOf(parts) {
     const n = stageCount(parts);
-    const names = (parts || []).map(function (id) { const p = part(id); return p ? p.name : ''; }).filter(Boolean);
-    if (!names.length) return '迷路謎（最短ルート）';
-    return (n > 1 ? n + '段の迷路謎：' : '迷路謎：') + names.join(' ＋ ');
+    const seen = {}, names = [];
+    (parts || []).forEach(function (id) {
+      const p = part(id);
+      if (!p) return;
+      if (seen[id]) { seen[id]++; return; }
+      seen[id] = 1; names.push(id);
+    });
+    const label = names.map(function (id) {
+      return part(id).name + (seen[id] > 1 ? ' ×' + seen[id] : '');
+    });
+    if (!label.length) return '迷路謎（最短ルート）';
+    return (n > 1 ? n + '段の迷路謎：' : '迷路謎：') + label.join(' ＋ ');
   }
 
   /* =======================================================================
@@ -671,6 +784,7 @@ MZ.packages = (function () {
 
   return {
     PARTS: PARTS, part: part, stageParts: stageParts, stageCount: stageCount,
+    canAdd: canAdd, countOf: countOf,
     usesColor: usesColor, defaultText: defaultText, instruction: instruction, titleOf: titleOf,
     STAGE_COLORS: STAGE_COLORS, MAX_STAGES: MAX_STAGES, DENSITY: DENSITY, LOOPS: LOOPS,
     build: build, checkRecipe: checkRecipe, seed: seed, letters: letters,

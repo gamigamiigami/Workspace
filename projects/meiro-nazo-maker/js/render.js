@@ -25,6 +25,7 @@ MZ.render = (function () {
     showOneway: true,
     showRoute: false,
     routePath: null,
+    routePaths: null,          // 何本も重ねて見せたいとき [{path, color, alpha}]
     routeColor: '#f76707',
     routeAlpha: 0.35,
     showRoles: true,      // ○必ず通る・×通らない の目印（制作者モードのみ）
@@ -124,25 +125,33 @@ MZ.render = (function () {
       ctx.stroke();
     }
 
-    /* ---- ルート（通る道すじ） ---- */
-    const path = opt(o, 'routePath');
-    if (opt(o, 'showRoute') && path && path.length) {
-      ctx.save();
-      ctx.lineWidth = Math.max(4, cell * 0.42);
-      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-      if (mono) { ctx.strokeStyle = '#999999'; ctx.setLineDash([cell * 0.25, cell * 0.2]); ctx.globalAlpha = 0.9; }
-      else { ctx.strokeStyle = opt(o, 'routeColor'); ctx.globalAlpha = opt(o, 'routeAlpha'); }
-      ctx.beginPath();
-      let drawing = false;
-      for (let i = 0; i < path.length; i++) {
-        const p = path[i];
-        const isJump = i > 0 && (Math.abs(p.r - path[i - 1].r) + Math.abs(p.c - path[i - 1].c)) !== 1;
-        if (!drawing || isJump) { ctx.moveTo(CX(p.c), CY(p.r)); drawing = true; }
-        else ctx.lineTo(CX(p.c), CY(p.r));
-      }
-      ctx.stroke();
-      // ルートの順番（1,2,3…）は出さない。通った道が見えれば十分なので図が汚れない
-      ctx.restore();
+    /* ---- ルート（通る道すじ）。何本でも重ねて描ける ---- */
+    if (opt(o, 'showRoute')) {
+      const list = (opt(o, 'routePaths') || []).slice();
+      const single = opt(o, 'routePath');
+      if (single && single.length) list.push({ path: single, color: opt(o, 'routeColor'), alpha: opt(o, 'routeAlpha') });
+      list.forEach(function (item) {
+        const path = item.path;
+        if (!path || !path.length) return;
+        ctx.save();
+        ctx.lineWidth = Math.max(4, cell * 0.42 * (item.width || 1));
+        ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+        if (mono) { ctx.strokeStyle = '#999999'; ctx.setLineDash([cell * 0.25, cell * 0.2]); ctx.globalAlpha = 0.9; }
+        else {
+          ctx.strokeStyle = item.color || opt(o, 'routeColor');
+          ctx.globalAlpha = (item.alpha !== undefined) ? item.alpha : opt(o, 'routeAlpha');
+        }
+        ctx.beginPath();
+        let drawing = false;
+        for (let i = 0; i < path.length; i++) {
+          const p = path[i];
+          const isJump = i > 0 && (Math.abs(p.r - path[i - 1].r) + Math.abs(p.c - path[i - 1].c)) !== 1;
+          if (!drawing || isJump) { ctx.moveTo(CX(p.c), CY(p.r)); drawing = true; }
+          else ctx.lineTo(CX(p.c), CY(p.r));
+        }
+        ctx.stroke();
+        ctx.restore();
+      });
     }
 
     /* ---- START と GOAL ----

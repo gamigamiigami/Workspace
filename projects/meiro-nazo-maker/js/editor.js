@@ -21,6 +21,7 @@ MZ.editor = (function () {
     maze: null,
     view: { scale: 1, tx: 0, ty: 0 },
     tool: 'select',
+    routeIndex: 0,           // いま描いている「描いたルート」の番号
     color: 'black',
     symbol: '○',
     role: 'none',
@@ -190,7 +191,7 @@ MZ.editor = (function () {
       if (S.display.opts) Object.assign(o, S.display.opts);
       if (S.display.cells) o.highlightCells = S.display.cells;
     } else {
-      const rt = S.maze.routes[0];
+      const rt = S.maze.routes[S.routeIndex];
       o.routePath = (S.renderOpts.routePath !== undefined) ? S.renderOpts.routePath : (rt ? rt.cells : null);
       if (S.renderOpts.showRoute === undefined) o.showRoute = !!o.routePath;
     }
@@ -240,6 +241,13 @@ MZ.editor = (function () {
   }
   function cellOf(e) { return R.cellAt(shownBoard(), boardPoint(e).x, boardPoint(e).y, baseOpts()); }
   function edgeOf(e) { return R.edgeAt(shownBoard(), boardPoint(e).x, boardPoint(e).y, baseOpts()); }
+
+  /** いま描いているルート（無ければ作る） */
+  function activeRoute(board) {
+    if (!board.routes) board.routes = [];
+    while (board.routes.length <= S.routeIndex) board.routes.push(M.makeRoute([]));
+    return board.routes[S.routeIndex];
+  }
 
   /** 押した場所が、盤（白い紙）の外かどうか */
   function outsideBoard(e) {
@@ -376,8 +384,7 @@ MZ.editor = (function () {
 
     if (t === 'route') {
       pushHistory();
-      let rt = board.routes[0];
-      if (!rt) { rt = M.makeRoute([]); board.routes = [rt]; }
+      let rt = activeRoute(board);
       const at = lastIndexInRoute(rt.cells, cell);
       if (at >= 0) {
         // すでに通っているマスを押した → そこから先を消して描き直せるようにする
@@ -490,7 +497,7 @@ MZ.editor = (function () {
     if (S.drag.kind === 'route') {
       const cell = cellOf(e);
       if (!cell) return;
-      const rt = board.routes[0];
+      const rt = activeRoute(board);
       const last = rt.cells[rt.cells.length - 1];
       if (!last || (last.r === cell.r && last.c === cell.c)) return;
       const prev = rt.cells[rt.cells.length - 2];
@@ -592,7 +599,7 @@ MZ.editor = (function () {
       return;
     }
     // 消すものが他に無ければ、正解ルートをそのマスから先だけ消す
-    const rt = board.routes[0];
+    const rt = board.routes[S.routeIndex];
     if (rt) {
       const at = indexInRoute(rt.cells, cell);
       if (at >= 0) rt.cells = rt.cells.slice(0, at);
@@ -787,6 +794,7 @@ MZ.editor = (function () {
     setDisplay: setDisplay, clearDisplay: clearDisplay, shownBoard: shownBoard, isReadOnly: isReadOnly,
     pushHistory: pushHistory, undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo,
     replaceMaze: replaceMaze, changed: changed,
+    activeRoute: activeRoute,
     getSelected: getSelected, selectAll: selectAll, deleteSelection: deleteSelection,
     duplicateSelection: duplicateSelection, applyToSelection: applyToSelection,
     handleKey: handleKey, openInlineInput: openInlineInput, closeInlineInput: closeInlineInput,
