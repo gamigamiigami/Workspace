@@ -1,11 +1,122 @@
 # 再利用可能UIコンポーネント集
 
-最終更新：2026-08-31（セッション175・A/B比較ビュー「見くらべ」画面を追加）
+最終更新：2026-09-05（セッション176・STEPエディタと3カラム制作ツールのレイアウトを追加）
 
 コピペで使えるUI部品をまとめる。スタイルはインラインまたは `<style>` 内に記載。
 
 ---
 
+## STEPエディタ（処理を1本の流れとして並べる左パネル）
+
+**用途：** 「これをして → 次にこれをして → 答えが出る」という**連鎖する処理**を、
+プログラムを書かずに組み立ててもらうUI。迷路謎メーカーの心臓部。
+制作ツール全般（作問ツール・自動化の手順書・チェックリスト）に流用できる。
+
+**考え方**
+- STEPは上から順に実行する。**各STEPの結果（その時点の盤面・文字）を保存**しておく
+- STEPの見出しをクリックすると、**その時点の状態を再現して表示**する（見るだけ・編集不可）
+- 編集は常に「設計図（STEP0）」に対して行う。→「STEP3を直したらSTEP1が壊れた」が起きない
+- 選択中のSTEPだけ、その場に設定フォームを開く（別画面に飛ばさない）
+- 結果・警告・エラーはSTEPの中に小さく出す（別の場所を見に行かせない）
+
+**HTML**
+
+```html
+<aside class="pane" id="paneSteps">
+  <h2>STEP（謎の流れ）</h2>
+  <div id="stepList"></div>
+  <select id="stepType"></select>
+  <button id="btnAddStep">＋ STEPを足す</button>
+  <button id="btnViewMaze">設計図にもどる</button>
+  <div class="answer-box">最後に出てくる文字：<b id="answerText">—</b></div>
+</aside>
+```
+
+**CSS**
+
+```css
+.step { border:1px solid #e5e9ef; border-radius:10px; margin-bottom:6px; background:#fff; overflow:hidden; }
+.step.sel  { border-color:#1c7ed6; box-shadow:0 0 0 2px rgba(28,126,214,.15); }
+.step-head { display:flex; align-items:center; gap:6px; padding:8px 10px; cursor:pointer; }
+.step-no   { font-size:11px; font-weight:700; color:#fff; background:#64748b;
+             border-radius:6px; padding:2px 6px; white-space:nowrap; }
+.step.err  .step-no { background:#e03131; }   /* エラーは番号の色で知らせる */
+.step.warn .step-no { background:#e8a300; }
+.step-title{ flex:1; font-size:13px; font-weight:600; }
+.step-log  { font-size:11px; color:#6b7280; padding:0 10px 8px; word-break:break-all; }
+.step-body { padding:8px 10px 10px; border-top:1px dashed #e5e9ef;
+             display:flex; flex-direction:column; gap:6px; }  /* 選択中だけ出す */
+```
+
+**JS（設定フォームを型から自動で作る）**
+
+```js
+// 部品ごとに「何を聞くか」だけを書いておけば、フォームは自動で組み上がる
+const FORMS = {
+  'filter-color': [
+    { k:'mode',   t:'sel',    label:'読み方', opts:[['include','この色だけ'],['exclude','この色いがい']] },
+    { k:'colors', t:'colors', label:'色' }
+  ],
+  'remove-walls': [ { k:'colors', t:'colors' }, { k:'mode', t:'delmode' } ]
+};
+// t（型）ごとに1回だけ描き方を書く → 新しいギミックはFORMSに1行足すだけ
+```
+
+**ポイント：** STEPの並べかえ（↑↓）・複製・削除は、**選択中のSTEPの中**に小さく置く。
+一覧の各行にボタンを並べると、指で押し間違える。
+
+**タグ：** #制作ツール #パイプラインUI #meiro-nazo-maker
+
+---
+
+## 制作ツールの3カラムレイアウト（PC 3列 ↔ iPad縦持ち タブ切りかえ）
+
+**用途：** 「一覧／作業キャンバス／設定」の3つを同時に見せたい制作ツール。
+iPad縦持ち（768px）では3列が入らないので、**タブで1枚ずつ**に切りかえる。
+
+```html
+<nav class="panetabs" id="paneTabs">
+  <button data-pane="steps">① STEP</button>
+  <button data-pane="canvas" class="on">② 迷路</button>
+  <button data-pane="side">③ 設定</button>
+</nav>
+<main class="layout">
+  <aside class="pane" id="paneSteps">…</aside>
+  <section class="pane pane-canvas show" id="paneCanvas">…</section>
+  <aside class="pane" id="paneSide">…</aside>
+</main>
+```
+
+```css
+.layout { flex:1; min-height:0; display:grid;
+          grid-template-columns:250px 1fr 330px; gap:8px; padding:8px; }
+.pane { background:#fff; border-radius:12px; overflow:auto; padding:12px; }
+.pane-canvas { padding:0; display:flex; flex-direction:column; overflow:hidden; }
+.panetabs { display:none; gap:4px; padding:6px 8px; background:#e2e8f0; }
+.panetabs button { flex:1; border-radius:8px; min-height:44px; }
+
+@media (max-width: 900px) {
+  .panetabs { display:flex; }
+  .layout { grid-template-columns:1fr; padding:6px; }
+  .pane { display:none; }
+  .pane.show { display:block; }
+  .pane-canvas.show { display:flex; }   /* キャンバスだけ flex にもどす */
+}
+```
+
+```js
+// タブでキャンバスに戻ったら、大きさが変わっているので描き直す
+if (pane === 'canvas') setTimeout(() => editor.fit(), 30);
+```
+
+**注意点**
+- `.pane.show { display:block }` だけだと**キャンバス面が縦に潰れる**。
+  `.pane-canvas.show { display:flex }` を別に書くこと
+- 設定パネルは `<details>` のアコーディオンにして、よく使う項目だけ `open` にする
+- 右パネルの折りたたみは、**自動テストからは閉じていて触れない**。
+  テストの最初に `document.querySelectorAll('details').forEach(d => d.open = true)` を入れる
+
+**タグ：** #レイアウト #iPad #レスポンシブ #制作ツール #meiro-nazo-maker
 ## A/B 比較ビュー「見くらべ」（ことばかける君 dual.html）
 
 **用途：** 2つの盤面を「同じページ」で見比べながら調整したいとき。
