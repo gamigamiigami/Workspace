@@ -96,6 +96,11 @@ MZ.packages = (function () {
       level: 'むずかしい'
     },
     {
+      id: 'move-both', kind: 'stage', emoji: '🌟', name: 'STARTもGOALも変わって次の段へ',
+      summary: '読んだ指示どおりに★から☆へ、出発点も終点も変えなおして、もう一度解きます',
+      level: 'むずかしい'
+    },
+    {
       id: 'read-order', kind: 'order', emoji: '🔃', name: '読む順番を変える',
       summary: '通った順ではなく「うしろから」「左 → 右」などの順に読ませます',
       level: 'むずかしい',
