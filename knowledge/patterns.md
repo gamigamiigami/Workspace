@@ -15,21 +15,21 @@
 ループを書いたが、実際のテスト（かなり長い指示文）で「最小値に達しても1行に収まらない」
 ケースが出てきた。
 
-**対処方法：** 最初から「上限に当たった時（縮めすぎた）→下限より小さい文字は出さない」
-「下限に当たった時（元の高さのまま）→はみ出しを許容する」という設計を明示的に入れた。
+**対処方法：** 「下限（最小サイズ）に当たってもまだ収まらない」ときに、**はみ出しを
+許容するのではなく、その最小サイズのまま自動で複数行に折り返す**ようにした
+（許容してしまうと、はみ出したまま印刷・保存されてしまうため）。
+「大きさを決める（measure）」と「実際に描く（drawBoard）」が別々にこの判定をすると
+確保した高さと実際の行数がずれるので、判定と折り返しを1つの関数 `fitInst()` にまとめ、
+両方から同じ結果（行の配列とフォントサイズ）を使うようにした。
 
 ```js
-// 計測（高さの計算）と描画（実際に表示）を同じ関数で行う
-function fitInst(width, fontSize, lines) {
-  const measuredHeight = measure(fontSize, lines);
-  const ok = measuredHeight <= TARGET_HEIGHT;
-  return {
-    fontSize: ok ? fontSize : Math.max(fontSize - 1, MIN_FONT),
-    actualHeight: measuredHeight
-  };
+// 悪い例：ループを抜けた理由（収まったのか、下限に達しただけなのか）を確かめない
+while (fs > MIN) { if (measure(text, fs) <= availW) break; fs--; }
+// 良い例：最小サイズでも1行に収まらないときは、そのサイズのまま複数行へ折り返す
+function fitInst(text, availW, cell) {
+  // …1行で縮めてみる…最小サイズでもだめなら wrapped = 1文字ずつ詰めて複数行にする
+  return { lines: wrapped, fontSize: fs };   // measure()/drawBoard() 両方がこれを使う
 }
-
-// 両者から呼ぶので、計測と描画が一貫する
 ```
 
 **教訓：** サイズ調整のループは、**「調整しきれなかったときの動作」を最初に決めてから書く**。
