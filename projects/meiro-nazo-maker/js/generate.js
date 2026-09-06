@@ -249,6 +249,9 @@ MZ.generate = (function () {
     const blocked = {};
     maze.elements.forEach(function (e) { blocked[M.cellKey(e.r, e.c)] = true; });
     maze.starts.concat(maze.goals).forEach(function (p) { blocked[M.cellKey(p.r, p.c)] = true; });
+    // avoidSet を渡すと、そのマスも迂回路の通り道から外す（前の段の道と重ならない
+    // 正味の新しいマスを増やしたいときなど、単に「空いている」だけでは足りない場合に使う）。
+    if (opts.avoidSet) Object.keys(opts.avoidSet).forEach(function (k) { blocked[k] = true; });
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
     const pool = maze.elements.filter(function (e) { return e.role === 'none'; })

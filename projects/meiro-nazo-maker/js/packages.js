@@ -25,9 +25,25 @@ MZ.packages = (function () {
   /* わき道（ぐるっと回れる道）の量。既定は「なし」＝道が1本しかない迷路 */
   const LOOPS = { none: 0, some: 0.12, many: 0.32 };
 
-  /* 段ごとの文字の色。1段め＝赤、2段め＝青、3段め＝緑、4段め＝紫 */
-  const STAGE_COLORS = ['red', 'blue', 'green', 'purple'];
-  const MAX_STAGES = STAGE_COLORS.length;
+  /* 段ごとの文字の色。1段め＝赤、2段め＝青、3段め＝黄、4段め＝緑、5段め＝紫。
+   * 色は5つしか無いので、読み直す段が6つ以上続くとまた赤から使い回す
+   * （そのぶん avoidSet は「直前の段」だけでなく「同じ色を使った段すべて」を見て、
+   *   一周して同じ色に戻っても前の段の文字を拾わないようにしている）。 */
+  const STAGE_COLORS = ['red', 'blue', 'yellow', 'green', 'purple'];
+  /* 段の上限。STARTやGOALを変える段は色を使い回せるので、色の数より多く積める */
+  const MAX_STAGES = 7;
+  /* STARTやGOALが変わる段が2回め以降のときに使う目印セット（★☆の使い回しで
+   * 見分けがつかなくなるのを防ぐ）。段は最大7つ＝STARTGOAL変更は最大6回なので、
+   * 6セット用意して、同じ記号が2回使われることが無いようにする。 */
+  const MARKER_SETS = [
+    { start: '★', goal: '☆' },
+    { start: '■', goal: '□' },
+    { start: '▲', goal: '△' },
+    { start: '◆', goal: '◇' },
+    { start: '●', goal: '♪' },
+    { start: '↑', goal: '→' }
+  ];
+  function markerFor(occurrence) { return MARKER_SETS[Math.min(occurrence, MARKER_SETS.length - 1)]; }
 
   /* 読む順番。'route'（通った順）が既定で、カードで選ぶとここから1つ使う */
   const ORDERS = [
@@ -343,6 +359,21 @@ MZ.packages = (function () {
   }
 
   /** 道が使っているマスの集合（"r:c" キー）。同じ色の段どうしで重なりを避けるのに使う */
+  /**
+   * sc（段ごとの読む色）は「読み直す」ときだけ進む単調増加の並びなので、
+   * 同じ色の段は必ず連続する。段iと同じ色がどこから始まっているかを返す。
+   */
+  function sameColorRunStart(sc, i) {
+    let k = i;
+    while (k > 0 && sc[k - 1] === sc[i]) k--;
+    return k;
+  }
+  function sameColorRunEnd(sc, i) {
+    let k = i;
+    while (k + 1 < sc.length && sc[k + 1] === sc[i]) k++;
+    return k;
+  }
+
   function routeCellSet(path) {
     const set = {};
     uniqueCells(path).forEach(function (p) { set[M.cellKey(p.r, p.c)] = true; });
@@ -456,11 +487,16 @@ MZ.packages = (function () {
    * 前の段と同じ色で読ませるとき、前の段の道と重なるマスを避けるために使う
    * （重ねてしまうと、前の段の道を歩いたときに次の段の文字まで見えてしまう）。
    *
+   * extraNear を渡すと、そのマスからも離す（D以上にする）。
+   * 同じ色の前の段・あとの段は道こそ避けているが、盤面の上ではすぐ近くを
+   * 通ることがあるので、すでに置いてある同じ色の文字からも離しておかないと
+   * 印刷した紙の上で「別の段の文字なのに隣どうし」に見えてしまう。
+   *
    * 戻り値：置いた文字の要素idの配列（失敗したら null）。
    * このidは、色を変えずに次の段へ進むときに「もう使い終えた文字」を
    * 消す（disable する）ために使う。
    */
-  function placeOnFree(maze, path, text, color, order, avoidSet) {
+  function placeOnFree(maze, path, text, color, order, avoidSet, extraNear) {
     const chs = letters(text);
     if (!chs.length) return null;
     const cells = uniqueCells(path);
@@ -474,6 +510,7 @@ MZ.packages = (function () {
       free.push(i);
     });
     if (free.length < chs.length) return null;
+    const near = extraNear || [];
 
     // 均等にならべたときの、だいたいの目あて位置
     function wantIdx(i) { return chs.length === 1 ? 0 : Math.round(i * (free.length - 1) / (chs.length - 1)); }
@@ -494,7 +531,8 @@ MZ.packages = (function () {
         let bestJ = -1, bestDiff = Infinity;
         for (let j = lo; j <= maxIdx; j++) {
           const p = cells[free[j]];
-          const farEnough = placedCells.every(function (q) { return gridDist(p, q) >= D; });
+          const farEnough = placedCells.every(function (q) { return gridDist(p, q) >= D; }) &&
+                             near.every(function (q) { return gridDist(p, q) >= D; });
           if (!farEnough) continue;
           const diff = Math.abs(j - want);
           if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
@@ -507,10 +545,13 @@ MZ.packages = (function () {
       return picked;
     }
 
-    // 出せるいちばん大きい距離をさがす（0マス隣＝距離1から）。1つも成り立たない
-    // ことは無い（距離1なら重ならなければ良いだけなので、free.length >= chs.length で必ず成立する）。
+    // 出せるいちばん大きい距離をさがす。
+    // ★D=1（隣どうし・斜めどなりもOK）は認めない。伊神さんの指摘：
+    //   「あおい」のように答えの文字どうしがくっついて見えると、答えがバレやすく読みにくい。
+    // D=2未満でしか置けないときは失敗にする。呼び出し側（makeOne/build）が
+    // 迷路をまるごと作り直すか、置く側（placeTargets）が理由つきで断る。
     let picked = null;
-    for (let D = 5; D >= 1 && !picked; D--) picked = tryFit(D);
+    for (let D = 5; D >= 2 && !picked; D--) picked = tryFit(D);
     if (!picked) return null;
 
     // 通った順にならんだマスを、読む順にならべかえてから1文字ずつ入れる
@@ -643,12 +684,32 @@ MZ.packages = (function () {
     return chosen;
   }
 
-  /** 道すじが謎として成立しているか（1本だけ・差4以上・なぞり返しなし） */
-  function routeIsGood(board, res, needCells) {
+  /**
+   * 文字を離して置く（D≧2）には、文字数ぴったりの空きマスでは足りない。
+   * 経験上、文字数の1.6倍＋2マスあれば、たいていどこかに離して置ける組み合わせが見つかる。
+   */
+  function spacingNeed(n) { return Math.ceil(n * 1.6) + 2; }
+
+  /**
+   * 道すじが謎として成立しているか（1本だけ・差4以上・なぞり返しなし）。
+   *
+   * excludeSet／excludeNeed を渡すと、excludeSet に含まれるマスを除いた
+   * 「正味の新しいマス」が excludeNeed 以上あることも求める。
+   * STARTやGOALが変わる段は、木構造の迷路だと新しい道もGOAL側でたいてい前の道と
+   * 合流して重なる。needCells（道ぜんたいの長さ）だけを見ていると、
+   * 合流でかさ増しされた長さを「文字を置ける場所」と誤解してしまい、
+   * 実際に前の道と重ならないマスが少なすぎて、文字を離して置けなくなる。
+   */
+  function routeIsGood(board, res, needCells, excludeSet, excludeNeed) {
     if (!res || !res.ok || res.count !== 1) return false;
     if (E.retracesEdge(res.path)) return false;
     if (E.routeMargin(board, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) return false;
-    if (needCells && uniqueCells(res.path).length < needCells) return false;
+    const cells = uniqueCells(res.path);
+    if (needCells && cells.length < needCells) return false;
+    if (excludeSet && excludeNeed) {
+      const avail = cells.filter(function (p) { return !excludeSet[M.cellKey(p.r, p.c)]; }).length;
+      if (avail < excludeNeed) return false;
+    }
     return true;
   }
 
@@ -694,18 +755,33 @@ MZ.packages = (function () {
     const routes = [route1];
     const solveOpts = { useMust: needMust, useAvoid: true };
     const transitions = [];
+    let moveCount = 0;   // STARTGOALの変更が何回めか（★☆→■□→▲△→◆◇ と目印を変える）
     for (let i = 0; i < st.length; i++) {
       // その段のあとに「色を変えて読み直す」段が続くなら、同じ道に文字がもっと要る
       let nextNeed = texts[i + 1].length;
       for (let j = i + 1; j < st.length && st[j] === 'next-read'; j++) nextNeed += texts[j + 1].length;
       nextNeed += 1;
 
+      // move-start/move-goal/move-bothは色を引き継ぐので、次の段（i+1）自身の文字は
+      // 「これまでの同じ色の段ぜんぶの道」と重ならない場所に置かなければならない
+      // （同じ色の使い回し防止。STARTGOAL変更が2回以上つづくと、直前の1本だけでなく
+      //   それより前の道とも重ならない必要があるので、ここで先まで合わせて渡しておく。
+      //   そうしないと、ここでは足りると判定したのに、実際に文字を置く段になって
+      //   「前の前の道」まで避けたら場所が足りない、ということが起きる）。
+      // 「前の道と重ならない、正味の新しいマス」がその文字数ぶん離して置けるだけ要る。
+      const ownNeed = spacingNeed(texts[i + 1].length);
       const nc = sc[i + 1];
+      const runStart = sameColorRunStart(sc, i + 1);
+      let priorRoute = routes[i];
+      if (runStart <= i) {
+        priorRoute = [];
+        for (let j = runStart; j <= i; j++) priorRoute = priorRoute.concat(routes[j]);
+      }
       let out = null;
       if (st[i] === 'erase-wall') out = doEraseWall(maze, work, routes[i], sc[i], solveOpts, nextNeed);
-      if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], nc, solveOpts, nextNeed);
-      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], nc, solveOpts, nextNeed);
-      if (st[i] === 'move-both') out = doMoveBoth(maze, work, routes[i], nc, solveOpts, nextNeed);
+      if (st[i] === 'move-start') out = doMoveStart(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
+      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
+      if (st[i] === 'move-both') out = doMoveBoth(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
       if (st[i] === 'next-read') {
         // 盤面は変えない。同じ道を、次の色でもう一度読むだけ
         out = { kind: 'next-read', color: nc, path: routes[i] };
@@ -717,12 +793,36 @@ MZ.packages = (function () {
 
     /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ----
      * 前の段と同じ色で読ませるときは、前の段の道と重なるマスを避けて置く。
-     * そうしないと、前の段の道を歩いたときに次の段の文字まで見えてしまう
-     * （STARTやGOALが変わる道は、たいてい前の道の一部を通る）。 */
+     * そうしないと、前の段を歩いたときに次の段の文字まで見えてしまい、
+     * 前の段の読み方が狂う（紙は最初から全部印刷ずみなので、あとの段の
+     * インクが先に置いてあることになる。逆に、前の段のインクがあとの段の道に
+     * 乗っているぶんには、読み終わった段の文字は「読み終わり」の見た目にする
+     * 仕組み側で対処ずみなので問題ない）。
+     * ★色は「読み直す（next-read・erase-wall）」のときだけ進むので、
+     *   同じ色の段は必ず連続したひとかたまりになる（sc は単調に増えるだけ）。
+     *   STARTやGOALを3回以上つづけて変える等で3段以上つづくこともあるので、
+     *   直前の1段だけでなく、それより前の同じ色の段ぜんぶの道を避ける。 */
     const stageIds = [];
     for (let i = n - 1; i >= 0; i--) {
-      const avoid = (i > 0 && sc[i - 1] === sc[i]) ? routeCellSet(routes[i - 1]) : null;
-      const ids = placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, parts), order, avoid);
+      const runStart = sameColorRunStart(sc, i), runEnd = sameColorRunEnd(sc, i);
+      let avoid = null, near = null;
+      if (runStart < i) {
+        avoid = {};
+        for (let j = runStart; j < i; j++) Object.assign(avoid, routeCellSet(routes[j]));
+      }
+      if (runEnd > i) {
+        // あとの段（すでに後ろから置いてあるので位置が分かる）とは、道の重なりまでは
+        // 避けなくてよいが、盤面の上でくっついて見えるのは避けたい（紙の見やすさのため）。
+        near = [];
+        for (let j = i + 1; j <= runEnd; j++) {
+          if (!stageIds[j]) continue;
+          stageIds[j].forEach(function (id) {
+            const el = maze.elements.filter(function (e) { return e.id === id; })[0];
+            if (el) near.push({ r: el.r, c: el.c });
+          });
+        }
+      }
+      const ids = placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, parts), order, avoid, near);
       if (!ids) return null;
       stageIds[i] = ids;
     }
@@ -755,18 +855,23 @@ MZ.packages = (function () {
         // 色を変えずに次の段へ進むとき（STARTが変わる・線を消す、など）は、
         // 前の段の文字が新しい道の上に残っていると、次の段で「同じ色だけ読む」ときに
         // 消化ずみのはずの前の文字まで拾ってしまう。読み終えた文字はここで消しておく。
-        if (sc[i - 1] === sc[i] && stageIds[i - 1] && stageIds[i - 1].length) {
-          steps.push(ST.makeStep('remove-elements', { ids: stageIds[i - 1].slice(), mode: 'disable' }));
+        // 同じ色の段が3つ以上つづくこともあるので、直前の1段だけでなく
+        // 同じ色の段ぜんぶ（この時点までに読み終えた分）を消す。
+        const runStart = sameColorRunStart(sc, i);
+        if (runStart < i) {
+          let ids = [];
+          for (let j = runStart; j < i; j++) if (stageIds[j] && stageIds[j].length) ids = ids.concat(stageIds[j]);
+          if (ids.length) steps.push(ST.makeStep('remove-elements', { ids: ids, mode: 'disable' }));
         }
         // 壁は色ではなく、この段で消すと決めた壁そのもの（キー）を指定する。
         // 別の段が同じ色を使っていると、色だけでは「まだ消してはいけない壁」まで
         // いっしょに消えてしまうことがあった。
         if (tr.kind === 'erase-wall') steps.push(ST.makeStep('remove-walls', { keys: tr.keys, colors: [tr.color] }));
-        if (tr.kind === 'move-start') steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
-        if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
+        if (tr.kind === 'move-start') steps.push(ST.makeStep('set-start', { symbol: tr.startSymbol, symbolColor: tr.color }));
+        if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: tr.goalSymbol, symbolColor: tr.color }));
         if (tr.kind === 'move-both') {
-          steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
-          steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
+          steps.push(ST.makeStep('set-start', { symbol: tr.startSymbol, symbolColor: tr.color }));
+          steps.push(ST.makeStep('set-goal', { symbol: tr.goalSymbol, symbolColor: tr.color }));
         }
         // next-read は盤面を変えないので、変換のSTEPは要らない
       }
@@ -793,7 +898,7 @@ MZ.packages = (function () {
     const checks = ST.validateAll(maze, steps);
     if (checks.some(function (c) { return c.level !== 'ok'; })) return null;
 
-    return { ok: true, maze: maze, steps: steps, answer: texts[n - 1], checks: checks, stages: n, routes: routes };
+    return { ok: true, maze: maze, steps: steps, answer: texts[n - 1], checks: checks, stages: n, routes: routes, stageIds: stageIds };
   }
 
   /** ○ / × を置いて、まっすぐではない道を正解にする */
@@ -859,10 +964,19 @@ MZ.packages = (function () {
     return true;
   }
 
-  /** 線を消して次の段へ */
+  /**
+   * 線を消して次の段へ。
+   * ★候補は「近道の長さ」だけでなく「元のルートとどれだけ別の道になるか」も見て、
+   *   いちばん元のルートから離れる候補を選ぶ。近道になる壁はいくつもあるが、
+   *   「壁を1本だけ消して、あとはほとんど元のルートのまま」を選んでしまうと
+   *   拾う文字も景色もほとんど変わらずつまらない（伊神さんの指摘）。
+   */
   function doEraseWall(maze, work, route, color, solveOpts, needCells) {
+    const onRoute = {};
+    route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
     // 近道になりそうな壁を、良い順にいくつも試す（1本だけ試すと作れないことが多い）
-    const cands = listShortcuts(work, route).slice(0, 8);
+    const cands = listShortcuts(work, route).slice(0, 20);
+    let best = null, bestScore = -1;
     for (let i = 0; i < cands.length; i++) {
       const sc = cands[i];
       work.walls[sc.key].disabled = true;
@@ -870,88 +984,156 @@ MZ.packages = (function () {
       const good = routeIsGood(work, res, needCells);
       work.walls[sc.key].disabled = false;
       if (!good) continue;
-      const keys = paintWalls(work, maze, sc.key, res.path, 3, color);
-      keys.forEach(function (k) { work.walls[k].disabled = true; });
-      return { kind: 'erase-wall', color: color, path: res.path, keys: keys };
+      const score = uniqueCells(res.path).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
+      if (score > bestScore) { bestScore = score; best = { key: sc.key, res: res }; }
     }
-    return null;
+    if (!best) return null;
+    const keys = paintWalls(work, maze, best.key, best.res.path, 3, color);
+    keys.forEach(function (k) { work.walls[k].disabled = true; });
+    return { kind: 'erase-wall', color: color, path: best.res.path, keys: keys };
   }
 
-  /** STARTを★に変えて次の段へ */
-  function doMoveStart(maze, work, route, color, solveOpts, needCells) {
+  /**
+   * 候補を総当たりし、「前の道と重ならない正味のマス」がいちばん多い候補を選ぶ。
+   * ★木構造の迷路は、新しい道もGOAL側でたいてい前の道と合流してしまうので、
+   *   ランダムに40個ためすだけだと、たまたま合流の浅い（＝重ならない場所が多い）
+   *   候補を引き当てられず、離して置く場所が足りないまま採用してしまっていた。
+   *   盤面のマス数ぶんしか候補が無いので、全部ためしても遅くはならない。
+   * needCells（道ぜんたいの長さ）を満たさない候補はそもそも除外するが、
+   * ownNeed（前の道と重ならない正味のマス）はここでは判定しない、
+   * 呼び出し側がだめならlengthenRouteで足りない分を積み増す。
+   */
+  function bestNonOverlap(work, onRoute, needCells, solveFn) {
+    let best = null, bestScore = -1;
+    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
+      if (onRoute[M.cellKey(r, c)]) continue;
+      const res = solveFn(r, c);
+      if (!res || !res.ok || res.count !== 1) continue;
+      if (E.retracesEdge(res.path)) continue;
+      if (E.routeMargin(work, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) continue;
+      const cells = uniqueCells(res.path);
+      if (needCells && cells.length < needCells) continue;
+      const score = cells.filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
+      if (score > bestScore) { bestScore = score; best = { r: r, c: c, res: res, score: score }; }
+    }
+    return best;
+  }
+
+  /**
+   * 前の道と重ならない正味のマスが ownNeed に足りないとき、その道を
+   * 迂回路で伸ばして使えるマスを増やす（伊神さんの指摘：「マス数が足りず
+   * こさが高くなるなら、寄り道させて使えるマスを増やして対応」）。
+   * work（STARTやGOALをすでに動かした状態の作業用盤面）の上で試し、
+   * うまくいったら同じ壁の変更を maze（本番の盤面）にも反映する。
+   * すでに壁を色つき（線を消すギミック使用ずみ）にしている迷路では、
+   * 壁の構造が maze と work とでずれてしまうおそれがあるので試さない。
+   */
+  function tryLengthenForRoom(maze, work, best, onRoute, ownNeed) {
+    if (best.score >= ownNeed) return best;
+    if (Object.keys(work.walls).some(function (k) { return work.walls[k].color && work.walls[k].color !== 'black'; })) return best;
+    const res = G.lengthenRoute(work, best.res.path, { avoidSet: onRoute, tries: 200,
+      accept: function (m, newRoute) {
+        return uniqueCells(newRoute).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length >= ownNeed;
+      } });
+    if (!res.ok) return best;
+    maze.walls = JSON.parse(JSON.stringify(work.walls));
+    const score = uniqueCells(res.route).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
+    return { r: best.r, c: best.c, res: { path: res.route }, score: score };
+  }
+
+  /** STARTを★（複数回めは■▲◆）に変えて次の段へ */
+  function doMoveStart(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+    const sym = (marker || MARKER_SETS[0]).start;
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const occupied = {};
+    maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
     const goal = work.goals[0];
-    const cands = [];
-    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
-      if (onRoute[M.cellKey(r, c)]) continue;
-      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
-      cands.push({ r: r, c: c });
-    }
-    shuffle(cands);
-    for (let i = 0; i < cands.length && i < 40; i++) {
-      const p = cands[i];
-      const res = E.solve(work, Object.assign({}, solveOpts, { start: p, goal: { r: goal.r, c: goal.c } }));
-      if (!routeIsGood(work, res, needCells + 1)) continue;
-      maze.elements.push(M.makeElement(p.r, p.c, '★', { color: color }));
-      work.elements.push(M.makeElement(p.r, p.c, '★', { color: color }));
-      work.starts = [M.makeStart(p.r, p.c)];
-      return { kind: 'move-start', color: color, path: res.path, star: p };
-    }
-    return null;
+    let best = bestNonOverlap(work, onRoute, needCells, function (r, c) {
+      if (occupied[M.cellKey(r, c)]) return null;
+      return E.solve(work, Object.assign({}, solveOpts, { start: { r: r, c: c }, goal: { r: goal.r, c: goal.c } }));
+    });
+    if (!best) return null;
+    const p = { r: best.r, c: best.c };
+    // lengthenRouteの中の checkLengthened は work.starts/goals を見て解き直すので、
+    // 迂回路を試す前に候補のSTARTへ動かしておく必要がある
+    work.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
+    work.starts = [M.makeStart(p.r, p.c)];
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    if (best.score < ownNeed) return null;
+    maze.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
+    return { kind: 'move-start', color: color, path: best.res.path, star: p, startSymbol: sym };
   }
 
-  /** GOALを■に変えて次の段へ */
-  function doMoveGoal(maze, work, route, color, solveOpts, needCells) {
+  /** GOALを☆（複数回めは□△◇）に変えて次の段へ */
+  function doMoveGoal(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+    const sym = (marker || MARKER_SETS[0]).goal;
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const occupied = {};
+    maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
     const start = work.starts[0];
-    const cands = [];
-    for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
-      if (onRoute[M.cellKey(r, c)]) continue;
-      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
-      cands.push({ r: r, c: c });
-    }
-    shuffle(cands);
-    for (let i = 0; i < cands.length && i < 40; i++) {
-      const p = cands[i];
-      const res = E.solve(work, Object.assign({}, solveOpts, { start: { r: start.r, c: start.c }, goal: p }));
-      if (!routeIsGood(work, res, needCells + 1)) continue;
-      maze.elements.push(M.makeElement(p.r, p.c, '☆', { color: color }));
-      work.elements.push(M.makeElement(p.r, p.c, '☆', { color: color }));
-      work.goals = [M.makeGoal(p.r, p.c)];
-      return { kind: 'move-goal', color: color, path: res.path, goal: p };
-    }
-    return null;
+    let best = bestNonOverlap(work, onRoute, needCells, function (r, c) {
+      if (occupied[M.cellKey(r, c)]) return null;
+      return E.solve(work, Object.assign({}, solveOpts, { start: { r: start.r, c: start.c }, goal: { r: r, c: c } }));
+    });
+    if (!best) return null;
+    const p = { r: best.r, c: best.c };
+    work.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
+    work.goals = [M.makeGoal(p.r, p.c)];
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    if (best.score < ownNeed) return null;
+    maze.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
+    return { kind: 'move-goal', color: color, path: best.res.path, goal: p, goalSymbol: sym };
   }
 
-  /** STARTもGOALも変えて次の段へ（★から☆へ） */
-  function doMoveBoth(maze, work, route, color, solveOpts, needCells) {
+  /** STARTもGOALも変えて次の段へ（★から☆へ。複数回めは■→□など） */
+  function doMoveBoth(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+    const mk = marker || MARKER_SETS[0];
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
+    const occupied = {};
+    maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
     const free = [];
     for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
       if (onRoute[M.cellKey(r, c)]) continue;
-      if (maze.elements.some(function (e) { return e.r === r && e.c === c; })) continue;
+      if (occupied[M.cellKey(r, c)]) continue;
       free.push({ r: r, c: c });
     }
     shuffle(free);
-    for (let i = 0; i < free.length && i < 30; i++) {
-      for (let j = 0; j < free.length && j < 30; j++) {
+    let best = null, bestScore = -1, bestAB = null;
+    const capI = Math.min(free.length, 30), capJ = Math.min(free.length, 30);
+    outer:
+    for (let i = 0; i < capI; i++) {
+      for (let j = 0; j < capJ; j++) {
         if (i === j) continue;
         const a = free[i], b = free[j];
         const res = E.solve(work, Object.assign({}, solveOpts, { start: a, goal: b }));
-        if (!routeIsGood(work, res, needCells + 2)) continue;
-        maze.elements.push(M.makeElement(a.r, a.c, '★', { color: color }));
-        maze.elements.push(M.makeElement(b.r, b.c, '☆', { color: color }));
-        work.elements.push(M.makeElement(a.r, a.c, '★', { color: color }));
-        work.elements.push(M.makeElement(b.r, b.c, '☆', { color: color }));
-        work.starts = [M.makeStart(a.r, a.c)];
-        work.goals = [M.makeGoal(b.r, b.c)];
-        return { kind: 'move-both', color: color, path: res.path, star: a, goal: b };
+        if (!res || !res.ok || res.count !== 1) continue;
+        if (E.retracesEdge(res.path)) continue;
+        if (E.routeMargin(work, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) continue;
+        const cells = uniqueCells(res.path);
+        if (cells.length < needCells) continue;
+        const score = cells.filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
+        if (score > bestScore) {
+          bestScore = score; best = { r: a.r, c: a.c, res: res, score: score }; bestAB = { a: a, b: b };
+          // ownNeed を満たす候補が見つかったら、それ以上ぜんぶの組を試さなくてよい
+          // （厳密な最良より、はやく見つかることのほうが大事）
+          if (bestScore >= ownNeed) break outer;
+        }
       }
     }
-    return null;
+    if (!best) return null;
+    const a = bestAB.a, b = bestAB.b;
+    work.elements.push(M.makeElement(a.r, a.c, mk.start, { color: color }));
+    work.elements.push(M.makeElement(b.r, b.c, mk.goal, { color: color }));
+    work.starts = [M.makeStart(a.r, a.c)];
+    work.goals = [M.makeGoal(b.r, b.c)];
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    if (best.score < ownNeed) return null;
+    maze.elements.push(M.makeElement(a.r, a.c, mk.start, { color: color }));
+    maze.elements.push(M.makeElement(b.r, b.c, mk.goal, { color: color }));
+    return { kind: 'move-both', color: color, path: best.res.path, star: a, goal: b, startSymbol: mk.start, goalSymbol: mk.goal };
   }
 
   function titleOf(parts) {
@@ -988,14 +1170,36 @@ MZ.packages = (function () {
     return null;
   }
 
+  /**
+   * STARTGOALの変更を2回以上重ねるなど、「同じ色で読み直す段」がいくつも続くと、
+   * 指定の大きさのままでは、前の段ぜんぶと重ならない場所がどうしても足りないことがある
+   * （伊神さんの指摘：「スタゴルを2回使うと作れないと出る。できるようにしてほしい」）。
+   * 指定の大きさで作れなければ、盤面を少しずつ大きくしながら作り直す。
+   * 大きさは自動で決めてよいとのことなので、確認なしで広げる。
+   */
   function build(recipe) {
     const rc = defaults(recipe);
     const bad = checkRecipe(rc);
     if (bad) return { ok: false, reason: bad };
-    for (let t = 0; t < BUILD_TRIES; t++) {
-      let out = null;
-      try { out = makeOne(rc); } catch (e) { out = null; }
-      if (out) { out.tries = t + 1; return out; }
+    const grows = [0, 2, 4, 6, 8];
+    let totalTries = 0;
+    let lastRows = null, lastCols = null;
+    for (let s = 0; s < grows.length; s++) {
+      const rows = clamp(rc.rows + grows[s], 6, 20), cols = clamp(rc.cols + grows[s], 6, 20);
+      if (rows === lastRows && cols === lastCols) continue;   // もう上限で広げられない
+      lastRows = rows; lastCols = cols;
+      const tryRc = (grows[s] === 0) ? rc : Object.assign({}, rc, { rows: rows, cols: cols });
+      const attempts = (s === 0) ? BUILD_TRIES : Math.ceil(BUILD_TRIES / 2);
+      for (let t = 0; t < attempts; t++) {
+        totalTries++;
+        let out = null;
+        try { out = makeOne(tryRc); } catch (e) { out = null; }
+        if (out) {
+          out.tries = totalTries;
+          if (grows[s] > 0) out.grownTo = rows + '×' + cols;
+          return out;
+        }
+      }
     }
     return { ok: false, reason: 'この組み合わせでは作れませんでした。文章を短くするか、迷路を大きくするか、しかけを減らしてみてください' };
   }
