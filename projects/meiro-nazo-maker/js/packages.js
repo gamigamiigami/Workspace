@@ -138,6 +138,32 @@ MZ.packages = (function () {
   function usesColor(parts) { return readMode(parts) !== 'all'; }
 
   /**
+   * 段ごとに「読む色」を割りあてる。
+   * ★大事な約束★：色が変わるのは「色を変えて読み直す（next-read）」のときだけ。
+   * STARTが変わる・GOALが変わる、は道が変わるだけで、読む色までは自動で変えない。
+   * 以前は段が増えるたびに問答無用で次の色になっていたので、
+   * 「色でしぼって読む → STARTが変わる」の2段を同じ色にしたくても、
+   * かってに別の色になってしまっていた。
+   *
+   * ただし「線を消す（erase-wall）」だけは例外。
+   * 壁を消してできる近道は、前の道の一部をかならず使いまわす構造になっている
+   * （そうでなければ「近道」にならない）ので、同じ色のままだと、
+   * 前の段の文字と新しい段の文字が紙の上で見分けられなくなってしまう。
+   * このときだけは、色を変えて読み直すを選んでいなくても自動で次の色にする。
+   */
+  function stageColors(parts) {
+    const st = stageParts(parts);
+    const n = stageCount(parts);
+    const out = [STAGE_COLORS[0]];
+    let idx = 0;
+    st.forEach(function (kind) {
+      if (kind === 'next-read' || kind === 'erase-wall') idx = Math.min(idx + 1, STAGE_COLORS.length - 1);
+      out.push(STAGE_COLORS[idx]);
+    });
+    return out.slice(0, n);
+  }
+
+  /**
    * 読み方。
    *   'all'     … 通ったマスの文字をぜんぶ読む（しかけ無しの1段のときだけ）
    *   'include' … その段の色の文字「だけ」読む
@@ -150,22 +176,25 @@ MZ.packages = (function () {
     return stageCount(parts) > 1 ? 'include' : 'all';
   }
 
-  /** 段 i で「読まない」色の一覧（exclude のときだけ使う） */
-  function excludeColors(i, n) {
-    if (n <= 1) return [STAGE_COLORS[0]];
-    return STAGE_COLORS.slice(0, n).filter(function (c) { return c !== STAGE_COLORS[i]; });
+  /** 段 i で「読まない」色の一覧（exclude のときだけ使う）。同じ色の段が複数あっても重複させない */
+  function excludeColors(i, parts) {
+    const sc = stageColors(parts);
+    if (sc.length <= 1) return [sc[0]];
+    const seen = {}, out = [];
+    sc.forEach(function (c) { if (c !== sc[i] && !seen[c]) { seen[c] = true; out.push(c); } });
+    return out;
   }
 
   /** 段 i の文字の色（exclude で1段だけのときは、こたえを黒にしてまぎれを赤にする） */
-  function answerColor(mode, i, n) {
+  function answerColor(mode, i, parts) {
     if (mode === 'all') return 'black';
-    if (mode === 'exclude' && n === 1) return 'black';
-    return STAGE_COLORS[i];
+    if (mode === 'exclude' && stageCount(parts) === 1) return 'black';
+    return stageColors(parts)[i];
   }
   /** ルートの上にまく「読まない文字」の色（null なら まかない） */
-  function noiseColor(mode, n) {
+  function noiseColor(mode, parts) {
     if (mode === 'include') return 'black';
-    if (mode === 'exclude') return n === 1 ? STAGE_COLORS[0] : null;
+    if (mode === 'exclude') return stageCount(parts) === 1 ? stageColors(parts)[0] : null;
     return null;
   }
 
@@ -212,40 +241,42 @@ MZ.packages = (function () {
   }
 
   /** 「○○だけよめ」「○○いがいをよめ」の短い言い方 */
-  function readPhrase(mode, i, n) {
+  function readPhrase(mode, i, parts) {
     if (mode === 'exclude') {
-      return excludeColors(i, n).map(colorAdj).join('と') + 'もじいがいをよめ';
+      return excludeColors(i, parts).map(colorAdj).join('と') + 'もじいがいをよめ';
     }
-    return colorAdj(STAGE_COLORS[i]) + 'もじだけよめ';
+    return colorAdj(stageColors(parts)[i]) + 'もじだけよめ';
   }
 
   /** その段の文章の、はじめから入れておく例 */
   function defaultText(parts, i) {
     const st = stageParts(parts);
     const n = stageCount(parts);
+    const sc = stageColors(parts);
     if (i === n - 1) return 'なぞがとけた';
     const kind = st[i];
-    if (kind === 'erase-wall') return colorAdj(STAGE_COLORS[i]) + 'せんをけせ';
+    if (kind === 'erase-wall') return colorAdj(sc[i]) + 'せんをけせ';
     if (kind === 'move-start') return 'ほしからやりなおし';
     if (kind === 'move-goal') return 'ほしまでいけ';
     if (kind === 'move-both') return 'ほしからほしへ';
-    if (kind === 'next-read') return readPhrase(readMode(parts), i + 1, n);
+    if (kind === 'next-read') return readPhrase(readMode(parts), i + 1, parts);
     return 'つぎへすすめ';
   }
 
   /** 段 i で読むものの言い方（問題用紙むけ） */
-  function readTarget(mode, i, n) {
+  function readTarget(mode, i, parts) {
     if (mode === 'all') return '通ったマスの文字';
     if (mode === 'exclude') {
-      return '通った道の' + excludeColors(i, n).map(colorLabel).join('と') + '色いがいの文字';
+      return '通った道の' + excludeColors(i, parts).map(colorLabel).join('と') + '色いがいの文字';
     }
-    return '通った道の' + colorLabel(STAGE_COLORS[i]) + '色の文字だけ';
+    return '通った道の' + colorLabel(stageColors(parts)[i]) + '色の文字だけ';
   }
 
   /** 問題用紙にのる「解く人がやること」 */
   function instruction(parts, opts) {
     const st = stageParts(parts);
     const n = stageCount(parts);
+    const sc = stageColors(parts);
     const mode = readMode(parts);
     const order = readOrder(parts, opts);
     const lines = [];
@@ -260,20 +291,20 @@ MZ.packages = (function () {
       const prev = (i > 0) ? st[i - 1] : null;
       if (prev === 'next-read') {
         // 道は変わらないので「進む」は書かず、読み直しだけを言う
-        lines.push(head + '同じ道をもう一度たどり、' + readTarget(mode, i, n) + 'を' + way + '読みます。');
+        lines.push(head + '同じ道をもう一度たどり、' + readTarget(mode, i, parts) + 'を' + way + '読みます。');
       } else {
         const from = (i === 0) ? 'STARTから'
           : (prev === 'move-goal') ? 'STARTから新しいGOALまで'
           : '新しいSTARTから';
         lines.push(head + from + how + 'GOALまでいちばん短く進み、' +
-                   readTarget(mode, i, n) + 'を' + way + '読みます。');
+                   readTarget(mode, i, parts) + 'を' + way + '読みます。');
       }
-      const nc = colorAdj(STAGE_COLORS[i + 1]);
-      if (st[i] === 'erase-wall') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i]) + '線を消してください。');
+      const nc = colorAdj(sc[i + 1]);
+      if (st[i] === 'erase-wall') lines.push('　→ 読めた指示どおりに、' + colorAdj(sc[i]) + '線を消してください。');
       if (st[i] === 'move-start') lines.push('　→ 読めた指示どおりに、' + nc + '★から出発しなおしてください。');
       if (st[i] === 'move-goal') lines.push('　→ 読めた指示どおりに、' + nc + '☆を新しいGOALにしてください。');
       if (st[i] === 'move-both') lines.push('　→ 読めた指示どおりに、' + nc + '★から ' + nc + '☆まで進みなおしてください。');
-      if (st[i] === 'next-read') lines.push('　→ 同じ道をもう一度たどり、今度は' + readTarget(mode, i + 1, n) + 'を読みます。');
+      if (st[i] === 'next-read') lines.push('　→ 同じ道をもう一度たどり、今度は' + readTarget(mode, i + 1, parts) + 'を読みます。');
     }
     lines.push('最後に読めた言葉がこたえです。');
     lines.push('※ 同じ通路を行って戻ることはありません（交差はします）。');
@@ -304,6 +335,13 @@ MZ.packages = (function () {
       seen[k] = true; out.push({ r: p.r, c: p.c });
     });
     return out;
+  }
+
+  /** 道が使っているマスの集合（"r:c" キー）。同じ色の段どうしで重なりを避けるのに使う */
+  function routeCellSet(path) {
+    const set = {};
+    uniqueCells(path).forEach(function (p) { set[M.cellKey(p.r, p.c)] = true; });
+    return set;
   }
 
   /* -----------------------------------------------------------------------
@@ -392,43 +430,95 @@ MZ.packages = (function () {
   /* -----------------------------------------------------------------------
    * 文字を置く
    * --------------------------------------------------------------------- */
+  /** 盤面上のマス目のあらさ（角も含めた距離）。0＝同じマス、1＝隣接／斜め隣接（紙の上ではくっついて見える） */
+  function gridDist(a, b) { return Math.max(Math.abs(a.r - b.r), Math.abs(a.c - b.c)); }
+
   /**
-   * ルートの空いているマスに、文章を等間隔で置く。
+   * ルートの空いているマスに、文章をだいたい均等に置く。
    * order を渡すと「その順で読んだときに文章になる」ように置く。
    * （読むときと同じ並べかえを、置くときにも通しているので必ず一致する）
+   *
+   * ★盤面の上でくっついて見えないようにする★
+   * 道の「通った順」だけで均等に置くと、道が折り返しているところでは
+   * 文字どうしが紙の上ではすぐ隣に来てしまうことがあった
+   * （伊神さんの指摘：「答えの文字が連続して固まりすぎる」）。
+   * 「盤面の上でとなり合わせにしない、いちばんゆるい距離Dはいくつか」を
+   * 大きいほうから順に試し、見つかった距離Dで「その距離を保てる、いちばん
+   * 手前のマス」から順にどんどん置いていく（早取り）。
+   * ちょうど均等である必要はないので、これで十分。
+   *
+   * avoidSet を渡すと、そのマス（"r:c" のキー）には置かない。
+   * 前の段と同じ色で読ませるとき、前の段の道と重なるマスを避けるために使う
+   * （重ねてしまうと、前の段の道を歩いたときに次の段の文字まで見えてしまう）。
+   *
+   * 戻り値：置いた文字の要素idの配列（失敗したら null）。
+   * このidは、色を変えずに次の段へ進むときに「もう使い終えた文字」を
+   * 消す（disable する）ために使う。
    */
-  function placeOnFree(maze, path, text, color, order) {
+  function placeOnFree(maze, path, text, color, order, avoidSet) {
     const chs = letters(text);
-    if (!chs.length) return false;
+    if (!chs.length) return null;
     const cells = uniqueCells(path);
     const occupied = {};
     maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
     const free = [];
-    cells.forEach(function (p, i) { if (!occupied[M.cellKey(p.r, p.c)]) free.push(i); });
-    if (free.length < chs.length) return false;
+    cells.forEach(function (p, i) {
+      const k = M.cellKey(p.r, p.c);
+      if (occupied[k]) return;
+      if (avoidSet && avoidSet[k]) return;
+      free.push(i);
+    });
+    if (free.length < chs.length) return null;
 
-    const used = {}, picked = [];
-    for (let i = 0; i < chs.length; i++) {
-      const want = free[chs.length === 1 ? 0 : Math.round(i * (free.length - 1) / (chs.length - 1))];
-      let j = free.indexOf(want);
-      while (j < free.length && used[free[j]]) j++;
-      if (j >= free.length) {
-        j = 0;
-        while (j < free.length && used[free[j]]) j++;
-        if (j >= free.length) return false;
+    // 均等にならべたときの、だいたいの目あて位置
+    function wantIdx(i) { return chs.length === 1 ? 0 : Math.round(i * (free.length - 1) / (chs.length - 1)); }
+
+    /**
+     * 距離Dを守れるかどうか。
+     * 守れるなら、その中で「均等にならべた目あて位置にいちばん近いマス」を選んで置く
+     * （手前から早取りするだけだと、前のほうで距離をかせぎすぎて、
+     *   あとの文字がまとめて隅に押しこまれることがあった）。
+     */
+    function tryFit(D) {
+      const picked = [], placedCells = [];
+      let lastIdx = -1;
+      for (let i = 0; i < chs.length; i++) {
+        const lo = lastIdx + 1;
+        const maxIdx = free.length - 1 - (chs.length - 1 - i);   // 残りの文字ぶんの場所を必ず残す
+        const want = wantIdx(i);
+        let bestJ = -1, bestDiff = Infinity;
+        for (let j = lo; j <= maxIdx; j++) {
+          const p = cells[free[j]];
+          const farEnough = placedCells.every(function (q) { return gridDist(p, q) >= D; });
+          if (!farEnough) continue;
+          const diff = Math.abs(j - want);
+          if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
+        }
+        if (bestJ < 0) return null;
+        picked.push(bestJ);
+        placedCells.push(cells[free[bestJ]]);
+        lastIdx = bestJ;
       }
-      used[free[j]] = true;
-      picked.push(free[j]);
+      return picked;
     }
-    picked.sort(function (a, b) { return a - b; });
+
+    // 出せるいちばん大きい距離をさがす（0マス隣＝距離1から）。1つも成り立たない
+    // ことは無い（距離1なら重ならなければ良いだけなので、free.length >= chs.length で必ず成立する）。
+    let picked = null;
+    for (let D = 5; D >= 1 && !picked; D--) picked = tryFit(D);
+    if (!picked) return null;
+
     // 通った順にならんだマスを、読む順にならべかえてから1文字ずつ入れる
-    const spots = picked.map(function (i) { return { r: cells[i].r, c: cells[i].c }; });
+    const spots = picked.map(function (idx) { return { r: cells[free[idx]].r, c: cells[free[idx]].c }; });
     const seq = O.applyOrder(spots, order || 'route', 'all');
-    if (seq.length !== chs.length) return false;
+    if (seq.length !== chs.length) return null;
+    const ids = [];
     for (let i = 0; i < chs.length; i++) {
-      maze.elements.push(M.makeElement(seq[i].r, seq[i].c, chs[i], { color: color }));
+      const el = M.makeElement(seq[i].r, seq[i].c, chs[i], { color: color });
+      maze.elements.push(el);
+      ids.push(el.id);
     }
-    return true;
+    return ids;
   }
 
   function fillGaps(maze, paths, color, ratio, pool) {
@@ -567,7 +657,8 @@ MZ.packages = (function () {
     const mode = readMode(parts);           // ぜんぶ読む／その色だけ／その色いがい
     const order = readOrder(parts, rc.opts);
     const color = (mode !== 'all');
-    const noise = noiseColor(mode, n);      // ルートの上にまく「読まれない文字」の色
+    const sc = stageColors(parts);          // 段ごとの読む色（色を変えて読み直す、のときだけ進む）
+    const noise = noiseColor(mode, parts);  // ルートの上にまく「読まれない文字」の色
     const needMust = parts.indexOf('must-circles') >= 0;
     const needAvoid = parts.indexOf('avoid-cross') >= 0;
     const texts = [];
@@ -604,9 +695,9 @@ MZ.packages = (function () {
       for (let j = i + 1; j < st.length && st[j] === 'next-read'; j++) nextNeed += texts[j + 1].length;
       nextNeed += 1;
 
-      const nc = STAGE_COLORS[i + 1];
+      const nc = sc[i + 1];
       let out = null;
-      if (st[i] === 'erase-wall') out = doEraseWall(maze, work, routes[i], STAGE_COLORS[i], solveOpts, nextNeed);
+      if (st[i] === 'erase-wall') out = doEraseWall(maze, work, routes[i], sc[i], solveOpts, nextNeed);
       if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], nc, solveOpts, nextNeed);
       if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], nc, solveOpts, nextNeed);
       if (st[i] === 'move-both') out = doMoveBoth(maze, work, routes[i], nc, solveOpts, nextNeed);
@@ -619,9 +710,16 @@ MZ.packages = (function () {
       routes.push(out.path);
     }
 
-    /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ---- */
+    /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ----
+     * 前の段と同じ色で読ませるときは、前の段の道と重なるマスを避けて置く。
+     * そうしないと、前の段の道を歩いたときに次の段の文字まで見えてしまう
+     * （STARTやGOALが変わる道は、たいてい前の道の一部を通る）。 */
+    const stageIds = [];
     for (let i = n - 1; i >= 0; i--) {
-      if (!placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, n), order)) return null;
+      const avoid = (i > 0 && sc[i - 1] === sc[i]) ? routeCellSet(routes[i - 1]) : null;
+      const ids = placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, parts), order, avoid);
+      if (!ids) return null;
+      stageIds[i] = ids;
     }
 
     /* ---- ⑤ まぎらわしい文字 ----
@@ -633,7 +731,7 @@ MZ.packages = (function () {
     const dummyPool = poolFrom(texts);
     if (noise) fillGaps(maze, routes, noise, curDensity(rc.density), dummyPool);
     if (color) {
-      const outColors = ['black'].concat(STAGE_COLORS.slice(0, n));
+      const outColors = ['black'].concat(sc.filter(function (c, idx) { return sc.indexOf(c) === idx; }));
       scatterOutside(maze, routes, rc, outColors, dummyPool);
     } else {
       // 全部読む謎では、道の上に余計な文字を置いてはいけない
@@ -642,13 +740,23 @@ MZ.packages = (function () {
 
     /* ---- ⑥ STEPを組む ---- */
     const steps = [];
+    const checkpoint = [];    // checkpoint[i] = 段iの読み方が確定するSTEPの番号
     // 記号（○ × ★）は読み上げの対象にしない。
     // ★はSTARTの目印として道の上に乗るので、入れてしまうと答えに混ざる。
     const readKinds = ['text', 'number'];
     for (let i = 0; i < n; i++) {
       if (i > 0) {
         const tr = transitions[i - 1];
-        if (tr.kind === 'erase-wall') steps.push(ST.makeStep('remove-walls', { colors: [tr.color] }));
+        // 色を変えずに次の段へ進むとき（STARTが変わる・線を消す、など）は、
+        // 前の段の文字が新しい道の上に残っていると、次の段で「同じ色だけ読む」ときに
+        // 消化ずみのはずの前の文字まで拾ってしまう。読み終えた文字はここで消しておく。
+        if (sc[i - 1] === sc[i] && stageIds[i - 1] && stageIds[i - 1].length) {
+          steps.push(ST.makeStep('remove-elements', { ids: stageIds[i - 1].slice(), mode: 'disable' }));
+        }
+        // 壁は色ではなく、この段で消すと決めた壁そのもの（キー）を指定する。
+        // 別の段が同じ色を使っていると、色だけでは「まだ消してはいけない壁」まで
+        // いっしょに消えてしまうことがあった。
+        if (tr.kind === 'erase-wall') steps.push(ST.makeStep('remove-walls', { keys: tr.keys, colors: [tr.color] }));
         if (tr.kind === 'move-start') steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
         if (tr.kind === 'move-goal') steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
         if (tr.kind === 'move-both') {
@@ -659,10 +767,11 @@ MZ.packages = (function () {
       }
       steps.push(ST.makeStep('solve', { useMust: needMust }));
       steps.push(ST.makeStep('extract', { kinds: readKinds }));
-      if (mode === 'include') steps.push(ST.makeStep('filter-color', { mode: 'include', colors: [STAGE_COLORS[i]] }));
-      if (mode === 'exclude') steps.push(ST.makeStep('filter-color', { mode: 'exclude', colors: excludeColors(i, n) }));
+      if (mode === 'include') steps.push(ST.makeStep('filter-color', { mode: 'include', colors: [sc[i]] }));
+      if (mode === 'exclude') steps.push(ST.makeStep('filter-color', { mode: 'exclude', colors: excludeColors(i, parts) }));
       // 色でしぼったあとに並べかえる（まぎれ文字を巻きこまないため、この順でなければならない）
       if (order !== 'route') steps.push(ST.makeStep('reorder', { order: order, parity: 'all' }));
+      checkpoint[i] = steps.length - 1;
     }
     steps.push(ST.makeStep('answer', { expected: texts[n - 1] }));
 
@@ -670,7 +779,12 @@ MZ.packages = (function () {
     maze.meta.title = titleOf(parts);
     maze.meta.instruction = instruction(parts, rc.opts);
     const results = ST.runSteps(maze, steps);
-    if (ST.finalText(results) !== texts[n - 1]) return null;
+    // 最終こたえが合っているだけでは足りない。道が重なって前後の段の文字が
+    // まざっていないか、段ごとの読み方もひとつずつ確かめる
+    // （results[0] は「最初の盤面」なので、STEPの番号 k は results[k+1] に対応する）。
+    for (let i = 0; i < n; i++) {
+      if ((results[checkpoint[i] + 1] || {}).text !== texts[i]) return null;
+    }
     const checks = ST.validateAll(maze, steps);
     if (checks.some(function (c) { return c.level !== 'ok'; })) return null;
 
@@ -993,7 +1107,7 @@ MZ.packages = (function () {
     PARTS: PARTS, part: part, stageParts: stageParts, stageCount: stageCount,
     canAdd: canAdd, whyNot: whyNot, countOf: countOf,
     usesColor: usesColor, readMode: readMode, readOrder: readOrder,
-    excludeColors: excludeColors, answerColor: answerColor, noiseColor: noiseColor,
+    excludeColors: excludeColors, answerColor: answerColor, noiseColor: noiseColor, stageColors: stageColors,
     defaultText: defaultText, instruction: instruction, titleOf: titleOf,
     ORDERS: ORDERS, ORDER_KEYS: ORDER_KEYS, orderWord: orderWord,
     STAGE_COLORS: STAGE_COLORS, MAX_STAGES: MAX_STAGES, DENSITY: DENSITY, LOOPS: LOOPS,
