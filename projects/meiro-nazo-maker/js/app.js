@@ -116,14 +116,40 @@
     A.maze = ED.getMaze();
     A.steps = steps;
     A.stepHistory = [];
-    A.targets = [];
     A.selStep = -1;
     A.openId = null;
     ED.state.history = []; ED.state.future = [];
     ED.clearDisplay();
     MZ.opt.set('rows', A.maze.rows);
     MZ.opt.set('cols', A.maze.cols);
+    // 「③ 読み方とこたえ」を、自動作成した段ごとの読み方で埋めておく。
+    // 空のまま渡すと「くわしく直す」で見たときに③が空っぽで、
+    // 何を直せばいいのか分からなくなってしまう。
+    A.results = ST.runSteps(A.maze, A.steps);
+    A.targets = deriveTargetsFromSteps();
     refresh();
+  }
+
+  /** 自動作成のSTEPから、段ごとの「読むルート・色・順・こたえ」を読みとって targets の形にする */
+  function deriveTargetsFromSteps() {
+    const solves = A.results.filter(function (r) { return r.step && r.step.type === 'solve'; });
+    return solves.map(function (sr, k) {
+      const nextIdx = (k + 1 < solves.length) ? solves[k + 1].index : Infinity;
+      const chain = A.results.filter(function (r) { return r.index >= sr.index && r.index < nextIdx; });
+      let color = null, order = 'route', text = '';
+      chain.forEach(function (r) {
+        // 盤面を変えるSTEP（壁を消す・STARTを移すなど）を通ると text は一度リセットされる。
+        // だから「最後の要素」ではなく「最後に出てきた読める文字」を拾う。
+        if (r.text !== null && r.text !== undefined) text = r.text;
+        if (!r.step) return;
+        if (r.step.type === 'filter-color' && r.step.params.mode === 'include' &&
+            r.step.params.colors && r.step.params.colors.length === 1) {
+          color = r.step.params.colors[0];
+        }
+        if (r.step.type === 'reorder') order = r.step.params.order || 'route';
+      });
+      return { srcId: 'step' + sr.index, color: color, order: order, text: text };
+    });
   }
 
   function showEditor() {
@@ -892,7 +918,9 @@
     A.results.forEach(function (r) {
       if (!r.step || !r.path) return;
       if (r.step.type !== 'solve' && r.step.type !== 'route-drawn') return;
-      out.push({ id: 'step' + r.index, label: 'STEP' + (r.index + 1) + '（' + r.title + '）', path: r.path });
+      // board も持たせておく（自動作成の多段の謎は、前の段の文字を消してから
+      // 次の段を解くので、確かめるときも「そのSTEPの時点の盤面」を見る必要がある）
+      out.push({ id: 'step' + r.index, label: 'STEP' + (r.index + 1) + '（' + r.title + '）', path: r.path, board: r.board });
     });
     if (!out.length) {
       const sv = E.solve(A.maze, { useAvoid: true });
@@ -1009,7 +1037,10 @@
     A.targets.forEach(function (t, i) {
       const sv = findSource(t.srcId);
       if (!sv) return;
-      const got = MZ.packages.readRow(A.maze, { path: sv.path, color: t.color || null, order: t.order || 'route' });
+      // STEP由来の行は、そのSTEPの時点の盤面（前の段の文字が消えたあとの状態）で確かめる。
+      // 自動作成の多段の謎（同じ色で読み直す段がある）は、生のA.mazeのままだと
+      // まだ消えていない前の段の文字まで拾ってしまう。
+      const got = MZ.packages.readRow(sv.board || A.maze, { path: sv.path, color: t.color || null, order: t.order || 'route' });
       const want = MZ.packages.letters(t.text).join('');
       if (!want) {
         box.appendChild(el('div', 'hint', (i + 1) + '行め：いま読めるのは「' + got + '」'));
