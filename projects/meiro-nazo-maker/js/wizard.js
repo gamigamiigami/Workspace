@@ -128,8 +128,11 @@
         return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
                  'move-both': 'STARTもGOALも変わる', 'next-read': '読み方を変えて読み直す' }[k] || k;
       });
+      // 色が変わるのは「色を変えて読み直す」のときだけ。それ以外の段（STARTが変わる等）は前の段と同じ色のまま
+      const sc = P.stageColors(W.parts);
+      const colorWords = sc.map(function (c) { return M.COLORS[c].label; });
       info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
-        (colorForced ? '段ごとに 赤 → 青 → 緑 → 紫 と文字の色が変わります。' : '');
+        (colorForced ? '文字の色は ' + colorWords.join(' → ') + ' の順です（色が変わるのは「読み方を変えて読み直す」のときだけ）。' : '');
     }
     $('#btnGenerate').disabled = false;
   }
@@ -153,7 +156,7 @@
     for (let i = 0; i < n; i++) {
       const key = 's' + (i + 1);
       const isLast = (i === n - 1);
-      const cname = M.COLORS[P.answerColor(mode, i, n)].label;
+      const cname = M.COLORS[P.answerColor(mode, i, W.parts)].label;
       const label = (n > 1 ? (i + 1) + '段め' : '') +
         (isLast ? (n > 1 ? 'のこたえ' : 'こたえになる文章') : 'に読ませる指示') +
         '（' + cname + 'で置きます）';

@@ -508,7 +508,10 @@ MZ.ops = (function () {
   register({
     id: 'remove-walls', label: '線（壁）を消す', group: 'かえる',
     inputs: '迷路 + 色', outputs: '変わった迷路',
-    defaults: { colors: ['red'], mode: 'disable' },
+    // keys は自動作成（packages.js）が「この壁だけ」を確実に指すために使う内部むけの項目。
+    // 手作業の編集画面フォームには出さない（段が同じ色を共有すると、色だけでは
+    // 「今回消したい壁」と「別の段の壁」を区別できないことがあるため）。
+    defaults: { colors: ['red'], keys: [], mode: 'disable' },
     describe: function (p) {
       const names = (p.colors || []).map(function (c) { return M.COLORS[c] ? M.COLORS[c].label : c; }).join('・');
       return (names || 'すべて') + 'の線を消す';
@@ -516,10 +519,13 @@ MZ.ops = (function () {
     run: function (ctx, p) {
       const board = M.cloneBoard(ctx.board);
       let n = 0;
-      Object.keys(board.walls).forEach(function (k) {
+      const targetKeys = (p.keys && p.keys.length) ? p.keys : Object.keys(board.walls);
+      targetKeys.forEach(function (k) {
         const w = board.walls[k];
         if (!w) return;
-        if (p.colors && p.colors.length && p.colors.indexOf(w.color) < 0) return;
+        if (!p.keys || !p.keys.length) {
+          if (p.colors && p.colors.length && p.colors.indexOf(w.color) < 0) return;
+        }
         if (p.mode === 'delete') { delete board.walls[k]; n++; }
         else if (p.mode === 'hide') { w.hidden = true; n++; }
         else { w.disabled = true; n++; }      // 通れるようになる
@@ -533,7 +539,9 @@ MZ.ops = (function () {
   register({
     id: 'remove-elements', label: '文字・記号を消す', group: 'かえる',
     inputs: '迷路 + 色/種類', outputs: '変わった迷路',
-    defaults: { colors: [], kinds: [], values: '', mode: 'disable' },
+    // ids は自動作成（packages.js）が「この文字だけ」を確実に指すために使う内部むけの項目。
+    // 手作業の編集画面フォームには出さない。
+    defaults: { colors: [], kinds: [], values: '', ids: [], mode: 'disable' },
     describe: function (p) {
       const names = (p.colors || []).map(function (c) { return M.COLORS[c] ? M.COLORS[c].label : c; }).join('・');
       const vals = (p.values || '').trim();
@@ -544,6 +552,7 @@ MZ.ops = (function () {
       const vals = Array.from((p.values || '').trim());
       let n = 0;
       const hit = function (e) {
+        if (p.ids && p.ids.length) return p.ids.indexOf(e.id) >= 0;
         if (p.colors && p.colors.length && p.colors.indexOf(e.color) < 0) return false;
         if (p.kinds && p.kinds.length && p.kinds.indexOf(e.kind) < 0) return false;
         if (vals.length && vals.indexOf(e.value) < 0) return false;
