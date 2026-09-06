@@ -451,21 +451,35 @@ MZ.packages = (function () {
     }
   }
 
-  function scatterOutside(maze, paths, rc, colors) {
+  function scatterOutside(maze, paths, rc, colors, pool) {
     let all = [];
     paths.forEach(function (p) { all = all.concat(p || []); });
     O.scatterDummies(maze, all, {
-      density: DENSITY[rc.density] !== undefined ? DENSITY[rc.density] : DENSITY.normal,
-      colors: colors
+      density: curDensity(rc.density),
+      colors: colors,
+      pool: pool
     });
   }
 
+  /** その設定の名前（few/normal/many）を、実際のこさ（0〜1）にする */
+  function curDensity(key) { return DENSITY[key] !== undefined ? DENSITY[key] : DENSITY.normal; }
+
+  /**
+   * まぎれ文字の材料。
+   * ★以前は「答えで使われている字だけ」を材料にしていた（=いちばん紛れると考えていた）が、
+   *   字の種類が4〜8個しかないと、まぎれ文字が答えとそっくりな字ばかりになってしまい、
+   *   「カモフラージュがみんな答えに似ている」と伊神さんから指摘を受けた。
+   * → 土台はひらがな46字すべてにして、答えが漢字・カタカナ・数字を含むときだけ
+   *   その字を少し混ぜる（種類がゼロにならないように）。
+   */
   function poolFrom(texts) {
-    const set = {}, out = [];
+    const set = {}, base = O.POOLS.hiragana.slice();
+    base.forEach(function (ch) { set[ch] = true; });
+    const extra = [];
     texts.forEach(function (t) {
-      letters(t).forEach(function (ch) { if (!set[ch]) { set[ch] = true; out.push(ch); } });
+      letters(t).forEach(function (ch) { if (!set[ch]) { set[ch] = true; extra.push(ch); } });
     });
-    return out.length >= 4 ? out : O.POOLS.hiragana;
+    return base.concat(extra);
   }
 
   /* -----------------------------------------------------------------------
@@ -612,14 +626,18 @@ MZ.packages = (function () {
 
     /* ---- ⑤ まぎらわしい文字 ----
      * 大事な約束：ルートの上にまく文字は、その段で「読まれない色」でなければならない。
-     * 読まれる色でまくと、答えの中に関係ない文字がまざってしまう。 */
-    if (noise) fillGaps(maze, routes, noise, 1, poolFrom(texts));
+     * 読まれる色でまくと、答えの中に関係ない文字がまざってしまう。
+     * ★以前はルートの空きマスを必ず100%埋めていたので、まわり（こさ設定ぶんしか埋めない）
+     *   と比べて答えルートだけ文字がびっしり詰まって見えてしまっていた。
+     *   ルートの内側も、まわりと同じ「こさ」で埋める。 */
+    const dummyPool = poolFrom(texts);
+    if (noise) fillGaps(maze, routes, noise, curDensity(rc.density), dummyPool);
     if (color) {
       const outColors = ['black'].concat(STAGE_COLORS.slice(0, n));
-      scatterOutside(maze, routes, rc, outColors);
+      scatterOutside(maze, routes, rc, outColors, dummyPool);
     } else {
       // 全部読む謎では、道の上に余計な文字を置いてはいけない
-      scatterOutside(maze, routes, rc, ['black']);
+      scatterOutside(maze, routes, rc, ['black'], dummyPool);
     }
 
     /* ---- ⑥ STEPを組む ---- */
@@ -953,7 +971,7 @@ MZ.packages = (function () {
         const safe = fillable.map(function (p) {
           return uniqueCells(p).filter(function (q) { return !blocked[M.cellKey(q.r, q.c)]; });
         });
-        fillGaps(maze, safe, fill, 1, poolFrom(rows.map(function (r) { return r.text; })));
+        fillGaps(maze, safe, fill, curDensity(opts.density), poolFrom(rows.map(function (r) { return r.text; })));
         if (fill !== 'black') fillNote = '（まぎれ文字は' + M.COLORS[fill].label + 'にしました。読む色とぶつからないようにするためです）';
       }
     }

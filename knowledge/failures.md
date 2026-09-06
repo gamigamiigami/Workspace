@@ -1,5 +1,55 @@
 # 失敗・ハマりポイント集
 
+## 「まぎれ物を作る」処理を、範囲ごとに別のロジックで書いてしまった
+
+**症状：** 迷路謎メーカーで、印刷した迷路を見た伊神さんから
+「答えのルートだけ文字多い」「答えに似た文字ばかりカモフラージュ文字になる」の2つを指摘された。
+
+**原因：** ルートの中とルートの外で、まぎれ文字の**埋め方も材料も別々**に書いていた。
+
+```js
+// 悪い例：ルートの中は「空きは全部埋める」、外は「こさ設定ぶんだけ」
+fillGaps(maze, routes, noise, 1, poolFrom(texts));          // ratio=1固定
+scatterOutside(maze, routes, rc, outColors);                 // density設定を使う
+
+// 悪い例：poolFrom が答えの字しか返さない
+function poolFrom(texts) {
+  const set = {}, out = [];
+  texts.forEach(t => letters(t).forEach(ch => { if (!set[ch]) { set[ch]=true; out.push(ch); } }));
+  return out.length >= 4 ? out : O.POOLS.hiragana;   // 答えの字が4つ以上あればそれだけを使う
+}
+```
+
+**対処：** 両方とも「1つの共通ルールを、場所によらず同じように適用する」形に直した。
+
+```js
+// 密度は curDensity() を通して、中も外も同じ「こさ設定」を使う
+function curDensity(key) { return DENSITY[key] !== undefined ? DENSITY[key] : DENSITY.normal; }
+if (noise) fillGaps(maze, routes, noise, curDensity(rc.density), dummyPool);
+scatterOutside(maze, routes, rc, outColors, dummyPool);
+
+// 材料はひらがな46字を土台にし、答えの字は「足りない種類を補う」だけにする
+function poolFrom(texts) {
+  const base = O.POOLS.hiragana.slice();
+  const set = {}; base.forEach(ch => set[ch] = true);
+  const extra = [];
+  texts.forEach(t => letters(t).forEach(ch => { if (!set[ch]) { set[ch]=true; extra.push(ch); } }));
+  return base.concat(extra);
+}
+```
+
+**学び：**
+- **見た目に出る「量」や「材料」は、範囲やモードで無自覚に変えない。** 変える理由が無いなら同じにする。
+  今回は「中は完全に埋める」「外は薄く埋める」という判断を、それぞれ別のタイミングで書いたために生まれた不整合だった。
+- **「いちばん紛れる」という思いつきは、極端な条件で裏目に出ることがある。**
+  「答えの字を使えば紛れる」は字の種類が多いときは正しいが、種類が少ない（4〜8字）となると
+  むしろ「答えの字だらけ」になり逆効果になる。**両極端（種類が多い／少ない）を想定してから採用する。**
+- **数値で確かめられる指標を先に作ってから直す。** 「ルートの詰まり具合 ÷ まわりの詰まり具合」
+  「まぎれ文字のうち答えと同じ字だった割合」という2つの比率を最初に定義したことで、
+  直った・直っていないを目視ではなく数字で言えるようになった。
+
+---
+
 ## 「読む条件」と「まぎれものを作る条件」を別々に書いたら、答えが崩れた
 
 **症状：** 迷路謎メーカーで「黒い文字だけ読んで『おかだせんせい』になるように」と指定したのに、

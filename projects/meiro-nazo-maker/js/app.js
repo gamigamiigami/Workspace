@@ -978,7 +978,7 @@
     }
     if (!rows.length) return;
     ED.pushHistory();
-    const res = MZ.packages.placeTargets(A.maze, rows, { fill: $('#ckTargetFill').checked });
+    const res = MZ.packages.placeTargets(A.maze, rows, { fill: $('#ckTargetFill').checked, density: MZ.opt.get('density') });
     if (!res.ok) { setStatus('⚠ ' + res.reason); ED.undo(); afterEdit(); return; }
     // 置き直した結果が「最終こたえ」と食いちがうと ✕ が出てしまうので、
     // 指定した言葉のどれかになっていれば、想定こたえのほうを合わせておく
