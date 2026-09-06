@@ -30,7 +30,8 @@
     targets: [],            // 「このルートをこの色で読んだらこの言葉」の指定
     dummyColors: ['black'],
     player: { index: 0, showAnswer: false, screens: [] },
-    openId: null
+    openId: null,
+    pngInstBase: null       // #inPngInst に最後に自動で入れた指示文（変わったときだけ上書きする）
   };
 
   /* =======================================================================
@@ -106,6 +107,8 @@
     showWizard: showWizard,
     doPrint: function () { doPrint(); },
     doPng: function () { doPng(); },
+    doPngShare: function () { doPngShare(); },
+    canShareFiles: function () { return canShareFiles(); },
     setTool: setTool,
     setStatus: setStatus
   };
@@ -263,6 +266,10 @@
     $('#btnPrint2').addEventListener('click', doPrint);
     $('#btnPng').addEventListener('click', doPng);
     $('#btnPng2').addEventListener('click', doPng);
+    if (canShareFiles()) {
+      $('#btnPngShare').hidden = false;
+      $('#btnPngShare').addEventListener('click', doPngShare);
+    }
     $('#btnSave').addEventListener('click', function () { $('#saveTitle').value = A.maze.meta.title || ''; $('#saveModal').hidden = false; $('#saveTitle').focus(); });
     $('#btnSaveCancel').addEventListener('click', function () { $('#saveModal').hidden = true; });
     $('#btnSaveDo').addEventListener('click', saveWork);
@@ -457,7 +464,23 @@
     $('#btnUndoStep').disabled = !A.stepHistory.length;
     $('#answerText').textContent = ST.finalText(A.results) || '—';
     renderFlow();
+    syncPngInst();
     saveAuto();
+  }
+
+  /**
+   * 画像に入れる指示文の欄（#inPngInst）を、自動作成の指示文と同期させる。
+   * ユーザーが自分で書きかえたあとは、迷路そのものが変わるまで上書きしない
+   * （書きかえるたびに自動生成の文へもどってしまうと編集にならないため）。
+   */
+  function syncPngInst() {
+    const ta = $('#inPngInst');
+    if (!ta) return;
+    const inst = A.maze.meta.instruction || '';
+    if (A.pngInstBase === null || A.pngInstBase !== inst) {
+      A.pngInstBase = inst;
+      ta.value = inst;
+    }
   }
 
   /** 表示する盤面を決める（設計図か、選んだSTEPの結果か） */
@@ -1204,14 +1227,22 @@
     setTimeout(function () { window.print(); }, 120);
   }
 
-  function doPng() {
+  /** 画像として書き出すときの盤面と設定（ダウンロード・写真に保存、両方で使う） */
+  function pngBoardAndOpts() {
     const board = ED.shownBoard();
     const o = printOpts(true);
     o.routePath = (A.selStep >= 0 && A.results[A.selStep + 1]) ? A.results[A.selStep + 1].path
       : (ED.state.renderOpts.routePath || null);
     o.showRoute = $('#ckPrintAnswer').checked && !!o.routePath;
     o.title = A.maze.meta.title || '';
-    const url = R.toDataURL(board, o);
+    const ckInst = $('#ckPngInst'), taInst = $('#inPngInst');
+    o.inst = (!ckInst || ckInst.checked) ? ((taInst && taInst.value) || A.maze.meta.instruction || '') : '';
+    return { board: board, o: o };
+  }
+
+  function doPng() {
+    const bo = pngBoardAndOpts();
+    const url = R.toDataURL(bo.board, bo.o);
     const a = document.createElement('a');
     a.href = url;
     a.download = (A.maze.meta.title || 'meiro-nazo') + '.png';
@@ -1219,6 +1250,31 @@
     a.click();
     document.body.removeChild(a);
     setStatus('画像を保存しました（' + a.download + '）');
+  }
+
+  /**
+   * スマホでは「ダウンロード」だとファイルアプリの奥に入ってしまい、写真アプリから
+   * 見つけにくいことがある。Web Share API（ファイル共有に対応した端末）が使えるときは
+   * 「写真に保存」ボタンを出し、共有シートの「画像を保存」から写真フォルダへ直接置けるようにする。
+   * 対応していない端末・PCでは、ボタンごと出さない（ダウンロードのみでよい）。
+   */
+  function canShareFiles() {
+    if (!navigator.share || !navigator.canShare) return false;
+    try {
+      const probe = new File([new Blob(['x'])], 'x.png', { type: 'image/png' });
+      return navigator.canShare({ files: [probe] });
+    } catch (e) { return false; }
+  }
+  function doPngShare() {
+    const bo = pngBoardAndOpts();
+    R.toCanvas(bo.board, bo.o).toBlob(function (blob) {
+      if (!blob) { setStatus('⚠ 画像を作れませんでした'); return; }
+      const name = (A.maze.meta.title || 'meiro-nazo') + '.png';
+      const file = new File([blob], name, { type: 'image/png' });
+      navigator.share({ files: [file], title: A.maze.meta.title || '迷路謎' })
+        .then(function () { setStatus('写真アプリなどに共有しました'); })
+        .catch(function () { /* 共有シートを閉じただけの場合もあるので、エラーにはしない */ });
+    }, 'image/png');
   }
 
   /* =======================================================================

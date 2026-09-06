@@ -34,15 +34,65 @@ MZ.render = (function () {
     legend: false,
     selection: [],
     highlightCells: [],
-    title: ''
+    title: '',
+    inst: ''     // 全体の指示文（迷路の上に1行で自動縮小して出す。改行が入っていればその行どおりに出す）
   };
 
   function opt(o, k) { return (o && o[k] !== undefined) ? o[k] : DEFAULTS[k]; }
+
+  const INST_MIN_FONT = 11;   // これより小さくはしない（読めなくなるため）
+  let instMeasureCtx = null;
+  function measureCtx() {
+    if (!instMeasureCtx) instMeasureCtx = document.createElement('canvas').getContext('2d');
+    return instMeasureCtx;
+  }
+
+  /**
+   * 指示文を「実際に描く行」と「そのフォントサイズ」に決める。
+   * measure()（大きさの計算）と drawBoard()（実際に描く）の両方が、
+   * かならずこの1つの結果を使う（2か所で別々に決めると、確保した高さと
+   * 実際に描く行数がずれて、はみ出したり余白が余ったりする）。
+   *
+   * ・改行がもとから無い（自動作成のまま）：1行に収まるまでフォントを縮める。
+   *   最小サイズでもまだ収まらないくらい長い文章は、最小サイズのまま
+   *   複数行に自動で折り返す（無理に1行へ押しこんで読めなくはしない）。
+   * ・改行がある（ユーザーが手で編集した）：その行どおりに、いちばん長い行を
+   *   基準にサイズを縮める（折り返しはしない＝ユーザーの改行を尊重する）。
+   */
+  function fitInst(text, availW, cell) {
+    if (!text) return { lines: [], fontSize: 0 };
+    const manual = text.indexOf('\n') >= 0;
+    const rawLines = String(text).split('\n').map(function (l) { return l.trim(); }).filter(function (l) { return l.length; });
+    if (!rawLines.length) return { lines: [], fontSize: 0 };
+    const ctx = measureCtx();
+    const widthAt = function (s, fs) { ctx.font = fs + 'px system-ui, sans-serif'; return ctx.measureText(s).width; };
+    let fs = Math.round(cell * 0.55);
+    while (fs > INST_MIN_FONT) {
+      const widest = rawLines.reduce(function (mx, l) { return Math.max(mx, widthAt(l, fs)); }, 0);
+      if (widest <= availW) break;
+      fs -= 1;
+    }
+    if (manual || rawLines.length > 1) return { lines: rawLines, fontSize: fs };
+    // 1行のまま最小サイズでも収まらない → 最小サイズで自動的に複数行へ折り返す
+    const one = rawLines[0];
+    if (widthAt(one, fs) <= availW) return { lines: [one], fontSize: fs };
+    const wrapped = [];
+    let cur = '';
+    Array.from(one).forEach(function (ch) {
+      const next = cur + ch;
+      if (cur && widthAt(next, fs) > availW) { wrapped.push(cur); cur = ch; } else { cur = next; }
+    });
+    if (cur) wrapped.push(cur);
+    return { lines: wrapped, fontSize: fs };
+  }
 
   /** 描いたときの大きさを返す */
   function measure(board, o) {
     const cell = opt(o, 'cellPx'), pad = opt(o, 'pad');
     const titleH = opt(o, 'title') ? Math.round(cell * 0.9) : 0;
+    const width = pad * 2 + board.cols * cell;
+    const inst = fitInst(opt(o, 'inst'), width - pad * 2, cell);
+    const instH = inst.lines.length ? Math.round(cell * 0.62 * inst.lines.length + cell * 0.3) : 0;
     let legendH = 0;
     if (opt(o, 'legend')) {
       const perRow = Math.max(1, Math.floor((board.cols * cell) / (cell * 2.3)));
@@ -50,10 +100,11 @@ MZ.render = (function () {
       legendH = Math.round(rows * cell * 0.78 + cell * 0.4);
     }
     return {
-      cell: cell, pad: pad, titleH: titleH, legendH: legendH,
-      width: pad * 2 + board.cols * cell,
-      height: pad * 2 + board.rows * cell + titleH + legendH,
-      originY: pad + titleH
+      cell: cell, pad: pad, titleH: titleH, instH: instH, legendH: legendH,
+      instLines: inst.lines, instFontSize: inst.fontSize,
+      width: width,
+      height: pad * 2 + board.rows * cell + titleH + instH + legendH,
+      originY: pad + titleH + instH
     };
   }
 
@@ -95,6 +146,21 @@ MZ.render = (function () {
       ctx.font = 'bold ' + Math.round(cell * 0.5) + 'px system-ui, sans-serif';
       ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
       ctx.fillText(opt(o, 'title'), pad, pad + m.titleH / 2);
+    }
+
+    /* ---- 全体の指示文（迷路の上に、はみ出さないよう自動でサイズを縮めて出す） ----
+     * measure() が呼んだ fitInst() の結果（m.instLines/instFontSize）をそのまま使うので、
+     * 確保した高さと実際に描く行数・文字の大きさが必ず一致する
+     * （別々に計算すると、ずれてはみ出したり余白が余ったりする）。 */
+    if (m.instLines.length) {
+      ctx.save();
+      ctx.fillStyle = '#22272e';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = m.instFontSize + 'px system-ui, sans-serif';
+      const lineH = cell * 0.62;
+      const top = pad + m.titleH + lineH / 2;
+      m.instLines.forEach(function (l, i) { ctx.fillText(l, m.width / 2, top + i * lineH); });
+      ctx.restore();
     }
 
     /* ---- マスの色 ---- */
