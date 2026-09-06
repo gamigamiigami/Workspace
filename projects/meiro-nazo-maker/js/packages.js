@@ -29,6 +29,20 @@ MZ.packages = (function () {
   const STAGE_COLORS = ['red', 'blue', 'green', 'purple'];
   const MAX_STAGES = STAGE_COLORS.length;
 
+  /* 読む順番。'route'（通った順）が既定で、カードで選ぶとここから1つ使う */
+  const ORDERS = [
+    { key: 'reverse', label: 'うしろから', word: 'うしろから順に' },
+    { key: 'lr',      label: '左 → 右',    word: '左にあるものから順に' },
+    { key: 'rl',      label: '右 → 左',    word: '右にあるものから順に' },
+    { key: 'tb',      label: '上 → 下',    word: '上にあるものから順に' },
+    { key: 'bt',      label: '下 → 上',    word: '下にあるものから順に' }
+  ];
+  const ORDER_KEYS = ORDERS.map(function (o) { return o.key; });
+  function orderWord(key) {
+    const o = ORDERS.filter(function (x) { return x.key === key; })[0];
+    return o ? o.word : '通った順に';
+  }
+
   const BUILD_TRIES = 60;
   const CORNER_TRIES = 20;
 
@@ -49,6 +63,11 @@ MZ.packages = (function () {
     {
       id: 'read-color', kind: 'read', emoji: '🔴', name: '色でしぼって読む',
       summary: '通った道の「赤い文字だけ」を読みます。2回えらぶと 赤→青 と読み直す段が増えます',
+      level: 'ふつう'
+    },
+    {
+      id: 'read-not-color', kind: 'read', emoji: '🚫', name: '色いがいを読む',
+      summary: '「赤い文字いがいを読め」の言い方にします。2回えらぶと読み直す段が増えます',
       level: 'ふつう'
     },
     {
@@ -75,26 +94,35 @@ MZ.packages = (function () {
       id: 'move-goal', kind: 'stage', emoji: '🎯', name: 'GOALが変わって次の段へ',
       summary: '読んだ指示どおりに☆を新しいGOALにして、もう一度解きます',
       level: 'むずかしい'
+    },
+    {
+      id: 'read-order', kind: 'order', emoji: '🔃', name: '読む順番を変える',
+      summary: '通った順ではなく「うしろから」「左 → 右」などの順に読ませます',
+      level: 'むずかしい',
+      option: { key: 'read-order', label: '読む順', def: 'reverse', list: ORDERS }
     }
   ];
 
   function part(id) { return PARTS.filter(function (p) { return p.id === id; })[0]; }
 
+  function isRead(id) { const p = part(id); return !!p && p.kind === 'read'; }
+  function readIds(parts) { return (parts || []).filter(isRead); }
+
   /**
    * 選んだ部品を「段のつなぎ方」の並びに変える。
    * 同じ部品を何回でも選べる。
    *   ・段を足す部品は、選んだ回数だけ段が増える
-   *   ・「色でしぼって読む」は、2回目からが段になる（同じ道を色を変えて読み直す）
+   *   ・読み方の部品は、2回目からが段になる（同じ道を色を変えて読み直す）
    *   ・STARTを変える と GOALを変える がとなり合っていたら、1つにまとめて「ほしからほしへ」にする
    */
   function stageParts(parts) {
     const raw = [];
-    let colorSeen = 0;
+    let readSeen = 0;
     (parts || []).forEach(function (id) {
       const p = part(id);
       if (!p) return;
       if (p.kind === 'stage') raw.push(id);
-      else if (id === 'read-color') { colorSeen++; if (colorSeen > 1) raw.push('next-color'); }
+      else if (p.kind === 'read') { readSeen++; if (readSeen > 1) raw.push('next-read'); }
     });
     // となり合った START変更 と GOAL変更 は1つにまとめる
     const out = [];
@@ -107,22 +135,88 @@ MZ.packages = (function () {
     return out.slice(0, MAX_STAGES - 1);
   }
   function stageCount(parts) { return Math.min(MAX_STAGES, stageParts(parts).length + 1); }
-  function usesColor(parts) { return (parts || []).indexOf('read-color') >= 0 || stageCount(parts) > 1; }
+  function usesColor(parts) { return readMode(parts) !== 'all'; }
 
-  /** その部品をあと何個えらべるか */
+  /**
+   * 読み方。
+   *   'all'     … 通ったマスの文字をぜんぶ読む（しかけ無しの1段のときだけ）
+   *   'include' … その段の色の文字「だけ」読む
+   *   'exclude' … その段以外の色の文字を読まない＝「○色いがいを読め」の言い方
+   * 「色でしぼって読む」と「色いがいを読む」は言い方が正反対なので、混ぜて選べないようにしている。
+   */
+  function readMode(parts) {
+    const r = readIds(parts);
+    if (r.length) return r[0] === 'read-not-color' ? 'exclude' : 'include';
+    return stageCount(parts) > 1 ? 'include' : 'all';
+  }
+
+  /** 段 i で「読まない」色の一覧（exclude のときだけ使う） */
+  function excludeColors(i, n) {
+    if (n <= 1) return [STAGE_COLORS[0]];
+    return STAGE_COLORS.slice(0, n).filter(function (c) { return c !== STAGE_COLORS[i]; });
+  }
+
+  /** 段 i の文字の色（exclude で1段だけのときは、こたえを黒にしてまぎれを赤にする） */
+  function answerColor(mode, i, n) {
+    if (mode === 'all') return 'black';
+    if (mode === 'exclude' && n === 1) return 'black';
+    return STAGE_COLORS[i];
+  }
+  /** ルートの上にまく「読まない文字」の色（null なら まかない） */
+  function noiseColor(mode, n) {
+    if (mode === 'include') return 'black';
+    if (mode === 'exclude') return n === 1 ? STAGE_COLORS[0] : null;
+    return null;
+  }
+
+  /** 読む順（'route' なら通った順のまま） */
+  function readOrder(parts, opts) {
+    if ((parts || []).indexOf('read-order') < 0) return 'route';
+    const v = (opts || {})['read-order'];
+    return ORDER_KEYS.indexOf(v) >= 0 ? v : 'reverse';
+  }
+
+  /** その部品をあと1つ足せるか */
   function canAdd(parts, id) {
     const p = part(id);
     if (!p) return false;
-    if (p.kind === 'solve') return (parts || []).indexOf(id) < 0;        // ○・×は1回だけ
+    if (p.kind === 'solve' || p.kind === 'order') return (parts || []).indexOf(id) < 0;
+    if (p.kind === 'read') {
+      // 「だけ読む」と「いがいを読む」は反対の言い方なので、どちらか片方だけ
+      const cur = readIds(parts);
+      if (cur.length && cur[0] !== id) return false;
+    }
     if (stageCount(parts) >= MAX_STAGES) {
-      // 段が上限。ただし「色でしぼって読む」の1個目は段を増やさないので足せる
-      if (id === 'read-color' && (parts || []).indexOf('read-color') < 0) return true;
+      // 段が上限。ただし読み方の1個目は段を増やさないので足せる
+      if (p.kind === 'read' && !readIds(parts).length) return true;
       return false;
     }
     return true;
   }
+  /** 足せない理由（画面に出すため） */
+  function whyNot(parts, id) {
+    const p = part(id);
+    if (!p) return '';
+    if (p.kind === 'solve') return 'この しかけ は1回だけ選べます';
+    if (p.kind === 'order') return '読む順番は1つだけ選べます';
+    if (p.kind === 'read') {
+      const cur = readIds(parts);
+      if (cur.length && cur[0] !== id) {
+        return '「' + part(cur[0]).name + '」と反対の言い方なので、いっしょには選べません（先にそちらを減らしてください）';
+      }
+    }
+    return '段は' + MAX_STAGES + 'つまでです。ほかの しかけ を減らしてから選んでください';
+  }
   function countOf(parts, id) {
     return (parts || []).filter(function (x) { return x === id; }).length;
+  }
+
+  /** 「○○だけよめ」「○○いがいをよめ」の短い言い方 */
+  function readPhrase(mode, i, n) {
+    if (mode === 'exclude') {
+      return excludeColors(i, n).map(colorAdj).join('と') + 'もじいがいをよめ';
+    }
+    return colorAdj(STAGE_COLORS[i]) + 'もじだけよめ';
   }
 
   /** その段の文章の、はじめから入れておく例 */
@@ -135,38 +229,51 @@ MZ.packages = (function () {
     if (kind === 'move-start') return 'ほしからやりなおし';
     if (kind === 'move-goal') return 'ほしまでいけ';
     if (kind === 'move-both') return 'ほしからほしへ';
-    if (kind === 'next-color') return colorAdj(STAGE_COLORS[i + 1]) + 'もじだけよめ';
+    if (kind === 'next-read') return readPhrase(readMode(parts), i + 1, n);
     return 'つぎへすすめ';
   }
 
+  /** 段 i で読むものの言い方（問題用紙むけ） */
+  function readTarget(mode, i, n) {
+    if (mode === 'all') return '通ったマスの文字';
+    if (mode === 'exclude') {
+      return '通った道の' + excludeColors(i, n).map(colorLabel).join('と') + '色いがいの文字';
+    }
+    return '通った道の' + colorLabel(STAGE_COLORS[i]) + '色の文字だけ';
+  }
+
   /** 問題用紙にのる「解く人がやること」 */
-  function instruction(parts) {
+  function instruction(parts, opts) {
     const st = stageParts(parts);
     const n = stageCount(parts);
-    const color = usesColor(parts);
+    const mode = readMode(parts);
+    const order = readOrder(parts, opts);
     const lines = [];
     const rule = [];
     if ((parts || []).indexOf('must-circles') >= 0) rule.push('○のマスを全部通り');
     if ((parts || []).indexOf('avoid-cross') >= 0) rule.push('×のマスは通らずに');
     const how = rule.length ? rule.join('、') + '、' : '';
+    const way = (order === 'route') ? '順に' : orderWord(order);
 
     for (let i = 0; i < n; i++) {
       const head = (n > 1 ? '（' + (i + 1) + '） ' : '');
-      const read = color ? colorLabel(STAGE_COLORS[i]) + 'い文字だけ' : '通ったマスの文字を';
       const prev = (i > 0) ? st[i - 1] : null;
-      const from = (i === 0) ? 'STARTから'
-        : (prev === 'next-color') ? '同じ道をもう一度たどり、'
-        : (prev === 'move-goal') ? 'STARTから新しいGOALまで'
-        : '新しいSTARTから';
-      lines.push(head + from + how + 'GOALまでいちばん短く進み、' +
-                 (color ? '通った道の' + colorLabel(STAGE_COLORS[i]) + '色の文字だけ' : '通ったマスの文字') +
-                 'を順に読みます。');
+      if (prev === 'next-read') {
+        // 道は変わらないので「進む」は書かず、読み直しだけを言う
+        lines.push(head + '同じ道をもう一度たどり、' + readTarget(mode, i, n) + 'を' + way + '読みます。');
+      } else {
+        const from = (i === 0) ? 'STARTから'
+          : (prev === 'move-goal') ? 'STARTから新しいGOALまで'
+          : '新しいSTARTから';
+        lines.push(head + from + how + 'GOALまでいちばん短く進み、' +
+                   readTarget(mode, i, n) + 'を' + way + '読みます。');
+      }
       const nc = colorAdj(STAGE_COLORS[i + 1]);
       if (st[i] === 'erase-wall') lines.push('　→ 読めた指示どおりに、' + colorAdj(STAGE_COLORS[i]) + '線を消してください。');
       if (st[i] === 'move-start') lines.push('　→ 読めた指示どおりに、' + nc + '★から出発しなおしてください。');
       if (st[i] === 'move-goal') lines.push('　→ 読めた指示どおりに、' + nc + '☆を新しいGOALにしてください。');
       if (st[i] === 'move-both') lines.push('　→ 読めた指示どおりに、' + nc + '★から ' + nc + '☆まで進みなおしてください。');
-      if (st[i] === 'next-color') lines.push('　→ 同じ道をもう一度たどり、今度は' + colorLabel(STAGE_COLORS[i + 1]) + '色の文字だけを読みます。');
+      if (st[i] === 'next-read') lines.push('　→ 同じ道をもう一度たどり、今度は' + readTarget(mode, i + 1, n) + 'を読みます。');
     }
     lines.push('最後に読めた言葉がこたえです。');
     lines.push('※ 同じ通路を行って戻ることはありません（交差はします）。');
@@ -178,7 +285,7 @@ MZ.packages = (function () {
    * ===================================================================== */
   function defaults(recipe) {
     const r = Object.assign({
-      rows: 12, cols: 12, density: 'normal', sg: 'corners', loops: 'none', parts: [], texts: {}
+      rows: 12, cols: 12, density: 'normal', sg: 'corners', loops: 'none', parts: [], texts: {}, opts: {}
     }, recipe || {});
     r.rows = clamp(r.rows, 6, 20);
     r.cols = clamp(r.cols, 6, 20);
@@ -285,7 +392,12 @@ MZ.packages = (function () {
   /* -----------------------------------------------------------------------
    * 文字を置く
    * --------------------------------------------------------------------- */
-  function placeOnFree(maze, path, text, color) {
+  /**
+   * ルートの空いているマスに、文章を等間隔で置く。
+   * order を渡すと「その順で読んだときに文章になる」ように置く。
+   * （読むときと同じ並べかえを、置くときにも通しているので必ず一致する）
+   */
+  function placeOnFree(maze, path, text, color, order) {
     const chs = letters(text);
     if (!chs.length) return false;
     const cells = uniqueCells(path);
@@ -309,10 +421,14 @@ MZ.packages = (function () {
       picked.push(free[j]);
     }
     picked.sort(function (a, b) { return a - b; });
-    const res = O.autoPlaceText(maze, cells, chs.join(''), {
-      mode: 'picked', pickedIndices: picked, color: color, overwrite: false
-    });
-    return !!res.ok;
+    // 通った順にならんだマスを、読む順にならべかえてから1文字ずつ入れる
+    const spots = picked.map(function (i) { return { r: cells[i].r, c: cells[i].c }; });
+    const seq = O.applyOrder(spots, order || 'route', 'all');
+    if (seq.length !== chs.length) return false;
+    for (let i = 0; i < chs.length; i++) {
+      maze.elements.push(M.makeElement(seq[i].r, seq[i].c, chs[i], { color: color }));
+    }
+    return true;
   }
 
   function fillGaps(maze, paths, color, ratio, pool) {
@@ -434,7 +550,10 @@ MZ.packages = (function () {
     const parts = rc.parts || [];
     const st = stageParts(parts);
     const n = stageCount(parts);
-    const color = usesColor(parts);
+    const mode = readMode(parts);           // ぜんぶ読む／その色だけ／その色いがい
+    const order = readOrder(parts, rc.opts);
+    const color = (mode !== 'all');
+    const noise = noiseColor(mode, n);      // ルートの上にまく「読まれない文字」の色
     const needMust = parts.indexOf('must-circles') >= 0;
     const needAvoid = parts.indexOf('avoid-cross') >= 0;
     const texts = [];
@@ -443,7 +562,7 @@ MZ.packages = (function () {
     /* ---- ① 種の迷路 ---- */
     const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
     let need0 = texts[0].length;
-    for (let j = 0; j < st.length && st[j] === 'next-color'; j++) need0 += texts[j + 1].length;
+    for (let j = 0; j < st.length && st[j] === 'next-read'; j++) need0 += texts[j + 1].length;
     // 「線を消して近道を作る」段は、道が長いほど作りやすい（近道になる壁が増える）
     const eraseCount = st.filter(function (k) { return k === 'erase-wall'; }).length;
     const minCells = need0 + (color ? 4 : 2) + eraseCount * 6;
@@ -468,7 +587,7 @@ MZ.packages = (function () {
     for (let i = 0; i < st.length; i++) {
       // その段のあとに「色を変えて読み直す」段が続くなら、同じ道に文字がもっと要る
       let nextNeed = texts[i + 1].length;
-      for (let j = i + 1; j < st.length && st[j] === 'next-color'; j++) nextNeed += texts[j + 1].length;
+      for (let j = i + 1; j < st.length && st[j] === 'next-read'; j++) nextNeed += texts[j + 1].length;
       nextNeed += 1;
 
       const nc = STAGE_COLORS[i + 1];
@@ -477,9 +596,9 @@ MZ.packages = (function () {
       if (st[i] === 'move-start') out = doMoveStart(maze, work, routes[i], nc, solveOpts, nextNeed);
       if (st[i] === 'move-goal') out = doMoveGoal(maze, work, routes[i], nc, solveOpts, nextNeed);
       if (st[i] === 'move-both') out = doMoveBoth(maze, work, routes[i], nc, solveOpts, nextNeed);
-      if (st[i] === 'next-color') {
+      if (st[i] === 'next-read') {
         // 盤面は変えない。同じ道を、次の色でもう一度読むだけ
-        out = { kind: 'next-color', color: nc, path: routes[i] };
+        out = { kind: 'next-read', color: nc, path: routes[i] };
       }
       if (!out) return null;
       transitions.push(out);
@@ -488,13 +607,14 @@ MZ.packages = (function () {
 
     /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ---- */
     for (let i = n - 1; i >= 0; i--) {
-      const c = color ? STAGE_COLORS[i] : 'black';
-      if (!placeOnFree(maze, routes[i], texts[i], c)) return null;
+      if (!placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, n), order)) return null;
     }
 
-    /* ---- ⑤ まぎらわしい文字 ---- */
+    /* ---- ⑤ まぎらわしい文字 ----
+     * 大事な約束：ルートの上にまく文字は、その段で「読まれない色」でなければならない。
+     * 読まれる色でまくと、答えの中に関係ない文字がまざってしまう。 */
+    if (noise) fillGaps(maze, routes, noise, 1, poolFrom(texts));
     if (color) {
-      fillGaps(maze, routes, 'black', 1, poolFrom(texts));
       const outColors = ['black'].concat(STAGE_COLORS.slice(0, n));
       scatterOutside(maze, routes, rc, outColors);
     } else {
@@ -517,17 +637,20 @@ MZ.packages = (function () {
           steps.push(ST.makeStep('set-start', { symbol: '★', symbolColor: tr.color }));
           steps.push(ST.makeStep('set-goal', { symbol: '☆', symbolColor: tr.color }));
         }
-        // next-color は盤面を変えないので、変換のSTEPは要らない
+        // next-read は盤面を変えないので、変換のSTEPは要らない
       }
       steps.push(ST.makeStep('solve', { useMust: needMust }));
       steps.push(ST.makeStep('extract', { kinds: readKinds }));
-      if (color) steps.push(ST.makeStep('filter-color', { mode: 'include', colors: [STAGE_COLORS[i]] }));
+      if (mode === 'include') steps.push(ST.makeStep('filter-color', { mode: 'include', colors: [STAGE_COLORS[i]] }));
+      if (mode === 'exclude') steps.push(ST.makeStep('filter-color', { mode: 'exclude', colors: excludeColors(i, n) }));
+      // 色でしぼったあとに並べかえる（まぎれ文字を巻きこまないため、この順でなければならない）
+      if (order !== 'route') steps.push(ST.makeStep('reorder', { order: order, parity: 'all' }));
     }
     steps.push(ST.makeStep('answer', { expected: texts[n - 1] }));
 
     /* ---- ⑦ 検証を通ったものだけ返す ---- */
     maze.meta.title = titleOf(parts);
-    maze.meta.instruction = instruction(parts);
+    maze.meta.instruction = instruction(parts, rc.opts);
     const results = ST.runSteps(maze, steps);
     if (ST.finalText(results) !== texts[n - 1]) return null;
     const checks = ST.validateAll(maze, steps);
@@ -745,6 +868,38 @@ MZ.packages = (function () {
    *   rows = [{ path, color（null なら全部読む）, text }]
    *   空きマスの少ないルートから先に置く
    * ===================================================================== */
+
+  /** 2つの行が「同じ文字を読んでしまう」関係か（色なし＝全部読む はどの色ともぶつかる） */
+  function colorsClash(a, b) { return !a || !b || a === b; }
+
+  /** 2つのルートが1マスでも重なっているか */
+  function sharesCell(p1, p2) {
+    const seen = {};
+    uniqueCells(p1).forEach(function (p) { seen[M.cellKey(p.r, p.c)] = true; });
+    return uniqueCells(p2).some(function (p) { return seen[M.cellKey(p.r, p.c)]; });
+  }
+
+  /**
+   * どの行にも読まれない色を1つ返す（まぎれ文字用）。
+   * ★ここが第4弾までのバグの原因だった★
+   *   読む色と同じ色でまぎれ文字をまいていたので、答えに関係ない文字がまざっていた。
+   */
+  function unreadColor(rows) {
+    const read = {};
+    rows.forEach(function (r) { if (r.color) read[r.color] = true; });
+    const order = ['black'].concat(M.COLOR_KEYS);
+    for (let i = 0; i < order.length; i++) if (!read[order[i]]) return order[i];
+    return null;
+  }
+
+  /** その行のとおりに読んでみる（画面の確認と、置いたあとの自己チェックで同じものを使う） */
+  function readRow(board, row) {
+    let chars = O.collectOnPath(board, row.path, { kinds: ['text', 'number'] });
+    if (row.color) chars = O.filters.includeColors(chars, [row.color]);
+    if (row.order && row.order !== 'route') chars = O.applyOrder(chars, row.order, 'all');
+    return O.charsToText(chars);
+  }
+
   function placeTargets(maze, rows, opts) {
     opts = opts || {};
     if (!rows || !rows.length) return { ok: false, reason: '行がありません' };
@@ -752,6 +907,20 @@ MZ.packages = (function () {
       if (!rows[i].path || rows[i].path.length < 2) return { ok: false, reason: (i + 1) + '行めのルートが取れませんでした' };
       if (!letters(rows[i].text).length) return { ok: false, reason: (i + 1) + '行めの答えを入れてください' };
     }
+
+    /* ---- ① 先にぶつかりを見る ----
+     * 同じ色を読む行どうしでルートが重なっていると、
+     * おたがいの文字が相手の答えにまざりこんでしまい、どう置いても直らない。 */
+    for (let i = 0; i < rows.length; i++) {
+      for (let j = i + 1; j < rows.length; j++) {
+        if (!colorsClash(rows[i].color, rows[j].color)) continue;
+        if (!sharesCell(rows[i].path, rows[j].path)) continue;
+        const nm = function (r) { return r.color ? M.COLORS[r.color].label + 'だけ' : '全部の文字'; };
+        return { ok: false, reason: (i + 1) + '行め（' + nm(rows[i]) + '）と' + (j + 1) + '行め（' + nm(rows[j]) +
+          '）は同じ文字を読んでしまい、ルートも重なっています。どちらかの「読む色」を変えてください' };
+      }
+    }
+
     // 対象のルート上にある古い文字を片づける（記号やチェックポイントは残す）
     const onPath = {};
     rows.forEach(function (r) { uniqueCells(r.path).forEach(function (p) { onPath[M.cellKey(p.r, p.c)] = true; }); });
@@ -760,35 +929,59 @@ MZ.packages = (function () {
       return !onPath[M.cellKey(e.r, e.c)];
     });
 
-    const order = rows.map(function (r, i) { return { r: r, i: i, n: uniqueCells(r.path).length }; })
-                      .sort(function (a, b) { return a.n - b.n; });
-    for (let k = 0; k < order.length; k++) {
-      const row = order[k].r;
-      if (!placeOnFree(maze, row.path, row.text, row.color || 'black')) {
-        return { ok: false, reason: (order[k].i + 1) + '行め「' + row.text + '」を置く場所が足りません。迷路を大きくするか、文章を短くしてください' };
+    /* ---- ② 空きマスの少ないルートから順に置く ---- */
+    const seq = rows.map(function (r, i) { return { r: r, i: i, n: uniqueCells(r.path).length }; })
+                    .sort(function (a, b) { return a.n - b.n; });
+    for (let k = 0; k < seq.length; k++) {
+      const row = seq[k].r;
+      if (!placeOnFree(maze, row.path, row.text, row.color || 'black', row.order)) {
+        return { ok: false, reason: (seq[k].i + 1) + '行め「' + row.text + '」を置く場所が足りません。迷路を大きくするか、文章を短くしてください' };
       }
     }
-    // まぎらわしい文字（「全部読む」の行があるルートには置かない）
+
+    /* ---- ③ まぎらわしい文字は「どの行にも読まれない色」でだけまく ---- */
+    const fill = unreadColor(rows);
     const allReadPaths = rows.filter(function (r) { return !r.color; }).map(function (r) { return r.path; });
     const fillable = rows.filter(function (r) { return !!r.color; }).map(function (r) { return r.path; });
+    let fillNote = '';
     if (opts.fill !== false && fillable.length) {
-      const blocked = {};
-      allReadPaths.forEach(function (p) { uniqueCells(p).forEach(function (q) { blocked[M.cellKey(q.r, q.c)] = true; }); });
-      const safe = fillable.map(function (p) {
-        return uniqueCells(p).filter(function (q) { return !blocked[M.cellKey(q.r, q.c)]; });
-      });
-      fillGaps(maze, safe, 'black', 1, poolFrom(rows.map(function (r) { return r.text; })));
+      if (!fill) {
+        fillNote = '（6色ぜんぶを読んでいるので、まぎれ文字はまきませんでした）';
+      } else {
+        const blocked = {};
+        allReadPaths.forEach(function (p) { uniqueCells(p).forEach(function (q) { blocked[M.cellKey(q.r, q.c)] = true; }); });
+        const safe = fillable.map(function (p) {
+          return uniqueCells(p).filter(function (q) { return !blocked[M.cellKey(q.r, q.c)]; });
+        });
+        fillGaps(maze, safe, fill, 1, poolFrom(rows.map(function (r) { return r.text; })));
+        if (fill !== 'black') fillNote = '（まぎれ文字は' + M.COLORS[fill].label + 'にしました。読む色とぶつからないようにするためです）';
+      }
     }
-    return { ok: true, placed: rows.length };
+
+    /* ---- ④ 置いたら必ず読み直して確かめる ---- */
+    const ng = [];
+    rows.forEach(function (r, i) {
+      const got = readRow(maze, r);
+      if (got !== letters(r.text).join('')) ng.push((i + 1) + '行め：「' + got + '」');
+    });
+    if (ng.length) {
+      return { ok: false, reason: '置いてみましたが、読み直すと ' + ng.join('／') +
+        ' になってしまいました。ルートが最短になっているか（②）を確かめてください' };
+    }
+    return { ok: true, placed: rows.length, fill: fill, note: fillNote };
   }
 
   return {
     PARTS: PARTS, part: part, stageParts: stageParts, stageCount: stageCount,
-    canAdd: canAdd, countOf: countOf,
-    usesColor: usesColor, defaultText: defaultText, instruction: instruction, titleOf: titleOf,
+    canAdd: canAdd, whyNot: whyNot, countOf: countOf,
+    usesColor: usesColor, readMode: readMode, readOrder: readOrder,
+    excludeColors: excludeColors, answerColor: answerColor, noiseColor: noiseColor,
+    defaultText: defaultText, instruction: instruction, titleOf: titleOf,
+    ORDERS: ORDERS, ORDER_KEYS: ORDER_KEYS, orderWord: orderWord,
     STAGE_COLORS: STAGE_COLORS, MAX_STAGES: MAX_STAGES, DENSITY: DENSITY, LOOPS: LOOPS,
     build: build, checkRecipe: checkRecipe, seed: seed, letters: letters,
     placeOnFree: placeOnFree, fillGaps: fillGaps, scatterOutside: scatterOutside,
-    placeTargets: placeTargets, uniqueCells: uniqueCells, colorAdj: colorAdj
+    placeTargets: placeTargets, readRow: readRow, unreadColor: unreadColor,
+    uniqueCells: uniqueCells, colorAdj: colorAdj
   };
 })();

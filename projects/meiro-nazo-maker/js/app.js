@@ -121,8 +121,8 @@
     A.openId = null;
     ED.state.history = []; ED.state.future = [];
     ED.clearDisplay();
-    $('#inRows').value = A.maze.rows;
-    $('#inCols').value = A.maze.cols;
+    MZ.opt.set('rows', A.maze.rows);
+    MZ.opt.set('cols', A.maze.cols);
     refresh();
   }
 
@@ -172,25 +172,7 @@
     const sp = $('#symbolPick');
     M.SYMBOLS.forEach(function (s) { const o = el('option', '', s); o.value = s; sp.appendChild(o); });
 
-    // 文章の色 / お試しの色
-    [$('#inPhraseColor'), $('#tryColor')].forEach(function (sel) {
-      M.COLOR_KEYS.forEach(function (k) {
-        const o = el('option', '', M.COLORS[k].label);
-        o.value = k; sel.appendChild(o);
-      });
-    });
-    $('#inPhraseColor').value = 'red';
-    $('#tryColor').value = 'red';
-
-    // 読み順・番目
-    Object.keys(O.orders).forEach(function (k) {
-      const o = el('option', '', O.orders[k].label); o.value = k; $('#tryOrder').appendChild(o);
-    });
-    Object.keys(O.parities).forEach(function (k) {
-      const o = el('option', '', O.parities[k].label); o.value = k; $('#tryParity').appendChild(o);
-    });
-
-    // ダミーの色
+    // まぎれ文字の色
     const dc = $('#dummyColors');
     M.COLOR_KEYS.forEach(function (k) {
       const b = el('button', 'sw' + (k === 'black' ? ' on' : ''));
@@ -277,11 +259,14 @@
       });
     });
 
-    /* ---- ① 盤面 ---- */
+    /* ---- ① 盤面と文字の量（かんたん作成と同じ設定を見ている） ---- */
+    MZ.opt.bind('#inRows', 'rows');
+    MZ.opt.bind('#inCols', 'cols');
+    MZ.opt.bind('#inDensity', 'density');
+    MZ.opt.bind('#inLoops', 'loops');
     $('#btnResize').addEventListener('click', function () {
-      const rows = clamp(+$('#inRows').value, 2, 40), cols = clamp(+$('#inCols').value, 2, 40);
       ED.pushHistory();
-      M.resize(A.maze, rows, cols);
+      M.resize(A.maze, MZ.opt.get('rows'), MZ.opt.get('cols'));
       afterEdit();
       ED.fit();
     });
@@ -348,7 +333,6 @@
     $('#ckShowShortest').addEventListener('change', updateRouteView);
 
     /* ---- ③ 文字を置く ---- */
-    $('#btnPlaceText').addEventListener('click', placePhrase);
     $('#btnScatter').addEventListener('click', scatter);
     $('#btnClearDummy').addEventListener('click', function () {
       ED.pushHistory();
@@ -372,10 +356,7 @@
     $('#btnDel').addEventListener('click', function () { ED.deleteSelection(); });
 
     /* ---- ⑤ 読み取りのお試し ---- */
-    ['#tryFilterMode', '#tryColor', '#tryOrder', '#tryParity'].forEach(function (s) {
-      $(s).addEventListener('change', updateTry);
-    });
-    $('#btnTryToStep').addEventListener('click', tryToSteps);
+    $('#btnTryToStep').addEventListener('click', targetsToSteps);
 
     /* ---- ⑥ 別盤面 ---- */
     $('#btnMakeSub').addEventListener('click', function () {
@@ -442,8 +423,8 @@
     renderSteps();
     renderTargets();
     renderChecks();
+    verifyTargets();
     updateRouteLen();
-    updateTry();
     updateRouteView();
     $('#btnUndo').disabled = !ED.canUndo();
     $('#btnRedo').disabled = !ED.canRedo();
@@ -532,7 +513,7 @@
     const chk = G.checkRoute(A.maze, rt.cells);
     if (!chk.ok) { setStatus('⚠ ' + chk.reason); return; }
     ED.pushHistory();
-    const res = G.fromRoute(A.maze, rt.cells, { branchiness: (+$('#inBranch').value) / 100 });
+    const res = G.fromRoute(A.maze, rt.cells, { branchiness: MZ.packages.LOOPS[MZ.opt.get('loops')] || 0 });
     if (!res.ok) { setStatus('⚠ ' + res.reason); return; }
     A.maze.walls = res.walls;
     // START / GOAL は必ずルートの両はしに置き直す
@@ -589,59 +570,39 @@
     return s.ok ? s.path : null;
   }
 
-  function placePhrase() {
-    const text = $('#inPhrase').value.trim();
-    if (!text) { setStatus('置く文章を入れてください'); return; }
-    const path = currentPath();
-    if (!path) { setStatus('先にルートを描くか、START/GOALを置いてください'); return; }
-    ED.pushHistory();
-    const res = O.autoPlaceText(A.maze, path, text, {
-      mode: $('#inPlaceMode').value,
-      color: $('#inPhraseColor').value
-    });
-    setStatus(res.ok ? '✓ ' + res.message : '⚠ ' + res.reason);
-    afterEdit();
-  }
-
   function scatter() {
     const path = currentPath() || [];
     ED.pushHistory();
     const poolKey = $('#inDummyPool').value;
     const res = O.scatterDummies(A.maze, path, {
-      density: (+$('#inDensity').value) / 100,
+      density: MZ.packages.DENSITY[MZ.opt.get('density')],
       colors: A.dummyColors.slice(),
       pool: poolKey === 'same' ? null : O.POOLS[poolKey]
     });
-    setStatus('✓ ' + res.message);
+    setStatus('✓ ' + res.message + '（文字の量：' + DENSITY_LABEL[MZ.opt.get('density')] + '）');
     afterEdit();
   }
+  const DENSITY_LABEL = { few: '少なめ', normal: 'ふつう', many: '多め' };
 
-  /* =======================================================================
-   * ⑤ 読み取りのお試し
-   * ===================================================================== */
-  function updateTry() {
-    const path = currentPath();
-    if (!path) { $('#tryResult').textContent = '（ルートがありません）'; return; }
-    let chars = O.collectOnPath(A.maze, path, {});
-    const mode = $('#tryFilterMode').value;
-    const col = $('#tryColor').value;
-    if (mode === 'include') chars = O.filters.includeColors(chars, [col]);
-    if (mode === 'exclude') chars = O.filters.excludeColors(chars, [col]);
-    chars = O.applyOrder(chars, $('#tryOrder').value, $('#tryParity').value);
-    const t = O.charsToText(chars);
-    $('#tryResult').textContent = t ? '「' + t + '」（' + chars.length + '文字）' : '（読める文字がありません）';
-  }
-
-  function tryToSteps() {
-    const mode = $('#tryFilterMode').value;
-    addStep('solve', {}, true);
-    addStep('extract', { order: 'route', parity: 'all' }, true);
-    if (mode !== 'none') addStep('filter-color', { mode: mode, colors: [$('#tryColor').value] }, true);
-    if ($('#tryOrder').value !== 'route' || $('#tryParity').value !== 'all') {
-      addStep('reorder', { order: $('#tryOrder').value, parity: $('#tryParity').value }, true);
-    }
+  /**
+   * 「読み方とこたえ」に書いた行を、そのままSTEPの流れにする。
+   * （前は「読み取りのお試し」という別の欄が同じことをしていたので、こちらに1本化した）
+   */
+  function targetsToSteps() {
+    const rows = A.targets.filter(function (t) { return !!findSource(t.srcId); });
+    if (!rows.length) { setStatus('⚠ 先に読む行を1つ足してください'); return; }
+    pushStepHistory();
+    A.steps = [];
+    rows.forEach(function (t, i) {
+      addStep('solve', {}, true);
+      addStep('extract', { kinds: ['text', 'number'] }, true);
+      if (t.color) addStep('filter-color', { mode: 'include', colors: [t.color] }, true);
+      if (t.order && t.order !== 'route') addStep('reorder', { order: t.order, parity: 'all' }, true);
+      if (i === rows.length - 1) addStep('answer', { expected: MZ.packages.letters(t.text).join('') }, true);
+    });
+    A.selStep = -1;
     refresh();
-    setStatus('お試しの読み方をSTEPにしました');
+    setStatus('✓ ' + rows.length + '行ぶんの読み方をSTEPにしました（盤面を変えるSTEPは自分で足してください）');
   }
 
   /* =======================================================================
@@ -917,6 +878,7 @@
     return {
       srcId: (src[Math.min(used, src.length - 1)] || {}).id || '',
       color: MZ.packages.STAGE_COLORS[Math.min(used, MZ.packages.STAGE_COLORS.length - 1)],
+      order: 'route',
       text: ''
     };
   }
@@ -964,7 +926,7 @@
       });
       if (!src.some(function (x) { return x.id === t.srcId; })) t.srcId = src[0].id;
       se.value = t.srcId;
-      se.addEventListener('change', function () { t.srcId = se.value; });
+      se.addEventListener('change', function () { t.srcId = se.value; verifyTargets(); });
       r1.appendChild(se);
       const del = el('button', 'del danger', '✕');
       del.addEventListener('click', function () { A.targets.splice(i, 1); renderTargets(); });
@@ -973,21 +935,34 @@
 
       const r2 = el('div', 'row');
       const cs = document.createElement('select');
-      cs.style.width = '110px';
+      cs.style.flex = '1';
       const anyOpt = el('option', '', '全部の文字'); anyOpt.value = ''; cs.appendChild(anyOpt);
       M.COLOR_KEYS.forEach(function (k) {
         const o = el('option', '', M.COLORS[k].label + 'だけ'); o.value = k; cs.appendChild(o);
       });
       cs.value = t.color || '';
-      cs.addEventListener('change', function () { t.color = cs.value; });
+      cs.addEventListener('change', function () { t.color = cs.value; verifyTargets(); });
       r2.appendChild(cs);
+      // 読む順（通った順のほかに うしろから・左→右 などが選べる）
+      const os = document.createElement('select');
+      os.style.flex = '1';
+      const o0 = el('option', '', '通った順'); o0.value = 'route'; os.appendChild(o0);
+      MZ.packages.ORDERS.forEach(function (o) {
+        const x = el('option', '', o.label); x.value = o.key; os.appendChild(x);
+      });
+      os.value = t.order || 'route';
+      os.addEventListener('change', function () { t.order = os.value; verifyTargets(); });
+      r2.appendChild(os);
+      node.appendChild(r2);
+
+      const r3 = el('div', 'row');
       const ip = document.createElement('input');
       ip.type = 'text'; ip.style.flex = '1';
-      ip.placeholder = 'この言葉になるように';
+      ip.placeholder = 'この言葉になるように（空なら今の読みを見るだけ）';
       ip.value = t.text;
-      ip.addEventListener('input', function () { t.text = ip.value; });
-      r2.appendChild(ip);
-      node.appendChild(r2);
+      ip.addEventListener('input', function () { t.text = ip.value; verifyTargets(); });
+      r3.appendChild(ip);
+      node.appendChild(r3);
       box.appendChild(node);
     });
   }
@@ -999,12 +974,12 @@
       const sv = findSource(t.srcId);
       if (!sv) { setStatus('⚠ 読むルートが見つかりません'); return; }
       if (!MZ.packages.letters(t.text).length) { setStatus('⚠ ' + (i + 1) + '行めの言葉を入れてください'); return; }
-      rows.push({ path: sv.path, color: t.color || null, text: t.text, label: sv.label });
+      rows.push({ path: sv.path, color: t.color || null, order: t.order || 'route', text: t.text, label: sv.label });
     }
     if (!rows.length) return;
     ED.pushHistory();
     const res = MZ.packages.placeTargets(A.maze, rows, { fill: $('#ckTargetFill').checked });
-    if (!res.ok) { setStatus('⚠ ' + res.reason); ED.undo(); return; }
+    if (!res.ok) { setStatus('⚠ ' + res.reason); ED.undo(); afterEdit(); return; }
     // 置き直した結果が「最終こたえ」と食いちがうと ✕ が出てしまうので、
     // 指定した言葉のどれかになっていれば、想定こたえのほうを合わせておく
     const results = ST.runSteps(A.maze, A.steps);
@@ -1017,30 +992,36 @@
       last.params.expected = got;
       synced = '（最終こたえも「' + got + '」に合わせました）';
     }
-    setStatus('✓ ' + rows.length + '行ぶんを、全部が成り立つように置きました' + synced);
+    setStatus('✓ ' + rows.length + '行ぶんを、全部が成り立つように置きました' + synced + (res.note || ''));
     afterEdit();
     verifyTargets();
   }
 
-  /** 置いたあと、本当にその言葉になっているか読み直して見せる */
+  /**
+   * いま何が読めるかを見せる。答えを書いてある行は ✓／✕ も出す。
+   * 読み方の計算は packages.readRow に1本化してある（置くときと同じ関数を使う）。
+   */
   function verifyTargets() {
     const box = $('#targetResult');
+    if (!box) return;
     box.textContent = '';
-    let allOk = true;
+    let allOk = true, checked = 0;
     A.targets.forEach(function (t, i) {
       const sv = findSource(t.srcId);
       if (!sv) return;
-      let chars = O.collectOnPath(A.maze, sv.path, { kinds: ['text', 'number'] });
-      if (t.color) chars = O.filters.includeColors(chars, [t.color]);
-      const got = O.charsToText(chars);
+      const got = MZ.packages.readRow(A.maze, { path: sv.path, color: t.color || null, order: t.order || 'route' });
       const want = MZ.packages.letters(t.text).join('');
+      if (!want) {
+        box.appendChild(el('div', 'hint', (i + 1) + '行め：いま読めるのは「' + got + '」'));
+        return;
+      }
+      checked++;
       const ok = (got === want);
       if (!ok) allOk = false;
-      const line = el('div', ok ? 'tgt-ok' : 'tgt-ng',
-        (ok ? '✓ ' : '✕ ') + (i + 1) + '行め：「' + got + '」' + (ok ? '' : '（ねらいは「' + want + '」）'));
-      box.appendChild(line);
+      box.appendChild(el('div', ok ? 'tgt-ok' : 'tgt-ng',
+        (ok ? '✓ ' : '✕ ') + (i + 1) + '行め：「' + got + '」' + (ok ? '' : '（ねらいは「' + want + '」）')));
     });
-    if (allOk && A.targets.length) box.appendChild(el('div', 'hint', 'すべてねらいどおりです。'));
+    if (allOk && checked) box.appendChild(el('div', 'hint', 'すべてねらいどおりです。'));
   }
 
   /* =======================================================================

@@ -23,7 +23,8 @@
   // texts …… いま欄に入っている文字
   // edited … 使う人が自分で書きかえた欄。書きかえていない欄は、
   //          しかけを変えるたびに「その組み合わせにふさわしい例文」に入れかえる
-  const W = { parts: [], texts: {}, edited: {}, built: null, view: 0, views: [] };
+  // opts … カードに「選ぶところ」がある しかけ の設定（今は「読む順番」だけ）
+  const W = { parts: [], texts: {}, edited: {}, opts: {}, built: null, view: 0, views: [] };
 
   /* =======================================================================
    * ① しかけをカードでえらぶ（複数選択）
@@ -51,6 +52,26 @@
       badge.appendChild(minus);
       badge.appendChild(num);
       wrap.appendChild(badge);
+      // 「読む順番」のように、選んだあとで中身を決める しかけ
+      if (def.option) {
+        const opt = el('div', 'pack-opt');
+        opt.dataset.for = def.id;
+        opt.appendChild(el('span', '', def.option.label + '：'));
+        const se = document.createElement('select');
+        def.option.list.forEach(function (o) {
+          const x = el('option', '', o.label); x.value = o.key; se.appendChild(x);
+        });
+        W.opts[def.option.key] = W.opts[def.option.key] || def.option.def;
+        se.value = W.opts[def.option.key];
+        se.addEventListener('click', function (e) { e.stopPropagation(); });
+        se.addEventListener('change', function () {
+          W.opts[def.option.key] = se.value;
+          buildInputs();
+          $('#wizResult').textContent = '';
+        });
+        opt.appendChild(se);
+        wrap.appendChild(opt);
+      }
       grid.appendChild(wrap);
     });
     updateCards();
@@ -58,13 +79,7 @@
 
   /** しかけを1つ足す（同じものを何回でも足せる） */
   function addPart(id) {
-    if (!P.canAdd(W.parts, id)) {
-      const def = P.part(id);
-      setNote(def.kind === 'solve'
-        ? 'この しかけ は1回だけ選べます'
-        : '段は' + P.MAX_STAGES + 'つまでです。ほかの しかけ を減らしてから選んでください');
-      return;
-    }
+    if (!P.canAdd(W.parts, id)) { setNote(P.whyNot(W.parts, id)); return; }
     W.parts.push(id);
     afterPartChange();
   }
@@ -84,17 +99,25 @@
   function updateCards() {
     const n = P.stageCount(W.parts);
     const colorForced = n > 1;
+    // 段が2つ以上あると、選ばなくても「色でしぼって読む」が自動でONになる。
+    // ただし「色いがいを読む」を選んでいるときは、そちらが効いているので出さない。
+    const hasRead = W.parts.some(function (id) { const d = P.part(id); return d && d.kind === 'read'; });
     document.querySelectorAll('.pack').forEach(function (b) {
       const id = b.dataset.id;
       const cnt = P.countOf(W.parts, id);
-      b.classList.toggle('on', cnt > 0 || (id === 'read-color' && colorForced));
-      b.classList.toggle('auto', id === 'read-color' && colorForced && cnt === 0);
-      b.classList.toggle('full', cnt > 0 && !P.canAdd(W.parts, id));
+      const auto = (id === 'read-color' && colorForced && !hasRead);
+      b.classList.toggle('on', cnt > 0 || auto);
+      b.classList.toggle('auto', auto);
+      b.classList.toggle('full', cnt === 0 ? false : !P.canAdd(W.parts, id));
+      b.classList.toggle('off', cnt === 0 && !auto && !P.canAdd(W.parts, id));
     });
     document.querySelectorAll('.pack-count').forEach(function (badge) {
       const cnt = P.countOf(W.parts, badge.dataset.for);
       badge.classList.toggle('show', cnt > 0);
       badge.querySelector('.cnt-num').textContent = '×' + cnt;
+    });
+    document.querySelectorAll('.pack-opt').forEach(function (o) {
+      o.classList.toggle('show', P.countOf(W.parts, o.dataset.for) > 0);
     });
     const info = $('#stageInfo');
     if (n === 1 && !W.parts.length) {
@@ -103,7 +126,7 @@
       const kinds = P.stageParts(W.parts);
       const how = kinds.map(function (k) {
         return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
-                 'move-both': 'STARTもGOALも変わる', 'next-color': '色を変えて読み直す' }[k] || k;
+                 'move-both': 'STARTもGOALも変わる', 'next-read': '読み方を変えて読み直す' }[k] || k;
       });
       info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
         (colorForced ? '段ごとに 赤 → 青 → 緑 → 紫 と文字の色が変わります。' : '');
@@ -126,10 +149,11 @@
     const color = P.usesColor(W.parts);
     box.textContent = '';
 
+    const mode = P.readMode(W.parts);
     for (let i = 0; i < n; i++) {
       const key = 's' + (i + 1);
       const isLast = (i === n - 1);
-      const cname = color ? M.COLORS[P.STAGE_COLORS[i]].label : '黒';
+      const cname = M.COLORS[P.answerColor(mode, i, n)].label;
       const label = (n > 1 ? (i + 1) + '段め' : '') +
         (isLast ? (n > 1 ? 'のこたえ' : 'こたえになる文章') : 'に読ませる指示') +
         '（' + cname + 'で置きます）';
@@ -149,19 +173,20 @@
 
     const note = el('div', 'wiz-inst');
     note.appendChild(el('b', '', '解く人がやること：'));
-    note.appendChild(el('div', '', P.instruction(W.parts)));
+    note.appendChild(el('div', '', P.instruction(W.parts, W.opts)));
     box.appendChild(note);
   }
 
   function recipe() {
-    const size = +$('#wizSize').value;
+    const o = MZ.opt.all();      // 大きさ・文字の量・わき道は編集画面と同じ設定を見ている
     return {
       parts: W.parts.slice(),
       texts: Object.assign({}, W.texts),
-      rows: size, cols: size,
-      density: $('#wizDensity').value,
-      sg: $('#wizSG').value,
-      loops: $('#wizLoops').value
+      opts: Object.assign({}, W.opts),
+      rows: o.rows, cols: o.cols,
+      density: o.density,
+      sg: o.sg,
+      loops: o.loops
     };
   }
 
@@ -243,7 +268,7 @@
     acts.appendChild(mk('🔁 もう一度作る', generate));
     acts.appendChild(mk('🖨 印刷する', function () { MZ.app.doPrint(); }, 'primary'));
     acts.appendChild(mk('🖼 画像で保存', function () { MZ.app.doPng(); }));
-    acts.appendChild(mk('✏️ くわしく直す', function () { MZ.app.showEditor(); }));
+    acts.appendChild(mk('✏️ いま作ったものを直す', function () { MZ.app.showEditor(); }));
     box.appendChild(acts);
 
     renderView();
@@ -284,10 +309,22 @@
   /* =======================================================================
    * 画面の出し入れ
    * ===================================================================== */
-  function show() { $('#wizardView').classList.add('show'); $('#app').classList.remove('show'); }
+  function show() { $('#wizardView').classList.add('show'); $('#app').classList.remove('show'); MZ.opt.paintAll(); }
   function hide() { $('#wizardView').classList.remove('show'); $('#app').classList.add('show'); }
 
   function init() {
+    // 大きさ・文字の量・わき道・START/GOAL は編集画面①とまったく同じ設定を見る
+    MZ.opt.bind('#wizRows', 'rows');
+    MZ.opt.bind('#wizCols', 'cols');
+    MZ.opt.bind('#wizDensity', 'density');
+    MZ.opt.bind('#wizLoops', 'loops');
+    MZ.opt.bind('#wizSG', 'sg');
+    document.querySelectorAll('.sizebtn').forEach(function (b) {
+      b.addEventListener('click', function () {
+        MZ.opt.set('rows', b.dataset.size);
+        MZ.opt.set('cols', b.dataset.size);
+      });
+    });
     buildCards();
     buildInputs();
     $('#btnGenerate').addEventListener('click', generate);
@@ -298,7 +335,7 @@
       MZ.app.setTool('route');
       MZ.app.setStatus('「ルート」で正解にしたい道をなぞってから、右の「このルートが最短になる迷路を作る」を押してください');
     });
-    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart };
+    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart, state: W };
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
