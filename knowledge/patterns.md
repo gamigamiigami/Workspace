@@ -6,6 +6,66 @@
 
 ---
 
+### [設計] 同じ設定が2画面にあるときは「値を1つだけ持って、入力欄はそれを映すだけ」にする — meiro-nazo-maker
+
+**やりたかったこと：** 「かんたん作成」と「編集画面」の両方に *文字の量・大きさ・わき道* を出したい。
+でも別々に持つと「どっちが効いているのか分からない」と言われた（実際に言われた）。
+
+**やったこと：** 値を持つ小さなモジュールを1つ作り、入力欄は `bind` でつなぐだけにする。
+
+```js
+MZ.opt = (function () {
+  const V = { rows: 12, cols: 12, density: 'normal', loops: 'none', sg: 'corners' };
+  const binds = [], watchers = [];
+  function set(k, v, from) {
+    V[k] = fix(k, v);
+    binds.forEach(b => { if (b.key === k && b.el !== from) b.el.value = V[k]; });  // 他の欄に映す
+    watchers.forEach(fn => fn(k, V[k]));
+  }
+  function bind(sel, key) {
+    const el = document.querySelector(sel);
+    binds.push({ key, el });
+    el.value = V[key];
+    el.addEventListener('change', () => set(key, el.value, el));  // 打っている途中は触らない
+  }
+  return { get: k => V[k], set, bind, all: () => Object.assign({}, V) };
+})();
+```
+
+使う側は2行だけ。
+
+```js
+MZ.opt.bind('#wizDensity', 'density');   // かんたん作成の欄
+MZ.opt.bind('#inDensity',  'density');   // 編集画面の欄  → 中身は同じ1つ
+```
+
+**効いたところ：**
+- 「片方で変えたらもう片方も変わる」ので、どちらが効いているか迷う余地が無くなる
+- 発火元の欄は書きかえない（`from`）ので、入力中にカーソルが飛ばない
+- `input` ではなく `change` だけを見る。数値欄で「1」と打った瞬間に下限へ丸められない
+
+**使いどころ：** 入口が2つある制作ツール全般（かんたん／くわしく、初心者／上級者）。
+
+---
+
+### [設計] 「置く」と「読む」は同じ関数を通す — meiro-nazo-maker
+
+「うしろから読む」「左→右で読む」のような**読む順**を足すとき、
+置く処理と読む処理を別々に書くと必ずずれる。同じ並べかえ関数を両方が呼ぶようにする。
+
+```js
+// 置くとき：通った順のマスを、読む順に並べかえてから1文字ずつ入れる
+const seq = O.applyOrder(spots, order, 'all');
+for (let i = 0; i < chs.length; i++) place(seq[i], chs[i]);
+
+// 読むとき：同じ applyOrder を通す
+chars = O.applyOrder(chars, row.order, 'all');
+```
+
+読み方が何種類に増えても、置き方を書き足す必要がない。
+
+---
+
 ### [アルゴリズム] 迷路の一部だけを作り変えるときは「全域木を組み直す」— meiro-nazo-maker
 
 **やりたかったこと：** すでに文字も しかけ も置いてある迷路で、

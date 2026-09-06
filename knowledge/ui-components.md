@@ -6,6 +6,48 @@
 
 ---
 
+## 選択カードに「個数バッジ」と「選んだあとの設定欄」をつける
+
+**用途：** 「どれを入れる？」を複数選ばせ、**同じものを何回でも重ねられる**カード。
+選んだものだけ、その場で細かい設定（例：読む順）を出す。
+
+```html
+<div class="pack-wrap">
+  <button class="pack on" data-id="read-order">…カードの中身…</button>
+  <div class="pack-count show"><button class="cnt-btn">−</button><span class="cnt-num">×2</span></div>
+  <div class="pack-opt show">読む順：<select>…</select></div>
+</div>
+```
+
+```css
+.pack-wrap { position: relative; }
+.pack-count { position: absolute; top: 6px; right: 6px; display: none; }
+.pack-count.show { display: flex; }
+.pack-opt { display: none; }
+.pack-opt.show { display: flex; align-items: center; gap: 6px; }
+.pack-opt select { min-height: 44px; }   /* 指で押せる大きさ */
+```
+
+```js
+// カードの中の select を押してもカードが反応しないようにする（これが無いと選択が増える）
+se.addEventListener('click', function (e) { e.stopPropagation(); });
+```
+
+**⚠ ハマりどころ：`button.on { color:#fff }` が選択カードにも当たる**
+
+ツールバー用に `button.on { background:#1c7ed6; color:#fff }` を書いていると、
+`<button class="pack on">` の**文字まで白**になり、薄い背景のカードで字が読めなくなる。
+`.pack.on` は背景と枠線しか上書きしていなかったので `color` だけ漏れていた。
+
+```css
+.pack.on { border-color:#1c7ed6; background:#f0f7ff; color:#22272e; }  /* color を必ず書き戻す */
+```
+
+**教訓：`.on` のような汎用クラスに色を書くときは、そのクラスを使う全部の見た目を確かめる。**
+確かめ方は `getComputedStyle(el).color` を実際に読むのがいちばん早い（目視だと気づかない）。
+
+---
+
 ## STEPエディタ（処理を1本の流れとして並べる左パネル）
 
 **用途：** 「これをして → 次にこれをして → 答えが出る」という**連鎖する処理**を、
