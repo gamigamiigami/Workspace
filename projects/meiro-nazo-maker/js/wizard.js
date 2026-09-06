@@ -271,6 +271,7 @@
     acts.appendChild(mk('🔁 もう一度作る', generate));
     acts.appendChild(mk('🖨 印刷する', function () { MZ.app.doPrint(); }, 'primary'));
     acts.appendChild(mk('🖼 画像で保存', function () { MZ.app.doPng(); }));
+    if (MZ.app.canShareFiles()) acts.appendChild(mk('📱 写真に保存', function () { MZ.app.doPngShare(); }));
     acts.appendChild(mk('✏️ いま作ったものを直す', function () { MZ.app.showEditor(); }));
     box.appendChild(acts);
 

@@ -586,9 +586,15 @@
           <div class="row">
             <label class="stack" style="flex:1">印刷の大きさ <input type="range" id="inPrintCell" min="24" max="80" value="46" style="width:100%"></label>
           </div>
+          <div class="row"><label><input type="checkbox" id="ckPngInst" checked> 🖼 画像に指示文を入れる</label></div>
+          <p class="hint" style="margin:2px 0 4px">迷路の上に1行で自動縮小して出ます。改行して打つと、その行どおりに複数行で出ます</p>
+          <div class="row">
+            <textarea id="inPngInst" rows="2" style="flex:1;resize:vertical" placeholder="例：STARTからGOALまで最短ルートで進み…"></textarea>
+          </div>
           <div class="row grow">
             <button id="btnPrint2">🖨 印刷</button>
             <button id="btnPng2">🖼 画像で保存</button>
+            <button id="btnPngShare" hidden>📱 写真に保存</button>
           </div>
           <hr style="border:none;border-top:1px dashed #e5e9ef">
           <div class="row grow">
