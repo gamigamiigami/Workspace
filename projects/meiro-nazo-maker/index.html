@@ -53,32 +53,41 @@
   .topbar button:hover { background: #4b5563; }
   .topbar button.primary { background: #2f9e44; border-color: #2f9e44; }
 
-  .panetabs { display: none; gap: 4px; padding: 6px 8px; background: #e2e8f0; }
-  .panetabs button { flex: 1; border-radius: 8px; min-height: 44px; }
+  /* ★ページはぜんぶ1本の流れ。3列に分けていたころは、直したいものが
+       どの列にあるか探すことになっていた。上から順に読めば終わる形にする。 */
+  .layout { display: block; }
+  .pane { background: #fff; border-radius: 12px; padding: 12px; margin-bottom: 10px; }
 
-  /* 編集エリア。ページ全体がスクロールするので、高さは「画面のこれくらい」で決める。
-     こうしないと、盤面が画面いっぱいに広がって上の「かんたん作成」に戻れなくなる。 */
-  .layout { display: grid; grid-template-columns: 250px 1fr 330px; gap: 8px; padding: 8px; align-items: start; }
-  .pane { background: #fff; border-radius: 12px; overflow: auto; padding: 12px; max-height: 78vh; }
-  .pane-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; height: 66vh; min-height: 380px; }
+  /* 盤面の箱。
+     ★迷路の全体・問題文・段の切りかえボタンが同時に見えること★ を優先して高さを決める。
+     画面の高さから「上の見出し・タブ・ツールバー・下のボタン」ぶんを引いた残りが盤面。
+     これより大きくすると、ズームアウトしないと全体が見えなくなる（伊神さんの指摘）。 */
+  .pane-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
 
   /* ===== ツールバー ===== */
   .toolbar {
-    display: flex; flex-wrap: wrap; gap: 5px; align-items: center;
-    padding: 8px; border-bottom: 1px solid #e5e9ef; background: #fbfcfd;
+    display: flex; flex-wrap: wrap; gap: 4px; align-items: center;
+    padding: 6px 8px; border-bottom: 1px solid #e5e9ef; background: #fbfcfd;
   }
-  .toolbar .sep { width: 1px; height: 28px; background: #e0e5ec; margin: 0 3px; }
+  .toolbar .sep { width: 1px; height: 26px; background: #e0e5ec; margin: 0 2px; }
   .tool {
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
-    min-width: 52px; min-height: 46px; padding: 4px 6px; font-size: 11px; line-height: 1.2;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
+    min-width: 50px; min-height: 46px; padding: 3px 4px; font-size: 10.5px; line-height: 1.15;
   }
-  .tool .ic { font-size: 17px; }
-  .swatches { display: flex; gap: 4px; }
-  .sw { width: 30px; height: 30px; min-height: 30px; min-width: 30px; border-radius: 50%; padding: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #cfd6de; }
+  .tool .ic { font-size: 16px; }
+  .toolbar .zoom { min-width: 38px; padding: 4px 6px; }
+  .swatches { display: flex; gap: 3px; }
+  .sw { width: 28px; height: 28px; min-height: 28px; min-width: 28px; border-radius: 50%; padding: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #cfd6de; }
   .sw.on { box-shadow: 0 0 0 3px #1c7ed6; }
 
   /* ===== キャンバス ===== */
-  .canvas-wrap { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #eef1f5; }
+  /* ★盤面の高さはここで決める★
+     ツールバーの行数は画面の幅で変わるので、箱ぜんたいではなく
+     「迷路が映る部分」の高さを直接おさえる。こうしないと、せまい画面で
+     ツールバーが3行になったぶん迷路がつぶれて、豆つぶのようになっていた。
+     引き算の 620px ＝ 上のバー・問題文・タブ・ツールバー・下のボタンの合計のめやす。 */
+  .canvas-wrap { position: relative; overflow: hidden; background: #eef1f5;
+                 height: clamp(240px, calc(100vh - 620px), 430px); }
   #board { display: block; touch-action: none; cursor: crosshair; }
   .cell-input {
     position: absolute; display: none; z-index: 20; text-align: center;
@@ -92,8 +101,9 @@
   }
   .viewbadge.show { display: block; }
   .statusbar {
-    padding: 6px 12px; border-top: 1px solid #e5e9ef; background: #fbfcfd;
-    font-size: 13px; color: #4b5563; min-height: 32px; display: flex; align-items: center; gap: 10px;
+    padding: 5px 12px; border-top: 1px solid #e5e9ef; background: #fbfcfd;
+    font-size: 12.5px; line-height: 1.4; color: #4b5563; min-height: 28px;
+    display: flex; align-items: center; gap: 10px;
   }
 
   /* ===== 右パネル ===== */
@@ -114,7 +124,11 @@
   .row select, .row input[type="text"], .row input[type="range"] { max-width: 100%; min-width: 0; }
   .row.grow > * { flex: 1; }
   .hint { font-size: 12px; color: #6b7280; line-height: 1.5; }
-  .num { width: 74px; }
+  /* input[type=number] の width:100% に負けないよう、型セレクタで指定する
+     （クラスだけだと優先度が足りず、欄が横いっぱいに伸びて となりのボタンと重なっていた） */
+  input[type=number].num { width: 78px; flex: 0 0 auto; }
+  /* 「たて[12] よこ[12]」のように 文字と欄が並ぶラベルは、すきまを空けて折り返さない */
+  .row > label.inline { display: inline-flex; align-items: center; gap: 6px; }
 
   /* ===== STEP一覧 ===== */
   .step {
@@ -182,24 +196,24 @@
                      object-fit: contain; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
   .player-note { max-width: 720px; margin: 12px auto; text-align: left; font-size: 14px; color: #374151; }
 
-  /* ===== かんたん作成（ページの上半分。編集エリアと同じ1ページに並ぶ） =====
+  /* ===== ページ全体（1〜5の順に上から並ぶ） =====
      以前は「かんたん作成」と「編集画面」が別画面で、行き来のたびに切りかわっていた。
      伊神さんの要望で1ページに統合し、上で作って、そのまま下で細かく直せるようにした。 */
   #wizardView { display: block; }
-  #app { display: none; }
+  /* ⑤「もっと細かく直す」は、まだ何も作っていないうちは出さない */
+  #app { display: none; background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px;
+         scroll-margin-top: 62px; }
   #app.show { display: block; }
-  .editor-head {
-    max-width: 920px; margin: 8px auto 0; padding: 0 14px;
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-  }
-  .editor-head h2 { font-size: 15px; }
+  .editor-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .editor-head h2 { font-size: 17px; color: #22272e; letter-spacing: 0; flex: 1; min-width: 190px; }
   .editor-head .no {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 22px; height: 22px; border-radius: 50%; background: #1f2937; color: #fff;
-    font-size: 13px; margin-right: 6px;
+    width: 28px; height: 28px; border-radius: 50%; background: #1c7ed6; color: #fff;
+    font-size: 15px; margin-right: 8px;
   }
   .wiz-wrap { max-width: 920px; margin: 0 auto; padding: 14px; }
-  .wiz-step { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .wiz-step { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px;
+              scroll-margin-top: 62px; }   /* 上のバーは sticky。その ぶん見出しを下げて止める */
   .wiz-step h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; color: #22272e; margin-bottom: 12px; letter-spacing: 0; }
   .wiz-step h2 .no {
     width: 28px; height: 28px; border-radius: 50%; background: #1c7ed6; color: #fff;
@@ -246,9 +260,29 @@
   .ans-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
   .ans-tabs button { flex: 0 0 auto; min-width: 104px; }
   .ans-tabs button.on { background: #1c7ed6; border-color: #1c7ed6; color: #fff; }
-  .ans-view { margin-top: 10px; text-align: center; background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; }
-  .ans-view img { max-width: 100%; height: auto; }
   .ans-note { font-size: 13px; color: #4b5563; margin-top: 8px; text-align: left; line-height: 1.7; }
+
+  /* ===== できたものを見る・直すところ ===== */
+  .work-inst { background: #f0f7ff; border: 1px solid #cfe3fb; border-radius: 10px;
+               padding: 8px 12px; font-size: 13.5px; line-height: 1.6; margin-bottom: 10px; }
+  /* 盤面は「えらんだものを直す」のすぐ上。直す→すぐ見える の距離を短くする */
+  /* 広い画面（PCなど）では、こたえとボタンを盤面の右に置いて、盤面の高さをかせぐ */
+  @media (min-width: 1000px) {
+    .work-cols { display: grid; grid-template-columns: 1fr 290px; gap: 12px; align-items: start; }
+    .work-cols .canvas-wrap { height: clamp(300px, calc(100vh - 360px), 640px); }
+    .work-side .wiz-actions button { flex: 1 1 100%; }
+  }
+
+  /* えらんだものを直す帯。盤面のすぐ下なので、高さを取りすぎないように1〜2行にまとめる */
+  .sel-strip { border: 1px solid #e5e9ef; border-radius: 10px; padding: 6px 10px; margin-top: 8px;
+               display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .sel-strip .hint { margin: 0; flex: 1 1 100%; }
+  .sel-strip .row { flex: 0 0 auto; margin: 0; }
+  .sel-strip .sizewrap { flex: 1 1 150px; min-width: 130px; }
+  .toolbar-sub { border-bottom: 1px solid #e5e9ef; background: #f4f8fc; }
+  /* .toolbar は display:flex なので、hidden 属性だけでは消えない */
+  .toolbar[hidden] { display: none; }
+  .toolbar-sub .lbl { font-size: 12px; color: #4b5563; }
 
   .wiz-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
   .wiz-card { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; text-align: center; }
@@ -285,11 +319,6 @@
   }
 
   @media (max-width: 900px) {
-    .panetabs { display: flex; }
-    .layout { grid-template-columns: 1fr; padding: 6px; }
-    .pane { display: none; }
-    .pane.show { display: block; }
-    .pane-canvas.show { display: flex; }
     .brand small { display: none; }
     /* 指で押すので、せまい画面でも高さは44px以上を保つ */
     .topbar button { font-size: 13px; padding: 6px 10px; min-height: 44px; }
@@ -304,7 +333,7 @@
   <header class="topbar">
     <div class="brand">🧩 迷路謎メーカー<small>作る → そのまま直す</small></div>
     <div class="top-actions">
-      <button id="btnToEditor">✏️ 細かく直す</button>
+      <button id="btnToEditor">✏️ 迷路を直す</button>
       <button id="btnPlay" class="primary">▶ 解いてみる</button>
       <button id="btnPrint">🖨 印刷</button>
       <button id="btnPng">🖼 画像で保存</button>
@@ -318,13 +347,14 @@
     <section class="wiz-step" id="wizStep1">
       <h2><span class="no">1</span> どんなしかけを入れますか？<small style="font-weight:400;font-size:13px;color:#6b7280">（いくつでも組み合わせられます）</small></h2>
       <p class="wiz-base">🏁 <b>「STARTからGOALまで、いちばん短い道を通る」</b>は、どの謎にも必ず入ります。<br>
-        このページは上から下へ<b>1〜4の順</b>に進みます。<b>4 細かく直す</b>（このページの下）では、
-        文字や壁を動かす・色を変える・ルートを描き直すなど、細かい直しが全部できます。<br>
+        このページは上から下へ<b>1〜5の順</b>に進みます。<b>4 できたものを見る・直す</b>に出る迷路は
+        「できあがりの絵」ではなく<b>本物の盤面</b>なので、見ながらそのまま
+        文字や記号を置く・動かす・色を変える・消す ができます。<br>
         最初から自分で道を描きたいときは、下の「② 最初から自分で作る」を押してください。</p>
       <div class="pack-grid" id="packGrid"></div>
       <p class="hint" id="stageInfo" style="margin-top:10px"></p>
       <div class="row" style="margin-top:10px">
-        <button id="btnDrawSelf" style="flex:1">✏️ ② 最初から自分で作る（下の編集エリアで道を描く）</button>
+        <button id="btnDrawSelf" style="flex:1">✏️ 最初から自分で作る（下の盤面に道を描く）</button>
       </div>
     </section>
 
@@ -334,10 +364,10 @@
       <details class="wiz-more">
         <summary>もっと細かく決める（ふつうはそのままでOK）</summary>
         <div class="body">
-          <!-- ここの4つは編集画面①とまったく同じ設定。どちらで変えても両方に効く -->
+          <!-- ここの4つは ⑤ の「① 盤面と文字の量」とまったく同じ設定。どちらで変えても両方に効く -->
           <div class="row">
-            <label>迷路の大きさ　たて<input type="number" id="wizRows" class="num" min="4" max="30" value="12"></label>
-            <label>よこ<input type="number" id="wizCols" class="num" min="4" max="30" value="12"></label>
+            <label class="inline">迷路の大きさ　たて<input type="number" id="wizRows" class="num" min="4" max="30" value="12"></label>
+            <label class="inline">よこ<input type="number" id="wizCols" class="num" min="4" max="30" value="12"></label>
             <button type="button" class="sizebtn" data-size="10">小</button>
             <button type="button" class="sizebtn" data-size="12">中</button>
             <button type="button" class="sizebtn" data-size="14">大</button>
@@ -369,7 +399,7 @@
           <p class="hint" style="margin-top:8px">
             「わき道なし」だと、行き止まりはあってもぐるっと回れる道はできません。
             解く人が「最短はこっちだ」と迷わずに決められます。<br>
-            この4つは下の編集エリアの「① 盤面と文字の量」と同じものです。どちらで変えても両方に効きます。
+            この4つは ⑤ の「① 盤面と文字の量」と同じものです。どちらで変えても両方に効きます。
           </p>
         </div>
       </details>
@@ -378,285 +408,306 @@
     <section class="wiz-step" id="wizStep3">
       <h2><span class="no">3</span> 作る</h2>
       <button id="btnGenerate" class="big-primary">✨ 自動で作る</button>
-      <div id="wizResult"></div>
-    </section>
-  </div>
-</div>
-
-<div id="app">
-
-  <!-- ===== 編集エリアの見出し（上のバーはページに1本だけなので、ここには置かない） ===== -->
-  <div class="editor-head">
-    <h2><span class="no">4</span> 細かく直す</h2>
-    <button id="btnUndo" title="迷路の変更をもとにもどす（Ctrl+Z）">↶ 迷路をもどす</button>
-    <button id="btnRedo" title="迷路の変更をやりなおす（Ctrl+Y）">↷ 迷路をすすむ</button>
-    <button id="btnHome">⬆ 上（作るところ）へ</button>
-    <button id="btnHelp">？ 使い方</button>
-  </div>
-
-  <!-- ===== せまい画面用のタブ ===== -->
-  <nav class="panetabs" id="paneTabs">
-    <button data-pane="steps">① STEP</button>
-    <button data-pane="canvas" class="on">② 迷路</button>
-    <button data-pane="side">③ 設定</button>
-  </nav>
-
-  <main class="layout">
-
-    <!-- ===== 左：STEP一覧 ===== -->
-    <aside class="pane" id="paneSteps">
-      <h2>STEP（謎の流れ）</h2>
-      <p class="hint" id="stepHint" style="margin:6px 0 10px">
-        上から順に実行されます。STEPを押すと、その時点の盤面を見られます。
-      </p>
-      <div id="stepList"></div>
-      <div class="row" style="margin-top:8px">
-        <select id="stepType" style="flex:1"></select>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <button id="btnAddStep" style="flex:1">＋ STEPを足す</button>
-        <button id="btnUndoStep" title="STEPの追加・削除・設定をもとにもどす">↶ STEPをもどす</button>
-      </div>
-      <div class="row" style="margin-top:6px">
-        <button id="btnViewMaze" style="flex:1" title="編集できる設計図にもどる">設計図にもどる</button>
-      </div>
-      <div class="answer-box">
-        最後に出てくる文字：<br><b id="answerText">—</b>
-      </div>
-      <div class="flowbox" id="flowBox" style="margin-top:8px"></div>
-    </aside>
-
-    <!-- ===== 中央：迷路 ===== -->
-    <section class="pane pane-canvas show" id="paneCanvas">
-      <div class="toolbar" id="toolbar">
-        <button class="tool on" data-tool="select"><span class="ic">↖</span>えらぶ</button>
-        <button class="tool" data-tool="wall"><span class="ic">▮</span>かべ</button>
-        <button class="tool" data-tool="route"><span class="ic">✏</span>ルート</button>
-        <button class="tool" data-tool="text"><span class="ic">あ</span>もじ</button>
-        <button class="tool" data-tool="symbol"><span class="ic">○</span>きごう</button>
-        <button class="tool" data-tool="start"><span class="ic">Ⓢ</span>START</button>
-        <button class="tool" data-tool="goal"><span class="ic">Ⓖ</span>GOAL</button>
-        <button class="tool" data-tool="oneway"><span class="ic">➜</span>一方通行</button>
-        <button class="tool" data-tool="cellcolor"><span class="ic">▨</span>マスの色</button>
-        <button class="tool" data-tool="erase"><span class="ic">🧽</span>けす</button>
-        <span class="sep"></span>
-        <span class="swatches" id="swatches"></span>
-        <span class="sep"></span>
-        <select id="symbolPick" style="width:70px" title="置く記号"></select>
-        <select id="rolePick" style="width:130px" title="記号のはたらき">
-          <option value="none">ふつうの記号</option>
-          <option value="must">必ず通る（○）</option>
-          <option value="avoid">通らない（×）</option>
-          <option value="warp">ワープ</option>
-        </select>
-        <select id="warpGroup" style="width:96px; display:none" title="ワープの組（同じ組どうしがつながります）">
-          <option value="A">A組</option><option value="B">B組</option>
-          <option value="C">C組</option><option value="D">D組</option>
-        </select>
-        <span class="sep"></span>
-        <button id="btnZoomOut" title="小さく">－</button>
-        <button id="btnZoomIn" title="大きく">＋</button>
-        <button id="btnFit" title="全体を表示">全体</button>
-      </div>
-      <div class="canvas-wrap" id="canvasWrap">
-        <canvas id="board"></canvas>
-        <input id="cellInput" class="cell-input" autocomplete="off" autocapitalize="off" spellcheck="false">
-        <div class="viewbadge" id="viewBadge"></div>
-      </div>
-      <div class="statusbar"><span id="statusText">「ルート」で正解の道を描いてから、右の「このルートを正解にする」を押してみてください。</span></div>
+      <div id="wizNote"></div>
     </section>
 
-    <!-- ===== 右：設定 ===== -->
-    <aside class="pane" id="paneSide">
+    <!-- =====================================================================
+         できたもの＝そのまま手で直せる場所。
+         「見るための絵」と「編集するための盤面」を分けていたころは、
+         直すたびに別の画面へ行き来することになっていた。ここに出るのは
+         本物の盤面そのものなので、見ながらそのまま直せる。
+         ================================================================== -->
+    <section class="wiz-step" id="wizStep4" hidden>
+      <h2><span class="no">4</span> できたものを見る・直す</h2>
 
-      <details>
-        <summary>① 盤面と文字の量</summary>
-        <div class="body">
-          <!-- ここの4つは「かんたん作成」の細かい設定とまったく同じもの。値は1つしか持たない -->
-          <div class="row">
-            <label>たて<input type="number" id="inRows" class="num" min="4" max="30" value="12"></label>
-            <label>よこ<input type="number" id="inCols" class="num" min="4" max="30" value="12"></label>
-            <button id="btnResize">変える</button>
-          </div>
-          <div class="row">
-            <label class="stack" style="flex:1">まわりの文字の量
-              <select id="inDensity">
-                <option value="few">少なめ（見やすい）</option>
-                <option value="normal">ふつう</option>
-                <option value="many">多め（むずかしい）</option>
-              </select>
-            </label>
-            <label class="stack" style="flex:1">わき道
-              <select id="inLoops">
-                <option value="none">なし</option>
-                <option value="some">少し</option>
-                <option value="many">多め</option>
-              </select>
-            </label>
-          </div>
-          <p class="hint">この2つは「かんたん作成」と同じ設定です。どちらで変えても両方に効きます。</p>
-          <div class="row grow">
-            <button id="btnScatter">まぎれ文字をまく</button>
-            <button id="btnClearDummy" class="danger">まぎれ文字を消す</button>
-          </div>
-          <hr style="border:none;border-top:1px dashed #e5e9ef">
-          <div class="row grow">
-            <button id="btnAllWalls">全部かべにする</button>
-            <button id="btnBorderOnly">外わくだけ</button>
-          </div>
-          <button id="btnRandomMaze">迷路をおまかせで作る</button>
-          <div class="row">
-            <label class="stack" style="flex:1">画面のマスの大きさ <input type="range" id="inCell" min="18" max="72" value="40" style="width:100%"></label>
-          </div>
-          <div class="row"><label><input type="checkbox" id="ckGrid" checked> うすいマス目を出す</label></div>
+      <div class="work-inst"><b>問題用紙にのる文：</b><span id="workInst"></span></div>
+
+      <!-- 段の切りかえ。「問題」＝手で直せる盤面、それ以外＝その段の答え（見るだけ） -->
+      <div class="ans-tabs" id="ansTabs"></div>
+
+      <!-- 広い画面では 盤面（左）と こたえ・ボタン（右）を横に並べる。
+           せまい画面ではふつうに縦に積む（.work-cols は既定では ただの箱） -->
+      <div class="work-cols">
+       <div class="work-main">
+      <section class="pane pane-canvas show" id="paneCanvas">
+        <div class="toolbar" id="toolbar">
+          <button class="tool on" data-tool="select"><span class="ic">↖</span>えらぶ</button>
+          <button class="tool" data-tool="text"><span class="ic">あ</span>もじ</button>
+          <button class="tool" data-tool="symbol"><span class="ic">○</span>きごう</button>
+          <button class="tool" data-tool="wall"><span class="ic">▮</span>かべ</button>
+          <button class="tool" data-tool="route"><span class="ic">✏</span>ルート</button>
+          <button class="tool" data-tool="erase"><span class="ic">🧽</span>けす</button>
+          <span class="sep"></span>
+          <span class="swatches" id="swatches"></span>
+          <span class="sep"></span>
+          <button class="tool" data-tool="start"><span class="ic">Ⓢ</span>START</button>
+          <button class="tool" data-tool="goal"><span class="ic">Ⓖ</span>GOAL</button>
+          <button class="tool" data-tool="cellcolor"><span class="ic">▨</span>マスの色</button>
+          <button class="tool" data-tool="oneway"><span class="ic">➜</span>一方通行</button>
+          <span class="sep"></span>
+          <button id="btnUndo" class="zoom" title="迷路の変更をもとにもどす（Ctrl+Z）">↶</button>
+          <button id="btnRedo" class="zoom" title="迷路の変更をやりなおす（Ctrl+Y）">↷</button>
+          <span class="sep"></span>
+          <button id="btnZoomOut" class="zoom" title="小さく">－</button>
+          <button id="btnZoomIn" class="zoom" title="大きく">＋</button>
+          <button id="btnFit" class="zoom" title="迷路の全体が入る大きさにする">全体</button>
         </div>
-      </details>
+        <!-- 「きごう」を選んだときだけ出る（ふだんは出しっぱなしにしない） -->
+        <div class="toolbar toolbar-sub" id="symbolBar" hidden>
+          <span class="lbl">おく記号</span>
+          <select id="symbolPick" style="width:74px" title="置く記号"></select>
+          <select id="rolePick" style="width:146px" title="記号のはたらき">
+            <option value="none">ふつうの記号</option>
+            <option value="must">必ず通る（○）</option>
+            <option value="avoid">通らない（×）</option>
+            <option value="warp">ワープ</option>
+          </select>
+          <select id="warpGroup" style="width:96px; display:none" title="ワープの組（同じ組どうしがつながります）">
+            <option value="A">A組</option><option value="B">B組</option>
+            <option value="C">C組</option><option value="D">D組</option>
+          </select>
+        </div>
+        <div class="canvas-wrap" id="canvasWrap">
+          <canvas id="board"></canvas>
+          <input id="cellInput" class="cell-input" autocomplete="off" autocapitalize="off" spellcheck="false">
+          <div class="viewbadge" id="viewBadge"></div>
+        </div>
+        <div class="statusbar"><span id="statusText">「えらぶ」で文字をドラッグすると動かせます。色を変えるときは、えらんでから下の色ボタンを押してください。</span></div>
+      </section>
 
-      <details open>
-        <summary>② 正解ルート（ここが要）</summary>
-        <div class="body">
-          <p class="hint">
-            ツールバーの「ルート」で、STARTからGOALまで通したい道を指でなぞってください。<br>
-            すでに通ったマスをもう一度押すと、そこから先を描き直せます。
+      <!-- えらんだものを直す（盤面のすぐ下に置く。いちばんよく使うので奥にしまわない） -->
+      <div class="sel-strip">
+        <p class="hint" id="selInfo">「えらぶ」で文字や記号を押すと、ここで色や大きさを変えられます（ドラッグで移動／範囲ドラッグでまとめて選択）。</p>
+        <div class="row" id="selColors"></div>
+        <label class="stack sizewrap">大きさ <input type="range" id="inSelSize" min="50" max="180" value="100" style="width:100%"></label>
+        <div class="row">
+          <button id="btnDup">複製（Ctrl+D）</button>
+          <button id="btnDel" class="danger">消す（Delete）</button>
+        </div>
+      </div>
+
+       </div>
+       <div class="work-side">
+        <div class="ans-note" id="ansNote"></div>
+        <div class="wiz-answer" id="ansAnswer"></div>
+        <div class="wiz-actions" id="ansActions"></div>
+       </div>
+      </div>
+    </section>
+
+    <div id="app">
+
+      <!-- ===== こまかい設定の見出し（上のバーはページに1本だけなので、ここには置かない） ===== -->
+      <div class="editor-head">
+        <h2><span class="no">5</span> もっと細かく直す（使いたいときだけ）</h2>
+        <button id="btnHome">⬆ 上（作るところ）へ</button>
+        <button id="btnHelp">？ 使い方</button>
+      </div>
+
+      <main class="layout">
+
+        <!-- ===== 左：STEP一覧 ===== -->
+        <aside class="pane" id="paneSteps">
+          <h2>STEP（謎の流れ）</h2>
+          <p class="hint" id="stepHint" style="margin:6px 0 10px">
+            上から順に実行されます。STEPを押すと、その時点の盤面を見られます。
           </p>
-          <div class="row">
-            <label class="stack" style="flex:1">どのルートを描く
-              <select id="routePick"></select>
-            </label>
-            <button id="btnAddRoute" title="ルートをもう1本ふやす">＋</button>
-            <button id="btnDelRoute" class="danger" title="このルートを消す">✕</button>
+          <div id="stepList"></div>
+          <div class="row" style="margin-top:8px">
+            <select id="stepType" style="flex:1"></select>
           </div>
-          <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
-          <button id="btnMakeMaze" class="primary">このルートが最短になる迷路を作る</button>
-          <p class="hint">わき道の多さは「① 盤面と文字の量」の<b>わき道</b>で決めます。増やしても「正解ルートが1本だけ」は必ず保たれます。</p>
-          <div class="row grow">
-            <button id="btnOpenRoute">今の迷路に道だけ通す</button>
-            <button id="btnClearRoute" class="danger">ルートを消す</button>
+          <div class="row" style="margin-top:6px">
+            <button id="btnAddStep" style="flex:1">＋ STEPを足す</button>
+            <button id="btnUndoStep" title="STEPの追加・削除・設定をもとにもどす">↶ STEPをもどす</button>
           </div>
-          <hr style="border:none;border-top:1px dashed #e5e9ef">
-          <button id="btnLengthen">🔀 ルートを遠回りにする</button>
-          <p class="hint">
-            今の最短ルートだけを長くします。<b>置いてある文字の並び順とSTEPの答えは変わりません。</b><br>
-            次の段で「壁を消して近道を作る」余地がないときに使ってください。
-          </p>
-          <div class="row grow">
-            <button id="btnRouteToSG">ルートの両はしをSTART/GOALにする</button>
+          <div class="row" style="margin-top:6px">
+            <button id="btnViewMaze" style="flex:1" title="編集できる設計図にもどる">設計図にもどる</button>
           </div>
-          <div class="row"><label><input type="checkbox" id="ckShowRoute" checked> 正解ルートを画面に出す</label></div>
-          <div class="row"><label><input type="checkbox" id="ckShowShortest"> 今の最短ルートを出す</label></div>
-        </div>
-      </details>
+          <div class="answer-box">
+            最後に出てくる文字：<br><b id="answerText">—</b>
+          </div>
+          <div class="flowbox" id="flowBox" style="margin-top:8px"></div>
+        </aside>
 
-      <details open>
-        <summary>③ 読み方とこたえ</summary>
-        <div class="body">
-          <p class="hint">
-            「このルートを、この色で、この順に読んだら、この言葉になる」を書いて
-            <b>「この通りに置く」</b>を押すと、<b>全部が同時に成り立つように</b>文字を置き直します。<br>
-            答えを空のままにすれば、<b>いま読める文字を見るだけ</b>にも使えます。
-          </p>
-          <div id="targetRows"></div>
-          <div class="row grow">
-            <button id="btnAddTarget">＋ 行を足す</button>
-            <button id="btnPlaceTargets" class="primary">✨ この通りに置く</button>
-          </div>
-          <div class="row grow">
-            <button id="btnTryToStep">この読み方でSTEPを作る</button>
-          </div>
-          <div class="row"><label><input type="checkbox" id="ckTargetFill" checked> まぎらわしい文字も一緒に置く</label></div>
-          <div class="flowbox" id="targetResult">—</div>
-        </div>
-      </details>
+        <!-- ===== 右：設定 ===== -->
+        <aside class="pane" id="paneSide">
 
-      <details>
-        <summary>④ 選んだものを直す</summary>
-        <div class="body">
-          <p class="hint" id="selInfo">「えらぶ」で文字や記号をクリックしてください。ドラッグで動かせます。<br>範囲をドラッグすればまとめて選べます。</p>
-          <div class="row" id="selColors"></div>
-          <div class="row">
-            <label class="stack" style="flex:1">大きさ <input type="range" id="inSelSize" min="50" max="180" value="100" style="width:100%"></label>
-          </div>
-          <div class="row grow">
-            <button id="btnDup">複製（Ctrl+D）</button>
-            <button id="btnDel" class="danger">消す（Delete）</button>
-          </div>
-        </div>
-      </details>
+          <details>
+            <summary>① 盤面と文字の量</summary>
+            <div class="body">
+              <!-- ここの4つは「かんたん作成」の細かい設定とまったく同じもの。値は1つしか持たない -->
+              <div class="row">
+                <label class="inline">たて<input type="number" id="inRows" class="num" min="4" max="30" value="12"></label>
+                <label class="inline">よこ<input type="number" id="inCols" class="num" min="4" max="30" value="12"></label>
+                <button id="btnResize">変える</button>
+              </div>
+              <div class="row">
+                <label class="stack" style="flex:1">まわりの文字の量
+                  <select id="inDensity">
+                    <option value="few">少なめ（見やすい）</option>
+                    <option value="normal">ふつう</option>
+                    <option value="many">多め（むずかしい）</option>
+                  </select>
+                </label>
+                <label class="stack" style="flex:1">わき道
+                  <select id="inLoops">
+                    <option value="none">なし</option>
+                    <option value="some">少し</option>
+                    <option value="many">多め</option>
+                  </select>
+                </label>
+              </div>
+              <p class="hint">この2つは ② の「もっと細かく決める」と同じ設定です。どちらで変えても両方に効きます。</p>
+              <div class="row grow">
+                <button id="btnScatter">まぎれ文字をまく</button>
+                <button id="btnClearDummy" class="danger">まぎれ文字を消す</button>
+              </div>
+              <hr style="border:none;border-top:1px dashed #e5e9ef">
+              <div class="row grow">
+                <button id="btnAllWalls">全部かべにする</button>
+                <button id="btnBorderOnly">外わくだけ</button>
+              </div>
+              <button id="btnRandomMaze">迷路をおまかせで作る</button>
+              <div class="row">
+                <label class="stack" style="flex:1">画面のマスの大きさ <input type="range" id="inCell" min="18" max="72" value="40" style="width:100%"></label>
+              </div>
+              <div class="row"><label><input type="checkbox" id="ckGrid" checked> うすいマス目を出す</label></div>
+            </div>
+          </details>
 
-      <details open>
-        <summary>⑤ チェック（謎として成立しているか）</summary>
-        <div class="body">
-          <div id="checkList"></div>
-          <button id="btnRecheck">もう一度しらべる</button>
-        </div>
-      </details>
+          <details open>
+            <summary>② 正解ルート（ここが要）</summary>
+            <div class="body">
+              <p class="hint">
+                ツールバーの「ルート」で、STARTからGOALまで通したい道を指でなぞってください。<br>
+                すでに通ったマスをもう一度押すと、そこから先を描き直せます。
+              </p>
+              <div class="row">
+                <label class="stack" style="flex:1">どのルートを描く
+                  <select id="routePick"></select>
+                </label>
+                <button id="btnAddRoute" title="ルートをもう1本ふやす">＋</button>
+                <button id="btnDelRoute" class="danger" title="このルートを消す">✕</button>
+              </div>
+              <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
+              <button id="btnMakeMaze" class="primary">このルートが最短になる迷路を作る</button>
+              <p class="hint">わき道の多さは「① 盤面と文字の量」の<b>わき道</b>で決めます。増やしても「正解ルートが1本だけ」は必ず保たれます。</p>
+              <div class="row grow">
+                <button id="btnOpenRoute">今の迷路に道だけ通す</button>
+                <button id="btnClearRoute" class="danger">ルートを消す</button>
+              </div>
+              <hr style="border:none;border-top:1px dashed #e5e9ef">
+              <button id="btnLengthen">🔀 ルートを遠回りにする</button>
+              <p class="hint">
+                今の最短ルートだけを長くします。<b>置いてある文字の並び順とSTEPの答えは変わりません。</b><br>
+                次の段で「壁を消して近道を作る」余地がないときに使ってください。
+              </p>
+              <div class="row grow">
+                <button id="btnRouteToSG">ルートの両はしをSTART/GOALにする</button>
+              </div>
+              <div class="row"><label><input type="checkbox" id="ckShowRoute" checked> 正解ルートを画面に出す</label></div>
+              <div class="row"><label><input type="checkbox" id="ckShowShortest"> 今の最短ルートを出す</label></div>
+            </div>
+          </details>
 
-      <details>
-        <summary>⑥ 印刷・画像で保存</summary>
-        <div class="body">
-          <div class="row"><label><input type="checkbox" id="ckMono"> 白黒で印刷する（色を線のもようで見分ける）</label></div>
-          <div class="row"><label><input type="checkbox" id="ckLegend"> 色の凡例をつける</label></div>
-          <div class="row"><label><input type="checkbox" id="ckPrintAnswer"> 答え（正解ルート）も出す</label></div>
-          <div class="row"><label><input type="checkbox" id="ckPrintSteps" checked> STEPごとの盤面をぜんぶ出す</label></div>
-          <div class="row">
-            <label class="stack" style="flex:1">印刷の大きさ <input type="range" id="inPrintCell" min="24" max="80" value="46" style="width:100%"></label>
-          </div>
-          <div class="row"><label><input type="checkbox" id="ckPngInst" checked> 🖼 画像に指示文を入れる</label></div>
-          <p class="hint" style="margin:2px 0 4px">迷路の上に1行で自動縮小して出ます。改行して打つと、その行どおりに複数行で出ます</p>
-          <div class="row">
-            <textarea id="inPngInst" rows="2" style="flex:1;resize:vertical" placeholder="例：STARTからGOALまで最短ルートで進み…"></textarea>
-          </div>
-          <div class="row grow">
-            <button id="btnPrint2">🖨 印刷</button>
-            <button id="btnPng2">🖼 画像で保存</button>
-            <button id="btnPngShare" hidden>📱 写真に保存</button>
-          </div>
-          <hr style="border:none;border-top:1px dashed #e5e9ef">
-          <div class="row grow">
-            <button id="btnExport">ファイルに書き出す</button>
-            <button id="btnImport">ファイルから読む</button>
-          </div>
-          <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
-        </div>
-      </details>
-      <details>
-        <summary>⑦ こまかい設定（ふだんは開かなくてOK）</summary>
-        <div class="body">
-          <label>まぎれ文字に使う字</label>
-          <div class="row">
-            <select id="inDummyPool" style="flex:1">
-              <option value="hiragana" selected>ひらがな（おすすめ）</option>
-              <option value="katakana">カタカナ</option>
-              <option value="number">数字</option>
-              <option value="alpha">アルファベット</option>
-              <option value="symbol">記号</option>
-              <option value="same">答えと同じ字だけを使う（答えの字だらけになりやすいので注意）</option>
-            </select>
-          </div>
-          <label>まぎれ文字の色</label>
-          <div class="row" id="dummyColors"></div>
-          <hr style="border:none;border-top:1px dashed #e5e9ef">
-          <label>別の盤面（文字盤）</label>
-          <p class="hint">迷路のルートの形を、この文字盤に重ねて文字を読ませられます。</p>
-          <div class="row">
-            <label>たて<input type="number" id="inSubRows" class="num" min="2" max="20" value="6"></label>
-            <label>よこ<input type="number" id="inSubCols" class="num" min="2" max="20" value="6"></label>
-            <button id="btnMakeSub">作る</button>
-          </div>
-          <label>文字盤の中身（1行ずつ、1文字ずつ書く）
-            <textarea id="inSubText" rows="6" placeholder="あいうえおか&#10;きくけこさし"></textarea>
-          </label>
-          <div class="row grow">
-            <button id="btnFillSub">文字盤に反映</button>
-            <button id="btnRandSub">ランダムで埋める</button>
-          </div>
-          <div class="row"><label><input type="checkbox" id="ckShowSub"> 文字盤を画面に出す</label></div>
-        </div>
-      </details>
+          <details open>
+            <summary>③ 読み方とこたえ</summary>
+            <div class="body">
+              <p class="hint">
+                「このルートを、この色で、この順に読んだら、この言葉になる」を書いて
+                <b>「この通りに置く」</b>を押すと、<b>全部が同時に成り立つように</b>文字を置き直します。<br>
+                答えを空のままにすれば、<b>いま読める文字を見るだけ</b>にも使えます。
+              </p>
+              <div id="targetRows"></div>
+              <div class="row grow">
+                <button id="btnAddTarget">＋ 行を足す</button>
+                <button id="btnPlaceTargets" class="primary">✨ この通りに置く</button>
+              </div>
+              <div class="row grow">
+                <button id="btnTryToStep">この読み方でSTEPを作る</button>
+              </div>
+              <div class="row"><label><input type="checkbox" id="ckTargetFill" checked> まぎらわしい文字も一緒に置く</label></div>
+              <div class="flowbox" id="targetResult">—</div>
+            </div>
+          </details>
 
 
-    </aside>
-  </main>
+          <details open>
+            <summary>④ チェック（謎として成立しているか）</summary>
+            <div class="body">
+              <div id="checkList"></div>
+              <button id="btnRecheck">もう一度しらべる</button>
+            </div>
+          </details>
+
+          <details>
+            <summary>⑤ 印刷・画像で保存</summary>
+            <div class="body">
+              <div class="row"><label><input type="checkbox" id="ckMono"> 白黒で印刷する（色を線のもようで見分ける）</label></div>
+              <div class="row"><label><input type="checkbox" id="ckLegend"> 色の凡例をつける</label></div>
+              <div class="row"><label><input type="checkbox" id="ckPrintAnswer"> 答え（正解ルート）も出す</label></div>
+              <div class="row"><label><input type="checkbox" id="ckPrintSteps" checked> STEPごとの盤面をぜんぶ出す</label></div>
+              <div class="row">
+                <label class="stack" style="flex:1">印刷の大きさ <input type="range" id="inPrintCell" min="24" max="80" value="46" style="width:100%"></label>
+              </div>
+              <div class="row"><label><input type="checkbox" id="ckPngInst" checked> 🖼 画像に指示文を入れる</label></div>
+              <p class="hint" style="margin:2px 0 4px">迷路の上に1行で自動縮小して出ます。改行して打つと、その行どおりに複数行で出ます</p>
+              <div class="row">
+                <textarea id="inPngInst" rows="2" style="flex:1;resize:vertical" placeholder="例：STARTからGOALまで最短ルートで進み…"></textarea>
+              </div>
+              <div class="row grow">
+                <button id="btnPrint2">🖨 印刷</button>
+                <button id="btnPng2">🖼 画像で保存</button>
+                <button id="btnPngShare" hidden>📱 写真に保存</button>
+              </div>
+              <hr style="border:none;border-top:1px dashed #e5e9ef">
+              <div class="row grow">
+                <button id="btnExport">ファイルに書き出す</button>
+                <button id="btnImport">ファイルから読む</button>
+              </div>
+              <input type="file" id="fileInput" accept=".json,application/json" style="display:none">
+            </div>
+          </details>
+          <details>
+            <summary>⑥ こまかい設定（ふだんは開かなくてOK）</summary>
+            <div class="body">
+              <label>まぎれ文字に使う字</label>
+              <div class="row">
+                <select id="inDummyPool" style="flex:1">
+                  <option value="hiragana" selected>ひらがな（おすすめ）</option>
+                  <option value="katakana">カタカナ</option>
+                  <option value="number">数字</option>
+                  <option value="alpha">アルファベット</option>
+                  <option value="symbol">記号</option>
+                  <option value="same">答えと同じ字だけを使う（答えの字だらけになりやすいので注意）</option>
+                </select>
+              </div>
+              <label>まぎれ文字の色</label>
+              <div class="row" id="dummyColors"></div>
+              <hr style="border:none;border-top:1px dashed #e5e9ef">
+              <label>別の盤面（文字盤）</label>
+              <p class="hint">迷路のルートの形を、この文字盤に重ねて文字を読ませられます。</p>
+              <div class="row">
+                <label class="inline">たて<input type="number" id="inSubRows" class="num" min="2" max="20" value="6"></label>
+                <label class="inline">よこ<input type="number" id="inSubCols" class="num" min="2" max="20" value="6"></label>
+                <button id="btnMakeSub">作る</button>
+              </div>
+              <label>文字盤の中身（1行ずつ、1文字ずつ書く）
+                <textarea id="inSubText" rows="6" placeholder="あいうえおか&#10;きくけこさし"></textarea>
+              </label>
+              <div class="row grow">
+                <button id="btnFillSub">文字盤に反映</button>
+                <button id="btnRandSub">ランダムで埋める</button>
+              </div>
+              <div class="row"><label><input type="checkbox" id="ckShowSub"> 文字盤を画面に出す</label></div>
+            </div>
+          </details>
+
+
+        </aside>
+      </main>
+    </div>
+  </div>
 </div>
 
 <!-- ===== プレイヤー画面（制作者むけの情報はぜんぶ隠す） ===== -->
@@ -715,21 +766,27 @@
         <li>2段階の謎なら、指示どおりにすると本当に道が変わる</li>
       </ul>
 
-      <p style="margin-top:10px"><b>くわしく直したいとき（同じページの下「4 細かく直す」）</b></p>
+      <p style="margin-top:10px"><b>直したいとき（4 できたものを見る・直す）</b></p>
       <ul style="margin:6px 0 10px 18px">
-        <li>画面は切りかわりません。<b>同じページの下に編集エリアがあります</b>（上の<b>「✏️ 細かく直す」</b>でそこまで飛べます）</li>
-        <li>編集エリアの右がわは<b>①盤面と文字の量／②正解ルート／③読み方とこたえ</b>の3つだけ見ればだいたい足ります</li>
+        <li>画面は切りかわりません。<b>4に出ている迷路が「本物の盤面」</b>です。見ながらそのまま直せます</li>
+        <li>上のツールで<b>もじ・きごう・かべ</b>を置く／<b>けす</b>で消す／<b>えらぶ</b>でドラッグして動かす</li>
+        <li>動かしたいものを「えらぶ」で選ぶと、盤面のすぐ下で<b>色・大きさ・複製・削除</b>ができます</li>
+        <li>盤面の上のタブで<b>「問題」と「n段めの答え」</b>を切りかえられます（同じ迷路のまま、通り道だけ変わります）</li>
+      </ul>
+
+      <p style="margin-top:10px"><b>もっと細かく直したいとき（5 もっと細かく直す）</b></p>
+      <ul style="margin:6px 0 10px 18px">
         <li><b>③ 読み方とこたえ</b>に「このルートを・この色で・この順に読んだら・この言葉」と書いて<b>「✨ この通りに置く」</b>を押すと、そのとおりに文字を置き直します</li>
         <li><b>「ルート」</b>で道をなぞり、<b>「このルートが最短になる迷路を作る」</b>を押すと、その道が正解の迷路ができます</li>
-        <li>左のSTEPを押すと「その時点の盤面」が見られます</li>
-        <li>右の<b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
-        <li><b>「⬆ 上（作るところ）へ」</b>で、いつでもページの上のかんたん作成に戻れます</li>
+        <li><b>STEP（謎の流れ）</b>を押すと、その時点の盤面が4に出ます。押したSTEPの中の<b>↑↓</b>で順番を入れかえられます</li>
+        <li><b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
+        <li><b>「⬆ 上（作るところ）へ」</b>で、いつでもページの上に戻れます</li>
       </ul>
 
       <p style="margin-top:10px"><b>覚えておくと便利</b></p>
       <ul style="margin:6px 0 10px 18px">
-        <li><b>迷路をもどす</b>＝Ctrl+Z／<b>STEPをもどす</b>は左のボタン（別々です）</li>
-        <li><b>大きさ・文字の量・わき道</b>は、かんたん作成と編集エリア①で<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
+        <li><b>迷路をもどす</b>＝Ctrl+Z／<b>STEPをもどす</b>は⑤のSTEP欄にあります（別々です）</li>
+        <li><b>大きさ・文字の量・わき道</b>は、②の「もっと細かく決める」と⑤の①で<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
         <li>消す＝Delete ／ 複製＝Ctrl+D</li>
         <li>文字は「もじ」でマスを押すとその場で打てます。Enterで右へ進みます</li>
         <li>文字や記号は「えらぶ」でドラッグして動かします</li>

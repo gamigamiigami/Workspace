@@ -550,26 +550,35 @@ MZ.packages = (function () {
      */
     function tryFit(D) {
       const picked = [], placedCells = [];
-      let lastIdx = -1;
-      for (let i = 0; i < chs.length; i++) {
-        const lo = lastIdx + 1;
+      // ぐねぐね曲がった道だと、道すじの上では離れているマスが盤の上ではとなり合う。
+      // 1文字ずつ「いちばん目あてに近いマス」を取っていくだけだと、そこで先がふさがり、
+      // 実際には置ける組み合わせがあるのに「置けない」と投げ出していた
+      // （そのせいで4段の組み合わせが18×18でも作れなかった）。
+      // 目あてに近い順に試しつつ、行きづまったら1つ前にもどってやり直す。
+      let budget = 4000;   // 探しすぎて固まらないための上限
+      function farEnough(p) {
+        return placedCells.every(function (q) { return gridDist(p, q) >= D; }) &&
+               near.every(function (q) { return gridDist(p, q) >= D; });
+      }
+      function rec(i, lo) {
+        if (i === chs.length) return true;
         const maxIdx = free.length - 1 - (chs.length - 1 - i);   // 残りの文字ぶんの場所を必ず残す
         const want = wantIdx(i);
-        let bestJ = -1, bestDiff = Infinity;
-        for (let j = lo; j <= maxIdx; j++) {
+        const order = [];
+        for (let j = lo; j <= maxIdx; j++) order.push(j);
+        order.sort(function (a, b) { return Math.abs(a - want) - Math.abs(b - want); });
+        for (let t = 0; t < order.length; t++) {
+          if (budget-- <= 0) return false;
+          const j = order[t];
           const p = cells[free[j]];
-          const farEnough = placedCells.every(function (q) { return gridDist(p, q) >= D; }) &&
-                             near.every(function (q) { return gridDist(p, q) >= D; });
-          if (!farEnough) continue;
-          const diff = Math.abs(j - want);
-          if (diff < bestDiff) { bestDiff = diff; bestJ = j; }
+          if (!farEnough(p)) continue;
+          picked.push(j); placedCells.push(p);
+          if (rec(i + 1, j + 1)) return true;
+          picked.pop(); placedCells.pop();
         }
-        if (bestJ < 0) return null;
-        picked.push(bestJ);
-        placedCells.push(cells[free[bestJ]]);
-        lastIdx = bestJ;
+        return false;
       }
-      return picked;
+      return rec(0, 0) ? picked.slice() : null;
     }
 
     // 出せるいちばん大きい距離をさがす。
@@ -667,41 +676,110 @@ MZ.packages = (function () {
     return false;
   }
 
-  /**
-   * 「消すと近道になる壁」をさがす。
-   * 道の上でとなり合っているのに、道づたいだと遠い2マスのあいだの壁がそれにあたる。
-   */
-  function pickShortcut(maze, route) { const l = listShortcuts(maze, route); return l.length ? pick(l.slice(0, 3)) : null; }
+  /* =======================================================================
+   * 「線を消すと近道ができる」候補さがし
+   *
+   * ねらい（伊神さんの指摘）：
+   *   「線けしを使うときは、必ず 元のルートより短いルートが開拓されて
+   *     答えが変わるようにしてほしい。それ以前のルートを遠回りにして、
+   *     全然ちがうルートを通れる近道を無理やり作る感じ」
+   *
+   * そこで、道すじの2点 A（i番め）と B（j番め）が
+   *   ・道づたいだと遠い（j − i が大きい）
+   *   ・でも盤の上では近い（まっすぐ行けば md マス）
+   * という関係のとき、そのあいだをまっすぐつなぐ「新しい通路」を作る。
+   * 通路をふさいでいる壁を消せば、そこが近道になる。
+   *
+   * 前の版は「となり合っているのに道づたいでは遠い2マス＝壁1本」しか
+   * 見ていなかった。それだと
+   *   ・そもそも候補が見つからないことが多く（実測で半分以上がゼロ候補）、
+   *   ・見つかっても新しく通るマスが1つも無い「ただの近道カット」になり、
+   *     道が変わった感じがしなかった。
+   * 壁を2〜3本まで消してよいことにすると、盤の別の場所を通る
+   * 本当に新しい道を開けるようになる。
+   * ===================================================================== */
 
-  /** 「消すと近道になる壁」を、良い順に全部あつめる */
-  function listShortcuts(maze, route) {
-    const at = {};
-    route.forEach(function (p, i) { at[M.cellKey(p.r, p.c)] = i; });
-    const found = [];
-    const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
-    route.forEach(function (p, i) {
-      dirs.forEach(function (d) {
-        const nr = p.r + d[0], nc = p.c + d[1];
-        if (!M.inside(maze, nr, nc)) return;
-        const j = at[M.cellKey(nr, nc)];
-        if (j === undefined || j - i < E.MARGIN_GOOD + 1) return;
-        const key = M.edgeBetween(p.r, p.c, nr, nc);
-        // すでに無い壁・すでに消してある壁は、消しても何も起きない
-        if (!maze.walls[key] || maze.walls[key].disabled) return;
-        found.push({ key: key, gain: (j - i) - 1 });
+  /** 消す壁の本数の上限（多すぎると「線を消す」作業が大変になる） */
+  const SHORTCUT_MAX_WALLS = 3;
+  /** 近道の通路の長さの上限（長すぎると消す壁も増えるので、ここで打ち切る） */
+  const SHORTCUT_MAX_SPAN = 10;
+  /** 新しい道が「別の道」と言えるために、前の道に無いマスが最低いくつ要るか */
+  const SHORTCUT_MIN_FRESH = 3;
+
+  /**
+   * A から B まで「B に近づく向きだけ」で進む通路のうち、
+   * いま閉じている壁がいちばん少ないものを返す。
+   * マンハッタン距離ぴったりの長さなので、通路そのものは最短になる。
+   */
+  function fewestWalls(board, A, B) {
+    const dr = B.r >= A.r ? 1 : -1, dc = B.c >= A.c ? 1 : -1;
+    const nr = Math.abs(B.r - A.r), nc = Math.abs(B.c - A.c);
+    const cost = [], from = [];
+    for (let x = 0; x <= nr; x++) {
+      cost.push(new Array(nc + 1).fill(Infinity));
+      from.push(new Array(nc + 1).fill(null));
+    }
+    cost[0][0] = 0;
+    for (let x = 0; x <= nr; x++) for (let y = 0; y <= nc; y++) {
+      if (cost[x][y] === Infinity) continue;
+      const r = A.r + x * dr, c = A.c + y * dc;
+      [[1, 0], [0, 1]].forEach(function (d) {
+        const x2 = x + d[0], y2 = y + d[1];
+        if (x2 > nr || y2 > nc) return;
+        const r2 = A.r + x2 * dr, c2 = A.c + y2 * dc;
+        const key = M.edgeBetween(r, c, r2, c2);
+        const w = board.walls[key];
+        const add = (w && !w.disabled) ? 1 : 0;   // すでに開いている辺は「消す壁」に数えない
+        if (cost[x][y] + add < cost[x2][y2]) {
+          cost[x2][y2] = cost[x][y] + add;
+          from[x2][y2] = { x: x, y: y, key: add ? key : null };
+        }
       });
-    });
-    found.sort(function (a, b) { return b.gain - a.gain; });
+    }
+    if (cost[nr][nc] === Infinity) return null;
+    const keys = [];
+    let x = nr, y = nc;
+    while (x || y) {
+      const f = from[x][y];
+      if (!f) return null;
+      if (f.key) keys.push(f.key);
+      x = f.x; y = f.y;
+    }
+    return keys;
+  }
+
+  /** 「消すと近道になる壁のまとまり」を全部あつめる */
+  function listShortcuts(board, route, maxWalls) {
+    maxWalls = maxWalls || SHORTCUT_MAX_WALLS;
+    const found = [], seen = {};
+    for (let i = 0; i < route.length; i++) {
+      const A = route[i];
+      for (let j = i + E.MARGIN_GOOD + 1; j < route.length; j++) {
+        const B = route[j];
+        const md = Math.abs(A.r - B.r) + Math.abs(A.c - B.c);
+        if (md < 1 || md > SHORTCUT_MAX_SPAN) continue;
+        const gain = (j - i) - md;           // これだけ道が短くなる
+        if (gain < E.MARGIN_GOOD) continue;
+        const keys = fewestWalls(board, A, B);
+        if (!keys || !keys.length || keys.length > maxWalls) continue;
+        const id = keys.slice().sort().join(',');
+        if (seen[id]) continue;
+        seen[id] = true;
+        found.push({ keys: keys, gain: gain, span: md });
+      }
+    }
     return found;
   }
 
   /** 本命の線に、消しても答えが変わらない「おとりの線」を足す */
-  function paintWalls(work, maze, realKey, expectPath, decoys, color) {
-    const chosen = [realKey];
+  function paintWalls(work, maze, realKeys, expectPath, decoys, color) {
+    const chosen = realKeys.slice();
+    const isReal = {};
+    chosen.forEach(function (k) { isReal[k] = true; });
     const keys = shuffle(Object.keys(work.walls).filter(function (k) {
-      return k !== realKey && !M.isBorderKey(work, k) && !work.walls[k].disabled;
+      return !isReal[k] && !M.isBorderKey(work, k) && !work.walls[k].disabled;
     }));
-    for (let i = 0; i < keys.length && chosen.length < 1 + decoys; i++) {
+    for (let i = 0; i < keys.length && chosen.length < realKeys.length + decoys; i++) {
       const cand = chosen.concat([keys[i]]);
       cand.forEach(function (k) { work.walls[k].disabled = true; });
       const res = E.solve(work, {});
@@ -724,6 +802,59 @@ MZ.packages = (function () {
   function spacingNeed(n) { return Math.ceil(n * 1.6) + 2; }
 
   /**
+   * 「前の道と重ならない、正味の新しいマス」が何マス要るか。
+   *
+   * 道ぜんたいの長さ（spacingNeed）より多めに要る。
+   * 道のつながったマスなら1マスおきに置けば距離2を守れるが、
+   * 「前の道を除いた残り」はあちこちに散らばっているので、
+   * 同じマス数でも離して置ける組み合わせが見つかりにくい。
+   * 1.6倍のままにしていたとき、STARTGOAL変更のあとの段で
+   * 「長さは足りているのに置けない」が失敗のいちばんの原因だった。
+   */
+  function spreadNeed(n) { return Math.ceil(n * 2.4) + 2; }
+
+  /**
+   * 段ごとに「その段の道に最低何マス要るか」を、うしろの段から逆算する。
+   *
+   * これを入れる前は「次の1段ぶん」しか見ていなかったので、
+   *   ・線を消す段は 道が短くなるのに、その ぶんを前の段に足していなかった
+   *   ・その先にもう1段あっても、そこまでは見ていなかった
+   * ため、たとえば
+   *   色でしぼる → スタゴル変更 → 線を消す → 色でしぼる（4段）
+   * だと、スタゴル変更のところで「次の段の文字が置ける長さ」だけを見て
+   * ぎりぎりの短い道を作ってしまい、そのあと線を消して短くなると
+   * もう文字が置けず、18×18でも作れないことがほとんどだった。
+   *
+   * ・読み直す（next-read）……… 同じ道に2段ぶんの文字がのる → 足し算
+   * ・線を消す（erase-wall）…… 次の道はこの道より最低 MARGIN_GOOD マス短い → その ぶん長く
+   * ・スタゴル変更 …………… 次はまったく別の道なので、長さは引き継がない
+   */
+  function stageNeeds(st, texts) {
+    const n = texts.length;
+    // load[k] = 「あとの段の文字のうち、この段の道の上にも乗るもの」の数。
+    //   ・読み直す（next-read）……… 同じ道なので、あとの段の文字はぜんぶ乗る
+    //   ・線を消す（erase-wall）…… 新しい道はこの道のほとんどを通るので、やはり乗る
+    //   ・スタゴル変更 …………… 別の道になるので、乗らないものとして数える
+    // 文字はうしろの段から先に置くので、この段の番になったときには
+    // load[k] マスがすでに ふさがっている。その ぶんも足しておかないと
+    // 「長さは足りているのに空きマスが無くて置けない」で作り直しになる。
+    const load = new Array(n).fill(0);
+    for (let k = n - 2; k >= 0; k--) {
+      load[k] = (st[k] === 'next-read' || st[k] === 'erase-wall')
+        ? texts[k + 1].length + load[k + 1] : 0;
+    }
+    const req = new Array(n);
+    req[n - 1] = spacingNeed(texts[n - 1].length);
+    for (let k = n - 2; k >= 0; k--) {
+      const own = spacingNeed(texts[k].length) + load[k];
+      if (st[k] === 'next-read') req[k] = Math.max(own, req[k + 1]);                    // 同じ道
+      else if (st[k] === 'erase-wall') req[k] = Math.max(own, req[k + 1] + E.MARGIN_GOOD); // 近道で短くなる ぶん
+      else req[k] = own;                                                                // 別の道（長さは引き継がない）
+    }
+    return req;
+  }
+
+  /**
    * 道すじが謎として成立しているか（1本だけ・差4以上・なぞり返しなし）。
    *
    * excludeSet／excludeNeed を渡すと、excludeSet に含まれるマスを除いた
@@ -736,13 +867,14 @@ MZ.packages = (function () {
   function routeIsGood(board, res, needCells, excludeSet, excludeNeed) {
     if (!res || !res.ok || res.count !== 1) return false;
     if (E.retracesEdge(res.path)) return false;
-    if (E.routeMargin(board, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) return false;
+    // routeMargin は辺ごとにBFSするので重い。マス数の判定を先にすませる
     const cells = uniqueCells(res.path);
     if (needCells && cells.length < needCells) return false;
     if (excludeSet && excludeNeed) {
       const avail = cells.filter(function (p) { return !excludeSet[M.cellKey(p.r, p.c)]; }).length;
       if (avail < excludeNeed) return false;
     }
+    if (E.routeMargin(board, res.path, { useAvoid: true }).margin < E.MARGIN_GOOD) return false;
     return true;
   }
 
@@ -762,13 +894,12 @@ MZ.packages = (function () {
     const texts = [];
     for (let i = 0; i < n; i++) texts.push(letters(rc.texts['s' + (i + 1)] || '').join(''));
 
-    /* ---- ① 種の迷路 ---- */
+    /* ---- ① 種の迷路 ----
+     * 段ごとに要るマス数は、うしろの段から逆算しておく（stageNeeds）。
+     * 1段めの道は req[0] マス以上ないと、そのあとの段が必ず行きづまる。 */
+    const req = stageNeeds(st, texts);
     const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
-    let need0 = texts[0].length;
-    for (let j = 0; j < st.length && st[j] === 'next-read'; j++) need0 += texts[j + 1].length;
-    // 「線を消して近道を作る」段は、道が長いほど作りやすい（近道になる壁が増える）
-    const eraseCount = st.filter(function (k) { return k === 'erase-wall'; }).length;
-    const minCells = need0 + (color ? 4 : 2) + eraseCount * 6;
+    const minCells = req[0] + (color ? 4 : 2);
     const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
     if (!s) return null;
     const maze = s.maze;
@@ -789,10 +920,9 @@ MZ.packages = (function () {
     const transitions = [];
     let moveCount = 0;   // STARTGOALの変更が何回めか（★☆→■□→▲△→◆◇ と目印を変える）
     for (let i = 0; i < st.length; i++) {
-      // その段のあとに「色を変えて読み直す」段が続くなら、同じ道に文字がもっと要る
-      let nextNeed = texts[i + 1].length;
-      for (let j = i + 1; j < st.length && st[j] === 'next-read'; j++) nextNeed += texts[j + 1].length;
-      nextNeed += 1;
+      // 次の段の道に要るマス数。うしろの段ぶんも線を消して短くなるぶんも
+      // stageNeeds で織りこみ済みなので、ここではその値を渡すだけでよい。
+      const nextNeed = req[i + 1];
 
       // move-start/move-goal/move-bothは色を引き継ぐので、次の段（i+1）自身の文字は
       // 「これまでの同じ色の段ぜんぶの道」と重ならない場所に置かなければならない
@@ -801,7 +931,7 @@ MZ.packages = (function () {
       //   そうしないと、ここでは足りると判定したのに、実際に文字を置く段になって
       //   「前の前の道」まで避けたら場所が足りない、ということが起きる）。
       // 「前の道と重ならない、正味の新しいマス」がその文字数ぶん離して置けるだけ要る。
-      const ownNeed = spacingNeed(texts[i + 1].length);
+      const ownNeed = spreadNeed(texts[i + 1].length);
       const nc = sc[i + 1];
       const before = sameColorBefore(sc, i + 1).filter(function (j) { return j !== i; });
       let priorRoute = routes[i].slice();
@@ -820,7 +950,7 @@ MZ.packages = (function () {
       routes.push(out.path);
     }
 
-    /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ----
+    /* ---- ④ 文字を置く（空きの少ない＝きつい段から先に置く） ----
      * ★同じ色を使う段どうしは、相手の道と重なるマスには置かない（前の段・あとの段の両方）。
      *   前の段の道だけを避けていたころは、前の段の文字があとの段の道に乗ってしまうので、
      *   あとの段で「同じ色だけ読む」ときに読み終わったはずの文字まで拾ってしまい、
@@ -833,14 +963,31 @@ MZ.packages = (function () {
      *   進まないので、同じ色の段はふつう連続する。個別に色を上書きした場合は
      *   連続しないこともあるので、同じ色を使っている段は連続の有無にかかわらずすべて拾う。 */
     const stageIds = [];
-    for (let i = n - 1; i >= 0; i--) {
+    // 置く順番は「きつい段」から。
+    //   道の長さではなく「その段が実際に使えるマス（ほかの色の段の道を除いたもの）」が
+    //   文字数に対してどれだけ余っているかで決める。
+    //   うしろの段から順に置いていたころは、いちばんきつい段（たとえば
+    //   前の段と同じ色で、道がその前の段と重なっている段）の番になったときには
+    //   もう空きが残っておらず、作れないことがとても多かった。
+    const order = [];
+    for (let i = 0; i < n; i++) order.push(i);
+    const slack = order.map(function (i) {
+      const others = sameColorBefore(sc, i).concat(sameColorAfter(sc, i));
+      const banned = {};
+      others.forEach(function (j) { Object.assign(banned, routeCellSet(routes[j])); });
+      const usable = uniqueCells(routes[i]).filter(function (p) { return !banned[M.cellKey(p.r, p.c)]; }).length;
+      return usable - spacingNeed(texts[i].length);
+    });
+    order.sort(function (a, b) { return slack[a] - slack[b]; });
+
+    for (let oi = 0; oi < order.length; oi++) {
+      const i = order[oi];
       const others = sameColorBefore(sc, i).concat(sameColorAfter(sc, i));
       let avoid = null, near = null;
       if (others.length) {
         avoid = {};
         others.forEach(function (j) { Object.assign(avoid, routeCellSet(routes[j])); });
-        // すでに置いてある段（うしろから置くので、番号が大きい段）とは、
-        // 盤面の上でくっついて見えないように距離もとる（紙の見やすさのため）。
+        // すでに置いてある段とは、盤面の上でくっついて見えないように距離もとる（紙の見やすさのため）。
         near = [];
         others.forEach(function (j) {
           if (!stageIds[j]) return;
@@ -1008,21 +1155,45 @@ MZ.packages = (function () {
   function doEraseWall(maze, work, route, color, solveOpts, needCells) {
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
-    // 近道になりそうな壁を、良い順にいくつも試す（1本だけ試すと作れないことが多い）
-    const cands = listShortcuts(work, route).slice(0, 20);
-    let best = null, bestScore = -1;
+    const routeLen = uniqueCells(route).length;
+
+    let cands = listShortcuts(work, route);
+    // 消したあとの道は だいたい routeLen − gain マスになる。
+    // 次の段の文字が置ける長さが残らない候補は、試すだけ無駄なので先に落とす。
+    // （ここを見ていなかったので、近道が見つかっても「短くなりすぎて文字が置けない」
+    //   という理由で落ちつづけ、4段の組み合わせがほとんど作れなくなっていた）
+    if (needCells) {
+      const fits = cands.filter(function (sc) { return routeLen - sc.gain >= needCells; });
+      if (fits.length) cands = fits;
+    }
+    // 「新しく通る通路が長いもの」＝いかにも別の道になるものから試す。
+    // 消す壁が多いほど解く人の手間が増えるので、少しだけ不利にしておく。
+    cands.sort(function (a, b) {
+      return (b.span - b.keys.length * 0.5) - (a.span - a.keys.length * 0.5);
+    });
+    cands = cands.slice(0, 24);
+
+    // 前の道に無いマス（fresh）がいちばん多い候補を選ぶ。
+    // fresh が SHORTCUT_MIN_FRESH 以上のもの＝はっきり別の道を優先し、
+    // それが1つも作れないときだけ、1マスでも新しければ認める。
+    // どちらも無ければ この迷路はあきらめて作り直す
+    // （＝「線を消しても道がほとんど変わらない」ものは、ここで必ずはじかれる）。
+    let best = null, bestFresh = 0;
     for (let i = 0; i < cands.length; i++) {
       const sc = cands[i];
-      work.walls[sc.key].disabled = true;
+      sc.keys.forEach(function (k) { work.walls[k].disabled = true; });
       const res = E.solve(work, solveOpts);
-      const good = routeIsGood(work, res, needCells);
-      work.walls[sc.key].disabled = false;
-      if (!good) continue;
-      const score = uniqueCells(res.path).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
-      if (score > bestScore) { bestScore = score; best = { key: sc.key, res: res }; }
+      let fresh = 0;
+      if (routeIsGood(work, res, needCells)) {
+        fresh = uniqueCells(res.path).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length;
+      }
+      sc.keys.forEach(function (k) { work.walls[k].disabled = false; });
+      if (fresh > bestFresh) { bestFresh = fresh; best = { keys: sc.keys, res: res }; }
+      if (bestFresh >= SHORTCUT_MIN_FRESH * 2) break;   // 十分ちがう道が出たら打ち切る（速さのため）
     }
     if (!best) return null;
-    const keys = paintWalls(work, maze, best.key, best.res.path, 3, color);
+    const keys = paintWalls(work, maze, best.keys, best.res.path,
+                            Math.max(1, 4 - best.keys.length), color);
     keys.forEach(function (k) { work.walls[k].disabled = true; });
     return { kind: 'erase-wall', color: color, path: best.res.path, keys: keys };
   }
@@ -1037,10 +1208,34 @@ MZ.packages = (function () {
    * ownNeed（前の道と重ならない正味のマス）はここでは判定しない、
    * 呼び出し側がだめならlengthenRouteで足りない分を積み増す。
    */
-  function bestNonOverlap(work, onRoute, needCells, solveFn) {
+  /**
+   * 「このマスから何マスで行けるか」の表を1回だけ作る（ふるい分け用）。
+   *
+   * STARTやGOALの置き場所は総あたりで探す。1か所ずつ解いていると
+   * 18×18で1回の段に300〜900回も探索が走り、4段の組み合わせでは
+   * 作るのに30秒以上かかっていた。先に1回だけ距離をひろげておけば
+   * 「そもそも短すぎて文字が置けない置き場所」は解かずに落とせる。
+   *
+   * 一方通行があると「行き」と「帰り」で距離が変わるので、
+   * そのときはふるい分けを使わない（自動作成では一方通行は作らない）。
+   */
+  function distFrom(board, p, solveOpts) {
+    if (Object.keys(board.oneways || {}).length) return null;
+    const ctx = E.makeContext(board, solveOpts || {});
+    return E.bfs(board, { r: p.r, c: p.c }, ctx).dist;
+  }
+  /** 距離の表で「短すぎる」候補をふるい落とす（表が無ければ通す） */
+  function tooShort(board, dist, r, c, needCells) {
+    if (!dist || !needCells) return false;
+    const d = dist[E.idxOf(board, r, c)];
+    return d < 0 || d + 1 < needCells;
+  }
+
+  function bestNonOverlap(work, onRoute, needCells, solveFn, dist) {
     let best = null, bestScore = -1;
     for (let r = 0; r < work.rows; r++) for (let c = 0; c < work.cols; c++) {
       if (onRoute[M.cellKey(r, c)]) continue;
+      if (tooShort(work, dist, r, c, needCells)) continue;
       const res = solveFn(r, c);
       if (!res || !res.ok || res.count !== 1) continue;
       if (E.retracesEdge(res.path)) continue;
@@ -1086,7 +1281,7 @@ MZ.packages = (function () {
     let best = bestNonOverlap(work, onRoute, needCells, function (r, c) {
       if (occupied[M.cellKey(r, c)]) return null;
       return E.solve(work, Object.assign({}, solveOpts, { start: { r: r, c: c }, goal: { r: goal.r, c: goal.c } }));
-    });
+    }, distFrom(work, goal, solveOpts));
     if (!best) return null;
     const p = { r: best.r, c: best.c };
     // lengthenRouteの中の checkLengthened は work.starts/goals を見て解き直すので、
@@ -1110,7 +1305,7 @@ MZ.packages = (function () {
     let best = bestNonOverlap(work, onRoute, needCells, function (r, c) {
       if (occupied[M.cellKey(r, c)]) return null;
       return E.solve(work, Object.assign({}, solveOpts, { start: { r: start.r, c: start.c }, goal: { r: r, c: c } }));
-    });
+    }, distFrom(work, start, solveOpts));
     if (!best) return null;
     const p = { r: best.r, c: best.c };
     work.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
@@ -1139,9 +1334,13 @@ MZ.packages = (function () {
     const capI = Math.min(free.length, 30), capJ = Math.min(free.length, 30);
     outer:
     for (let i = 0; i < capI; i++) {
+      // ★ START候補ごとに1回だけ距離をひろげ、短すぎる GOAL候補は解かずに落とす。
+      //   ここを総あたりで解いていたので、1回の段で最大900回も探索が走っていた。
+      const dist = distFrom(work, free[i], solveOpts);
       for (let j = 0; j < capJ; j++) {
         if (i === j) continue;
         const a = free[i], b = free[j];
+        if (tooShort(work, dist, b.r, b.c, needCells)) continue;
         const res = E.solve(work, Object.assign({}, solveOpts, { start: a, goal: b }));
         if (!res || !res.ok || res.count !== 1) continue;
         if (E.retracesEdge(res.path)) continue;
@@ -1223,7 +1422,10 @@ MZ.packages = (function () {
       if (rows === lastRows && cols === lastCols) continue;   // もう上限で広げられない
       lastRows = rows; lastCols = cols;
       const tryRc = (grows[s] === 0) ? rc : Object.assign({}, rc, { rows: rows, cols: cols });
-      const attempts = (s === 0) ? BUILD_TRIES : Math.ceil(BUILD_TRIES / 2);
+      // 段が多い組み合わせは、同じ大きさでねばるより早く盤を広げたほうが速く出来る。
+      // （12×12で60回ねばってから広げていたころは、3〜4段で15秒かかることがあった）
+      const many = stageCount(rc.parts) >= 3;
+      const attempts = (s === 0 && !many) ? BUILD_TRIES : Math.ceil(BUILD_TRIES / 2);
       for (let t = 0; t < attempts; t++) {
         totalTries++;
         let out = null;

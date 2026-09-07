@@ -67,7 +67,7 @@
         se.addEventListener('change', function () {
           W.opts[def.option.key] = se.value;
           buildInputs();
-          $('#wizResult').textContent = '';
+          setNote('');
         });
         opt.appendChild(se);
         wrap.appendChild(opt);
@@ -93,7 +93,7 @@
   function afterPartChange() {
     updateCards();
     buildInputs();
-    $('#wizResult').textContent = '';
+    setNote('');
   }
 
   function updateCards() {
@@ -139,9 +139,9 @@
   }
 
   function setNote(msg) {
-    const box = $('#wizResult');
+    const box = $('#wizNote');
     box.textContent = '';
-    box.appendChild(el('div', 'wiz-note', '⚠ ' + msg));
+    if (msg) box.appendChild(el('div', 'wiz-note', '⚠ ' + msg));
   }
 
   /* =======================================================================
@@ -220,7 +220,7 @@
   }
 
   function recipe() {
-    const o = MZ.opt.all();      // 大きさ・文字の量・わき道は編集画面と同じ設定を見ている
+    const o = MZ.opt.all();      // 大きさ・文字の量・わき道は ⑤ の①と同じ設定を見ている
     return {
       parts: W.parts.slice(),
       texts: Object.assign({}, W.texts),
@@ -237,10 +237,9 @@
    * ===================================================================== */
   function generate() {
     const btn = $('#btnGenerate');
-    const box = $('#wizResult');
     btn.disabled = true;
     btn.textContent = '⏳ 作っています…';
-    box.textContent = '';
+    setNote('');
     setTimeout(function () {
       let out;
       try { out = P.build(recipe()); }
@@ -248,99 +247,92 @@
       btn.disabled = false;
       btn.textContent = '✨ 自動で作る';
       if (!out || !out.ok) { setNote((out && out.reason) || '作れませんでした'); return; }
+      setNote('');
       W.built = out;
+      // 盤面は app（編集する側）が持つ。ここでは渡すだけ。
+      // applyBuilt → refresh → syncViews の順で、④のタブと盤面がそろう。
       MZ.app.applyBuilt(out.maze, out.steps);
-      showResult(out);
+      W.view = 0;
+      showResult();
     }, 30);
   }
 
-  /** 段ごとの「盤面＋通り道」を並べる。1つの迷路で切りかえて見せるため */
-  function buildViews(out) {
-    const results = ST.runSteps(out.maze, out.steps);
-    const views = [{ title: '問題', board: results[0].board, path: null, note: out.maze.meta.instruction || '' }];
-    let stage = 0;
-    results.forEach(function (r) {
-      if (!r.step || r.step.type !== 'solve') return;
-      stage++;
-      const notes = [];
-      if (r.log) notes.push(r.log);
-      views.push({ title: stage + '段めの答え', board: r.board, path: r.path, note: '' , stage: stage, log: r.log });
+  /* =======================================================================
+   * ④ できたものを見る・直す
+   *
+   *   ここに出る盤面は「結果の絵」ではなく、編集そのものの盤面（canvas）。
+   *   前の版は結果をPNGで見せていたので、直すには下の編集エリアにある
+   *   別の盤面まで行く必要があった（伊神さんの指摘：
+   *   「ページの統合とはそういうことではない」）。
+   *   絵をやめて盤面をひとつにしたので、見ているものをそのまま直せる。
+   * ===================================================================== */
+
+  /**
+   * タブ・問題文・こたえを作り直す。app.js の refresh() から毎回呼ばれるので、
+   * 盤面を手で直すたびに、段の数もこたえもその場で追いかけて変わる。
+   */
+  function syncViews() {
+    const host = $('#ansTabs');
+    if (!host || !MZ.app.stageInfo) return;
+    W.views = MZ.app.stageInfo();
+    const sum = MZ.app.summary();
+    // いま見えている盤面から、光らせるタブを決める。
+    // ⑤のSTEP一覧から別のSTEPを選んだときは、どのタブにも当てはまらないので光らせない。
+    W.view = -1;
+    W.views.forEach(function (v, i) { if (v.stepIndex === sum.selStep) W.view = i; });
+    host.textContent = '';
+    W.views.forEach(function (v, i) {
+      const b = el('button', i === W.view ? 'on' : '', v.title);
+      b.addEventListener('click', function () { setView(i); });
+      host.appendChild(b);
     });
-    // その段で読めた文字を、あとから拾ってメモに足す
-    let idx = 0;
-    results.forEach(function (r) {
-      if (!r.step) return;
-      if (r.step.type === 'solve') idx++;
-      if (r.step.type === 'filter-color' || (r.step.type === 'extract' && !P.usesColor(W.parts))) {
-        if (views[idx]) views[idx].read = r.text;
-      }
-    });
-    return views;
+    $('#workInst').textContent = sum.instruction || '（まだ決まっていません）';
+    const ans = $('#ansAnswer');
+    ans.textContent = '';
+    ans.appendChild(el('span', '', 'こたえ：'));
+    ans.appendChild(el('b', '', sum.answer || '—'));
+    renderNote();
   }
 
-  function showResult(out) {
-    const box = $('#wizResult');
-    box.textContent = '';
-    W.views = buildViews(out);
-    W.view = 0;
-
-    const tabs = el('div', 'ans-tabs');
-    W.views.forEach(function (v, i) {
-      const b = el('button', '', v.title);
-      b.addEventListener('click', function () { W.view = i; renderView(); });
-      tabs.appendChild(b);
-    });
-    box.appendChild(tabs);
-
-    const view = el('div', 'ans-view');
-    view.id = 'ansView';
-    box.appendChild(view);
-
-    const ans = el('div', 'wiz-answer');
-    ans.appendChild(el('span', '', 'こたえ：'));
-    ans.appendChild(el('b', '', out.answer));
-    box.appendChild(ans);
-
-    const inst = el('div', 'wiz-inst');
-    inst.appendChild(el('b', '', '問題用紙にのる文：'));
-    inst.appendChild(el('div', '', out.maze.meta.instruction || ''));
-    box.appendChild(inst);
-
-    const acts = el('div', 'wiz-actions');
+  /** 盤面の下のボタン（作り直す・印刷・保存…）。中身は変わらないので1回だけ作る */
+  function buildActions() {
+    const acts = $('#ansActions');
+    acts.textContent = '';
     acts.appendChild(mk('🔁 もう一度作る', generate));
     acts.appendChild(mk('🖨 印刷する', function () { MZ.app.doPrint(); }, 'primary'));
     acts.appendChild(mk('🖼 画像で保存', function () { MZ.app.doPng(); }));
     if (MZ.app.canShareFiles()) acts.appendChild(mk('📱 写真に保存', function () { MZ.app.doPngShare(); }));
-    acts.appendChild(mk('✏️ 下で細かく直す', function () { MZ.app.showEditor(); }));
-    box.appendChild(acts);
-
-    renderView();
-    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    acts.appendChild(mk('⚙️ もっと細かく直す', function () { MZ.app.showEditor(); }));
   }
 
-  function renderView() {
+  /** 見る段を切りかえる（盤面そのものを切りかえる） */
+  function setView(i) {
+    W.view = i;
+    const v = W.views[i];
+    if (!v || v.stepIndex < 0) MZ.app.viewDesign();
+    else MZ.app.viewStage(v.stepIndex);
+    // viewDesign / viewStage は refresh を通るので syncViews が走り、タブの色も直る
+  }
+
+  /** 盤面の下に出す説明（通り道の長さ・その段で読める文字） */
+  function renderNote() {
     const v = W.views[W.view];
-    const host = $('#ansView');
-    if (!v || !host) return;
-    document.querySelectorAll('.ans-tabs button').forEach(function (b, i) {
-      b.classList.toggle('on', i === W.view);
-    });
-    host.textContent = '';
-    const img = document.createElement('img');
-    img.src = R.toDataURL(v.board, {
-      cellPx: 38, showRoles: false, showGhost: false, showGrid: true, exportScale: 2,
-      showRoute: !!v.path, routePath: v.path
-    });
-    img.alt = v.title;
-    host.appendChild(img);
-    const note = el('div', 'ans-note');
-    if (v.path) {
-      note.appendChild(el('div', '', '通り道：' + (v.log || '')));
-      if (v.read) note.appendChild(el('div', '', 'ここで読める文字：「' + v.read + '」'));
+    const note = $('#ansNote');
+    if (!note) return;
+    note.textContent = '';
+    if (!v) { note.appendChild(el('div', '', '⑤のSTEPを1つ選んで見ています。上のタブを押すと、問題や段ごとの答えにもどれます。')); return; }
+    if (v.stepIndex < 0) {
+      // 「問題」を見ているときは、盤面の下のステータスバーが案内になっているので何も出さない
+      //（同じことを二重に書くと、そのぶん盤面の高さが取れなくなる）
     } else {
-      note.appendChild(el('div', '', v.note));
+      if (v.log) note.appendChild(el('div', '', '通り道：' + v.log));
+      if (v.read) note.appendChild(el('div', '', 'ここで読める文字：「' + v.read + '」'));
     }
-    host.appendChild(note);
+  }
+
+  function showResult() {
+    setView(0);
+    $('#wizStep4').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
   function mk(label, fn, cls) {
@@ -352,13 +344,13 @@
   /* =======================================================================
    * 画面の出し入れ
    * ===================================================================== */
-  // かんたん作成と編集エリアは同じ1ページに縦に並んでいるので、
+  // 作るところと直すところは同じ1ページに縦に並んでいるので、
   // 「見せる／隠す」ではなく「そこまでスクロールする」だけでよい。
   function show() { MZ.opt.paintAll(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function hide() { $('#app').classList.add('show'); }
+  function hide() { MZ.app.showWork(); }
 
   function init() {
-    // 大きさ・文字の量・わき道・START/GOAL は編集画面①とまったく同じ設定を見る
+    // 大きさ・文字の量・わき道・START/GOAL は ⑤ の①とまったく同じ設定を見る
     MZ.opt.bind('#wizRows', 'rows');
     MZ.opt.bind('#wizCols', 'cols');
     MZ.opt.bind('#wizDensity', 'density');
@@ -372,15 +364,20 @@
     });
     buildCards();
     buildInputs();
+    buildActions();
     $('#btnGenerate').addEventListener('click', generate);
-    $('#btnToEditor').addEventListener('click', function () { MZ.app.showEditor(); });
+    $('#btnToEditor').addEventListener('click', function () { MZ.app.showBoard(); });
     $('#btnWizHelp').addEventListener('click', function () { $('#helpModal').hidden = false; });
     $('#btnDrawSelf').addEventListener('click', function () {
-      MZ.app.showEditor();
+      MZ.app.showBoard();
       MZ.app.setTool('route');
-      MZ.app.setStatus('「ルート」で正解にしたい道をなぞってから、右の「このルートが最短になる迷路を作る」を押してください');
+      MZ.app.setStatus('「ルート」で正解にしたい道をなぞってから、⑤の「② 正解ルート」にある「このルートが最短になる迷路を作る」を押してください');
     });
-    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart, state: W };
+    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart,
+                  syncViews: syncViews, state: W };
+    // app.js のほうが先に動くので、前回のつづきを開いていた場合は
+    // ここで1回だけタブと問題文を作る（以後は refresh() から呼ばれる）
+    if (!$('#wizStep4').hidden) syncViews();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

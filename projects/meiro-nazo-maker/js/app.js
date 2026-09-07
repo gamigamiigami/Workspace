@@ -95,7 +95,7 @@
       }
     });
     wire();
-    restoreAuto();          // 前回のつづきがあれば編集画面に入れておく
+    restoreAuto();          // 前回のつづきがあれば盤面に入れておく
     refresh();
     // 最初に出るのは「かんたん作成」画面（index.html で show 済み）
   }
@@ -105,6 +105,16 @@
     applyBuilt: applyBuilt,
     showEditor: showEditor,
     showWizard: showWizard,
+    showWork: showWork,
+    showBoard: showBoard,
+    stageInfo: stageInfo,
+    summary: function () {
+      return { instruction: A.maze.meta.instruction || '', answer: ST.finalText(A.results) || '',
+               selStep: A.selStep };
+    },
+    viewDesign: viewDesign,
+    viewStage: viewStage,
+    fit: function () { ED.fit(); },
     doPrint: function () { doPrint(); },
     doPng: function () { doPng(); },
     doPngShare: function () { doPngShare(); },
@@ -113,7 +123,7 @@
     setStatus: setStatus
   };
 
-  /** かんたん作成で出来たものを、編集画面の状態として受けとる */
+  /** かんたん作成で出来たものを、盤面（編集する側）の状態として受けとる */
   function applyBuilt(maze, steps) {
     ED.replaceMaze(M.normalize(maze));
     A.maze = ED.getMaze();
@@ -126,14 +136,30 @@
     MZ.opt.set('rows', A.maze.rows);
     MZ.opt.set('cols', A.maze.cols);
     // 「③ 読み方とこたえ」を、自動作成した段ごとの読み方で埋めておく。
-    // 空のまま渡すと「くわしく直す」で見たときに③が空っぽで、
+    // 空のまま渡すと ⑤ の③が空っぽで、
     // 何を直せばいいのか分からなくなってしまう。
     A.results = ST.runSteps(A.maze, A.steps);
     A.targets = deriveTargetsFromSteps();
     refresh();
-    // 作ったら、同じページの下にある編集エリアもすぐ使えるようにしておく
-    // （スクロールはしない。まず結果を見てもらい、直したくなったら下へ行けばいい）
+    // 作ったら「④ できたものを見る・直す」と「⑤ もっと細かく直す」を出す。
+    // ④に出る盤面は絵ではなく本物の盤面なので、見ながらそのまま直せる。
+    showWork();
+  }
+
+  /**
+   * できたものの置き場（④）と、こまかい設定（⑤）を出す。
+   * ★ここが「1ページ統合」の要★
+   *   前の版は「かんたん作成の下に、これまでの編集画面をそのままぶら下げる」形だった。
+   *   結果の絵と編集用の盤面が別々にあり、直すには下の別の盤面まで行く必要があった。
+   *   いまは④に出ている盤面が編集そのものなので、見ている絵を直接直せる。
+   */
+  function showWork() {
+    $('#wizStep4').hidden = false;
     $('#app').classList.add('show');
+    // ★タブは盤面より上にあるので、盤面の大きさを合わせる前に作っておく。
+    //   あとから増えると そのぶん盤面が下にずれ、描いている途中で
+    //   指の位置と迷路のマスがずれてしまう（ルートが1マスで途切れていた）。
+    if (MZ.wizard && MZ.wizard.syncViews) MZ.wizard.syncViews();
     setTimeout(function () { ED.fit(); }, 30);
   }
 
@@ -160,13 +186,20 @@
   }
 
   /**
-   * 細かい編集エリアを出す。
-   * 以前は「かんたん作成」と「編集画面」が別画面で、行き来のたびに切りかわっていたが、
-   * 伊神さんの要望で1ページにまとめた。ここは画面の切りかえではなく、
-   * 同じページの下half（編集エリア）を出して、そこまでスクロールするだけ。
+   * ⑤（もっと細かく直す）まで行く。
+   * 画面の切りかえではなく、同じページの下のほうへスクロールするだけ。
    */
+  /** ④（できたものを見る・直す）まで行く。ふだんの「直す」はこちら */
+  function showBoard() {
+    showWork();
+    setTimeout(function () {
+      ED.fit();
+      $('#wizStep4').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 30);
+  }
+
   function showEditor() {
-    $('#app').classList.add('show');
+    showWork();
     refresh();
     // 表示された直後は盤面の大きさが確定していないので、1フレーム待ってから合わせる
     setTimeout(function () {
@@ -174,7 +207,7 @@
       $('#app').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 30);
   }
-  /** ページの上（作るところ）へもどる。編集エリアは開いたまま残す */
+  /** ページの上（作るところ）へもどる。④⑤は開いたまま残す */
   function showWizard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
@@ -185,6 +218,9 @@
       x.classList.toggle('on', x.dataset.tool === name);
     });
     ED.set('tool', name);
+    // 記号の細かい設定は「きごう」を選んだときだけ出す（ふだんは場所を取らせない）
+    const sb = $('#symbolBar');
+    if (sb) sb.hidden = (name !== 'symbol');
     if (name === 'route') {
       $('#ckShowShortest').checked = false;
       $('#ckShowRoute').checked = true;
@@ -293,19 +329,6 @@
     $('#btnExport').addEventListener('click', exportFile);
     $('#btnImport').addEventListener('click', function () { $('#fileInput').click(); });
     $('#fileInput').addEventListener('change', importFile);
-
-    // 画面のタブ（せまい画面用）
-    document.querySelectorAll('#paneTabs button').forEach(function (b) {
-      b.addEventListener('click', function () {
-        document.querySelectorAll('#paneTabs button').forEach(function (x) { x.classList.remove('on'); });
-        b.classList.add('on');
-        ['steps', 'canvas', 'side'].forEach(function (p) {
-          const node = $('#pane' + p.charAt(0).toUpperCase() + p.slice(1));
-          node.classList.toggle('show', p === b.dataset.pane);
-        });
-        if (b.dataset.pane === 'canvas') setTimeout(function () { ED.fit(); }, 30);
-      });
-    });
 
     /* ---- ① 盤面と文字の量（かんたん作成と同じ設定を見ている） ---- */
     MZ.opt.bind('#inRows', 'rows');
@@ -460,7 +483,13 @@
   function clamp(v, a, b) { return Math.max(a, Math.min(b, isNaN(v) ? a : v)); }
   function setStatus(msg) { if (msg !== undefined && msg !== null) $('#statusText').textContent = msg; }
 
-  function afterEdit() { A.selStep = -1; ED.clearDisplay(); refresh(); ED.draw(); }
+  /**
+   * 盤面を変えたあとの後始末。
+   * 盤面は④、こまかいボタンは⑤にあるので、⑤のボタンを押したときは
+   * 盤面が画面の外にいることがある。変わったところが見えないと直しようがないので、
+   * 見えていないときだけ盤面まで戻す（見えているときは動かさない）。
+   */
+  function afterEdit() { A.selStep = -1; ED.clearDisplay(); refresh(); ED.draw(); revealBoard(); }
 
   /* =======================================================================
    * 画面の作り直し（変更があったら必ずここを通す）
@@ -480,6 +509,8 @@
     $('#answerText').textContent = ST.finalText(A.results) || '—';
     renderFlow();
     syncPngInst();
+    // ④のタブ（問題／n段めの答え）は、編集で段が増減するたびに作り直す
+    if (MZ.wizard && MZ.wizard.syncViews) MZ.wizard.syncViews();
     saveAuto();
   }
 
@@ -750,6 +781,7 @@
         A.selStep = (A.selStep === i) ? -1 : i;
         refresh();
         if (A.selStep >= 0) showStepBoard(A.selStep); else ED.clearDisplay();
+        revealBoard();
       });
       node.appendChild(head);
 
@@ -791,6 +823,54 @@
   }
 
   /** STEPの結果の盤面を画面に出す（見るだけ・編集はできない） */
+  /* =======================================================================
+   * ④「できたものを見る・直す」のタブ用
+   *
+   *   タブは「いま盤面のどこを見ているか」を切りかえるだけ。
+   *   ・問題 …………… 手で直せる、ほんものの盤面
+   *   ・n段めの答え … そのSTEPまで進めた盤面（見るだけ）
+   *   前の版は結果をPNGの絵で見せていたので、絵と編集用の盤面が二重にあった。
+   *   絵をやめて盤面ひとつにしたので、見ているものをそのまま直せる。
+   * ===================================================================== */
+  function stageInfo() {
+    const out = [{ title: '問題', stepIndex: -1, log: '', read: '' }];
+    let cur = null, stage = 0;
+    A.results.forEach(function (r) {
+      if (!r.step) return;
+      if (r.step.type === 'solve') {
+        stage++;
+        cur = { title: stage + '段めの答え', stepIndex: r.index, log: r.log || '', read: '' };
+        out.push(cur);
+      } else if (cur && r.text) {
+        cur.read = r.text;      // その段で読めた文字（色でしぼった あと・ならべかえた あと）
+      }
+    });
+    return out;
+  }
+  /** 手で直せる盤面にもどす */
+  function viewDesign() {
+    A.selStep = -1;
+    ED.clearDisplay();
+    refresh();
+    ED.fit();
+  }
+  /** 盤面（④）が画面の外にあるときだけ、そこまでスクロールする。
+   *  STEPの一覧は⑤にあるので、押しても上の盤面が見えないと変化に気づけない。 */
+  function revealBoard() {
+    const box = $('#paneCanvas');
+    if (!box) return;
+    const r = box.getBoundingClientRect();
+    const vh = window.innerHeight || 800;
+    if (r.bottom < 120 || r.top > vh - 120) box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  /** その段の答え（見るだけ）を出す */
+  function viewStage(i) {
+    A.selStep = i;
+    refresh();
+    showStepBoard(i);
+  }
+
   function showStepBoard(i) {
     const res = A.results[i + 1];
     if (!res) return;
@@ -1340,6 +1420,9 @@
         return row.map(function (c) { return c.value || ' '; }).join('');
       }).join('\n');
     }
+    // 盤面が入ったのだから、④「できたものを見る・直す」も出す
+    // （前回のつづき・保存した作品・ファイル読みこみ、どの入口でも同じにする）
+    showWork();
   }
 
   function saveWork() {
