@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "mkdir -p ~/.claude/skills && cp -r /home/user/Workspace/.claude/skills/. ~/.claude/skills/ && echo '### knowledge/ 自動読み込み（セッション開始）' && echo '' && echo '## profile.md' && cat /home/user/Workspace/knowledge/profile.md && echo '' && echo '## mistakes.md' && cat /home/user/Workspace/knowledge/mistakes.md"
+            "command": "mkdir -p ~/.claude/skills && cp -r /home/user/Workspace/.claude/skills/. ~/.claude/skills/ && cat /home/user/Workspace/knowledge/context.md"
           }
         ]
       }
@@ -15,7 +15,7 @@
     "hooks": [
       {
         "type": "agent",
-        "prompt": "セッション終了処理を行ってください。作業ディレクトリは /home/user/Workspace です。\n\n## 手順\n\n### 1. 変更確認\n`git -C /home/user/Workspace status --short` を実行して今セッションの変更を確認する。\n\n### 2. Task Diary への記録（毎セッション必ず書く）\n`knowledge/task-diary.md` の先頭（`---` の直後）に以下の形式で追記する：\n\n```\n### YYYY-MM-DD\n\n**うまくいったこと**\n- （有効だった手法・アプローチ。なければ「なし」）\n\n**うまくいかなかったこと**\n- （失敗・障壁・回避策が必要だったもの。なければ「なし」）\n\n**発見**\n- （新しくわかった仕様・制限・知見。なければ「なし」）\n\n**次回への申し送り**\n- （中断タスク・今後試したいこと。なければ「なし」）\n\n---\n```\n\n会話の内容から誠実に振り返って書くこと。「なし」が多くても構わない。\n\n### 3. パターン昇華チェック\n`knowledge/task-diary.md` を読み、同じ内容が5件以上記録されているパターンがあれば：\n- 技術的なパターン → `knowledge/patterns.md` または `knowledge/failures.md` に追記\n- 行動ルール・制約 → `CLAUDE.md` の該当箇所に追記\n\n### 4. projects/ の変更がある場合のみ\n`projects/` 配下に変更があれば、追加で以下も行う：\n- 再利用できるUIパーツ → `knowledge/ui-components.md` に追記\n- `knowledge/log.md` に作業サマリーを追記",
+        "prompt": "セッション終了処理。作業ディレクトリ /home/user/Workspace。会話の内容だけを根拠に、実際にやったことを誠実に書く（推測で埋めない）。\n\n1. `git -C /home/user/Workspace status --short` で変更を確認。\n\n2. `knowledge/task-diary.md` の先頭（最初の `---` の直後）に追記（毎回必須）：\n`### YYYY-MM-DD` の見出しに続けて **うまくいったこと / うまくいかなかったこと / 発見 / 次回への申し送り** の4項目を箇条書き。該当なしは「なし」でよい。末尾に `---` を置く。ファイル全体は読まず `head -80` だけ見て形式を合わせること（大きいファイルなので全読み禁止）。\n\n3. 今回の学びが繰り返し起きるパターンなら、技術面は `knowledge/patterns.md` / `knowledge/failures.md`、行動ルールは `CLAUDE.md` と `knowledge/context.md` に1行で追記する。\n\n4. `projects/` に変更がある場合のみ：再利用できるUIパーツを `knowledge/ui-components.md` に、作業サマリーを `knowledge/log.md` の先頭に追記する。",
         "timeout": 180
       },
       {
