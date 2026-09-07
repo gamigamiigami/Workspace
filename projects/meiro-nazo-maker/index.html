@@ -8,7 +8,7 @@
 <style>
   /* ===== リセット・基本 ===== */
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
+  html, body { min-height: 100%; }
   body {
     font-family: system-ui, sans-serif;
     font-size: 16px;
@@ -18,7 +18,7 @@
     /* ダブルタップ拡大だけを止める。連続タップやドラッグはそのまま通す */
     touch-action: manipulation;
     -webkit-text-size-adjust: 100%;
-    overflow: hidden;
+    /* 1ページに「かんたん作成」と「細かい編集」を縦に並べるので、ページ全体はスクロールする */
   }
   button, select, input, textarea { font-family: inherit; font-size: 15px; color: inherit; }
   button {
@@ -39,10 +39,10 @@
   h2 { font-size: 15px; font-weight: 700; letter-spacing: .04em; color: #4b5563; }
 
   /* ===== 全体レイアウト ===== */
-  #app { height: 100%; display: flex; flex-direction: column; }
   .topbar {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
     padding: 8px 12px; background: #1f2937; color: #fff;
+    position: sticky; top: 0; z-index: 40;
   }
   .brand { font-weight: 700; font-size: 17px; white-space: nowrap; }
   .brand small { font-weight: 400; opacity: .7; font-size: 12px; margin-left: 6px; }
@@ -56,9 +56,11 @@
   .panetabs { display: none; gap: 4px; padding: 6px 8px; background: #e2e8f0; }
   .panetabs button { flex: 1; border-radius: 8px; min-height: 44px; }
 
-  .layout { flex: 1; min-height: 0; display: grid; grid-template-columns: 250px 1fr 330px; gap: 8px; padding: 8px; }
-  .pane { background: #fff; border-radius: 12px; overflow: auto; padding: 12px; }
-  .pane-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+  /* 編集エリア。ページ全体がスクロールするので、高さは「画面のこれくらい」で決める。
+     こうしないと、盤面が画面いっぱいに広がって上の「かんたん作成」に戻れなくなる。 */
+  .layout { display: grid; grid-template-columns: 250px 1fr 330px; gap: 8px; padding: 8px; align-items: start; }
+  .pane { background: #fff; border-radius: 12px; overflow: auto; padding: 12px; max-height: 78vh; }
+  .pane-canvas { padding: 0; display: flex; flex-direction: column; overflow: hidden; height: 66vh; min-height: 380px; }
 
   /* ===== ツールバー ===== */
   .toolbar {
@@ -180,11 +182,22 @@
                      object-fit: contain; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,.12); }
   .player-note { max-width: 720px; margin: 12px auto; text-align: left; font-size: 14px; color: #374151; }
 
-  /* ===== かんたん作成画面（最初に出る画面） ===== */
-  #wizardView { position: fixed; inset: 0; z-index: 50; background: #eef1f5; overflow: auto; display: none; }
-  #wizardView.show { display: block; }
+  /* ===== かんたん作成（ページの上半分。編集エリアと同じ1ページに並ぶ） =====
+     以前は「かんたん作成」と「編集画面」が別画面で、行き来のたびに切りかわっていた。
+     伊神さんの要望で1ページに統合し、上で作って、そのまま下で細かく直せるようにした。 */
+  #wizardView { display: block; }
   #app { display: none; }
-  #app.show { display: flex; }
+  #app.show { display: block; }
+  .editor-head {
+    max-width: 920px; margin: 8px auto 0; padding: 0 14px;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  }
+  .editor-head h2 { font-size: 15px; }
+  .editor-head .no {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; background: #1f2937; color: #fff;
+    font-size: 13px; margin-right: 6px;
+  }
   .wiz-wrap { max-width: 920px; margin: 0 auto; padding: 14px; }
   .wiz-step { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px; }
   .wiz-step h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; color: #22272e; margin-bottom: 12px; letter-spacing: 0; }
@@ -255,7 +268,7 @@
   #printArea img { max-width: 100%; }
   @media print {
     body { overflow: visible; background: #fff; }
-    #app, .overlay { display: none !important; }
+    #wizardView, #app, .overlay { display: none !important; }
     #printArea { display: block !important; }
     #printArea .sheet-page { page-break-after: always; text-align: center; }
     #printArea .sheet-page:last-child { page-break-after: auto; }
@@ -287,11 +300,17 @@
 
 <!-- ===== かんたん作成（最初に出る画面） ===== -->
 <div id="wizardView" class="show">
+  <!-- 上のバーは1本だけ。作るのも直すのも同じページなので、画面の切りかえは無い -->
   <header class="topbar">
-    <div class="brand">🧩 迷路謎メーカー<small>かんたん作成</small></div>
+    <div class="brand">🧩 迷路謎メーカー<small>作る → そのまま直す</small></div>
     <div class="top-actions">
+      <button id="btnToEditor">✏️ 細かく直す</button>
+      <button id="btnPlay" class="primary">▶ 解いてみる</button>
+      <button id="btnPrint">🖨 印刷</button>
+      <button id="btnPng">🖼 画像で保存</button>
+      <button id="btnSave">💾 保存</button>
+      <button id="btnOpen">📂 開く</button>
       <button id="btnWizHelp">？ 使い方</button>
-      <button id="btnToEditor">✏️ いま作ったものを直す</button>
     </div>
   </header>
 
@@ -299,12 +318,13 @@
     <section class="wiz-step" id="wizStep1">
       <h2><span class="no">1</span> どんなしかけを入れますか？<small style="font-weight:400;font-size:13px;color:#6b7280">（いくつでも組み合わせられます）</small></h2>
       <p class="wiz-base">🏁 <b>「STARTからGOALまで、いちばん短い道を通る」</b>は、どの謎にも必ず入ります。<br>
-        作り方は2つだけです。<b>①ここで作ってから細かく直す</b>／<b>②最初から自分で作る</b>（下のボタン）。<br>
-        同じ設定が両方の画面にある場合は、<b>どちらで変えても同じ</b>ものです。</p>
+        このページは上から下へ<b>1〜4の順</b>に進みます。<b>4 細かく直す</b>（このページの下）では、
+        文字や壁を動かす・色を変える・ルートを描き直すなど、細かい直しが全部できます。<br>
+        最初から自分で道を描きたいときは、下の「② 最初から自分で作る」を押してください。</p>
       <div class="pack-grid" id="packGrid"></div>
       <p class="hint" id="stageInfo" style="margin-top:10px"></p>
       <div class="row" style="margin-top:10px">
-        <button id="btnDrawSelf" style="flex:1">✏️ ② 最初から自分で作る（編集画面で道を描く）</button>
+        <button id="btnDrawSelf" style="flex:1">✏️ ② 最初から自分で作る（下の編集エリアで道を描く）</button>
       </div>
     </section>
 
@@ -349,7 +369,7 @@
           <p class="hint" style="margin-top:8px">
             「わき道なし」だと、行き止まりはあってもぐるっと回れる道はできません。
             解く人が「最短はこっちだ」と迷わずに決められます。<br>
-            この4つは編集画面の「① 盤面と文字の量」と同じものです。どちらで変えても両方に効きます。
+            この4つは下の編集エリアの「① 盤面と文字の量」と同じものです。どちらで変えても両方に効きます。
           </p>
         </div>
       </details>
@@ -365,21 +385,14 @@
 
 <div id="app">
 
-  <!-- ===== 上のバー ===== -->
-  <header class="topbar">
-    <div class="brand">🧩 迷路謎メーカー<small>解き方から迷路を作る</small></div>
-    <div class="top-actions">
-      <button id="btnHome">🏠 かんたん作成</button>
-      <button id="btnUndo" title="迷路の変更をもとにもどす（Ctrl+Z）">↶ 迷路をもどす</button>
-      <button id="btnRedo" title="迷路の変更をやりなおす（Ctrl+Y）">↷ 迷路をすすむ</button>
-      <button id="btnPlay" class="primary">▶ 解いてみる</button>
-      <button id="btnPrint">🖨 印刷</button>
-      <button id="btnPng">🖼 画像で保存</button>
-      <button id="btnSave">💾 保存</button>
-      <button id="btnOpen">📂 開く</button>
-      <button id="btnHelp">？ 使い方</button>
-    </div>
-  </header>
+  <!-- ===== 編集エリアの見出し（上のバーはページに1本だけなので、ここには置かない） ===== -->
+  <div class="editor-head">
+    <h2><span class="no">4</span> 細かく直す</h2>
+    <button id="btnUndo" title="迷路の変更をもとにもどす（Ctrl+Z）">↶ 迷路をもどす</button>
+    <button id="btnRedo" title="迷路の変更をやりなおす（Ctrl+Y）">↷ 迷路をすすむ</button>
+    <button id="btnHome">⬆ 上（作るところ）へ</button>
+    <button id="btnHelp">？ 使い方</button>
+  </div>
 
   <!-- ===== せまい画面用のタブ ===== -->
   <nav class="panetabs" id="paneTabs">
@@ -702,21 +715,21 @@
         <li>2段階の謎なら、指示どおりにすると本当に道が変わる</li>
       </ul>
 
-      <p style="margin-top:10px"><b>くわしく直したいとき</b></p>
+      <p style="margin-top:10px"><b>くわしく直したいとき（同じページの下「4 細かく直す」）</b></p>
       <ul style="margin:6px 0 10px 18px">
-        <li>右上の<b>「✏️ いま作ったものを直す」</b>で編集画面に移ります（作り方は「①かんたん作成 → 直す」か「②最初から自分で作る」の2つだけです）</li>
-        <li>編集画面の右がわは<b>①盤面と文字の量／②正解ルート／③読み方とこたえ</b>の3つだけ見ればだいたい足ります</li>
+        <li>画面は切りかわりません。<b>同じページの下に編集エリアがあります</b>（上の<b>「✏️ 細かく直す」</b>でそこまで飛べます）</li>
+        <li>編集エリアの右がわは<b>①盤面と文字の量／②正解ルート／③読み方とこたえ</b>の3つだけ見ればだいたい足ります</li>
         <li><b>③ 読み方とこたえ</b>に「このルートを・この色で・この順に読んだら・この言葉」と書いて<b>「✨ この通りに置く」</b>を押すと、そのとおりに文字を置き直します</li>
         <li><b>「ルート」</b>で道をなぞり、<b>「このルートが最短になる迷路を作る」</b>を押すと、その道が正解の迷路ができます</li>
         <li>左のSTEPを押すと「その時点の盤面」が見られます</li>
         <li>右の<b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
-        <li>右上の<b>「🏠 かんたん作成」</b>でいつでも戻れます</li>
+        <li><b>「⬆ 上（作るところ）へ」</b>で、いつでもページの上のかんたん作成に戻れます</li>
       </ul>
 
       <p style="margin-top:10px"><b>覚えておくと便利</b></p>
       <ul style="margin:6px 0 10px 18px">
         <li><b>迷路をもどす</b>＝Ctrl+Z／<b>STEPをもどす</b>は左のボタン（別々です）</li>
-        <li><b>大きさ・文字の量・わき道</b>は、かんたん作成と編集画面①で<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
+        <li><b>大きさ・文字の量・わき道</b>は、かんたん作成と編集エリア①で<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
         <li>消す＝Delete ／ 複製＝Ctrl+D</li>
         <li>文字は「もじ」でマスを押すとその場で打てます。Enterで右へ進みます</li>
         <li>文字や記号は「えらぶ」でドラッグして動かします</li>

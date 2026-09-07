@@ -173,6 +173,35 @@ MZ.ops = (function () {
   /* =======================================================================
    * 5. ダミー文字をまく（これが無いと答えが丸見えになる）
    * ===================================================================== */
+
+  /** 盤面の文字を「マスのキー → 文字」の辞書にする（近くの字を調べるのに使う） */
+  function valueMap(board) {
+    const m = {};
+    board.elements.forEach(function (e) { if (e.value) m[M.cellKey(e.r, e.c)] = e.value; });
+    return m;
+  }
+
+  /**
+   * 近く（マス距離 NEAR_R 以内）にある字とは同じ字を選ばないようにして、1字えらぶ。
+   * ★伊神さんの指摘：「カモフラージュが似たような文字になる。
+   *   できるだけ近くの文字で同じにならないようにしてほしい」。
+   *   まったく無作為に選ぶと、同じ字が2つ3つ固まって置かれて目立ってしまい、
+   *   かえって「まぎれ」になっていなかった。
+   * 近くの字を全部よけると候補が無くなる場合（種類が少ない材料のとき）は、
+   * よけるのをあきらめて全部の中から選ぶ（置けないよりはまし）。
+   */
+  const NEAR_R = 2;
+  function pickAwayFrom(vmap, r, c, pool) {
+    const banned = {};
+    for (let dr = -NEAR_R; dr <= NEAR_R; dr++) for (let dc = -NEAR_R; dc <= NEAR_R; dc++) {
+      const v = vmap[M.cellKey(r + dr, c + dc)];
+      if (v) banned[v] = true;
+    }
+    const okList = pool.filter(function (ch) { return !banned[ch]; });
+    const src = okList.length ? okList : pool;
+    return src[Math.floor(Math.random() * src.length)];
+  }
+
   function scatterDummies(board, path, opts) {
     opts = opts || {};
     const onRoute = {};
@@ -201,13 +230,17 @@ MZ.ops = (function () {
     const n = opts.count !== undefined ? Math.min(opts.count, cands.length)
       : Math.round(cands.length * (opts.density !== undefined ? opts.density : 0.5));
     const ids = [];
+    // 置いたそばから辞書を更新して、次の字が近くの字とかぶらないようにする
+    const vmap = valueMap(board);
     for (let i = 0; i < n; i++) {
       const p = cands[i];
-      const el = M.makeElement(p.r, p.c, pool[Math.floor(Math.random() * pool.length)], {
+      const ch = pickAwayFrom(vmap, p.r, p.c, pool);
+      const el = M.makeElement(p.r, p.c, ch, {
         color: colors[Math.floor(Math.random() * colors.length)]
       });
       el.isDummy = true;
       board.elements.push(el);
+      vmap[M.cellKey(p.r, p.c)] = ch;
       ids.push(el.id);
     }
     return { ok: true, placed: n, ids: ids, message: 'ダミーを' + n + '文字まきました' };
@@ -704,6 +737,7 @@ MZ.ops = (function () {
     registry: registry, register: register, list: list, get: get,
     collectOnPath: collectOnPath, charsToText: charsToText, applyOrder: applyOrder,
     autoPlaceText: autoPlaceText, scatterDummies: scatterDummies, POOLS: POOLS,
+    valueMap: valueMap, pickAwayFrom: pickAwayFrom,
     transformBoard: transformBoard, transformPath: transformPath,
     routeShape: routeShape, enclosedCells: enclosedCells, transferToSubBoard: transferToSubBoard
   };

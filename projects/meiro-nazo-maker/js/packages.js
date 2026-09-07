@@ -609,8 +609,14 @@ MZ.packages = (function () {
     shuffle(free);
     const n = Math.round(free.length * ratio);
     const src = (pool && pool.length) ? pool : O.POOLS.hiragana;
+    // 近くの字とかぶらない字をえらぶ（置いたそばから辞書を更新する）
+    const vmap = O.valueMap(maze);
     for (let i = 0; i < n; i++) {
-      maze.elements.push(M.makeElement(free[i].r, free[i].c, pick(src), { color: color }));
+      const ch = O.pickAwayFrom(vmap, free[i].r, free[i].c, src);
+      const el = M.makeElement(free[i].r, free[i].c, ch, { color: color });
+      el.isDummy = true;   // answerではなく「まぎれ」だと分かるようにしておく
+      maze.elements.push(el);
+      vmap[M.cellKey(free[i].r, free[i].c)] = ch;
     }
   }
 
@@ -815,28 +821,28 @@ MZ.packages = (function () {
     }
 
     /* ---- ④ 文字を置く（あとの段ほど空きが少ないので、うしろから置く） ----
-     * 前の段と同じ色で読ませるときは、前の段の道と重なるマスを避けて置く。
-     * そうしないと、前の段を歩いたときに次の段の文字まで見えてしまい、
-     * 前の段の読み方が狂う（紙は最初から全部印刷ずみなので、あとの段の
-     * インクが先に置いてあることになる。逆に、前の段のインクがあとの段の道に
-     * 乗っているぶんには、読み終わった段の文字は「読み終わり」の見た目にする
-     * 仕組み側で対処ずみなので問題ない）。
+     * ★同じ色を使う段どうしは、相手の道と重なるマスには置かない（前の段・あとの段の両方）。
+     *   前の段の道だけを避けていたころは、前の段の文字があとの段の道に乗ってしまうので、
+     *   あとの段で「同じ色だけ読む」ときに読み終わったはずの文字まで拾ってしまい、
+     *   それを防ぐために「読み終わった文字を一時的に消す」STEPを自動で入れていた。
+     *   その結果、段を切りかえるたびに青い文字が消えたり出たりして分かりにくかった
+     *   （伊神さんの指摘：「一段目と三段目の都合で消したり出したりはやめてほしい」）。
+     *   両方向で避けておけば、どの段でも自分の文字しか道の上に無いので、
+     *   文字を消す仕掛けそのものが要らなくなる＝紙に印刷したまま最後まで解ける。
      * ★色は既定では「読み直す（next-read）」か「スタゴル/線けし（直前が赤のとき）」でしか
      *   進まないので、同じ色の段はふつう連続する。個別に色を上書きした場合は
      *   連続しないこともあるので、同じ色を使っている段は連続の有無にかかわらずすべて拾う。 */
     const stageIds = [];
     for (let i = n - 1; i >= 0; i--) {
-      const before = sameColorBefore(sc, i), after = sameColorAfter(sc, i);
+      const others = sameColorBefore(sc, i).concat(sameColorAfter(sc, i));
       let avoid = null, near = null;
-      if (before.length) {
+      if (others.length) {
         avoid = {};
-        before.forEach(function (j) { Object.assign(avoid, routeCellSet(routes[j])); });
-      }
-      if (after.length) {
-        // あとの段（すでに後ろから置いてあるので位置が分かる）とは、道の重なりまでは
-        // 避けなくてよいが、盤面の上でくっついて見えるのは避けたい（紙の見やすさのため）。
+        others.forEach(function (j) { Object.assign(avoid, routeCellSet(routes[j])); });
+        // すでに置いてある段（うしろから置くので、番号が大きい段）とは、
+        // 盤面の上でくっついて見えないように距離もとる（紙の見やすさのため）。
         near = [];
-        after.forEach(function (j) {
+        others.forEach(function (j) {
           if (!stageIds[j]) return;
           stageIds[j].forEach(function (id) {
             const el = maze.elements.filter(function (e) { return e.id === id; })[0];
@@ -844,7 +850,17 @@ MZ.packages = (function () {
           });
         });
       }
-      const ids = placeOnFree(maze, routes[i], texts[i], answerColor(mode, i, parts, rc.opts), readOrder(parts, rc.opts, i), avoid, near);
+      // すでに置いてある文字のうち、この段の文章にも出てくる字の場所。
+      // 同じ字が近くに2つあると、どちらが答えか分かりにくく「まぎれ」に見えるので、
+      // 離して置けるなら離す（離せないときは今までどおり置く＝作れないよりはまし）。
+      const mine = {};
+      letters(texts[i]).forEach(function (ch) { mine[ch] = true; });
+      const dupSpots = [];
+      maze.elements.forEach(function (e) { if (e.value && mine[e.value]) dupSpots.push({ r: e.r, c: e.c }); });
+      const col = answerColor(mode, i, parts, rc.opts), ord = readOrder(parts, rc.opts, i);
+      const ids = placeOnFree(maze, routes[i], texts[i], col, ord, avoid, (near || []).concat(dupSpots));
+      // 離して置けないときは、この迷路はあきらめて作り直す（build が別の迷路で何度も試す）。
+      // 「置けないなら近くても置く」にすると、同じ字がとなり合う盤面がまれに出てしまう。
       if (!ids) return null;
       stageIds[i] = ids;
     }
@@ -874,17 +890,12 @@ MZ.packages = (function () {
     for (let i = 0; i < n; i++) {
       if (i > 0) {
         const tr = transitions[i - 1];
-        // 色を変えずに次の段へ進むとき（STARTが変わる・線を消す、など）は、
-        // 前の段の文字が新しい道の上に残っていると、次の段で「同じ色だけ読む」ときに
-        // 消化ずみのはずの前の文字まで拾ってしまう。読み終えた文字はここで消しておく。
-        // 同じ色の段が3つ以上つづくこともあるので、直前の1段だけでなく
-        // 同じ色の段ぜんぶ（この時点までに読み終えた分。連続していなくても拾う）を消す。
-        const before = sameColorBefore(sc, i);
-        if (before.length) {
-          let ids = [];
-          before.forEach(function (j) { if (stageIds[j] && stageIds[j].length) ids = ids.concat(stageIds[j]); });
-          if (ids.length) steps.push(ST.makeStep('remove-elements', { ids: ids, mode: 'disable' }));
-        }
+        // ★「読み終わった文字を消す」STEPは入れない。
+        //   ④で同じ色の段どうしがおたがいの道を避けて置かれているので、
+        //   どの段でも自分の文字しか道の上に無く、消して隠す必要がない。
+        //   （消していたころは、段を切りかえるたびに文字が消えたり出たりして
+        //     紙の上の見た目と合わなかった。印刷して解く道具なので、
+        //     盤面の文字は最初から最後まで動かないほうが正しい。）
         // 壁は色ではなく、この段で消すと決めた壁そのもの（キー）を指定する。
         // 別の段が同じ色を使っていると、色だけでは「まだ消してはいけない壁」まで
         // いっしょに消えてしまうことがあった。
