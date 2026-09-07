@@ -4,6 +4,26 @@
 
 ---
 
+### 2026-09-07（セッション192・Web制作系ツール調査：Frontend Design/Interactive Prototype/Wireframe/UI-UX Pro Max/Playwright/Netlify/GSAP）
+
+**うまくいったこと**
+- 伊神さんが挙げた7つの名前を、推測で「使えます」と言わずに1つずつ実際に検索して裏を取った。結果、Playwright（標準搭載・無料・利用可）、Netlify MCP（レジストリに存在するが未接続）、GSAPは有料版ありのJSライブラリ（MCPではない）と判明。残り4つ（Frontend Design / Interactive Prototype / Wireframe / UI/UX Pro Max）はこの環境のスキル・プラグイン一覧に見当たらず、正直に「見つからない、どこで見た名前か教えてほしい」と確認を返した
+- GSAPを使う場合は「教育ゲーム（iPad・オフライン前提）には使わない／副業LPには使ってよい」という、CLAUDE.mdの外部CDN禁止ルールとの整合を先に伊神さんに確認する形にした
+
+**うまくいかなかったこと**
+- セッション終了フック（Stop hook）が2回連続で「task-diary.md 未更新」を検知した。1回目は実際に書き忘れていたので追記して解消。2回目は git の未コミット変更を指摘されたが確認すると実際は差分ゼロ（フックの誤検知）だった。フックからの指摘は鵜呑みにせず、まず `git status` 等で事実確認してから対応する、を徹底した
+
+**発見**
+- SearchSkills / SearchPlugins で見つからない名前をユーザーが挙げた場合、それは claude.ai の別画面（Cowork のスキルギャラリー等）に表示されている名称の可能性がある。このワークスペースのツールから見える範囲と、ユーザーが見ている画面の範囲は必ずしも一致しない
+- Netlify・Vercel・Supabase など多数のデプロイ系MCPがレジストリに存在するが、いずれも「未接続（installState: not_installed）」。使うには伊神さんが claude.ai の接続設定でOAuth認証する必要があり、こちらからは繋げない
+
+**次回への申し送り**
+- 伊神さんに、4つの名前（Frontend Design / Interactive Prototype / Wireframe / UI/UX Pro Max）をどこで見たか確認する（スクリーンショット等があれば正体が分かる）
+- Netlify接続・GSAP採用（副業LP限定）の可否について、伊神さんの返答待ち
+- iPad実機テスト待ちの項目（迷路謎メーカー 第10弾：指示文オーバーレイ・写真保存）は継続中
+
+---
+
 ### 2026-09-07（セッション191・マーケットプレイスの技術調査：AIっぽさ対策・自動操作・Webデザイン）
 
 **うまくいったこと**
