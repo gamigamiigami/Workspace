@@ -1,31 +1,15 @@
 # ui-components Skill
 
 ## Overview
-コピペで使える再利用UIコンポーネント集。
-実装前にこのスキルで使えるパーツを確認すること。
+コピペで使える再利用UIパーツ集（17項目）。UIを実装する前に流用できるものを探す。
 
-## When to use
-- UIパーツを実装するとき
-- 既存コンポーネントを流用できるか確認したいとき
+## 使い方（トークン節約・この順で）
+1. 索引 `knowledge/ui-components.md`（約30行）を読む
+2. 使うパーツだけ行番号で読む → `sed -n '450,560p' knowledge/details/ui-components.md`
+3. HTML・CSS・JS をそれぞれ対応箇所に貼る
 
-## コンポーネント一覧
+**`knowledge/details/ui-components.md`（1,950行）を全文読まないこと。**
 
-詳細なコードは `knowledge/ui-components.md` を読むこと。
-
-| コンポーネント | 用途 | キーワード |
-|---|---|---|
-| モーダルダイアログ | 説明表示・確認ダイアログ | `openModal()` / `closeModal()` |
-| タイマー表示 | 制限時間の表示・カウントダウン | `startTimer()` / `stopTimer()` |
-| 選択肢ボタン | クイズの4択表示 | `renderChoices()` / `.choice-btn` |
-| トースト通知 | 画面上部への一時メッセージ | `showToast()` |
-
-## 使用手順
-
-1. `knowledge/ui-components.md` を読む
-2. 必要なコンポーネントのコードをコピー
-3. HTML・CSS・JSをそれぞれ対応箇所に貼り付け
-
-## 追加ルール
-
-- 新しいUIパーツができたら `knowledge/ui-components.md` に追記する
-- コンポーネントは独立して動作するよう設計する（他に依存しない）
+## 追記するとき
+1. `knowledge/details/ui-components.md` に追記（他に依存せず単体で動く形で書く）
+2. `bash knowledge/details/build-index.sh` で索引を作り直す

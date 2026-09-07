@@ -1,7 +1,7 @@
 # CLAUDE.md — ワークスペース運用ルール
 
 このファイルはClaude Codeが自律的に更新・改善してよい。改善点に気づいたら確認なしで更新すること。
-**このファイルは毎セッション全文が読まれる。詳細はスキル・knowledge に置き、ここは80行以内に保つ。**
+**このファイルは毎セッション全文が読まれる。詳細はスキル・knowledge に置き、ここは120行以内に保つ。**
 
 ---
 
@@ -46,15 +46,23 @@ Workspace/
 
 | ファイル | タイミング |
 |---|---|
-| `knowledge/patterns.md` | うまくいった実装パターンが出た |
-| `knowledge/failures.md` | ハマりの原因と解決策がわかった |
-| `knowledge/ui-components.md` | 再利用できるUIパーツができた |
+| `knowledge/details/patterns.md` | うまくいった実装パターンが出た |
+| `knowledge/details/failures.md` | ハマりの原因と解決策がわかった |
+| `knowledge/details/ui-components.md` | 再利用できるUIパーツができた |
 | `knowledge/mistakes.md` | ユーザーの明示的訂正 かつ 再発しうる かつ「する/しない」で書ける（3条件すべて）。書いたら `knowledge/context.md` の行動ルールにも1行で反映する |
 | `knowledge/log.md` | 作業が完了・中断した（直近3ヶ月分のみ保持。古いものは `knowledge/log-archive/` へ） |
 | `knowledge/task-diary.md` | セッション終了処理時（毎セッション必須） |
 
+`knowledge/details/` に追記したら **`bash knowledge/details/build-index.sh`** で索引（`knowledge/patterns.md` 等）を作り直す。
 mistakes.md の形式：`YYYY-MM-DD: 一言` / `NG:` / `OK:` / `場面:`
-1ファイルが100行を超えたら分割を検討する。
+
+## トークン節約の原則（重要・毎回効く）
+
+- **大きいファイルを全文読まない。** `knowledge/details/*.md`（各1,800〜3,500行）と `knowledge/log.md` `knowledge/task-diary.md` は、索引か `grep -n` で場所を特定してから `sed -n 'A,Bp'` で必要な範囲だけ読む。
+- スキルは**そのタスクに要るものだけ**呼ぶ。雑談・単発の質問ではスキルを読まない。
+- 記録ファイルが1,000行を超えたら `knowledge/log-archive/` へ退避する。
+- 長い調べもの・大量ファイルの探索は Explore / general-purpose サブエージェントに任せる（結果だけ返るので本体の文脈が汚れない）。
+- 話題が変わったら `/clear`、会話が長引いたら `/compact`。
 
 **報告ルール：** knowledge/ や skills/ を読み書きしたら必ず報告する（例「knowledge: failures.md に書き込みました」）。サイレントで読み書きしない。
 
@@ -102,4 +110,3 @@ git config user.email noreply@anthropic.com && git config user.name Claude
 - 推測で実装した箇所は `<!-- 要確認: 理由 -->` とコメントする。
 - 指示が非効率と判断したら代替案を先に提示する。
 - ユーザーはプログラミング完全初心者。専門用語には必ず補足説明を入れる。
-- 会話が長くなったら `/compact`、話題を変えるときは `/clear`（ナレッジは消えない）。
