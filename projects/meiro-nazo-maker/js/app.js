@@ -584,7 +584,7 @@
     if (!box) return;
     box.classList.toggle('readonly', !on);
     box.querySelectorAll('.toolbar button, .toolbar select, .sw').forEach(function (b) { b.disabled = !on; });
-    document.querySelectorAll('.sel-strip button, .sel-strip input, .sel-strip .sw')
+    document.querySelectorAll('.sel-strip button, .sel-strip input, .sel-strip .sw, .draw-help button')
       .forEach(function (b) { b.disabled = !on; });
     // ズームだけは見るだけでも使えたほうがよい
     ['#btnZoomIn', '#btnZoomOut', '#btnFit'].forEach(function (id) { const e = $(id); if (e) e.disabled = false; });

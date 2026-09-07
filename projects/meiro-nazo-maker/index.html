@@ -295,6 +295,8 @@
   /* .toolbar は display:flex なので、hidden 属性だけでは消えない */
   .toolbar[hidden] { display: none; }
   .toolbar-sub .lbl { font-size: 12px; color: #4b5563; }
+  /* display:flex は hidden 属性に勝ってしまうので、消す指定を必ず添える */
+  .draw-help[hidden] { display: none; }
   .draw-help { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
                background: #f0f7ff; border: 1px solid #cfe3fb; border-radius: 10px;
                padding: 8px 12px; font-size: 13px; color: #1c4e80; }
@@ -463,7 +465,7 @@
           <button class="tool" data-tool="route"><span class="ic">✏</span>ルート</button>
           <button class="tool" data-tool="erase"><span class="ic">🧽</span>けす</button>
           <span class="sep"></span>
-          <span class="swatches" id="swatches"></span>
+          <span class="swatches"><span class="lbl">おく色</span><span id="swatches" style="display:flex;gap:4px"></span></span>
           <span class="sep"></span>
           <button class="tool" data-tool="start"><span class="ic">Ⓢ</span>START</button>
           <button class="tool" data-tool="goal"><span class="ic">Ⓖ</span>GOAL</button>
@@ -504,7 +506,7 @@
       <!-- えらんだものを直す（盤面のすぐ下に置く。いちばんよく使うので奥にしまわない） -->
       <div class="sel-strip">
         <p class="hint" id="selInfo">「えらぶ」で文字や記号を押すと、ここで色や大きさを変えられます（ドラッグで移動／範囲ドラッグでまとめて選択）。</p>
-        <div class="row" id="selColors"></div>
+        <div class="row"><span class="lbl">えらんだものの色にする</span><span id="selColors" style="display:flex;gap:4px"></span></div>
         <label class="stack sizewrap">大きさ <input type="range" id="inSelSize" min="50" max="180" value="100" style="width:100%"></label>
         <div class="row">
           <button id="btnDup">複製（Ctrl+D）</button>
