@@ -128,11 +128,12 @@
         return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
                  'move-both': 'STARTもGOALも変わる', 'next-read': '読み方を変えて読み直す' }[k] || k;
       });
-      // 色が変わるのは「色を変えて読み直す」のときだけ。それ以外の段（STARTが変わる等）は前の段と同じ色のまま
-      const sc = P.stageColors(W.parts);
+      // 既定では「読み方を変えて読み直す」で次の色へ、「線を消す/START・GOALが変わる」で赤にもどる
+      // （直前がすでに赤なら次の色）。②の欄でこの段だけ個別に色を変えることもできる。
+      const sc = P.stageColors(W.parts, W.opts);
       const colorWords = sc.map(function (c) { return M.COLORS[c].label; });
       info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
-        (colorForced ? '文字の色は ' + colorWords.join(' → ') + ' の順です（色が変わるのは「読み方を変えて読み直す」のときだけ）。' : '');
+        (colorForced ? '文字の色は ' + colorWords.join(' → ') + ' の順です（②の欄で段ごとに変えられます）。' : '');
     }
     $('#btnGenerate').disabled = false;
   }
@@ -150,13 +151,14 @@
     const box = $('#packInputs');
     const n = P.stageCount(W.parts);
     const color = P.usesColor(W.parts);
+    const hasOrder = P.countOf(W.parts, 'read-order') > 0;
     box.textContent = '';
 
     const mode = P.readMode(W.parts);
     for (let i = 0; i < n; i++) {
       const key = 's' + (i + 1);
       const isLast = (i === n - 1);
-      const cname = M.COLORS[P.answerColor(mode, i, W.parts)].label;
+      const cname = M.COLORS[P.answerColor(mode, i, W.parts, W.opts)].label;
       const label = (n > 1 ? (i + 1) + '段め' : '') +
         (isLast ? (n > 1 ? 'のこたえ' : 'こたえになる文章') : 'に読ませる指示') +
         '（' + cname + 'で置きます）';
@@ -165,11 +167,48 @@
       const ip = document.createElement('input');
       ip.type = 'text';
       ip.id = 'wizin_' + key;
-      const def = P.defaultText(W.parts, i);
+      const def = P.defaultText(W.parts, i, W.opts);
       ip.value = W.edited[key] ? (W.texts[key] || def) : def;
       W.texts[key] = ip.value;
       ip.addEventListener('input', function () { W.texts[key] = ip.value; W.edited[key] = true; });
       wrap.appendChild(ip);
+
+      // この段だけの細かい調整（色・読む順）。基本は自動でよいので、
+      // 「変えたいときだけ」触ればいい小さいセレクトにしている。
+      if (color || hasOrder) {
+        const tune = el('div', 'wiz-tune');
+        if (color) {
+          tune.appendChild(el('span', '', '色：'));
+          const cs = document.createElement('select');
+          P.STAGE_COLORS.forEach(function (c) {
+            const o = el('option', '', M.COLORS[c].label); o.value = c; cs.appendChild(o);
+          });
+          cs.value = P.answerColor(mode, i, W.parts, W.opts);
+          cs.addEventListener('change', function () {
+            W.opts.stageColor = W.opts.stageColor || {};
+            W.opts.stageColor[i] = cs.value;
+            afterPartChange();
+          });
+          tune.appendChild(cs);
+        }
+        if (hasOrder) {
+          tune.appendChild(el('span', '', ' 読む順：'));
+          const os = document.createElement('select');
+          const defOpt = el('option', '', 'カードの設定のまま'); defOpt.value = ''; os.appendChild(defOpt);
+          P.ORDERS.forEach(function (o) {
+            const x = el('option', '', o.label); x.value = o.key; os.appendChild(x);
+          });
+          os.value = (W.opts.stageOrder && W.opts.stageOrder[i]) || '';
+          os.addEventListener('change', function () {
+            W.opts.stageOrder = W.opts.stageOrder || {};
+            if (os.value) W.opts.stageOrder[i] = os.value; else delete W.opts.stageOrder[i];
+            afterPartChange();
+          });
+          tune.appendChild(os);
+        }
+        wrap.appendChild(tune);
+      }
+
       if (!isLast) wrap.appendChild(el('div', 'ex', 'ここに書いた指示のとおりにすると、次の段に進めます'));
       box.appendChild(wrap);
     }
