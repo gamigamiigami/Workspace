@@ -131,6 +131,10 @@
     A.results = ST.runSteps(A.maze, A.steps);
     A.targets = deriveTargetsFromSteps();
     refresh();
+    // 作ったら、同じページの下にある編集エリアもすぐ使えるようにしておく
+    // （スクロールはしない。まず結果を見てもらい、直したくなったら下へ行けばいい）
+    $('#app').classList.add('show');
+    setTimeout(function () { ED.fit(); }, 30);
   }
 
   /** 自動作成のSTEPから、段ごとの「読むルート・色・順・こたえ」を読みとって targets の形にする */
@@ -155,13 +159,24 @@
     });
   }
 
+  /**
+   * 細かい編集エリアを出す。
+   * 以前は「かんたん作成」と「編集画面」が別画面で、行き来のたびに切りかわっていたが、
+   * 伊神さんの要望で1ページにまとめた。ここは画面の切りかえではなく、
+   * 同じページの下half（編集エリア）を出して、そこまでスクロールするだけ。
+   */
   function showEditor() {
-    if (MZ.wizard) MZ.wizard.hide();
+    $('#app').classList.add('show');
     refresh();
-    setTimeout(function () { ED.fit(); }, 30);
+    // 表示された直後は盤面の大きさが確定していないので、1フレーム待ってから合わせる
+    setTimeout(function () {
+      ED.fit();
+      $('#app').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 30);
   }
+  /** ページの上（作るところ）へもどる。編集エリアは開いたまま残す */
   function showWizard() {
-    if (MZ.wizard) MZ.wizard.show();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   /** ツールを外から選ぶ */

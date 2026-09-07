@@ -311,7 +311,7 @@
     acts.appendChild(mk('🖨 印刷する', function () { MZ.app.doPrint(); }, 'primary'));
     acts.appendChild(mk('🖼 画像で保存', function () { MZ.app.doPng(); }));
     if (MZ.app.canShareFiles()) acts.appendChild(mk('📱 写真に保存', function () { MZ.app.doPngShare(); }));
-    acts.appendChild(mk('✏️ いま作ったものを直す', function () { MZ.app.showEditor(); }));
+    acts.appendChild(mk('✏️ 下で細かく直す', function () { MZ.app.showEditor(); }));
     box.appendChild(acts);
 
     renderView();
@@ -352,8 +352,10 @@
   /* =======================================================================
    * 画面の出し入れ
    * ===================================================================== */
-  function show() { $('#wizardView').classList.add('show'); $('#app').classList.remove('show'); MZ.opt.paintAll(); }
-  function hide() { $('#wizardView').classList.remove('show'); $('#app').classList.add('show'); }
+  // かんたん作成と編集エリアは同じ1ページに縦に並んでいるので、
+  // 「見せる／隠す」ではなく「そこまでスクロールする」だけでよい。
+  function show() { MZ.opt.paintAll(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+  function hide() { $('#app').classList.add('show'); }
 
   function init() {
     // 大きさ・文字の量・わき道・START/GOAL は編集画面①とまったく同じ設定を見る
