@@ -53,7 +53,7 @@
       { k: 'colors', t: 'colors', label: '色' }
     ],
     'reorder': [{ k: 'order', t: 'order' }, { k: 'parity', t: 'parity' }],
-    'remove-walls': [{ k: 'colors', t: 'colors', label: '消す線の色' }],
+    'remove-walls': [{ k: 'colors', t: 'colors', label: '消す線の色', hideIf: 'keys' }],
     'remove-elements': [
       { k: 'colors', t: 'colors', label: '消す色（選ばなければ色は問わない）' },
       { k: 'kinds', t: 'kinds', label: '消す種類' },
@@ -120,11 +120,13 @@
     doPngShare: function () { doPngShare(); },
     canShareFiles: function () { return canShareFiles(); },
     setTool: setTool,
-    setStatus: setStatus
+    setStatus: setStatus,
+    /** 自動作成のあと、手で直したところがあるか（作り直す前の確認に使う） */
+    hasHandEdits: function () { return ED.canUndo(); },
   };
 
   /** かんたん作成で出来たものを、盤面（編集する側）の状態として受けとる */
-  function applyBuilt(maze, steps) {
+  function applyBuilt(maze, steps, grownTo) {
     ED.replaceMaze(M.normalize(maze));
     A.maze = ED.getMaze();
     A.steps = steps;
@@ -135,12 +137,13 @@
     ED.clearDisplay();
     MZ.opt.set('rows', A.maze.rows);
     MZ.opt.set('cols', A.maze.cols);
-    // 「③ 読み方とこたえ」を、自動作成した段ごとの読み方で埋めておく。
-    // 空のまま渡すと ⑤ の③が空っぽで、
+    // ⑤の「C 読み方とこたえ」を、自動作成した段ごとの読み方で埋めておく。
+    // 空のまま渡すと そこが空っぽで、
     // 何を直せばいいのか分からなくなってしまう。
     A.results = ST.runSteps(A.maze, A.steps);
     A.targets = deriveTargetsFromSteps();
     refresh();
+    if (grownTo) setStatus('迷路を ' + grownTo + ' にして作りました');
     // 作ったら「④ できたものを見る・直す」と「⑤ もっと細かく直す」を出す。
     // ④に出る盤面は絵ではなく本物の盤面なので、見ながらそのまま直せる。
     showWork();
@@ -221,6 +224,9 @@
     // 記号の細かい設定は「きごう」を選んだときだけ出す（ふだんは場所を取らせない）
     const sb = $('#symbolBar');
     if (sb) sb.hidden = (name !== 'symbol');
+    // 「ルート」のときだけ、次に押すボタンを盤面のすぐ下に出す
+    const dh = $('#drawHelp');
+    if (dh) dh.hidden = (name !== 'route');
     if (name === 'route') {
       $('#ckShowShortest').checked = false;
       $('#ckShowRoute').checked = true;
@@ -306,21 +312,17 @@
     // 上のバー
     $('#btnUndo').addEventListener('click', function () { ED.undo(); });
     $('#btnRedo').addEventListener('click', function () { ED.redo(); });
-    $('#btnHelp').addEventListener('click', function () { $('#helpModal').hidden = false; });
-    $('#btnHelpClose').addEventListener('click', function () { $('#helpModal').hidden = true; });
+    $('#btnHelpClose').addEventListener('click', closeHelp);
+    // 使い方は中身が長い。背景を押しても Escape でも閉じられるようにする
+    $('#helpModal').addEventListener('click', function (e) { if (e.target === this) closeHelp(); });
     $('#btnPlay').addEventListener('click', openPlayer);
     $('#btnPlayerClose').addEventListener('click', function () { $('#playerView').hidden = true; });
     $('#btnPlayerPrev').addEventListener('click', function () { movePlayer(-1); });
     $('#btnPlayerNext').addEventListener('click', function () { movePlayer(1); });
     $('#btnPlayerAnswer').addEventListener('click', function () { A.player.showAnswer = !A.player.showAnswer; renderPlayer(); });
     $('#btnPrint').addEventListener('click', doPrint);
-    $('#btnPrint2').addEventListener('click', doPrint);
+    $('#inPngInst').addEventListener('input', applyInstEdit);
     $('#btnPng').addEventListener('click', doPng);
-    $('#btnPng2').addEventListener('click', doPng);
-    if (canShareFiles()) {
-      $('#btnPngShare').hidden = false;
-      $('#btnPngShare').addEventListener('click', doPngShare);
-    }
     $('#btnSave').addEventListener('click', function () { $('#saveTitle').value = A.maze.meta.title || ''; $('#saveModal').hidden = false; $('#saveTitle').focus(); });
     $('#btnSaveCancel').addEventListener('click', function () { $('#saveModal').hidden = true; });
     $('#btnSaveDo').addEventListener('click', saveWork);
@@ -330,7 +332,7 @@
     $('#btnImport').addEventListener('click', function () { $('#fileInput').click(); });
     $('#fileInput').addEventListener('change', importFile);
 
-    /* ---- ① 盤面と文字の量（かんたん作成と同じ設定を見ている） ---- */
+    /* ---- A 盤面と文字の量（②の「もっと細かく決める」と同じ設定を見ている） ---- */
     MZ.opt.bind('#inRows', 'rows');
     MZ.opt.bind('#inCols', 'cols');
     MZ.opt.bind('#inDensity', 'density');
@@ -346,17 +348,25 @@
       ED.fit();
     });
     $('#ckGrid').addEventListener('change', function () { ED.state.renderOpts.showGrid = this.checked; ED.draw(); });
-    $('#btnAllWalls').addEventListener('click', function () { ED.pushHistory(); M.fillAllWalls(A.maze); afterEdit(); });
-    $('#btnBorderOnly').addEventListener('click', function () { ED.pushHistory(); M.onlyBorderWalls(A.maze); afterEdit(); });
+    $('#btnAllWalls').addEventListener('click', function () {
+      if (!askIfMade('いまの迷路の道をぜんぶ壁でふさぎます。')) return;
+      ED.pushHistory(); M.fillAllWalls(A.maze); afterEdit(); setStatus('全部かべにしました（↶ でもどせます）');
+    });
+    $('#btnBorderOnly').addEventListener('click', function () {
+      if (!askIfMade('いまの迷路の壁をぜんぶ消して、外わくだけにします。')) return;
+      ED.pushHistory(); M.onlyBorderWalls(A.maze); afterEdit(); setStatus('外わくだけにしました（↶ でもどせます）');
+    });
     $('#btnRandomMaze').addEventListener('click', function () {
+      if (!askIfMade('いまの迷路の壁をぜんぶ作り直します。')) return;
       ED.pushHistory();
       A.maze.walls = G.random(A.maze).walls;
       setStatus('迷路をおまかせで作りました');
       afterEdit();
     });
 
-    /* ---- ② 正解ルート ---- */
+    /* ---- B 正解ルート ---- */
     $('#btnMakeMaze').addEventListener('click', makeMazeFromRoute);
+    $('#btnMakeMazeHere').addEventListener('click', makeMazeFromRoute);
     $('#btnOpenRoute').addEventListener('click', function () {
       const rt = A.maze.routes[ED.state.routeIndex];
       if (!rt) { setStatus('先にルートを描いてください'); return; }
@@ -366,10 +376,13 @@
       afterEdit();
     });
     $('#btnClearRoute').addEventListener('click', function () {
-      ED.pushHistory();
       const rt = A.maze.routes[ED.state.routeIndex];
-      if (rt) rt.cells = [];
+      if (!rt || !rt.cells.length) { setStatus('このルートはもう空です'); return; }
+      ED.pushHistory();
+      const n = rt.cells.length;
+      rt.cells = [];
       afterEdit();
+      setStatus('ルート（' + n + 'マス）を消しました（↶ でもどせます）');
     });
     $('#btnLengthen').addEventListener('click', lengthenRoute);
     $('#routePick').addEventListener('change', function () {
@@ -409,7 +422,7 @@
       ED.pushHistory();
       const before = A.maze.elements.length;
       A.maze.elements = A.maze.elements.filter(function (e) { return !e.isDummy; });
-      setStatus('ダミーを' + (before - A.maze.elements.length) + '個消しました');
+      setStatus('まぎれ文字を' + (before - A.maze.elements.length) + '文字 消しました（↶ でもどせます）');
       afterEdit();
     });
 
@@ -456,6 +469,7 @@
 
     // キーボード
     document.addEventListener('keydown', function (e) {
+      if (!$('#helpModal').hidden) { if (e.key === 'Escape') closeHelp(); return; }
       if (!$('#playerView').hidden) {
         if (e.key === 'ArrowRight') movePlayer(1);
         if (e.key === 'ArrowLeft') movePlayer(-1);
@@ -481,6 +495,16 @@
   };
 
   function clamp(v, a, b) { return Math.max(a, Math.min(b, isNaN(v) ? a : v)); }
+  function closeHelp() { $('#helpModal').hidden = true; }
+
+  /**
+   * 作ったものが入っているときだけ確認する。
+   * 空の盤面でいちいち聞かれると邪魔なので、中身があるときだけ止める。
+   */
+  function askIfMade(what) {
+    if (isEmptyWork()) return true;
+    return window.confirm(what + '\nよろしいですか？（あとで ↶ でもどせます）');
+  }
   function setStatus(msg) { if (msg !== undefined && msg !== null) $('#statusText').textContent = msg; }
 
   /**
@@ -496,7 +520,14 @@
    * ===================================================================== */
   function refresh() {
     A.results = ST.runSteps(A.maze, A.steps);
-    A.checks = ST.validateAll(A.maze, A.steps);
+    A.checks = ST.validateAll(A.maze, A.steps, A.results);   // 走らせた結果を渡して二度打ちを避ける
+    // 何も作っていないのに「解いてみる」を押すと、空の10×10が開いてしまう。
+    // 「✏️ 迷路を直す」は「まっさらから自分で描く」入口でもあるので、ここでは止めない。
+    const empty = isEmptyWork();
+    ['#btnPlay', '#btnPrint', '#btnPng'].forEach(function (id) {
+      const b = $(id);
+      if (b) { b.disabled = empty; b.title = empty ? 'まず「✨ 自動で作る」を押してください' : ''; }
+    });
     renderSteps();
     renderTargets();
     renderChecks();
@@ -507,7 +538,6 @@
     $('#btnRedo').disabled = !ED.canRedo();
     $('#btnUndoStep').disabled = !A.stepHistory.length;
     $('#answerText').textContent = ST.finalText(A.results) || '—';
-    renderFlow();
     syncPngInst();
     // ④のタブ（問題／n段めの答え）は、編集で段が増減するたびに作り直す
     if (MZ.wizard && MZ.wizard.syncViews) MZ.wizard.syncViews();
@@ -515,7 +545,7 @@
   }
 
   /**
-   * 画像に入れる指示文の欄（#inPngInst）を、自動作成の指示文と同期させる。
+   * 指示文の欄（#inPngInst）を、自動作成の指示文と同期させる。
    * ユーザーが自分で書きかえたあとは、迷路そのものが変わるまで上書きしない
    * （書きかえるたびに自動生成の文へもどってしまうと編集にならないため）。
    */
@@ -529,9 +559,41 @@
     }
   }
 
+  /**
+   * 指示文（問題用紙にのる文）は1つしか持たない。
+   * 前は「印刷は maze.meta.instruction・画像は #inPngInst の中身」と2系統あったので、
+   * 欄を書きかえても紙には反映されず、直す手段が事実上なかった。
+   * 欄を直したらここで meta に書きもどし、印刷・画像・④の表示がぜんぶ同じ文を見る。
+   */
+  function applyInstEdit() {
+    const ta = $('#inPngInst');
+    if (!ta) return;
+    A.maze.meta.instruction = ta.value;
+    A.pngInstBase = ta.value;
+    $('#workInst').textContent = ta.value || '（まだ決まっていません）';
+    saveAuto();
+  }
+
+  /**
+   * 見るだけの盤面（段ごとの答え）のあいだは、道具を押せないようにする。
+   * 押せる見た目のままだと「動かせます」という案内も出ているのに何も起きず、
+   * しかも出るメッセージが「設計図を選んでください」＝画面に無い名前を指していた。
+   */
+  function setToolsEnabled(on) {
+    const box = $('#paneCanvas');
+    if (!box) return;
+    box.classList.toggle('readonly', !on);
+    box.querySelectorAll('.toolbar button, .toolbar select, .sw').forEach(function (b) { b.disabled = !on; });
+    document.querySelectorAll('.sel-strip button, .sel-strip input, .sel-strip .sw')
+      .forEach(function (b) { b.disabled = !on; });
+    // ズームだけは見るだけでも使えたほうがよい
+    ['#btnZoomIn', '#btnZoomOut', '#btnFit'].forEach(function (id) { const e = $(id); if (e) e.disabled = false; });
+  }
+
   /** 表示する盤面を決める（設計図か、選んだSTEPの結果か） */
   function updateRouteView() {
     const opts = ED.state.renderOpts;
+    setToolsEnabled(A.selStep < 0);
     if (A.selStep >= 0) return;
     if ($('#ckShowSub').checked && A.maze.subBoard) {
       ED.setDisplay({ board: R.subBoardAsBoard(A.maze.subBoard), readOnly: true, opts: { showRoute: false } });
@@ -546,9 +608,10 @@
       opts.routePath = s.ok ? s.path : null;
       opts.routePaths = null;
       opts.showRoute = s.ok;
-      opts.routeColor = '#1c7ed6';
+      opts.routeColor = '#1c7ed6';        // 今の最短ルートは青で出す
       setStatus(s.ok ? '最短ルート：' + s.dist + 'マス' + (s.multiple ? '／同じ長さの道が' + (s.capped ? 'たくさん' : s.count) + '通りあります' : '／1本だけです') : s.reason);
     } else if ($('#ckShowRoute').checked && A.maze.routes.length) {
+      opts.routeColor = undefined;        // 青にしたままだと、段の答えの道まで青くなる
       // 描いたルートは全部見せる。いま描いているものを濃く、ほかは薄く
       const active = ED.state.routeIndex;
       opts.routePaths = A.maze.routes.map(function (r, i) {
@@ -558,6 +621,7 @@
       opts.routePath = null;
       opts.showRoute = true;
     } else {
+      opts.routeColor = undefined;
       opts.routePath = null;
       opts.routePaths = null;
       opts.showRoute = false;
@@ -585,6 +649,10 @@
     const rt = A.maze.routes[idx];
     const n = rt ? rt.cells.length : 0;
     $('#routeLen').textContent = '「ルート' + (idx + 1) + '」の長さ：' + n + 'マス' + (n > 1 ? '（' + (n - 1) + '歩）' : '');
+    const dl = $('#drawLen');
+    if (dl) dl.textContent = n ? ('いま ' + n + 'マス') : 'まだ描いていません';
+    const bh = $('#btnMakeMazeHere');
+    if (bh) bh.disabled = n < 2;
     if (ED.state.renderOpts.showRoute) ED.draw();
   }
 
@@ -600,7 +668,7 @@
   }
 
   /* =======================================================================
-   * ② 正解ルートから迷路を作る
+   * B 正解ルートから迷路を作る
    * ===================================================================== */
   function makeMazeFromRoute() {
     const rt = A.maze.routes[ED.state.routeIndex];
@@ -656,7 +724,7 @@
   }
 
   /* =======================================================================
-   * ③ 文字を置く / ダミーをまく
+   * ③ 文字を置く / まぎれ文字をまく
    * ===================================================================== */
   function currentPath() {
     const rt = A.maze.routes[ED.state.routeIndex];
@@ -876,7 +944,8 @@
     if (!res) return;
     ED.setDisplay({ board: res.board, path: res.path, cells: res.cells, readOnly: true });
     $('#viewBadge').className = 'viewbadge show';
-    $('#viewBadge').textContent = 'STEP' + (i + 1) + ' のあとの盤面（見るだけ）';
+    $('#viewBadge').textContent = stageTitleFor(i) + '（見るだけ）';
+    setStatus('いまは答えを見ています。直すときは上の「問題」タブを押してください');
     ED.fit();
   }
 
@@ -889,6 +958,9 @@
       parent.appendChild(io);
     }
     fields.forEach(function (f) {
+      // 自動作成が「この線だけ」と決めているときは、色を選ばせない。
+      // 選べても run() が色を無視するので、見出しだけ変わって中身が変わらない
+      if (f.hideIf && (st.params[f.hideIf] || []).length) return;
       const row = el('div', 'row');
       const upd = function (v) {
         pushStepHistory();
@@ -928,14 +1000,6 @@
         const se = document.createElement('select');
         Object.keys(src).forEach(function (k) { const x = el('option', '', src[k].label); x.value = k; se.appendChild(x); });
         se.value = st.params[f.k] || (f.t === 'order' ? 'route' : 'all');
-        se.addEventListener('change', function () { upd(se.value); });
-        lb.appendChild(se); row.appendChild(lb);
-      } else if (f.t === 'delmode') {
-        const lb = el('label', '', '消し方');
-        const se = document.createElement('select');
-        [['disable', '無効にする（通れる・読めなくなる）'], ['hide', '見た目だけ消す'], ['delete', '完全に消す']]
-          .forEach(function (o) { const x = el('option', '', o[1]); x.value = o[0]; se.appendChild(x); });
-        se.value = st.params[f.k] || 'disable';
         se.addEventListener('change', function () { upd(se.value); });
         lb.appendChild(se); row.appendChild(lb);
       } else if (f.t === 'colors') {
@@ -996,19 +1060,6 @@
       }
       parent.appendChild(row);
     });
-  }
-
-  /* ---- 謎の流れを言葉で書き出す ---- */
-  function renderFlow() {
-    const box = $('#flowBox');
-    box.textContent = '';
-    if (!A.steps.length) { box.textContent = '謎の流れがここに出ます'; return; }
-    const parts = ['最初の迷路'];
-    A.steps.forEach(function (st, i) {
-      const res = A.results[i + 1] || {};
-      parts.push('↓ ' + ST.describe(st) + (res.log ? '　' + res.log : ''));
-    });
-    parts.forEach(function (t) { box.appendChild(el('div', '', t)); });
   }
 
   /* =======================================================================
@@ -1204,6 +1255,19 @@
   }
 
   /** プレイヤーが実際に目にする「画面」を並べる（同じ盤面が続くときはまとめる） */
+  /**
+   * 印刷やプレイヤー画面の見出しを、画面のタブと同じ言い方にする。
+   * 「STEP4 のあと」は作る側の言葉で、生徒に配る紙に出す言葉ではない。
+   */
+  function stageTitleFor(stepIndex) {
+    const views = stageInfo();
+    for (let i = 1; i < views.length; i++) {
+      if (views[i].stepIndex === stepIndex) return views[i].title;
+    }
+    // solve 以外のSTEPの途中経過（ふつうは同じ画面にまとめられるので出ない）
+    return 'とちゅうの盤面';
+  }
+
   function buildScreens() {
     const screens = [];
     let lastKey = null;
@@ -1224,7 +1288,7 @@
       screens.push({
         board: r.board,
         path: r.path,
-        title: r.index < 0 ? '問題' : 'STEP' + (r.index + 1) + ' のあと',
+        title: r.index < 0 ? '問題' : stageTitleFor(r.index),
         notes: r.step ? [ST.describe(r.step) + (r.log ? '　' + r.log : '')] : ['まずはこの迷路を解いてください']
       });
     });
@@ -1330,8 +1394,8 @@
       : (ED.state.renderOpts.routePath || null);
     o.showRoute = $('#ckPrintAnswer').checked && !!o.routePath;
     o.title = A.maze.meta.title || '';
-    const ckInst = $('#ckPngInst'), taInst = $('#inPngInst');
-    o.inst = (!ckInst || ckInst.checked) ? ((taInst && taInst.value) || A.maze.meta.instruction || '') : '';
+    const ckInst = $('#ckPngInst');
+    o.inst = (!ckInst || ckInst.checked) ? (A.maze.meta.instruction || '') : '';
     return { board: board, o: o };
   }
 
@@ -1384,7 +1448,15 @@
     try { localStorage.setItem(STORE_KEY, JSON.stringify(list)); return true; }
     catch (e) { setStatus('⚠ このブラウザでは保存できませんでした（プライベートモードかもしれません）。「ファイルに書き出す」をお使いください'); return false; }
   }
+  /** まだ何も作っていない（空の初期盤面）か */
+  function isEmptyWork() {
+    return !A.steps.length && !A.maze.elements.length && !A.maze.routes.some(function (r) { return r.cells.length; });
+  }
+
   function saveAuto() {
+    // 起動直後の空の盤面まで保存すると、2回目に開いたとき
+    // 何も作っていないのに「4 できたものを見る・直す」と⑤が開いてしまう
+    if (isEmptyWork()) return;
     try { localStorage.setItem(AUTO_KEY, JSON.stringify({ maze: A.maze, steps: A.steps })); } catch (e) { /* 保存できなくても動作は続ける */ }
   }
   function restoreAuto() {
@@ -1411,8 +1483,12 @@
     A.stepHistory = [];
     A.targets = [];
     ED.clearDisplay();
-    $('#inRows').value = A.maze.rows;
-    $('#inCols').value = A.maze.cols;
+    // ★DOMに直接入れてはいけない★
+    //   MZ.opt.bind は change イベントしか見ないので、値を直接入れても
+    //   MZ.opt の中の値は古いまま＝②の欄も目安表示も古いままになる。
+    //   その状態で⑤の「変える」を押すと、開いた作品が古い大きさに切り縮められていた。
+    MZ.opt.set('rows', A.maze.rows);
+    MZ.opt.set('cols', A.maze.cols);
     if (A.maze.subBoard) {
       $('#inSubRows').value = A.maze.subBoard.rows;
       $('#inSubCols').value = A.maze.subBoard.cols;

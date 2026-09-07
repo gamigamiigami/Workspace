@@ -27,7 +27,6 @@ MZ.editor = (function () {
     role: 'none',
     warpGroup: 'A',
     size: 1,
-    pendingText: '',
     selection: [],
     history: [], future: [],
     display: null,           // STEPの結果を見ているときはここに入る（編集はできない）
@@ -67,7 +66,6 @@ MZ.editor = (function () {
     fit();
   }
 
-  function setMaze(m) { S.maze = m; S.selection = []; S.history = []; S.future = []; fit(); }
   function getMaze() { return S.maze; }
 
   /** いま画面に出ている盤面（STEPを見ているときはその結果） */
@@ -222,7 +220,6 @@ MZ.editor = (function () {
       ctx.strokeRect(r.x, r.y, r.w, r.h);
       ctx.restore();
     }
-    if (S.hooks.onDraw) S.hooks.onDraw();
   }
 
   function normRect(m) {
@@ -299,7 +296,8 @@ MZ.editor = (function () {
       S.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, tx: S.view.tx, ty: S.view.ty };
       return;
     }
-    if (isReadOnly()) { status('STEPの結果を見ています。編集するには「設計図」を選んでください'); return; }
+    // 画面に「設計図」という名前のボタンは無い。④のタブの言い方に合わせる
+    if (isReadOnly()) { status('いまは「答え」を見ています。直すときは上の「問題」タブを押してください'); return; }
     S.histLenBefore = S.history.length;
     startTool(e);
   }
@@ -328,7 +326,7 @@ MZ.editor = (function () {
       draw();
       return;
     }
-    if (!S.drag && !S.marquee) { hoverTool(e); return; }
+    if (!S.drag && !S.marquee) return;
     if (S.drag && S.drag.kind === 'pan') {
       S.view.tx = S.drag.tx + (e.clientX - S.drag.sx);
       S.view.ty = S.drag.ty + (e.clientY - S.drag.sy);
@@ -555,7 +553,6 @@ MZ.editor = (function () {
     }
   }
 
-  function hoverTool(e) { /* いまは何もしない（将来ここに下じき表示を足せる） */ }
 
   function finishMarquee() {
     const r = normRect(S.marquee);
@@ -794,7 +791,7 @@ MZ.editor = (function () {
 
   return {
     init: init, state: S, draw: draw, fit: fit, zoom: zoom,
-    set: set, setMaze: setMaze, getMaze: getMaze,
+    set: set, getMaze: getMaze,
     setDisplay: setDisplay, clearDisplay: clearDisplay, shownBoard: shownBoard, isReadOnly: isReadOnly,
     pushHistory: pushHistory, undo: undo, redo: redo, canUndo: canUndo, canRedo: canRedo,
     replaceMaze: replaceMaze, changed: changed,

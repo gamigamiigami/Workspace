@@ -193,9 +193,6 @@ MZ.model = (function () {
     for (let i = 0; i < list.length; i++) if (list[i].id === id) return list[i];
     return null;
   }
-  function elementsAt(board, r, c) {
-    return board.elements.filter(function (e) { return e.r === r && e.c === c; });
-  }
   /** 探索や抽出で「生きている」要素だけを返す（無効化されたものは除く） */
   function activeElements(board) {
     return board.elements.filter(function (e) { return !e.disabled; });
@@ -211,17 +208,7 @@ MZ.model = (function () {
     return JSON.parse(JSON.stringify(board));
   }
 
-  /** 保存用の文字列にする */
-  function serialize(maze) {
-    return JSON.stringify({ v: 1, maze: maze });
-  }
 
-  /** 保存した文字列から戻す。古い形でも落ちないように穴埋めする */
-  function deserialize(text) {
-    const data = JSON.parse(text);
-    const m = data.maze || data;
-    return normalize(m);
-  }
 
   /** 足りない項目を補って、いつでも安全に使える形にそろえる */
   function normalize(m) {
@@ -289,6 +276,26 @@ MZ.model = (function () {
       if (ok) ow[k] = old.oneways[k];
     });
     maze.oneways = ow;
+    // ★大きくしたときは、増えたところを「まだ掘っていない壁だらけの場所」にする★
+    //   前は外周を足すだけだったので、
+    //   ・増えた場所は壁が1本も無い ただの空き地になり、
+    //   ・古い外周の壁が残って、そこへ行く道が塞がれたまま
+    //   になっていた（10×10→14×14 で96マスが到達不能。それでも警告は出ない）。
+    //   壁で埋めておけば「まだ道が通っていない場所」として、
+    //   ⑤の「今の迷路に道だけ通す」やルート描きでふつうに掘れる。
+    if (rows > old.rows || cols > old.cols) {
+      for (let r = 0; r <= rows; r++) for (let c = 0; c < cols; c++) {
+        if (r < old.rows + 1 && c < old.cols) continue;      // 元からあったところは触らない
+        if (!maze.walls[hKey(r, c)]) maze.walls[hKey(r, c)] = makeWall();
+      }
+      for (let r = 0; r < rows; r++) for (let c = 0; c <= cols; c++) {
+        if (r < old.rows && c < old.cols + 1) continue;
+        if (!maze.walls[vKey(r, c)]) maze.walls[vKey(r, c)] = makeWall();
+      }
+      // 古い外周は、もう外周ではないので消して通れるようにする
+      if (cols > old.cols) for (let r = 0; r < old.rows; r++) delete maze.walls[vKey(r, old.cols)];
+      if (rows > old.rows) for (let c = 0; c < old.cols; c++) delete maze.walls[hKey(old.rows, c)];
+    }
     // 外周は必ず壁にする
     for (let c = 0; c < cols; c++) {
       if (!maze.walls[hKey(0, c)]) maze.walls[hKey(0, c)] = makeWall();
@@ -320,9 +327,9 @@ MZ.model = (function () {
     createMaze: createMaze, fillAllWalls: fillAllWalls, onlyBorderWalls: onlyBorderWalls,
     makeWall: makeWall, makeElement: makeElement, guessKind: guessKind,
     makeStart: makeStart, makeGoal: makeGoal, makeRoute: makeRoute,
-    findById: findById, elementsAt: elementsAt, activeElements: activeElements,
+    findById: findById, activeElements: activeElements,
     cellsWithRole: cellsWithRole,
-    cloneBoard: cloneBoard, serialize: serialize, deserialize: deserialize, normalize: normalize,
+    cloneBoard: cloneBoard, normalize: normalize,
     createSubBoard: createSubBoard, resize: resize
   };
 })();

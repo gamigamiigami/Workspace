@@ -32,6 +32,8 @@ MZ.packages = (function () {
   const STAGE_COLORS = ['red', 'blue', 'yellow', 'green', 'purple'];
   /* 段の上限。STARTやGOALを変える段は色を使い回せるので、色の数より多く積める */
   const MAX_STAGES = 7;
+  /* 自動作成が作れる盤面の大きさ。MZ.opt.RANGE と index.html の min/max もこれに合わせる */
+  const MIN_SIZE = 6, MAX_SIZE = 20;
   /* STARTやGOALが変わる段が2回め以降のときに使う目印セット（★☆の使い回しで
    * 見分けがつかなくなるのを防ぐ）。段は最大7つ＝STARTGOAL変更は最大6回なので、
    * 6セット用意して、同じ記号が2回使われることが無いようにする。 */
@@ -190,10 +192,26 @@ MZ.packages = (function () {
       const v = override[i];
       return (v && STAGE_COLORS.indexOf(v) >= 0) ? v : auto;
     }
-    const out = [pick(0, STAGE_COLORS[0])];
+    // ★「線を消す」段の色は、ぜったいに使い回さない★
+    //   消す線の色は、その段の色（st[i] のときの sc[i]）になる。
+    //   同じ色が2回出ると、盤面には赤い線が8本立つのに STEP は自分の4本しか消さない。
+    //   ところが問題用紙の指示は「あかいせんをけせ」なので、解く人は8本ぜんぶ消してしまい、
+    //   途中の段が読めなくなる（＝紙のとおりに解くと解けない謎ができていた）。
+    //   検証は消す線を key で指定して解くので、このズレをすり抜けていた。
+    const usedErase = {};
+    function fixErase(i, color) {
+      if (st[i] !== 'erase-wall') return color;          // この段は線を消さない
+      let c = color;
+      for (let k = 0; k < STAGE_COLORS.length && usedErase[c]; k++) {
+        c = STAGE_COLORS[(STAGE_COLORS.indexOf(c) + 1) % STAGE_COLORS.length];
+      }
+      usedErase[c] = true;
+      return c;
+    }
+    const out = [fixErase(0, pick(0, STAGE_COLORS[0]))];
     st.forEach(function (kind) {
       const i = out.length;
-      out.push(pick(i, nextAutoColor(out[out.length - 1], kind)));
+      out.push(fixErase(i, pick(i, nextAutoColor(out[out.length - 1], kind))));
     });
     return out.slice(0, n);
   }
@@ -1079,6 +1097,22 @@ MZ.packages = (function () {
     for (let i = 0; i < n; i++) {
       if ((results[checkpoint[i] + 1] || {}).text !== texts[i]) return stop('read:' + i);
     }
+    // ★紙のとおりに解けるかの最後の関門★
+    //   「線を消す」STEPは keys（この段で決めた線）を消すが、問題用紙の指示は
+    //   「あかいせんをけせ」と色で言う。だから、その色の線が盤面に他にもあると
+    //   解く人は多く消してしまう。②で色を手で上書きしたときにも起きうるので、
+    //   ここで必ず確かめる（既定のルールでは stageColors が色をかぶらせない）。
+    for (let k = 0; k < steps.length; k++) {
+      const sp = steps[k];
+      if (sp.type !== 'remove-walls') continue;
+      const col = (sp.params.colors || [])[0];
+      const mine = {};
+      (sp.params.keys || []).forEach(function (x) { mine[x] = true; });
+      const strays = Object.keys(maze.walls).filter(function (x) {
+        return maze.walls[x].color === col && !mine[x];
+      });
+      if (strays.length) return stop('erasecolor');
+    }
     const checks = ST.validateAll(maze, steps);
     if (checks.some(function (c) { return c.level !== 'ok'; })) return stop('check');
 
@@ -1406,9 +1440,11 @@ MZ.packages = (function () {
     }
     const room = rc.rows * rc.cols;
     const limit = Math.floor(room * 0.55) - n * 3;      // 置ける文字数の上限
-    // 上限に足りるいちばん小さい正方形（目安として案内に出す）
-    let need = rc.rows;
-    while (need < 30 && Math.floor(need * need * 0.55) - n * 3 < total) need++;
+    // 上限に足りるいちばん小さい正方形（目安として案内に出す）。
+    // ★build() が作れる上限（MAX_SIZE）を超えて勧めてはいけない★
+    //   超えた大きさを勧めると、言われたとおりにしても永久に通らない。
+    let need = Math.max(MIN_SIZE, Math.min(rc.rows, MAX_SIZE));
+    while (need < MAX_SIZE && Math.floor(need * need * 0.55) - n * 3 < total) need++;
     return { stages: n, total: total, limit: limit, emptyStage: empty,
              over: total > limit, suggest: need };
   }
@@ -1444,7 +1480,7 @@ MZ.packages = (function () {
     let totalTries = 0;
     let lastRows = null, lastCols = null;
     for (let s = 0; s < grows.length; s++) {
-      const rows = clamp(rc.rows + grows[s], 6, 20), cols = clamp(rc.cols + grows[s], 6, 20);
+      const rows = clamp(rc.rows + grows[s], MIN_SIZE, MAX_SIZE), cols = clamp(rc.cols + grows[s], MIN_SIZE, MAX_SIZE);
       if (rows === lastRows && cols === lastCols) continue;   // もう上限で広げられない
       lastRows = rows; lastCols = cols;
       const tryRc = (grows[s] === 0) ? rc : Object.assign({}, rc, { rows: rows, cols: cols });
@@ -1455,7 +1491,14 @@ MZ.packages = (function () {
       for (let t = 0; t < attempts; t++) {
         totalTries++;
         let out = null;
-        try { out = makeOne(tryRc, diag); } catch (e) { out = null; diag.error = (diag.error || 0) + 1; }
+        try { out = makeOne(tryRc, diag); }
+        catch (e) {
+          out = null;
+          // ここで握りつぶすと、プログラムの不具合が「作れませんでした」に化けて
+          // 気づけなくなる。数えておいて、いちばん多ければそう言う
+          diag.error = (diag.error || 0) + 1;
+          diag.errorMsg = (e && e.message) ? e.message : String(e);
+        }
         if (out) {
           out.tries = totalTries;
           if (grows[s] > 0) out.grownTo = rows + '×' + cols;
@@ -1493,18 +1536,18 @@ MZ.packages = (function () {
   }
 
   function explainFail(diag, rc, rows, cols, tries) {
-    const keys = Object.keys(diag);
+    const keys = Object.keys(diag).filter(function (k) { return typeof diag[k] === 'number'; });
     let top = '', best = -1;
     keys.forEach(function (k) { if (diag[k] > best) { best = diag[k]; top = k; } });
 
     const size = rows + '×' + cols;
-    const maxed = (rows >= 20 && cols >= 20);
+    const maxed = (rows >= MAX_SIZE && cols >= MAX_SIZE);
     const grew = ((rows > rc.rows || cols > rc.cols)
         ? '迷路は ' + rc.rows + '×' + rc.cols + ' から ' + size + ' まで自動で大きくして、' + tries + '回ためしました。'
         : size + ' で ' + tries + '回ためしました。')
-      + (maxed ? '迷路の大きさは上限（20×20）まで試しています。' : '');
+      + (maxed ? '迷路の大きさは上限（' + MAX_SIZE + '×' + MAX_SIZE + '）まで試しています。' : '');
     // 「大きくする」は、まだ上限に届いていないときだけ直し方として出す
-    const nx = Math.min(20, Math.max(rows, cols) + 2);
+    const nx = Math.min(MAX_SIZE, Math.max(rows, cols) + 2);
     const bigger = maxed ? null
       : '「もっと細かく決める」で迷路を <b>' + nx + '×' + nx + '</b> にする';
 
@@ -1551,9 +1594,20 @@ MZ.packages = (function () {
       how = ['段ごとの色を変える（②の「色：」欄で、となり合う段に別の色を選ぶ）',
              stageWord(rc, i) + 'を短くする', bigger];
 
+    } else if (top === 'erasecolor') {
+      what = '「線を消す」段が2つ以上あって、消す線の色が同じになっています。'
+           + 'そのままだと、問題用紙の「◯いせんをけせ」で ほかの段の線まで消えてしまいます。';
+      how = ['②の「色：」欄で、線を消す段どうしに<b>ちがう色</b>を選ぶ',
+             '「✂️ 線を消して次の段へ」の数を1つ減らす'];
+
     } else if (top === 'check') {
       what = '作れたのですが、「最短の道が1本だけ」などのチェックに通りませんでした。';
       how = ['「もっと細かく決める」の<b>わき道</b>を「なし」にする', bigger];
+
+    } else if (top === 'error') {
+      what = '作っているとちゅうでエラーが起きました（' + esc(diag.errorMsg || '') + '）。'
+           + 'これは組み合わせの問題ではなく、道具のほうの不具合です。';
+      how = ['ページを読み込み直してもう一度ためす', 'この文言をそのまま伝える'];
 
     } else {
       what = 'この組み合わせでは作れませんでした。';

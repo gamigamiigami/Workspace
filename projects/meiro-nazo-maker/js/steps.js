@@ -93,7 +93,13 @@ MZ.steps = (function () {
    * 自動検証 — 「謎として成立しているか」を機械にチェックさせる
    * 返すのは { level:'ok'|'warn'|'ng', text } の一覧
    * --------------------------------------------------------------------- */
-  function validateAll(maze, steps) {
+  /**
+   * @param preRun 呼ぶ側がすでに runSteps した結果があれば渡す。
+   *   app.js の refresh() は runSteps → validateAll の順に呼ぶが、
+   *   validateAll の中でもう一度 runSteps を回していたので、
+   *   1回の画面更新で同じ計算が2回走っていた（18×18・16STEPで約6ms×2）。
+   */
+  function validateAll(maze, steps, preRun) {
     const out = [];
     const ok = function (t) { out.push({ level: 'ok', text: t }); };
     const warn = function (t) { out.push({ level: 'warn', text: t }); };
@@ -125,7 +131,12 @@ MZ.steps = (function () {
         // （○を通る条件つきのときは長さの意味が変わるので、この見方はしない）
         if (!hasMust) {
           const mg = MZ.engine.routeMargin(maze, main.path).margin;
-          if (mg >= MZ.engine.MARGIN_GOOD) ok(MZ.engine.marginText(mg) + 'ので、見て分かります');
+          // marginText は「…ので、まちがえようがありません」で終わる完結した文も返すので、
+          // うしろに「ので、見て分かります」を足すと「…ありませんので、見て分かります」になる。
+          if (mg >= MZ.engine.MARGIN_GOOD) {
+            ok(mg === Infinity ? MZ.engine.marginText(mg)
+                               : MZ.engine.marginText(mg) + 'ので、数えなくても見て分かります');
+          }
           else warn('次に短い道との差が ' + mg + 'マス しかありません。解く人が数えないと分かりません（' + MZ.engine.MARGIN_GOOD + 'マス以上あると安心）');
         }
       }
@@ -157,7 +168,7 @@ MZ.steps = (function () {
       if (musts.length > MZ.engine.MUST_LIMIT) {
         warn('必ず通る○が多すぎます（' + MZ.engine.MUST_LIMIT + '個まで）。順番を決める設定にしてください');
       } else {
-        const r = MZ.engine.solve(maze, { useMust: true, useAvoid: true });
+        const r = main;      // 上で solve 済み（同じ引数で2回解いていた）
         if (r.ok) ok('指定した○（' + musts.length + '個）をすべて通れます（' + r.dist + 'マス）');
         else ng('指定した○をすべて通ることができません');
         const r2 = MZ.engine.solve(maze, { useMust: true, ordered: true, useAvoid: true });
@@ -168,7 +179,7 @@ MZ.steps = (function () {
       }
     }
     if (avoids.length) {
-      const r = MZ.engine.solve(maze, { useAvoid: true });
+      const r = base;      // 上で solve 済み（同じ引数で2回解いていた）
       if (r.ok) ok('×（' + avoids.length + '個）を避けてGOALまで行けます');
       else ng('×を避けるとGOALまで行けません');
     }
@@ -197,7 +208,7 @@ MZ.steps = (function () {
 
     /* --- STEPの連鎖 --- */
     if (steps && steps.length) {
-      const results = runSteps(maze, steps);
+      const results = preRun || runSteps(maze, steps);
       let prevBoardStr = null;
       results.forEach(function (r) {
         if (r.index < 0) { prevBoardStr = JSON.stringify(r.board); return; }

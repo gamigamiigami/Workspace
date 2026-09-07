@@ -294,9 +294,7 @@ MZ.generate = (function () {
         detourKeys.push(key);
       }
 
-      let done = false;
       if (!touchedColored) {
-        {
           // ② 区間に置いてあった文字を、迂回路の上へ順番どおりに移す
           //    （これをしないと、読める文字の並びが変わってしまう）
           const spots = [];
@@ -324,12 +322,10 @@ MZ.generate = (function () {
           if (checkLengthened(maze, newRoute) && accept(maze, newRoute)) {
             return { ok: true, route: newRoute, gain: newRoute.length - route.length, moved: moving.length };
           }
-        }
       }
       maze.walls = JSON.parse(backupWalls);
       maze.elements = JSON.parse(backupEls);
       maze.routes = JSON.parse(backupRoutes);
-      if (done) break;
     }
     return { ok: false, reason: '遠回りにできる場所が見つかりませんでした。迷路を大きくするか、まわりの文字を減らしてみてください' };
   }

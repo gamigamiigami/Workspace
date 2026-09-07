@@ -110,68 +110,8 @@ MZ.ops = (function () {
     symbol: M.SYMBOLS.slice()
   };
 
-  /**
-   * text を path の上に並べる
-   *   mode: 'from-start' 始点から順 / 'from-goal' 終点から逆順
-   *         'even' 等間隔 / 'picked' 指定したマスだけ
-   */
-  function autoPlaceText(board, path, text, opts) {
-    opts = opts || {};
-    let chars = Array.from(String(text || ''));
-    if (opts.skipSpace !== false) chars = chars.filter(function (ch) { return !/\s/.test(ch); });
-    if (!chars.length) return { ok: false, reason: '置く文字がありません' };
-    if (!path || !path.length) return { ok: false, reason: 'ルートがありません' };
-
-    // 同じマスを2回通る場合は1回だけ使う
-    const cells = [];
-    const seen = {};
-    path.forEach(function (p) {
-      const k = M.cellKey(p.r, p.c);
-      if (seen[k]) return;
-      seen[k] = true;
-      cells.push(p);
-    });
-
-    let targets = [];
-    const mode = opts.mode || 'from-start';
-    if (mode === 'from-goal') {
-      targets = cells.slice().reverse().slice(0, chars.length);
-    } else if (mode === 'even') {
-      const n = chars.length;
-      if (n === 1) targets = [cells[0]];
-      else for (let i = 0; i < n; i++) targets.push(cells[Math.round(i * (cells.length - 1) / (n - 1))]);
-    } else if (mode === 'picked') {
-      const idxs = opts.pickedIndices || [];
-      targets = idxs.map(function (i) { return cells[i]; }).filter(Boolean).slice(0, chars.length);
-    } else {
-      targets = cells.slice(0, chars.length);
-    }
-
-    if (targets.length < chars.length) {
-      return { ok: false, reason: 'ルートが短すぎます。' + chars.length + 'マス必要ですが ' + targets.length + 'マスしかありません' };
-    }
-
-    // 置く前に、そのマスの古い文字を片づける（記号やチェックポイントは残す）
-    const placedIds = [];
-    targets.forEach(function (p, i) {
-      if (opts.overwrite !== false) {
-        board.elements = board.elements.filter(function (e) {
-          return !(e.r === p.r && e.c === p.c && e.role === 'none');
-        });
-      }
-      const el = M.makeElement(p.r, p.c, chars[i], {
-        color: opts.color || 'black',
-        size: opts.size || 1
-      });
-      el.fromAuto = true;
-      board.elements.push(el);
-      placedIds.push(el.id);
-    });
-    return { ok: true, placed: targets.length, ids: placedIds, message: chars.length + '文字を置きました。1文字ずつ動かしたり色を変えたりできます' };
-  }
-
   /* =======================================================================
-   * 5. ダミー文字をまく（これが無いと答えが丸見えになる）
+   * 5. まぎれ文字をまく（これが無いと答えが丸見えになる）
    * ===================================================================== */
 
   /** 盤面の文字を「マスのキー → 文字」の辞書にする（近くの字を調べるのに使う） */
@@ -243,7 +183,7 @@ MZ.ops = (function () {
       vmap[M.cellKey(p.r, p.c)] = ch;
       ids.push(el.id);
     }
-    return { ok: true, placed: n, ids: ids, message: 'ダミーを' + n + '文字まきました' };
+    return { ok: true, placed: n, ids: ids, message: 'まぎれ文字を' + n + '文字まきました' };
   }
 
   function unique(a) { const s = {}; const o = []; a.forEach(function (x) { if (!s[x]) { s[x] = 1; o.push(x); } }); return o; }
@@ -423,15 +363,6 @@ MZ.ops = (function () {
     return null;
   }
 
-  function pointOf(board, spec) {
-    if (!spec) return null;
-    if (typeof spec === 'string') {
-      const s = M.findById(board.starts, spec) || M.findById(board.goals, spec);
-      return s ? { r: s.r, c: s.c } : null;
-    }
-    return spec;
-  }
-
   /* ---- 迷路を解く ---- */
   register({
     id: 'solve', label: '最短ルートを通る', group: 'とく',
@@ -547,6 +478,11 @@ MZ.ops = (function () {
     defaults: { colors: ['red'], keys: [], mode: 'disable' },
     describe: function (p) {
       const names = (p.colors || []).map(function (c) { return M.COLORS[c] ? M.COLORS[c].label : c; }).join('・');
+      // keys があるときは色ではなく「この段で決めた線」を消す。
+      // 見出しだけ色を名乗ると、色を変えても中身が変わらず、見出しがウソになる。
+      if (p.keys && p.keys.length) {
+        return (names ? names + 'の線' : '線') + ' ' + p.keys.length + '本を消す（この段で決めた線）';
+      }
       return (names || 'すべて') + 'の線を消す';
     },
     run: function (ctx, p) {
@@ -736,7 +672,7 @@ MZ.ops = (function () {
     orders: orders, parities: parities, filters: filters,
     registry: registry, register: register, list: list, get: get,
     collectOnPath: collectOnPath, charsToText: charsToText, applyOrder: applyOrder,
-    autoPlaceText: autoPlaceText, scatterDummies: scatterDummies, POOLS: POOLS,
+    scatterDummies: scatterDummies, POOLS: POOLS,
     valueMap: valueMap, pickAwayFrom: pickAwayFrom,
     transformBoard: transformBoard, transformPath: transformPath,
     routeShape: routeShape, enclosedCells: enclosedCells, transferToSubBoard: transferToSubBoard

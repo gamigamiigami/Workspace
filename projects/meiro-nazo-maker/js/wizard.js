@@ -143,12 +143,12 @@
    * 直し方を番号つきで出すので、太字や改行を使えるように innerHTML で入れる。
    * 中に入る使う人の文章は packages.esc() で無害化してある。
    */
-  function setNote(msg) {
+  function setNote(msg, kind) {
     const box = $('#wizNote');
     box.textContent = '';
     if (!msg) return;
-    const n = el('div', 'wiz-note');
-    n.innerHTML = '⚠ ' + msg;
+    const n = el('div', 'wiz-note' + (kind === 'info' ? ' info' : ''));
+    n.innerHTML = (kind === 'info' ? 'ℹ️ ' : '⚠ ') + msg;
     box.appendChild(n);
   }
 
@@ -254,7 +254,7 @@
   }
 
   function recipe() {
-    const o = MZ.opt.all();      // 大きさ・文字の量・わき道は ⑤ の①と同じ設定を見ている
+    const o = MZ.opt.all();      // 大きさ・文字の量・わき道は ⑤ の A と同じ設定を見ている
     return {
       parts: W.parts.slice(),
       texts: Object.assign({}, W.texts),
@@ -281,11 +281,17 @@
       btn.disabled = false;
       btn.textContent = '✨ 自動で作る';
       if (!out || !out.ok) { setNote((out && out.reason) || '作れませんでした'); return; }
-      setNote('');
+      // 迷路の大きさを自動で広げたときは黙っていない。
+      // ②の欄も「あと何文字入るか」の目安も、この新しい大きさに変わるので、
+      // 何も言わないと「勝手に数字が変わった」ように見える。
+      setNote(out.grownTo
+        ? '文章が入りきらなかったので、迷路を <b>' + out.grownTo + '</b> にして作りました。' +
+          '（②の「もっと細かく決める」の大きさも、この値に変わっています）'
+        : '', 'info');
       W.built = out;
       // 盤面は app（編集する側）が持つ。ここでは渡すだけ。
       // applyBuilt → refresh → syncViews の順で、④のタブと盤面がそろう。
-      MZ.app.applyBuilt(out.maze, out.steps);
+      MZ.app.applyBuilt(out.maze, out.steps, out.grownTo);
       W.view = 0;
       showResult();
     }, 30);
@@ -332,11 +338,22 @@
   function buildActions() {
     const acts = $('#ansActions');
     acts.textContent = '';
-    acts.appendChild(mk('🔁 もう一度作る', generate));
+    // ★並び順に意味がある★
+    //   「もう一度作る」は手で直したところを全部すてる。前は「印刷する」のとなりに
+    //   あったので、刷ろうとした指が当たると作ったものが消えていた。
+    //   よく使うものを左に、すてるものはいちばん右に置き、赤くして確認も出す。
     acts.appendChild(mk('🖨 印刷する', function () { MZ.app.doPrint(); }, 'primary'));
     acts.appendChild(mk('🖼 画像で保存', function () { MZ.app.doPng(); }));
     if (MZ.app.canShareFiles()) acts.appendChild(mk('📱 写真に保存', function () { MZ.app.doPngShare(); }));
     acts.appendChild(mk('⚙️ もっと細かく直す', function () { MZ.app.showEditor(); }));
+    acts.appendChild(mk('🔁 作り直す', regenerate, 'danger'));
+  }
+
+  /** 手で直したものがあるときだけ確認してから作り直す */
+  function regenerate() {
+    if (MZ.app.hasHandEdits() &&
+        !window.confirm('手で直したところは消えて、新しい迷路になります。\nよろしいですか？')) return;
+    generate();
   }
 
   /** 見る段を切りかえる（盤面そのものを切りかえる） */
@@ -376,15 +393,10 @@
   }
 
   /* =======================================================================
-   * 画面の出し入れ
+   * 立ち上げ
    * ===================================================================== */
-  // 作るところと直すところは同じ1ページに縦に並んでいるので、
-  // 「見せる／隠す」ではなく「そこまでスクロールする」だけでよい。
-  function show() { MZ.opt.paintAll(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
-  function hide() { MZ.app.showWork(); }
-
   function init() {
-    // 大きさ・文字の量・わき道・START/GOAL は ⑤ の①とまったく同じ設定を見る
+    // 大きさ・文字の量・わき道は ⑤ の A とまったく同じ設定を見る（START/GOALはここだけ）
     MZ.opt.bind('#wizRows', 'rows');
     MZ.opt.bind('#wizCols', 'cols');
     MZ.opt.bind('#wizDensity', 'density');
@@ -408,9 +420,9 @@
     $('#btnDrawSelf').addEventListener('click', function () {
       MZ.app.showBoard();
       MZ.app.setTool('route');
-      MZ.app.setStatus('「ルート」で正解にしたい道をなぞってから、⑤の「② 正解ルート」にある「このルートが最短になる迷路を作る」を押してください');
+      MZ.app.setStatus('STARTからGOALまで、正解にしたい道を指でなぞってください');
     });
-    MZ.wizard = { show: show, hide: hide, generate: generate, add: addPart, remove: removePart,
+    MZ.wizard = { generate: generate, add: addPart, remove: removePart,
                   syncViews: syncViews, state: W };
     // app.js のほうが先に動くので、前回のつづきを開いていた場合は
     // ここで1回だけタブと問題文を作る（以後は refresh() から呼ばれる）

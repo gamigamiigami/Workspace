@@ -20,7 +20,10 @@ MZ.opt = (function () {
     loops: 'none',        // わき道の量            none / some / many
     sg: 'corners'         // START・GOALの決め方   corners / auto
   };
-  const RANGE = { rows: [4, 30], cols: [4, 30] };
+  // ★大きさの上限はここが唯一の決めごと★
+  //   自動作成（packages.build）が 6〜20 でしか作らないので、
+  //   入力欄で 4 や 30 を選べると「言われたとおりにしても通らない」ことになる。
+  const RANGE = { rows: [6, 20], cols: [6, 20] };
 
   const binds = [];       // { key, el } … その値を映している入力欄
   const watchers = [];    // 値が変わったときに呼ぶもの
@@ -52,7 +55,6 @@ MZ.opt = (function () {
       if (String(b.el.value) !== String(V[k])) b.el.value = V[k];
     });
   }
-  function paintAll() { Object.keys(V).forEach(function (k) { paint(k, null); }); }
 
   /**
    * 入力欄をこの設定につなぐ。
@@ -70,5 +72,5 @@ MZ.opt = (function () {
 
   function watch(fn) { if (typeof fn === 'function') watchers.push(fn); }
 
-  return { get: get, set: set, all: all, bind: bind, watch: watch, paintAll: paintAll, RANGE: RANGE };
+  return { get: get, set: set, all: all, bind: bind, watch: watch, RANGE: RANGE };
 })();

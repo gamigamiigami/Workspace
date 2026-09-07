@@ -48,6 +48,7 @@
   .brand small { font-weight: 400; opacity: .7; font-size: 12px; margin-left: 6px; }
   .top-actions { margin-left: auto; display: flex; gap: 6px; flex-wrap: wrap; }
   .topbar button {
+    min-height: 44px;
     background: #374151; border-color: #4b5563; color: #fff; padding: 7px 10px; min-height: 38px; font-size: 14px;
   }
   .topbar button:hover { background: #4b5563; }
@@ -75,9 +76,11 @@
     min-width: 50px; min-height: 46px; padding: 3px 4px; font-size: 10.5px; line-height: 1.15;
   }
   .tool .ic { font-size: 16px; }
-  .toolbar .zoom { min-width: 38px; padding: 4px 6px; }
-  .swatches { display: flex; gap: 3px; }
-  .sw { width: 28px; height: 28px; min-height: 28px; min-width: 28px; border-radius: 50%; padding: 0; border: 2px solid #fff; box-shadow: 0 0 0 1px #cfd6de; }
+  .toolbar .zoom { min-width: 44px; min-height: 44px; padding: 4px 6px; }
+  /* 色の丸は指で押すので44px。ラベルと組にして「何の色か」が分かるようにする */
+  .swatches { display: flex; align-items: center; gap: 4px; }
+  .swatches .lbl, .sel-strip .lbl { font-size: 11px; color: #6b7280; }
+  .sw { width: 40px; height: 40px; min-height: 40px; min-width: 40px; border-radius: 50%; padding: 0; border: 3px solid #fff; box-shadow: 0 0 0 1px #cfd6de; }
   .sw.on { box-shadow: 0 0 0 3px #1c7ed6; }
 
   /* ===== キャンバス ===== */
@@ -127,6 +130,8 @@
   /* input[type=number] の width:100% に負けないよう、型セレクタで指定する
      （クラスだけだと優先度が足りず、欄が横いっぱいに伸びて となりのボタンと重なっていた） */
   input[type=number].num { width: 78px; flex: 0 0 auto; }
+  /* 記号だけのボタンも、指で押せる大きさにそろえる */
+  .iconbtn { min-width: 44px; min-height: 44px; }
   /* 「たて[12] よこ[12]」のように 文字と欄が並ぶラベルは、すきまを空けて折り返さない */
   .row > label.inline { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -144,7 +149,8 @@
   .step-body { padding: 8px 10px 10px; border-top: 1px dashed #e5e9ef; display: flex; flex-direction: column; gap: 6px; }
   .step-body.hide { display: none; }
   .step-mini { display: flex; gap: 4px; }
-  .step-mini button { padding: 4px 8px; min-height: 30px; font-size: 12px; }
+  /* 「消す」を押しまちがえると痛いので、指の大きさにそろえる */
+  .step-mini button { padding: 6px 12px; min-height: 40px; font-size: 12.5px; }
   .flowbox { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 8px; padding: 8px; font-size: 12px; }
 
   /* ねらった答えにする — 1行ぶんの入力 */
@@ -176,7 +182,9 @@
   .overlay[hidden] { display: none; }
   .sheet { background: #fff; border-radius: 14px; padding: 18px; width: 100%; max-width: 520px; max-height: 88vh; overflow: auto; }
   .sheet h3 { font-size: 17px; margin-bottom: 10px; }
-  .sheet .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+  /* 中身が長いと「とじる」が画面の外に出て閉じられなくなるので、下に貼りつける */
+  .sheet .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px;
+                 position: sticky; bottom: -18px; background: #fff; padding: 10px 0; }
   .work-list { max-height: 40vh; overflow: auto; display: flex; flex-direction: column; gap: 6px; }
   .work-item { display: flex; align-items: center; gap: 8px; border: 1px solid #e5e9ef; border-radius: 8px; padding: 10px; }
   .work-item .nm { flex: 1; font-weight: 600; word-break: break-all; }
@@ -202,7 +210,7 @@
   #wizardView { display: block; }
   /* ⑤「もっと細かく直す」は、まだ何も作っていないうちは出さない */
   #app { display: none; background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px;
-         scroll-margin-top: 62px; }
+         scroll-margin-top: 104px; }
   #app.show { display: block; }
   .editor-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
   .editor-head h2 { font-size: 17px; color: #22272e; letter-spacing: 0; flex: 1; min-width: 190px; }
@@ -213,7 +221,7 @@
   }
   .wiz-wrap { max-width: 920px; margin: 0 auto; padding: 14px; }
   .wiz-step { background: #fff; border-radius: 14px; padding: 16px; margin-bottom: 14px;
-              scroll-margin-top: 62px; }   /* 上のバーは sticky。その ぶん見出しを下げて止める */
+              scroll-margin-top: 104px; }  /* 上のバーは sticky。iPad縦だとバーが2段(96px)になるので、その ぶん下げて止める */
   .wiz-step h2 { display: flex; align-items: center; gap: 10px; font-size: 17px; color: #22272e; margin-bottom: 12px; letter-spacing: 0; }
   .wiz-step h2 .no {
     width: 28px; height: 28px; border-radius: 50%; background: #1c7ed6; color: #fff;
@@ -254,8 +262,9 @@
   .pack-count.show { display: flex; }
   .pack-count .cnt-num { background: #1c7ed6; color: #fff; border-radius: 999px; font-size: 12px;
                          font-weight: 700; padding: 3px 9px; }
-  .pack-count .cnt-btn { min-height: 26px; min-width: 26px; padding: 0; border-radius: 50%;
-                         font-size: 15px; line-height: 1; background: #fff; }
+  /* 指で押すので、カードの「−」も38px（44pxだとカードの絵にかぶる） */
+  .pack-count .cnt-btn { min-height: 38px; min-width: 38px; padding: 0; border-radius: 50%;
+                         font-size: 18px; line-height: 1; background: #fff; }
   /* 答えの段を切りかえるタブ。1つの迷路の上でルートだけ差しかえる */
   .ans-tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
   .ans-tabs button { flex: 0 0 auto; min-width: 104px; }
@@ -280,14 +289,17 @@
   .sel-strip .row { flex: 0 0 auto; margin: 0; }
   .sel-strip .sizewrap { flex: 1 1 150px; min-width: 130px; }
   .toolbar-sub { border-bottom: 1px solid #e5e9ef; background: #f4f8fc; }
+  /* 見るだけの盤面のあいだは、道具が使えないことを見た目でも伝える */
+  .pane-canvas.readonly .toolbar { opacity: .45; }
+  .pane-canvas.readonly .statusbar { color: #9aa5b1; }
   /* .toolbar は display:flex なので、hidden 属性だけでは消えない */
   .toolbar[hidden] { display: none; }
   .toolbar-sub .lbl { font-size: 12px; color: #4b5563; }
+  .draw-help { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px;
+               background: #f0f7ff; border: 1px solid #cfe3fb; border-radius: 10px;
+               padding: 8px 12px; font-size: 13px; color: #1c4e80; }
+  .draw-help .len { font-weight: 700; }
 
-  .wiz-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; }
-  .wiz-card { background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 12px; padding: 10px; text-align: center; }
-  .wiz-card h3 { font-size: 13px; color: #4b5563; margin-bottom: 6px; }
-  .wiz-card img { max-width: 100%; height: auto; }
   .wiz-answer { margin-top: 12px; background: #f1f8f3; border: 1px solid #c8e6cf; border-radius: 10px; padding: 12px; font-size: 14px; }
   .wiz-answer b { font-size: 19px; letter-spacing: .08em; word-break: break-all; }
   .wiz-inst { margin-top: 10px; background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #374151; }
@@ -296,6 +308,9 @@
   .wiz-note { font-size: 13px; line-height: 1.8; color: #7c5a00; background: #fffbea;
               border: 1px solid #ffe8a3; border-radius: 10px; padding: 12px; margin-top: 10px; }
   .wiz-note b { color: #6b4e00; }
+  /* お知らせ（作れた けれど 伝えておきたいこと）は、警告と色を分ける */
+  .wiz-note.info { color: #1c4e80; background: #f0f7ff; border-color: #cfe3fb; }
+  .wiz-note.info b { color: #14406b; }
   .wiz-note .sub { color: #9b7c33; font-size: 12px; }
   /* 「あと何文字入るか」の目安。足りているときは静かに、はみ出したら赤で目立たせる */
   .cap-note { font-size: 12.5px; color: #6b7280; margin-top: 6px; }
@@ -321,10 +336,9 @@
 
   /* ===== せまい画面（iPad縦持ち・スマホ） ===== */
   @media (max-width: 700px) {
-    .wiz-preview { grid-template-columns: 1fr; }
-  }
+    }
 
-  @media (max-width: 900px) {
+  @media (max-width: 1100px) {
     .brand small { display: none; }
     /* 指で押すので、せまい画面でも高さは44px以上を保つ */
     .topbar button { font-size: 13px; padding: 6px 10px; min-height: 44px; }
@@ -372,10 +386,11 @@
       <details class="wiz-more">
         <summary>もっと細かく決める（ふつうはそのままでOK）</summary>
         <div class="body">
-          <!-- ここの4つは ⑤ の「① 盤面と文字の量」とまったく同じ設定。どちらで変えても両方に効く -->
+          <!-- 大きさ・文字の量・わき道の3つは ⑤ の「A 盤面と文字の量」と同じ値を見ている。
+               START/GOALの場所はここにしかない。ここで変えるのは「次に作る迷路」の設定 -->
           <div class="row">
-            <label class="inline">迷路の大きさ　たて<input type="number" id="wizRows" class="num" min="4" max="30" value="12"></label>
-            <label class="inline">よこ<input type="number" id="wizCols" class="num" min="4" max="30" value="12"></label>
+            <label class="inline">迷路の大きさ　たて<input type="number" id="wizRows" class="num" min="6" max="20" value="12"></label>
+            <label class="inline">よこ<input type="number" id="wizCols" class="num" min="6" max="20" value="12"></label>
             <button type="button" class="sizebtn" data-size="10">小</button>
             <button type="button" class="sizebtn" data-size="12">中</button>
             <button type="button" class="sizebtn" data-size="14">大</button>
@@ -407,7 +422,9 @@
           <p class="hint" style="margin-top:8px">
             「わき道なし」だと、行き止まりはあってもぐるっと回れる道はできません。
             解く人が「最短はこっちだ」と迷わずに決められます。<br>
-            この4つは ⑤ の「① 盤面と文字の量」と同じものです。どちらで変えても両方に効きます。
+            <b>ここは「次に作る迷路」の設定です。</b>いま出ている盤面はすぐには変わりません。<br>
+            大きさ・文字の量・わき道の3つは ⑤ の「A 盤面と文字の量」と同じ値です（どちらで変えても両方に効きます）。
+            いまの盤面をその場で作り直すのは ⑤ の A にある「変える」ボタンです。
           </p>
         </div>
       </details>
@@ -481,6 +498,7 @@
           <div class="viewbadge" id="viewBadge"></div>
         </div>
         <div class="statusbar"><span id="statusText">「えらぶ」で文字をドラッグすると動かせます。色を変えるときは、えらんでから下の色ボタンを押してください。</span></div>
+        <!-- 見るだけの盤面のときは、statusbar が「いまは答えを見ています」に変わる（app.js: setToolsEnabled / editor.js） -->
       </section>
 
       <!-- えらんだものを直す（盤面のすぐ下に置く。いちばんよく使うので奥にしまわない） -->
@@ -497,6 +515,13 @@
        </div>
        <div class="work-side">
         <div class="ans-note" id="ansNote"></div>
+      <!-- 自分で道を描く人むけ。ふだんは隠れていて、「ルート」ツールのときだけ出る。
+           前は次に押すボタンが盤面から1400px下にあり、たどりつけなかった -->
+      <div class="draw-help" id="drawHelp" hidden>
+        <span>STARTからGOALまで道をなぞったら →</span>
+        <button id="btnMakeMazeHere" class="primary">このルートが最短になる迷路を作る</button>
+        <span class="len" id="drawLen"></span>
+      </div>
         <div class="wiz-answer" id="ansAnswer"></div>
         <div class="wiz-actions" id="ansActions"></div>
        </div>
@@ -509,7 +534,6 @@
       <div class="editor-head">
         <h2><span class="no">5</span> もっと細かく直す（使いたいときだけ）</h2>
         <button id="btnHome">⬆ 上（作るところ）へ</button>
-        <button id="btnHelp">？ 使い方</button>
       </div>
 
       <main class="layout">
@@ -529,24 +553,25 @@
             <button id="btnUndoStep" title="STEPの追加・削除・設定をもとにもどす">↶ STEPをもどす</button>
           </div>
           <div class="row" style="margin-top:6px">
-            <button id="btnViewMaze" style="flex:1" title="編集できる設計図にもどる">設計図にもどる</button>
+            <button id="btnViewMaze" style="flex:1" title="④の「問題」タブと同じです">④の「問題」にもどる</button>
           </div>
           <div class="answer-box">
-            最後に出てくる文字：<br><b id="answerText">—</b>
+            こたえ（最後に読める文字）：<br><b id="answerText">—</b>
           </div>
-          <div class="flowbox" id="flowBox" style="margin-top:8px"></div>
+          <!-- 「流れ」の箱はSTEP一覧とまったく同じ文を出していたので消した
+               （同じ説明が STEP一覧・流れ・チェック の3か所に縦に並んでいた） -->
         </aside>
 
         <!-- ===== 右：設定 ===== -->
         <aside class="pane" id="paneSide">
 
           <details>
-            <summary>① 盤面と文字の量</summary>
+            <summary>A 盤面と文字の量</summary>
             <div class="body">
               <!-- ここの4つは「かんたん作成」の細かい設定とまったく同じもの。値は1つしか持たない -->
               <div class="row">
-                <label class="inline">たて<input type="number" id="inRows" class="num" min="4" max="30" value="12"></label>
-                <label class="inline">よこ<input type="number" id="inCols" class="num" min="4" max="30" value="12"></label>
+                <label class="inline">たて<input type="number" id="inRows" class="num" min="6" max="20" value="12"></label>
+                <label class="inline">よこ<input type="number" id="inCols" class="num" min="6" max="20" value="12"></label>
                 <button id="btnResize">変える</button>
               </div>
               <div class="row">
@@ -565,7 +590,8 @@
                   </select>
                 </label>
               </div>
-              <p class="hint">この2つは ② の「もっと細かく決める」と同じ設定です。どちらで変えても両方に効きます。</p>
+              <p class="hint">この2つは ② の「もっと細かく決める」と同じ設定です。どちらで変えても両方に効きます。<br>
+                上の「変える」を押すと、<b>いまの盤面</b>をその大きさに作り直します（はみ出した文字は消えます）。</p>
               <div class="row grow">
                 <button id="btnScatter">まぎれ文字をまく</button>
                 <button id="btnClearDummy" class="danger">まぎれ文字を消す</button>
@@ -583,8 +609,8 @@
             </div>
           </details>
 
-          <details open>
-            <summary>② 正解ルート（ここが要）</summary>
+          <details>
+            <summary>B 正解ルート（自分で道を描くとき）</summary>
             <div class="body">
               <p class="hint">
                 ツールバーの「ルート」で、STARTからGOALまで通したい道を指でなぞってください。<br>
@@ -594,12 +620,12 @@
                 <label class="stack" style="flex:1">どのルートを描く
                   <select id="routePick"></select>
                 </label>
-                <button id="btnAddRoute" title="ルートをもう1本ふやす">＋</button>
-                <button id="btnDelRoute" class="danger" title="このルートを消す">✕</button>
+                <button id="btnAddRoute" class="iconbtn" title="ルートをもう1本ふやす">＋</button>
+                <button id="btnDelRoute" class="danger iconbtn" title="このルートを消す">✕</button>
               </div>
               <div class="row"><b id="routeLen">ルートの長さ：0マス</b></div>
               <button id="btnMakeMaze" class="primary">このルートが最短になる迷路を作る</button>
-              <p class="hint">わき道の多さは「① 盤面と文字の量」の<b>わき道</b>で決めます。増やしても「正解ルートが1本だけ」は必ず保たれます。</p>
+              <p class="hint">わき道の多さは「A 盤面と文字の量」の<b>わき道</b>で決めます。増やしても「正解ルートが1本だけ」は必ず保たれます。</p>
               <div class="row grow">
                 <button id="btnOpenRoute">今の迷路に道だけ通す</button>
                 <button id="btnClearRoute" class="danger">ルートを消す</button>
@@ -618,8 +644,8 @@
             </div>
           </details>
 
-          <details open>
-            <summary>③ 読み方とこたえ</summary>
+          <details>
+            <summary>C 読み方とこたえ</summary>
             <div class="body">
               <p class="hint">
                 「このルートを、この色で、この順に読んだら、この言葉になる」を書いて
@@ -641,7 +667,7 @@
 
 
           <details open>
-            <summary>④ チェック（謎として成立しているか）</summary>
+            <summary>D チェック（謎として成立しているか）</summary>
             <div class="body">
               <div id="checkList"></div>
               <button id="btnRecheck">もう一度しらべる</button>
@@ -649,25 +675,22 @@
           </details>
 
           <details>
-            <summary>⑤ 印刷・画像で保存</summary>
+            <summary>E 印刷・保存・書き出し</summary>
             <div class="body">
               <div class="row"><label><input type="checkbox" id="ckMono"> 白黒で印刷する（色を線のもようで見分ける）</label></div>
               <div class="row"><label><input type="checkbox" id="ckLegend"> 色の凡例をつける</label></div>
               <div class="row"><label><input type="checkbox" id="ckPrintAnswer"> 答え（正解ルート）も出す</label></div>
-              <div class="row"><label><input type="checkbox" id="ckPrintSteps" checked> STEPごとの盤面をぜんぶ出す</label></div>
+              <div class="row"><label><input type="checkbox" id="ckPrintSteps"> とちゅうの段の盤面も出す（答えが見えるので、配る紙では外してください）</label></div>
               <div class="row">
                 <label class="stack" style="flex:1">印刷の大きさ <input type="range" id="inPrintCell" min="24" max="80" value="46" style="width:100%"></label>
               </div>
-              <div class="row"><label><input type="checkbox" id="ckPngInst" checked> 🖼 画像に指示文を入れる</label></div>
-              <p class="hint" style="margin:2px 0 4px">迷路の上に1行で自動縮小して出ます。改行して打つと、その行どおりに複数行で出ます</p>
+              <label>問題用紙・画像にのせる文（ここを直すと、印刷にも画像にも ④ の表示にも効きます）</label>
               <div class="row">
-                <textarea id="inPngInst" rows="2" style="flex:1;resize:vertical" placeholder="例：STARTからGOALまで最短ルートで進み…"></textarea>
+                <textarea id="inPngInst" rows="3" style="flex:1;resize:vertical" placeholder="例：STARTからGOALまで最短ルートで進み…"></textarea>
               </div>
-              <div class="row grow">
-                <button id="btnPrint2">🖨 印刷</button>
-                <button id="btnPng2">🖼 画像で保存</button>
-                <button id="btnPngShare" hidden>📱 写真に保存</button>
-              </div>
+              <div class="row"><label><input type="checkbox" id="ckPngInst" checked> 🖼 画像にもこの文を入れる</label></div>
+              <p class="hint" style="margin:2px 0 4px">画像では、迷路の上に1行で自動縮小して出ます。改行して打つと、その行どおりに複数行で出ます</p>
+              <p class="hint">印刷・画像で保存は、上のバーか ④ のボタンから行えます（同じものです）。</p>
               <hr style="border:none;border-top:1px dashed #e5e9ef">
               <div class="row grow">
                 <button id="btnExport">ファイルに書き出す</button>
@@ -677,7 +700,7 @@
             </div>
           </details>
           <details>
-            <summary>⑥ こまかい設定（ふだんは開かなくてOK）</summary>
+            <summary>F こまかい設定（自動作成では使いません）</summary>
             <div class="body">
               <label>まぎれ文字に使う字</label>
               <div class="row">
@@ -784,7 +807,7 @@
 
       <p style="margin-top:10px"><b>もっと細かく直したいとき（5 もっと細かく直す）</b></p>
       <ul style="margin:6px 0 10px 18px">
-        <li><b>③ 読み方とこたえ</b>に「このルートを・この色で・この順に読んだら・この言葉」と書いて<b>「✨ この通りに置く」</b>を押すと、そのとおりに文字を置き直します</li>
+        <li><b>C 読み方とこたえ</b>に「このルートを・この色で・この順に読んだら・この言葉」と書いて<b>「✨ この通りに置く」</b>を押すと、そのとおりに文字を置き直します</li>
         <li><b>「ルート」</b>で道をなぞり、<b>「このルートが最短になる迷路を作る」</b>を押すと、その道が正解の迷路ができます</li>
         <li><b>STEP（謎の流れ）</b>を押すと、その時点の盤面が4に出ます。押したSTEPの中の<b>↑↓</b>で順番を入れかえられます</li>
         <li><b>チェック</b>に ✓ ばかりが並べば、謎として成立しています</li>
@@ -794,7 +817,7 @@
       <p style="margin-top:10px"><b>覚えておくと便利</b></p>
       <ul style="margin:6px 0 10px 18px">
         <li><b>迷路をもどす</b>＝Ctrl+Z／<b>STEPをもどす</b>は⑤のSTEP欄にあります（別々です）</li>
-        <li><b>大きさ・文字の量・わき道</b>は、②の「もっと細かく決める」と⑤の①で<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
+        <li><b>大きさ・文字の量・わき道</b>は、②の「もっと細かく決める」と⑤のAで<b>同じ設定</b>です（片方を変えるともう片方も変わります）</li>
         <li>消す＝Delete ／ 複製＝Ctrl+D</li>
         <li>文字は「もじ」でマスを押すとその場で打てます。Enterで右へ進みます</li>
         <li>文字や記号は「えらぶ」でドラッグして動かします</li>
