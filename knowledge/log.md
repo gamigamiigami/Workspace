@@ -4,6 +4,26 @@
 
 ---
 
+### [2026-09-07] セッション190 — CLAUDE.md・知識ベースのトークン最適化（projects の変更なし）
+
+**やったこと**
+
+| 対象 | 前 | 後 |
+|---|---|---|
+| CLAUDE.md | 283行 | 112行 |
+| SessionStart hook の読み込み | profile.md + mistakes.md 157行 | `knowledge/context.md` 28行 |
+| コーディング作業1回で読む量 | 約7,600行 | 約520行 |
+| 全 SKILL.md 合計 | 1,346行 | 685行 |
+
+- 知識ベースを「索引＋詳細」方式へ：`knowledge/details/{patterns,failures,ui-components}.md` に全文、`knowledge/*.md` は行番号つき索引（`bash knowledge/details/build-index.sh` で再生成）
+- `deploy-pages` スキル・`knowledge/scope-decision.md`・`knowledge/session-hooks.md` を新設し CLAUDE.md から分離
+- `learning-log.md`（7.3MB）・log.md・task-diary.md の超過分を `knowledge/log-archive/` へ退避
+- 運用ブランチにマージ済み。Pages ワークフローは `projects/**` `site/**` 変更時のみ動くため未実行（公開ページに影響なし）
+
+**次のアクション：** 次のコーディング作業で索引方式の粒度を実地確認／迷路謎メーカー 第10弾の iPad実機テスト待ち（指示文オーバーレイ・写真保存）
+
+---
+
 ### [2026-09-06] セッション189 — 迷路謎メーカー 第10弾 最終デプロイ完了
 
 **デプロイ確認**

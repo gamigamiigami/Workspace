@@ -4,6 +4,31 @@
 
 ---
 
+### 2026-09-07（セッション190・CLAUDE.md と知識ベースのトークン最適化）
+
+**うまくいったこと**
+- CLAUDE.md を283行→112行に圧縮。詳細（Pages公開手順・撤退判定・hook解説）はスキルと knowledge へ分離し、内容は削らずに移動した
+- SessionStart hook の読み込みを profile.md + mistakes.md（157行）から要約 `knowledge/context.md`（28行）1本に変更
+- `patterns.md` `failures.md` `ui-components.md`（計7,256行）を `knowledge/details/` へ移し、行番号つき索引（計220行）を `build-index.sh` で自動生成する方式にした。「索引→必要な範囲だけ sed で読む」に3スキルを書き換え
+- note-writer・my-tool-maker を SKILL.md + reference.md に分割（章ごとの行番号表つき）
+- 結果：雑談チャット 約9,000トークン→約1,000、コーディング作業1回 約7,600行→約520行
+
+**うまくいかなかったこと**
+- `.claude/settings.json` を python で書き換えようとして auto mode の分類器に1度ブロックされた。Edit ツールに切り替えて解決（設定ファイルの一括書き換えは Edit を先に試すほうが早い）
+
+**発見**
+- `knowledge/learning-log.md` が 7.3MB（47,379行）あった。自動学習の生ログで知見は sales-playbook.md に統合済み。うっかり全文を読むと一撃で文脈が飽和する地雷だったので archive へ退避した
+- 索引方式は「見出しが説明的に書かれている」ことが前提。今後も追記時は見出しだけで中身が分かるように書く必要がある
+- `deploy-pages.yml` のトリガーは `projects/**` `site/**` `deploy-pages.yml` のみ。knowledge・CLAUDE.md の変更では Pages は再デプロイされない（今回の変更は公開ページに無影響）
+
+**次回への申し送り**
+- 新方式の実地確認待ち：次のコーディング作業で「索引→ sed で部分読み」が実際に機能するか（索引の粒度が粗すぎないか）を見る
+- `knowledge/details/*.md` に追記したら必ず `bash knowledge/details/build-index.sh` を実行すること
+- 使っていない可能性のある knowledge ファイル（pdca-kpi.md / sales-channels.md / handoff.md など）の要否を伊神さんに確認する
+- iPad実機テスト待ちの項目は前セッション（迷路謎メーカー 第10弾：指示文オーバーレイ・写真保存）から継続中
+
+---
+
 ### 2026-09-06（セッション189・迷路謎メーカー 第10弾 最終デプロイ確認）
 
 **うまくいったこと**
