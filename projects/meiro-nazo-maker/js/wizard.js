@@ -138,10 +138,18 @@
     $('#btnGenerate').disabled = false;
   }
 
+  /**
+   * 「作れませんでした」などの案内を出す。
+   * 直し方を番号つきで出すので、太字や改行を使えるように innerHTML で入れる。
+   * 中に入る使う人の文章は packages.esc() で無害化してある。
+   */
   function setNote(msg) {
     const box = $('#wizNote');
     box.textContent = '';
-    if (msg) box.appendChild(el('div', 'wiz-note', '⚠ ' + msg));
+    if (!msg) return;
+    const n = el('div', 'wiz-note');
+    n.innerHTML = '⚠ ' + msg;
+    box.appendChild(n);
   }
 
   /* =======================================================================
@@ -170,7 +178,10 @@
       const def = P.defaultText(W.parts, i, W.opts);
       ip.value = W.edited[key] ? (W.texts[key] || def) : def;
       W.texts[key] = ip.value;
-      ip.addEventListener('input', function () { W.texts[key] = ip.value; W.edited[key] = true; });
+      ip.addEventListener('input', function () {
+        W.texts[key] = ip.value; W.edited[key] = true;
+        updateCapacity();
+      });
       wrap.appendChild(ip);
 
       // この段だけの細かい調整（色・読む順）。基本は自動でよいので、
@@ -217,6 +228,29 @@
     note.appendChild(el('b', '', '解く人がやること：'));
     note.appendChild(el('div', '', P.instruction(W.parts, W.opts)));
     box.appendChild(note);
+
+    updateCapacity();
+  }
+
+  /**
+   * 「いまの迷路の大きさに、あと何文字入るか」をその場で出す。
+   * 作ってから「文章が長すぎます」と断られるより、
+   * 打っている最中に分かるほうが直しやすい。
+   */
+  function updateCapacity() {
+    const box = $('#capNote');
+    if (!box) return;
+    const cap = P.capacity(recipe());
+    const o = MZ.opt.all();
+    box.className = 'cap-note' + (cap.over ? ' over' : '');
+    if (cap.over) {
+      box.textContent = '⚠ 文章が長すぎます：合計 ' + cap.total + ' 文字／この迷路（' +
+        o.rows + '×' + o.cols + '）に入るのは ' + cap.limit + ' 文字まで。' +
+        (cap.total - cap.limit) + ' 文字みじかくするか、迷路を ' + cap.suggest + '×' + cap.suggest + ' 以上にしてください。';
+    } else {
+      box.textContent = '文章は合計 ' + cap.total + ' 文字。この迷路（' + o.rows + '×' + o.cols +
+        '）には ' + cap.limit + ' 文字まで入ります（あと ' + (cap.limit - cap.total) + ' 文字）。';
+    }
   }
 
   function recipe() {
@@ -361,6 +395,9 @@
         MZ.opt.set('rows', b.dataset.size);
         MZ.opt.set('cols', b.dataset.size);
       });
+    });
+    MZ.opt.watch(function (k) {
+      if (k === 'rows' || k === 'cols') updateCapacity();
     });
     buildCards();
     buildInputs();

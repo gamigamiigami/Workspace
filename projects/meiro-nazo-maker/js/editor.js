@@ -186,7 +186,11 @@ MZ.editor = (function () {
     const o = baseOpts();
     o.selection = S.selection;
     if (S.display) {
+      // ★見るだけの盤面（段ごとの答え）では、その段の通り道だけを出す。
+      //   renderOpts.routePaths（設計図で描いてあるルート）が残っていると、
+      //   1段めの道と2段めの道が重なって出てしまい、どれが今の答えか分からなくなる。
       o.routePath = S.display.path || null;
+      o.routePaths = null;
       o.showRoute = !!S.display.path;
       if (S.display.opts) Object.assign(o, S.display.opts);
       if (S.display.cells) o.highlightCells = S.display.cells;

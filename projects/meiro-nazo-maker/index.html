@@ -293,7 +293,13 @@
   .wiz-inst { margin-top: 10px; background: #f8fafc; border: 1px solid #e5e9ef; border-radius: 10px; padding: 10px; font-size: 13.5px; color: #374151; }
   .wiz-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
   .wiz-actions button { flex: 1; min-width: 132px; }
-  .wiz-note { font-size: 13px; color: #7c5a00; background: #fffbea; border: 1px solid #ffe8a3; border-radius: 10px; padding: 10px; margin-top: 10px; }
+  .wiz-note { font-size: 13px; line-height: 1.8; color: #7c5a00; background: #fffbea;
+              border: 1px solid #ffe8a3; border-radius: 10px; padding: 12px; margin-top: 10px; }
+  .wiz-note b { color: #6b4e00; }
+  .wiz-note .sub { color: #9b7c33; font-size: 12px; }
+  /* 「あと何文字入るか」の目安。足りているときは静かに、はみ出したら赤で目立たせる */
+  .cap-note { font-size: 12.5px; color: #6b7280; margin-top: 6px; }
+  .cap-note.over { color: #c92a2a; font-weight: 700; }
   .wiz-more { margin-top: 6px; }
   .wiz-more .body { padding-top: 6px; }
 
@@ -361,6 +367,8 @@
     <section class="wiz-step" id="wizStep2">
       <h2><span class="no">2</span> 段ごとの文章を入れる</h2>
       <div id="packInputs"></div>
+      <!-- 作ってから断られるより、打っている最中に「あと何文字入るか」が分かるほうが直しやすい -->
+      <p class="cap-note" id="capNote"></p>
       <details class="wiz-more">
         <summary>もっと細かく決める（ふつうはそのままでOK）</summary>
         <div class="body">

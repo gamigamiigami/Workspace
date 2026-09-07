@@ -881,7 +881,10 @@ MZ.packages = (function () {
   /* =======================================================================
    * 組み立て本体
    * ===================================================================== */
-  function makeOne(rc) {
+  function makeOne(rc, diag) {
+    // どこで行きづまったかを数える。build() がこれを見て、
+    // 「作れません」ではなく「何が問題で、どうすればよいか」を返せるようにする。
+    function stop(why) { if (diag) diag[why] = (diag[why] || 0) + 1; return null; }
     const parts = rc.parts || [];
     const st = stageParts(parts);
     const n = stageCount(parts);
@@ -901,7 +904,7 @@ MZ.packages = (function () {
     const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
     const minCells = req[0] + (color ? 4 : 2);
     const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
-    if (!s) return null;
+    if (!s) return stop('seed');
     const maze = s.maze;
     const work = M.cloneBoard(maze);      // 段の変化を積み上げていく作業用の盤面
 
@@ -909,7 +912,7 @@ MZ.packages = (function () {
     let route1 = s.route;
     if (needAvoid || needMust) {
       const built = buildConstrainedRoute(maze, work, s.route, needMust, needAvoid, texts[0].length + 2);
-      if (!built) return null;
+      if (!built) return stop('marks');
       route1 = built;
     }
     maze.routes = [M.makeRoute(route1)];
@@ -945,7 +948,7 @@ MZ.packages = (function () {
         // 盤面は変えない。同じ道を、次の色でもう一度読むだけ
         out = { kind: 'next-read', color: nc, path: routes[i] };
       }
-      if (!out) return null;
+      if (!out) return stop('stage:' + st[i] + ':' + i);
       transitions.push(out);
       routes.push(out.path);
     }
@@ -1008,7 +1011,7 @@ MZ.packages = (function () {
       const ids = placeOnFree(maze, routes[i], texts[i], col, ord, avoid, (near || []).concat(dupSpots));
       // 離して置けないときは、この迷路はあきらめて作り直す（build が別の迷路で何度も試す）。
       // 「置けないなら近くても置く」にすると、同じ字がとなり合う盤面がまれに出てしまう。
-      if (!ids) return null;
+      if (!ids) return stop('place:' + i);
       stageIds[i] = ids;
     }
 
@@ -1074,10 +1077,10 @@ MZ.packages = (function () {
     // まざっていないか、段ごとの読み方もひとつずつ確かめる
     // （results[0] は「最初の盤面」なので、STEPの番号 k は results[k+1] に対応する）。
     for (let i = 0; i < n; i++) {
-      if ((results[checkpoint[i] + 1] || {}).text !== texts[i]) return null;
+      if ((results[checkpoint[i] + 1] || {}).text !== texts[i]) return stop('read:' + i);
     }
     const checks = ST.validateAll(maze, steps);
-    if (checks.some(function (c) { return c.level !== 'ok'; })) return null;
+    if (checks.some(function (c) { return c.level !== 'ok'; })) return stop('check');
 
     return { ok: true, maze: maze, steps: steps, answer: texts[n - 1], checks: checks, stages: n, routes: routes, stageIds: stageIds };
   }
@@ -1388,17 +1391,39 @@ MZ.packages = (function () {
   /* =======================================================================
    * 入口
    * ===================================================================== */
-  function checkRecipe(rc) {
+  /**
+   * いま入っている文章の合計と、この盤面に入る上限を返す。
+   * 「作る」を押す前の目安表示（②の下）と、押したあとの断り文句で
+   * 同じ式を使うために、1か所にまとめてある。
+   */
+  function capacity(rc) {
     const n = stageCount(rc.parts);
-    let total = 0;
+    let total = 0, empty = -1;
     for (let i = 0; i < n; i++) {
       const t = letters(rc.texts['s' + (i + 1)] || '');
-      if (!t.length) return (n > 1 ? (i + 1) + '段めの' : '') + '文章を入れてください';
+      if (!t.length && empty < 0) empty = i;
       total += t.length;
     }
     const room = rc.rows * rc.cols;
-    if (total + n * 3 > room * 0.55) {
-      return '文章が長すぎます（合計' + total + '文字）。迷路を大きくするか、文章を短くしてください';
+    const limit = Math.floor(room * 0.55) - n * 3;      // 置ける文字数の上限
+    // 上限に足りるいちばん小さい正方形（目安として案内に出す）
+    let need = rc.rows;
+    while (need < 30 && Math.floor(need * need * 0.55) - n * 3 < total) need++;
+    return { stages: n, total: total, limit: limit, emptyStage: empty,
+             over: total > limit, suggest: need };
+  }
+
+  function checkRecipe(rc) {
+    const cap = capacity(rc);
+    if (cap.emptyStage >= 0) {
+      return (cap.stages > 1 ? (cap.emptyStage + 1) + '段めの' : '') + '文章を入れてください';
+    }
+    if (cap.over) {
+      return '文章が長すぎます。いまの ' + rc.rows + '×' + rc.cols + ' に入るのは合計 ' + cap.limit +
+             ' 文字までですが、' + cap.total + ' 文字あります。' +
+             '<br><b>直し方（どちらかで通ります）</b><br>' +
+             '1. 文章を合計 ' + (cap.total - cap.limit) + ' 文字ぶん短くする<br>' +
+             '2. 「もっと細かく決める」で迷路を <b>' + cap.suggest + '×' + cap.suggest + '</b> 以上にする';
     }
     return null;
   }
@@ -1415,6 +1440,7 @@ MZ.packages = (function () {
     const bad = checkRecipe(rc);
     if (bad) return { ok: false, reason: bad };
     const grows = [0, 2, 4, 6, 8];
+    const diag = {};           // どこで行きづまったかの回数
     let totalTries = 0;
     let lastRows = null, lastCols = null;
     for (let s = 0; s < grows.length; s++) {
@@ -1429,7 +1455,7 @@ MZ.packages = (function () {
       for (let t = 0; t < attempts; t++) {
         totalTries++;
         let out = null;
-        try { out = makeOne(tryRc); } catch (e) { out = null; }
+        try { out = makeOne(tryRc, diag); } catch (e) { out = null; diag.error = (diag.error || 0) + 1; }
         if (out) {
           out.tries = totalTries;
           if (grows[s] > 0) out.grownTo = rows + '×' + cols;
@@ -1437,7 +1463,107 @@ MZ.packages = (function () {
         }
       }
     }
-    return { ok: false, reason: 'この組み合わせでは作れませんでした。文章を短くするか、迷路を大きくするか、しかけを減らしてみてください' };
+    return { ok: false, reason: explainFail(diag, rc, lastRows, lastCols, totalTries), diag: diag };
+  }
+
+  /* =======================================================================
+   * 「作れませんでした」を、何が問題で どうすればよいかに変える
+   *
+   *   ただ「作れません」と出すと、使う人は文章を短くすればいいのか、
+   *   迷路を大きくすればいいのか、しかけを減らせばいいのか分からない。
+   *   makeOne() が行きづまった場所を数えているので、いちばん多かった場所から
+   *   「その場所を通れるようにする直し方」を1つ選んで出す。
+   * ===================================================================== */
+
+  function esc(t) {
+    return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  /**
+   * その段の文章の言い方。
+   *   full=true  … 「3段めの文章「あかいせんをけせ」（8文字）」＝何が問題かを言うとき
+   *   full=false … 「3段めの文章（8文字）」＝直し方の中で短く指すとき
+   */
+  function stageWord(rc, i, full) {
+    const n = stageCount(rc.parts);
+    const t = letters(rc.texts['s' + (i + 1)] || '').join('');
+    const name = (n > 1 ? (i + 1) + '段めの' : '') + '文章';
+    return full ? (name + '「' + esc(t) + '」（' + t.length + '文字）')
+                : (name + '（' + t.length + '文字）');
+  }
+
+  function explainFail(diag, rc, rows, cols, tries) {
+    const keys = Object.keys(diag);
+    let top = '', best = -1;
+    keys.forEach(function (k) { if (diag[k] > best) { best = diag[k]; top = k; } });
+
+    const size = rows + '×' + cols;
+    const maxed = (rows >= 20 && cols >= 20);
+    const grew = ((rows > rc.rows || cols > rc.cols)
+        ? '迷路は ' + rc.rows + '×' + rc.cols + ' から ' + size + ' まで自動で大きくして、' + tries + '回ためしました。'
+        : size + ' で ' + tries + '回ためしました。')
+      + (maxed ? '迷路の大きさは上限（20×20）まで試しています。' : '');
+    // 「大きくする」は、まだ上限に届いていないときだけ直し方として出す
+    const nx = Math.min(20, Math.max(rows, cols) + 2);
+    const bigger = maxed ? null
+      : '「もっと細かく決める」で迷路を <b>' + nx + '×' + nx + '</b> にする';
+
+    let what = '', how = [];
+
+    if (top === 'seed') {
+      what = stageWord(rc, 0, true) + ' を全部置けるだけの長さの一本道が、この盤面に引けませんでした。';
+      how = [stageWord(rc, 0) + 'を短くする', bigger];
+
+    } else if (top === 'marks') {
+      what = '○（必ず通る）や ×（通らない）を、まっすぐな道からはずれた場所に置けませんでした。';
+      how = ['「○を全部通る」「×を通らない」のどちらかを外す', bigger];
+
+    } else if (top.indexOf('stage:erase-wall') === 0) {
+      const i = +top.split(':')[2];
+      what = '「✂️ 線を消して次の段へ」で、線を消したときに<b>前とはちがう近道</b>ができる場所が見つかりませんでした。'
+           + '近道を作るには、その前の段の道が長く、まわりに空きが要ります。';
+      how = ['「もっと細かく決める」の<b>わき道</b>を「少し」か「多め」にする（回り道が増えて、近道を作る余地ができます）',
+             (i === 0 ? '1段めの文章' : (i + 1) + '段めより前の文章') + 'を長めにして、道じたいを長くする',
+             '「✂️ 線を消して次の段へ」の数を1つ減らす',
+             bigger];
+
+    } else if (top.indexOf('stage:move-') === 0) {
+      const kind = top.split(':')[1];
+      const mark = kind === 'move-start' ? '★（新しいSTART）'
+                 : kind === 'move-goal' ? '☆（新しいGOAL）' : '★と☆（新しいSTARTとGOAL）';
+      const i = +top.split(':')[2];
+      what = mark + ' の置き場所が見つかりませんでした。'
+           + '新しい道は、前の段の道と重ならず、しかも次の段の文章が置けるだけの長さが要ります。';
+      how = [stageWord(rc, i + 1) + 'を短くする',
+             'STARTやGOALが変わるしかけを1つ減らす',
+             bigger];
+
+    } else if (top.indexOf('place:') === 0) {
+      const i = +top.split(':')[1];
+      what = stageWord(rc, i, true) + ' を、ほかの段の文字とぶつからないように離して置ける場所が足りませんでした。';
+      how = [stageWord(rc, i) + 'を短くする',
+             '「もっと細かく決める」の<b>まわりの文字の量</b>を「少なめ」にする',
+             bigger];
+
+    } else if (top.indexOf('read:') === 0) {
+      const i = +top.split(':')[1];
+      what = '作れたのですが、' + (i + 1) + '段めを読んだときに、ほかの段の文字がまざってしまいました。';
+      how = ['段ごとの色を変える（②の「色：」欄で、となり合う段に別の色を選ぶ）',
+             stageWord(rc, i) + 'を短くする', bigger];
+
+    } else if (top === 'check') {
+      what = '作れたのですが、「最短の道が1本だけ」などのチェックに通りませんでした。';
+      how = ['「もっと細かく決める」の<b>わき道</b>を「なし」にする', bigger];
+
+    } else {
+      what = 'この組み合わせでは作れませんでした。';
+      how = ['どれかの段の文章を短くする', 'しかけを1つ減らす', bigger];
+    }
+
+    how = how.filter(function (h) { return !!h; });
+    return what + '<br><b>直し方（上から順にためしてください）</b><br>'
+         + how.map(function (h, i) { return (i + 1) + '. ' + h; }).join('<br>')
+         + '<br><span class="sub">' + grew + '</span>';
   }
 
   /* =======================================================================
@@ -1556,7 +1682,7 @@ MZ.packages = (function () {
     defaultText: defaultText, instruction: instruction, titleOf: titleOf,
     ORDERS: ORDERS, ORDER_KEYS: ORDER_KEYS, orderWord: orderWord,
     STAGE_COLORS: STAGE_COLORS, MAX_STAGES: MAX_STAGES, DENSITY: DENSITY, LOOPS: LOOPS,
-    build: build, checkRecipe: checkRecipe, seed: seed, letters: letters,
+    build: build, checkRecipe: checkRecipe, capacity: capacity, seed: seed, letters: letters,
     placeOnFree: placeOnFree, fillGaps: fillGaps, scatterOutside: scatterOutside,
     placeTargets: placeTargets, readRow: readRow, unreadColor: unreadColor,
     uniqueCells: uniqueCells, colorAdj: colorAdj
