@@ -3556,3 +3556,38 @@ function nextAutoColor(prevColor, kind) {
 2026-09-06の教訓）で決めた既定動作を静かに壊すことがある。
 
 **タグ：** #設計判断 #デフォルト値 #回帰防止 #meiro-nazo-maker
+
+---
+
+### [UI] 2つの画面を1ページに統合するときは、IDを変えずにCSSの意味だけ変える — meiro-nazo-maker
+
+**やりたかったこと：** 「かんたん作成」と「詳細編集」が別画面で切りかわっていたのを、
+1ページに統合したい（伊神さんの要望：「簡単作成側に詳細を組み込む。詳細ページを無くす」）。
+ただし編集画面は配線量が多く（ツールバー・キャンバス・パネル7枚・STEP一覧）、
+作り直すと確実に壊れる。
+
+**やったこと：** HTMLの**IDと構造はほぼそのまま**にして、
+「画面の切りかえ」を「同じページの中の位置」に読みかえた。
+
+| 前 | 後 |
+|---|---|
+| `#wizardView { position:fixed; display:none } .show{display:block}` | `#wizardView { display:block }`（常時表示） |
+| `#app { display:none } .show{display:flex}` | `#app { display:none } .show{display:block}`（下に出る節） |
+| `#app{height:100%}` + `.layout{flex:1}` | `.layout` は通常グリッド、`.pane-canvas{height:66vh}` |
+| `showEditor()` = 画面を入れかえる | `showEditor()` = `.show` を付けて `scrollIntoView()` |
+| 上のバーが2本（画面ごと） | 上のバー1本（`position:sticky`）に統合 |
+
+`#board` `#toolbar` `#stepList` などのIDに触っていないので、
+editor.js / app.js の配線は**1行も変えずに**そのまま動いた。
+既存のブラウザテスト29本がそのまま通ったことで、それを確認できた。
+
+**効果：** 画面の行き来が無くなり、作った直後に同じページの下で
+文字の移動・色変え・ルート描き直しができる。実装の変更は
+index.html のCSS 5箇所＋HTML 2箇所、app.js / wizard.js の関数4つだけ。
+
+**教訓：** 画面統合は「作り直し」に見えて、実は
+**「表示のしかた（CSS）と、移動のしかた（scroll）だけの置きかえ」**で済むことが多い。
+DOMのIDと構造を保てば、そこにぶら下がった配線・イベント・テストが全部生き残る。
+先に「何を変えないか」を決めてから着手する。
+
+**タグ：** #UI #リファクタリング #画面統合 #meiro-nazo-maker
