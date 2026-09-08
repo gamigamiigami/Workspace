@@ -60,7 +60,8 @@ MZ.editor = (function () {
     S.canvas.addEventListener('pointercancel', onPointerUp);
     S.canvas.addEventListener('wheel', onWheel, { passive: false });
     S.canvas.addEventListener('dblclick', onDoubleClick);
-    window.addEventListener('resize', function () { draw(); });
+    // 画面の大きさが変わると「収まっているかどうか」も変わるので、そのつどおさめ直す
+    window.addEventListener('resize', function () { clampView(); draw(); });
 
     setupInlineInput();
     fit();
@@ -130,9 +131,43 @@ MZ.editor = (function () {
     const w = S.wrap.clientWidth || 600, h = S.wrap.clientHeight || 400;
     const sc = Math.min((w - 24) / m.width, (h - 24) / m.height);
     S.view.scale = Math.max(0.15, Math.min(3, sc));
-    S.view.tx = (w - m.width * S.view.scale) / 2;
-    S.view.ty = (h - m.height * S.view.scale) / 2;
+    clampView();
     draw();
+  }
+
+  /* -----------------------------------------------------------------------
+   * 迷路が行方不明にならないようにする（伊神さんの指摘）
+   *
+   *   ぜんたいが見えている（100%表示）ときは、迷路は動かさない。
+   *   ズームインしているときも、盤のはしが画面のはしより内側に来ないところで止める。
+   *   前は指やホイールで無限に動かせたので、迷路を画面の外へ追い出せてしまい、
+   *   さらにページを縦にスクロールしようとしても迷路のほうが動いて じゃまだった。
+   * --------------------------------------------------------------------- */
+
+  /** いまの倍率で、盤が画面（wrap）に収まっているか */
+  function viewBounds() {
+    const b = shownBoard();
+    const m = R.measure(b, baseOpts());
+    const w = S.wrap.clientWidth || 600, h = S.wrap.clientHeight || 400;
+    const bw = m.width * S.view.scale, bh = m.height * S.view.scale;
+    return { w: w, h: h, bw: bw, bh: bh, fitsX: bw <= w, fitsY: bh <= h };
+  }
+
+  /** 迷路を動かせる状態か（＝はみ出しているか） */
+  function canPan() {
+    if (!shownBoard() || !S.wrap) return false;
+    const v = viewBounds();
+    return !(v.fitsX && v.fitsY);
+  }
+
+  /** 移動量を範囲内におさめる。収まっている向きは真ん中に固定する */
+  function clampView() {
+    if (!shownBoard() || !S.wrap) return;
+    const v = viewBounds();
+    S.view.tx = v.fitsX ? (v.w - v.bw) / 2
+                        : Math.min(0, Math.max(v.w - v.bw, S.view.tx));
+    S.view.ty = v.fitsY ? (v.h - v.bh) / 2
+                        : Math.min(0, Math.max(v.h - v.bh, S.view.ty));
   }
 
   function zoomAt(factor, sx, sy) {
@@ -143,6 +178,7 @@ MZ.editor = (function () {
     S.view.tx = sx - (sx - S.view.tx) * (next / old);
     S.view.ty = sy - (sy - S.view.ty) * (next / old);
     S.view.scale = next;
+    clampView();
     draw();
   }
   function zoom(factor) {
@@ -151,15 +187,23 @@ MZ.editor = (function () {
   }
 
   function onWheel(e) {
-    e.preventDefault();
     if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
       const p = screenPoint(e);
       zoomAt(e.deltaY < 0 ? 1.12 : 1 / 1.12, p.sx, p.sy);
-    } else {
-      S.view.tx -= e.deltaX;
-      S.view.ty -= e.deltaY;
-      draw();
+      return;
     }
+    // ★ぜんたいが見えているときは、ここでホイールを横取りしない★
+    //   横取りしていたせいで、迷路の上にカーソルがあるとページが縦に動かなかった。
+    if (!canPan()) return;
+    const tx0 = S.view.tx, ty0 = S.view.ty;
+    S.view.tx -= e.deltaX;
+    S.view.ty -= e.deltaY;
+    clampView();
+    // はしまで来て1ドットも動けなかったときも、ページのスクロールにゆずる
+    if (S.view.tx === tx0 && S.view.ty === ty0) return;
+    e.preventDefault();
+    draw();
   }
 
   /* =======================================================================
@@ -169,6 +213,8 @@ MZ.editor = (function () {
     if (!S.ctx || !S.wrap) return;
     const board = shownBoard();
     if (!board) return;
+    // 盤の大きさや表示が切りかわった直後でも、迷路が画面の外に出ないようにする
+    clampView();
     const dpr = window.devicePixelRatio || 1;
     const w = S.wrap.clientWidth, h = S.wrap.clientHeight;
     if (!w || !h) return;
@@ -293,7 +339,13 @@ MZ.editor = (function () {
     // 盤の外側をつかんだら画面を動かす（「うごかす」道具をなくしたかわり）
     // 指2本でも動かせるが、マウスの人はこちらのほうが分かりやすい
     if (e.button === 1 || outsideBoard(e)) {
-      S.drag = { kind: 'pan', sx: e.clientX, sy: e.clientY, tx: S.view.tx, ty: S.view.ty };
+      // ★ぜんたいが見えているときは迷路を動かさない★
+      //   かわりに、まわりの余白をなぞったらページのほうを縦に動かす
+      //   （キャンバスは touch-action:none なので、こちらで動かさないと
+      //     iPad で迷路の上をなぞってもページがスクロールできない）
+      S.drag = canPan()
+        ? { kind: 'pan', sx: e.clientX, sy: e.clientY, tx: S.view.tx, ty: S.view.ty }
+        : { kind: 'pagescroll', sy: e.clientY };
       return;
     }
     // 画面に「設計図」という名前のボタンは無い。④のタブの言い方に合わせる
@@ -323,13 +375,20 @@ MZ.editor = (function () {
       S.view.scale = Math.max(0.15, Math.min(4, S.pinch.scale * f));
       S.view.tx = m2.sx - (S.pinch.mid.sx - S.pinch.tx) * (S.view.scale / S.pinch.scale);
       S.view.ty = m2.sy - (S.pinch.mid.sy - S.pinch.ty) * (S.view.scale / S.pinch.scale);
+      clampView();
       draw();
       return;
     }
     if (!S.drag && !S.marquee) return;
+    if (S.drag && S.drag.kind === 'pagescroll') {
+      window.scrollBy(0, S.drag.sy - e.clientY);
+      S.drag.sy = e.clientY;
+      return;
+    }
     if (S.drag && S.drag.kind === 'pan') {
       S.view.tx = S.drag.tx + (e.clientX - S.drag.sx);
       S.view.ty = S.drag.ty + (e.clientY - S.drag.sy);
+      clampView();
       draw();
       return;
     }

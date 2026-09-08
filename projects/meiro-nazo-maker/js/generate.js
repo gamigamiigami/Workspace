@@ -526,6 +526,7 @@ MZ.generate = (function () {
     makeProbe: makeProbe,
     routeIsUniqueShortest: routeIsUniqueShortest,
     routeIsClearlyShortest: routeIsClearlyShortest,
-    makeShortestUnique: makeShortestUnique
+    makeShortestUnique: makeShortestUnique,
+    findDetour: findDetour
   };
 })();
