@@ -557,8 +557,56 @@ MZ.packages = (function () {
     if (free.length < chs.length) return null;
     const near = extraNear || [];
 
-    // 均等にならべたときの、だいたいの目あて位置
-    function wantIdx(i) { return chs.length === 1 ? 0 : Math.round(i * (free.length - 1) / (chs.length - 1)); }
+    /* =====================================================================
+     * 目あての位置は「道のどのあたりか」で決める
+     *
+     * ★前はここが「空きマスの何番めか」だった★
+     *   空きマスが少なくてかたまっていると、そのかたまりの中に均等にならべる
+     *   ことになり、道の上では となり合った3マスに答えが並んでしまう。
+     *   伊神さんの指摘：「赤文字『わかる』の三文字が連続して配置されて、
+     *   迷路を解かなくても答えが分かってしまう」。
+     *
+     * ★はじめ・なか・おわりの分けかた★
+     *   道を3つに分け、重み 2 : 3 : 3 で配る（はじめは少なめ、なか・おわりを多めに）。
+     *   3文字なら 1・1・1、5文字なら 1・2・2 になる。
+     *   STARTのすぐそばに答えがあると、道をたどらなくても目に入ってしまうので、
+     *   はじめを軽くしている。
+     * =================================================================== */
+    const SECTION_W = [2, 3, 3];
+    const SECTION_TOTAL = SECTION_W[0] + SECTION_W[1] + SECTION_W[2];
+    /** 0〜1 の目もりを、重みつきの「道のどのあたりか」に変える */
+    function sectionAt(u) {
+      let acc = 0;
+      for (let s2 = 0; s2 < 3; s2++) {
+        const w = SECTION_W[s2] / SECTION_TOTAL;
+        if (u < acc + w) return (s2 + (u - acc) / w) / 3;
+        acc += w;
+      }
+      return 1;
+    }
+    /** i番めの文字の「道の上の目あて位置（マス番号）」 */
+    function wantCell(i) {
+      const u = (chs.length === 1) ? 0.5 : (i + 0.5) / chs.length;
+      return sectionAt(u) * (cells.length - 1);
+    }
+    /**
+     * その目あてにいちばん近い空きマスは、free の何番めか。
+     *
+     * ★必ず「i番めは i以上・残りの文字ぶんを残す位置以下」に収める★
+     *   空きマスが少なくてかたまっていると、目あて位置がちがう文字でも
+     *   いちばん近い空きマスが同じになってしまう。そのまま探索の目じるしにすると、
+     *   最初から成り立たない並びばかり試して、置けるはずの迷路をあきらめていた。
+     */
+    function wantIdx(i) {
+      const target = wantCell(i);
+      const lo = i, hi = free.length - (chs.length - i);
+      let best = lo, bestD = Infinity;
+      for (let j = lo; j <= hi; j++) {
+        const d = Math.abs(free[j] - target);
+        if (d < bestD) { bestD = d; best = j; }
+      }
+      return best;
+    }
 
     /**
      * 距離Dを守れるかどうか。
@@ -566,16 +614,25 @@ MZ.packages = (function () {
      * （手前から早取りするだけだと、前のほうで距離をかせぎすぎて、
      *   あとの文字がまとめて隅に押しこまれることがあった）。
      */
-    function tryFit(D) {
-      const picked = [], placedCells = [];
+    /**
+     * @param D    盤の上でどれだけ離すか（となり合わない＝2以上）
+     * @param GAP  道すじの上でどれだけ離すか（間に GAP-1 マス入る）
+     */
+    function tryFit(D, GAP) {
+      const picked = [], placedCells = [], placedAt = [];
       // ぐねぐね曲がった道だと、道すじの上では離れているマスが盤の上ではとなり合う。
       // 1文字ずつ「いちばん目あてに近いマス」を取っていくだけだと、そこで先がふさがり、
       // 実際には置ける組み合わせがあるのに「置けない」と投げ出していた
       // （そのせいで4段の組み合わせが18×18でも作れなかった）。
       // 目あてに近い順に試しつつ、行きづまったら1つ前にもどってやり直す。
-      let budget = 4000;   // 探しすぎて固まらないための上限
-      function farEnough(p) {
-        return placedCells.every(function (q) { return gridDist(p, q) >= D; }) &&
+      // 探しすぎて固まらないための上限。空きマスも文字も多いほど、
+      // 行きづまってからのやり直しが増えるので、そのぶん多めにとる
+      let budget = Math.min(40000, 4000 + free.length * chs.length * 20);
+      function farEnough(p, at) {
+        // 盤の上で離れているだけでは足りない。道の上でも離れていないと、
+        // 「わ□か□る」のように、間をひとマス飛ばすだけで読めてしまう
+        return placedAt.every(function (q) { return Math.abs(at - q) >= GAP; }) &&
+               placedCells.every(function (q) { return gridDist(p, q) >= D; }) &&
                near.every(function (q) { return gridDist(p, q) >= D; });
       }
       function rec(i, lo) {
@@ -589,23 +646,31 @@ MZ.packages = (function () {
           if (budget-- <= 0) return false;
           const j = order[t];
           const p = cells[free[j]];
-          if (!farEnough(p)) continue;
-          picked.push(j); placedCells.push(p);
+          if (!farEnough(p, free[j])) continue;
+          picked.push(j); placedCells.push(p); placedAt.push(free[j]);
           if (rec(i + 1, j + 1)) return true;
-          picked.pop(); placedCells.pop();
+          picked.pop(); placedCells.pop(); placedAt.pop();
         }
         return false;
       }
       return rec(0, 0) ? picked.slice() : null;
     }
 
-    // 出せるいちばん大きい距離をさがす。
-    // ★D=1（隣どうし・斜めどなりもOK）は認めない。伊神さんの指摘：
-    //   「あおい」のように答えの文字どうしがくっついて見えると、答えがバレやすく読みにくい。
-    // D=2未満でしか置けないときは失敗にする。呼び出し側（makeOne/build）が
-    // 迷路をまるごと作り直すか、置く側（placeTargets）が理由つきで断る。
+    // ゆるめながら、置ける組み合わせをさがす。広いほうから試すので、
+    // 置ける迷路では自然と大きく離れる（実測でほとんどが4マス以上あく）。
+    //
+    // ★下限のきまり★
+    //   ・盤の距離 D=1（となり・斜めどなり）は認めない
+    //     … 答えの文字がくっついて見えて、読みやすくなってしまう
+    //   ・道すじのすきま GAP=1（となり合うマス）は認めない
+    //     … 「わかる」がそのまま3マス並んでしまう（伊神さんの指摘）
+    //   GAP=2（間が1マス）は認める。ただし makeOne が、その1マスを
+    //   まぎれ文字で必ず埋める（mustFill）ので、「わ□か□る」とは読めない。
+    //   ここより下は妥協せず失敗を返し、呼び出し側が別の迷路で作り直す。
     let picked = null;
-    for (let D = 5; D >= 2 && !picked; D--) picked = tryFit(D);
+    for (let GAP = 5; GAP >= 2 && !picked; GAP--) {
+      for (let D = 5; D >= 2 && !picked; D--) picked = tryFit(D, GAP);
+    }
     if (!picked) return null;
 
     // 通った順にならんだマスを、読む順にならべかえてから1文字ずつ入れる
@@ -621,7 +686,13 @@ MZ.packages = (function () {
     return ids;
   }
 
-  function fillGaps(maze, paths, color, ratio, pool) {
+  /**
+   * @param must 「ここは必ず埋める」マスの一覧。
+   *   答えの文字と文字のあいだが空白のままだと、間を飛ばして読めてしまうので、
+   *   こさの設定に関係なく先に埋める（伊神さんの指摘：
+   *   「カモフラやほかの色が『わかる』の中に入らないと、迷路を解かなくても答えが分かる」）。
+   */
+  function fillGaps(maze, paths, color, ratio, pool, must) {
     const occupied = {};
     maze.elements.forEach(function (e) { occupied[M.cellKey(e.r, e.c)] = true; });
     const free = [];
@@ -634,7 +705,15 @@ MZ.packages = (function () {
       });
     });
     shuffle(free);
-    const n = Math.round(free.length * ratio);
+    // 「必ず埋める」マスを先頭にもってくる（重複はしない）
+    const mustKey = {};
+    (must || []).forEach(function (p) { mustKey[M.cellKey(p.r, p.c)] = true; });
+    const head = [], tail = [];
+    free.forEach(function (p) { (mustKey[M.cellKey(p.r, p.c)] ? head : tail).push(p); });
+    free.length = 0;
+    Array.prototype.push.apply(free, head);
+    Array.prototype.push.apply(free, tail);
+    const n = Math.max(head.length, Math.round(free.length * ratio));
     const src = (pool && pool.length) ? pool : O.POOLS.hiragana;
     // 近くの字とかぶらない字をえらぶ（置いたそばから辞書を更新する）
     const vmap = O.valueMap(maze);
@@ -1039,8 +1118,25 @@ MZ.packages = (function () {
      * ★以前はルートの空きマスを必ず100%埋めていたので、まわり（こさ設定ぶんしか埋めない）
      *   と比べて答えルートだけ文字がびっしり詰まって見えてしまっていた。
      *   ルートの内側も、まわりと同じ「こさ」で埋める。 */
+    /* 答えの文字どうしのあいだに、必ず1マスは何か入るようにする。
+     * 間が空白のままだと「わ□か□る」と読めてしまい、迷路を解く意味が無くなる。 */
+    const mustFill = [];
+    for (let i = 0; i < n; i++) {
+      if (!stageIds[i]) continue;
+      const cells = uniqueCells(routes[i]);
+      const at = {};
+      cells.forEach(function (p, k) { at[M.cellKey(p.r, p.c)] = k; });
+      const spots = stageIds[i].map(function (id) {
+        const el = maze.elements.filter(function (e) { return e.id === id; })[0];
+        return el ? at[M.cellKey(el.r, el.c)] : -1;
+      }).filter(function (k) { return k >= 0; }).sort(function (a, b) { return a - b; });
+      for (let k = 1; k < spots.length; k++) {
+        const mid = Math.floor((spots[k - 1] + spots[k]) / 2);
+        if (mid > spots[k - 1] && mid < spots[k]) mustFill.push(cells[mid]);
+      }
+    }
     const dummyPool = poolFrom(texts);
-    if (noise) fillGaps(maze, routes, noise, curDensity(rc.density), dummyPool);
+    if (noise) fillGaps(maze, routes, noise, curDensity(rc.density), dummyPool, mustFill);
     if (color) {
       const outColors = ['black'].concat(sc.filter(function (c, idx) { return sc.indexOf(c) === idx; }));
       scatterOutside(maze, routes, rc, outColors, dummyPool);

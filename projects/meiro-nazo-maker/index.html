@@ -169,6 +169,10 @@
   .check.warn .mk { color: #e8a300; }
   .check.ng .mk { color: #e03131; }
   .check.ng { color: #c92a2a; }
+  .check .body { flex: 1; min-width: 0; }
+  /* その場で直せる警告に出すボタン。押せることが分かるように色をつける */
+  .check .fixbtn { margin-top: 6px; min-height: 40px; font-size: 12.5px;
+                   background: #fff8e6; border-color: #ffd88a; color: #7c5a00; font-weight: 700; }
 
   /* ===== こたえ表示 ===== */
   .answer-box { margin-top: 10px; background: #f1f8f3; border: 1px solid #c8e6cf; border-radius: 10px; padding: 10px; font-size: 14px; }

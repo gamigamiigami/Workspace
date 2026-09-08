@@ -443,6 +443,78 @@ MZ.generate = (function () {
     return null;
   }
 
+  /* =======================================================================
+   * 「最短ルートが複数あります」を、その場で1本にする
+   *
+   *   チェックに ⚠ が出ても、どの壁を足せば1本になるのかは人には分からない。
+   *   （伊神さんの指摘：「このエラーが出たときの直し方がわからない」）
+   *
+   *   考え方はかんたん：
+   *     STARTからの距離 dS と GOALからの距離 dG を1回ずつ測ると、
+   *     「最短ルートのどれかが通る辺」は dS[a] + 1 + dG[b] === 最短の長さ で見分けられる。
+   *     そのうち **残したい道の上にない辺だけ** を壁でふさげば、
+   *     残る最短ルートは その道1本だけになる。
+   *   壁を足すだけなので、残したい道は絶対に短くならないし、通れなくもならない。
+   * ===================================================================== */
+  function makeShortestUnique(maze, route) {
+    const E = MZ.engine;
+    if (Object.keys(maze.oneways || {}).length) {
+      return { ok: false, reason: '一方通行があるときは、この直し方は使えません（行きと帰りで距離が変わるため）' };
+    }
+    if (M.cellsWithRole(maze, 'warp').length) {
+      return { ok: false, reason: 'ワープがあるときは、この直し方は使えません' };
+    }
+    if (!maze.starts.length || !maze.goals.length) return { ok: false, reason: 'STARTとGOALを置いてください' };
+
+    const solved = E.solve(maze, { useAvoid: true });
+    if (!solved.ok) return { ok: false, reason: solved.reason };
+    const keep = (route && route.length >= 2) ? route : solved.path;
+    if (keep.length - 1 !== solved.dist) {
+      return { ok: false, reason: '残したい道が最短ではありません（' + (keep.length - 1) + '歩／最短は ' + solved.dist +
+                                  '歩）。先に「このルートが最短になる迷路を作る」を使ってください' };
+    }
+
+    const ctx = E.makeContext(maze, { useAvoid: true });
+    const start = maze.starts[0], goal = maze.goals[0];
+    const dS = E.bfs(maze, { r: start.r, c: start.c }, ctx).dist;
+    const dG = E.bfs(maze, { r: goal.r, c: goal.c }, ctx).dist;
+    const d0 = solved.dist;
+
+    // 残したい道の上の辺は、ぜったいにふさがない
+    const keepEdge = {};
+    for (let i = 0; i + 1 < keep.length; i++) {
+      const k = M.edgeBetween(keep[i].r, keep[i].c, keep[i + 1].r, keep[i + 1].c);
+      if (k) keepEdge[k] = true;
+    }
+
+    const added = [];
+    for (let r = 0; r < maze.rows; r++) for (let c = 0; c < maze.cols; c++) {
+      [[0, 1], [1, 0]].forEach(function (d) {
+        const nr = r + d[0], nc = c + d[1];
+        if (!M.inside(maze, nr, nc)) return;
+        if (!E.canPass(maze, r, c, nr, nc)) return;                 // もう通れない辺
+        const key = M.edgeBetween(r, c, nr, nc);
+        if (!key || keepEdge[key]) return;
+        const a = E.idxOf(maze, r, c), b = E.idxOf(maze, nr, nc);
+        if (dS[a] < 0 || dG[a] < 0 || dS[b] < 0 || dG[b] < 0) return;
+        // この辺を通る最短ルートがあるか（どちら向きでも）
+        const onShortest = (dS[a] + 1 + dG[b] === d0) || (dS[b] + 1 + dG[a] === d0);
+        if (!onShortest) return;
+        maze.walls[key] = M.makeWall();
+        added.push(key);
+      });
+    }
+
+    const after = E.solve(maze, { useAvoid: true });
+    if (!after.ok || after.count !== 1 || !E.samePath(after.path, keep)) {
+      added.forEach(function (k) { delete maze.walls[k]; });        // もとにもどす
+      return { ok: false, reason: '1本にできませんでした（○や×の条件が絡んでいるかもしれません）' };
+    }
+    return { ok: true, added: added.length, route: keep,
+             message: added.length ? ('わき道を ' + added.length + 'か所ふさいで、最短ルートを1本にしました')
+                                   : 'もともと最短ルートは1本でした' };
+  }
+
   return {
     checkRoute: checkRoute,
     lengthenRoute: lengthenRoute,
@@ -453,6 +525,7 @@ MZ.generate = (function () {
     addLoops: addLoops,
     makeProbe: makeProbe,
     routeIsUniqueShortest: routeIsUniqueShortest,
-    routeIsClearlyShortest: routeIsClearlyShortest
+    routeIsClearlyShortest: routeIsClearlyShortest,
+    makeShortestUnique: makeShortestUnique
   };
 })();

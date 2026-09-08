@@ -102,7 +102,8 @@ MZ.steps = (function () {
   function validateAll(maze, steps, preRun) {
     const out = [];
     const ok = function (t) { out.push({ level: 'ok', text: t }); };
-    const warn = function (t) { out.push({ level: 'warn', text: t }); };
+    // fix … 画面がここに「直すボタン」を出せるようにする合図（app.js の renderChecks）
+    const warn = function (t, fix) { out.push({ level: 'warn', text: t, fix: fix || null }); };
     const ng = function (t) { out.push({ level: 'ng', text: t }); };
 
     /* --- START / GOAL --- */
@@ -120,7 +121,10 @@ MZ.steps = (function () {
     if (!base.ok) { ng(base.reason); }
     else {
       ok('STARTからGOALへ到達できます（最短 ' + base.dist + 'マス）');
-      if (main.ok && main.multiple) warn('最短ルートが' + (main.capped ? 'たくさん' : main.count + '通り') + '存在します');
+      if (main.ok && main.multiple) {
+        warn('最短ルートが' + (main.capped ? 'たくさん' : main.count + '通り') + 'あります。' +
+             'このままだと、解く人によって通る道がちがってしまいます', 'unique-shortest');
+      }
       else if (main.ok) {
         ok('最短ルートは1本だけです');
         // 絶対条件：同じ通路を行って戻る道は、謎として成立しない（交差はOK）

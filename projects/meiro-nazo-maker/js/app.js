@@ -1233,9 +1233,35 @@
     A.checks.forEach(function (c) {
       const row = el('div', 'check ' + c.level);
       row.appendChild(el('span', 'mk', c.level === 'ok' ? '✓' : (c.level === 'warn' ? '⚠' : '✕')));
-      row.appendChild(el('span', '', c.text));
+      const body = el('span', 'body');
+      body.appendChild(el('div', '', c.text));
+      // ★その場で直せる警告には、直すボタンを出す★
+      //   「最短ルートが複数あります」と言われても、どの壁を足せば1本になるかは
+      //   人には分からない（伊神さんの指摘）。分かっているのは道具のほうなので、
+      //   ここで押せるようにする。
+      if (c.fix === 'unique-shortest') {
+        const b = el('button', 'fixbtn', '🔧 わき道をふさいで1本にする');
+        b.addEventListener('click', fixUniqueShortest);
+        body.appendChild(b);
+      }
+      row.appendChild(body);
       box.appendChild(row);
     });
+  }
+
+  /** 正解ルート以外の「最短の道」をふさいで、最短ルートを1本にする */
+  function fixUniqueShortest() {
+    const rt = A.maze.routes[ED.state.routeIndex];
+    ED.pushHistory();
+    const res = G.makeShortestUnique(A.maze, rt && rt.cells.length ? rt.cells : null);
+    if (!res.ok) { ED.undo(); setStatus('⚠ ' + res.reason); return; }
+    // 残った1本を「正解ルート」としても持っておく（次に見たときに分かるように）
+    if (!rt || !rt.cells.length) {
+      if (!A.maze.routes.length) A.maze.routes.push(M.makeRoute(res.route));
+      else A.maze.routes[ED.state.routeIndex].cells = res.route.slice();
+    }
+    afterEdit();
+    setStatus(res.message + '（↶ でもどせます）');
   }
 
   /* =======================================================================
