@@ -35,6 +35,13 @@ MZ.packages = (function () {
      2段までなら作れるが、3段になると急に作れなくなる
      （実測：5段スタゴル2回＋線けしで、3段が赤だと 3/12・42秒。2段までなら 12/12・7秒）。 */
   const SAME_COLOR_MAX = 2;
+  /* 同じ色にもどすのに必要な「線を消す」の回数。
+     線を消すと道は少し変わるが、1回ぶんでは前の段とほとんど同じ道のまま。
+     2回ぶん変わればおたがい自分だけが通るマスができるので、同じ色にもどせる
+     （実測：赤→赤（線けし1回）は 2/8 しか作れないが、
+       赤→青→赤（線けし2回）は 7/8 作れる）。
+     STARTやGOALが変わる段は道がまるごと別物になるので、1回で使い回してよい。 */
+  const ERASE_TO_REUSE = 2;
   /* 段の上限。STARTやGOALを変える段は色を使い回せるので、色の数より多く積める */
   const MAX_STAGES = 7;
   /* 自動作成が作れる盤面の大きさ。MZ.opt.RANGE と index.html の min/max もこれに合わせる */
@@ -207,11 +214,18 @@ MZ.packages = (function () {
     const out = [];
     const forced = {};        // ずらした段 → { want: 本来の色, got: 実際の色, why: 理由 }
     const usedErase = {};     // 「線を消す」段が使った色
-    let usedHere = {};        // 道が入れかわってから使った色
+    let lastAt = {};          // 色 → その色をさいごに使った段（道が入れかわるとまっさらにする）
     const count = {};         // 色ごとに、いくつの段が使っているか
     function nextOf(c) { return STAGE_COLORS[(STAGE_COLORS.indexOf(c) + 1) % STAGE_COLORS.length]; }
-    /** その色をこの段で使えるか（道が同じ段とかぶらない・同じ色は2段まで） */
-    function free(c) { return !usedHere[c] && (count[c] || 0) < SAME_COLOR_MAX; }
+    /** その色を i 段めで使えるか */
+    function free(c, i) {
+      if ((count[c] || 0) >= SAME_COLOR_MAX) return false;   // 同じ色は2段まで
+      if (lastAt[c] === undefined) return true;              // まだ使っていない
+      // その色をさいごに使ってから、「線を消す」が何回あったか
+      let erases = 0;
+      for (let k = lastAt[c]; k < i; k++) if (st[k] === 'erase-wall') erases++;
+      return erases >= ERASE_TO_REUSE;
+    }
 
     function place(i, auto) {
       const ov = override[i];
@@ -219,9 +233,9 @@ MZ.packages = (function () {
       const want = hasOv ? ov : auto;
       let c = want, why = '';
       // 手で色を指定したときは、その色を尊重する（作りにくくなっても、指定どおりに出す）
-      if (!hasOv && !free(c)) {
-        why = usedHere[c] ? 'route' : 'many';
-        for (let k = 0; k < STAGE_COLORS.length && !free(c); k++) c = nextOf(c);
+      if (!hasOv && !free(c, i)) {
+        why = ((count[c] || 0) >= SAME_COLOR_MAX) ? 'many' : 'route';
+        for (let k = 0; k < STAGE_COLORS.length && !free(c, i); k++) c = nextOf(c);
       }
       // 消す線の色だけは、手で指定されていても必ず別の色にする
       if (st[i] === 'erase-wall') {
@@ -229,11 +243,11 @@ MZ.packages = (function () {
         usedErase[c] = true;
       }
       if (c !== want) forced[i] = { want: want, got: c, why: why };
-      usedHere[c] = true;
+      lastAt[c] = i;
       count[c] = (count[c] || 0) + 1;
       out.push(c);
       // 道が入れかわる段のあとは、色をまた使えるようにする（＝ここで赤にもどれる）
-      if (st[i] === 'move-start' || st[i] === 'move-goal' || st[i] === 'move-both') usedHere = {};
+      if (st[i] === 'move-start' || st[i] === 'move-goal' || st[i] === 'move-both') lastAt = {};
     }
 
     place(0, STAGE_COLORS[0]);
@@ -1031,7 +1045,7 @@ MZ.packages = (function () {
     const n = stageCount(parts);
     const mode = readMode(parts);           // ぜんぶ読む／その色だけ／その色いがい
     const color = (mode !== 'all');
-    const sc = stageColors(parts, rc.opts); // 段ごとの読む色（既定は「まだ使っていない色」を優先。個別上書き可）
+    const sc = stageColors(parts, rc.opts);   // 段ごとの読む色（既定のルール＋個別上書き）
     const noise = noiseColor(mode, parts, rc.opts);  // ルートの上にまく「読まれない文字」の色
     const needMust = parts.indexOf('must-circles') >= 0;
     const needAvoid = parts.indexOf('avoid-cross') >= 0;
@@ -1928,7 +1942,11 @@ MZ.packages = (function () {
     let room = 0, other = 0;
     Object.keys(diag).forEach(function (k) {
       if (k === 'errorMsg' || k === 'error') return;
-      if (k.indexOf('place:') === 0 || k.indexOf('read:') === 0) room += diag[k];
+      // place（離して置けない）／read（ほかの段の文字がまざる）は、道が長くなれば解ける。
+      // stage:erase-wall（遠回りを作れない）も、道が長いほど作る場所が増えるので効く
+      //   （とくに文章が短い謎は道も短くなり、遠回りを作る余地が無くなっていた）。
+      if (k.indexOf('place:') === 0 || k.indexOf('read:') === 0 ||
+          k.indexOf('stage:erase-wall') === 0) room += diag[k];
       else other += diag[k];
     });
     return room > 0 && room >= other;
@@ -2035,9 +2053,20 @@ MZ.packages = (function () {
 
     } else if (top.indexOf('stage:erase-wall') === 0) {
       const i = +top.split(':')[2];
+      // 線を消したあとの段が、前の段と同じ色なら それがいちばんの原因。
+      // 同じ色の2段は「自分だけが通るマス」に文字を置く必要があるので、
+      // 道を大きく分けなければならず、そのぶん作りにくい。
+      const sc2 = stageColors(rc.parts, rc.opts);
+      const same = [];
+      for (let k = 0; k < i + 1; k++) if (sc2[k] === sc2[i + 1]) same.push(k);
+      const colorName = (M.COLORS[sc2[i + 1]] || {}).label || sc2[i + 1];
       what = '「✂️ 線を消して次の段へ」で、線を消したときに<b>前とはちがう近道</b>ができる場所が見つかりませんでした。'
-           + '近道を作るには、その前の段の道が長く、まわりに空きが要ります。';
-      how = ['「もっと細かく決める」の<b>わき道</b>を「少し」か「多め」にする（回り道が増えて、近道を作る余地ができます）',
+           + '近道を作るには、その前の段の道が長く、まわりに空きが要ります。'
+           + (same.length ? (i + 2) + '段めは ' + same.map(function (k) { return (k + 1) + '段め'; }).join('・')
+               + ' と同じ<b>' + colorName + '</b>なので、その2つの段が<b>おたがいに自分だけ通る道</b>を'
+               + '持てるところまで道を分ける必要があり、そのぶん作りにくくなっています。' : '');
+      how = [same.length ? '②の「色：」欄で <b>' + (i + 2) + '段めを別の色</b>にする（いちばん効きます）' : null,
+             '「もっと細かく決める」の<b>わき道</b>を「少し」か「多め」にする（回り道が増えて、近道を作る余地ができます）',
              (i === 0 ? '1段めの文章' : (i + 1) + '段めより前の文章') + 'を長めにして、道じたいを長くする',
              '「✂️ 線を消して次の段へ」の数を1つ減らす',
              bigger];
