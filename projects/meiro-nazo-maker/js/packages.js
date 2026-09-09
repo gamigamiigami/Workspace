@@ -161,18 +161,18 @@ MZ.packages = (function () {
   function usesColor(parts) { return readMode(parts) !== 'all'; }
 
   /**
-   * 段ごとに「読む色」を割りあてる、既定のルール。
-   *   ・「色を変えて読み直す（next-read）」のときは、次の色へ進む
-   *     （赤→青→黄…と、あたらしい色で読み直したいので）。
-   *   ・「STARTが変わる」「GOALが変わる」「STARTもGOALも変わる」は、
-   *     新しい道は前の道と重ならない場所を選ぶ構造になっているので、
-   *     同じ色のままでも紙の上で見分けがつかなくなる心配が無い。
-   *     場面が切りかわる区切りとして、既定では赤にもどす
-   *     （直前がすでに赤なら、それはそのまま「前の色を引き継ぐ」になる）。
-   *   ・「線を消す（erase-wall）」だけは例外。近道は前の道の一部を
-   *     かならず使いまわす構造になっている（そうでなければ「近道」にならない）ので、
-   *     直前と同じ色のままだと前の段の文字と新しい段の文字が紙の上で見分けられない。
-   *     このときだけ、直前がすでに赤なら次の色に進める。
+   * 次の段の色の「たたき台」。ここでは とりあえずの1色を返すだけで、
+   * ほんとうに使う色は stageColors() が決める（使っていない色を優先する）。
+   *
+   * ★もとは「スタゴル・線けしでは赤にもどす」だった★
+   *   場面の区切りを色でも見せたかったのだが、これは見た目の都合でしかない。
+   *   ところが段の色は「文字が何色か」だけでなく「その段の文字を置けない場所」も決めていて、
+   *   同じ色の段どうしは おたがいの道をよけて置く必要がある。
+   *   「読み直す」と「線を消す」は前の道をほとんどそのまま通るので、
+   *   そこで赤にもどすと 1段めと3段めが同じ色になり、置き場所がほぼ残らなかった
+   *   （伊神さんの4段の例：20×20でも作れず。色を分けるだけで 0/8 → 8/8）。
+   *   いまは stageColors() が「まだ使っていない色」を優先するので、
+   *   ここが返す色は出発点にしかならない。
    */
   function nextAutoColor(prevColor, kind) {
     const prevIdx = Math.max(0, STAGE_COLORS.indexOf(prevColor));
@@ -188,10 +188,7 @@ MZ.packages = (function () {
     const st = stageParts(parts);
     const n = stageCount(parts);
     const override = (opts || {}).stageColor || {};
-    function pick(i, auto) {
-      const v = override[i];
-      return (v && STAGE_COLORS.indexOf(v) >= 0) ? v : auto;
-    }
+    const out = [];
     // ★「線を消す」段の色は、ぜったいに使い回さない★
     //   消す線の色は、その段の色（st[i] のときの sc[i]）になる。
     //   同じ色が2回出ると、盤面には赤い線が8本立つのに STEP は自分の4本しか消さない。
@@ -199,20 +196,49 @@ MZ.packages = (function () {
     //   途中の段が読めなくなる（＝紙のとおりに解くと解けない謎ができていた）。
     //   検証は消す線を key で指定して解くので、このズレをすり抜けていた。
     const usedErase = {};
-    function fixErase(i, color) {
-      if (st[i] !== 'erase-wall') return color;          // この段は線を消さない
-      let c = color;
-      for (let k = 0; k < STAGE_COLORS.length && usedErase[c]; k++) {
-        c = STAGE_COLORS[(STAGE_COLORS.indexOf(c) + 1) % STAGE_COLORS.length];
+    // ★道が入れかわっていない段どうしでは、色を使い回さない★
+    //   「読み直す」と「線を消す」は、前の道をほとんどそのまま通る。
+    //   ここで同じ色を2回使うと、あとの段は「前の同じ色の段の道を避けたマス」にしか
+    //   文字を置けないので、道はじゅうぶん長いのに置き場所が無くなる
+    //   （伊神さんの4段の例：20×20でも「離して置ける場所が足りません」になっていた）。
+    //   STARTやGOALが変わる段をまたいだら、道が別物になるので使い回してよい。
+    let usedHere = {};
+    // 使ったことのある色ぜんぶ。道が入れかわっていれば使い回してよいが、
+    // まだ使っていない色が残っているならそちらを選ぶ。同じ色の段が2つあると、
+    // その2段はおたがいの道をよけて文字を置かなければならず、作れないことが増える。
+    const usedAll = {};
+    function nextOf(c) { return STAGE_COLORS[(STAGE_COLORS.indexOf(c) + 1) % STAGE_COLORS.length]; }
+
+    function place(i, auto) {
+      const ov = override[i];
+      const hasOv = !!(ov && STAGE_COLORS.indexOf(ov) >= 0);
+      let c = hasOv ? ov : auto;
+      // 手で色を指定したときは、その色を尊重する（作りにくくなっても、指定どおりに出す）
+      if (!hasOv) {
+        // ① まだ一度も使っていない色があれば、それを使う
+        let c2 = c, found = false;
+        for (let k = 0; k < STAGE_COLORS.length; k++) {
+          if (!usedAll[c2]) { found = true; break; }
+          c2 = nextOf(c2);
+        }
+        if (found) c = c2;
+        // ② 色を使い切ったら、せめて「道が入れかわってから使っていない色」にする
+        else for (let k = 0; k < STAGE_COLORS.length && usedHere[c]; k++) c = nextOf(c);
       }
-      usedErase[c] = true;
-      return c;
+      // 消す線の色だけは、手で指定されていても必ず別の色にする（紙のとおりに解けなくなるため）
+      if (st[i] === 'erase-wall') {
+        for (let k = 0; k < STAGE_COLORS.length && usedErase[c]; k++) c = nextOf(c);
+        usedErase[c] = true;
+      }
+      usedHere[c] = true;
+      usedAll[c] = true;
+      out.push(c);
+      // 道が入れかわる段のあとは、色をまた使えるようにする
+      if (st[i] === 'move-start' || st[i] === 'move-goal' || st[i] === 'move-both') usedHere = {};
     }
-    const out = [fixErase(0, pick(0, STAGE_COLORS[0]))];
-    st.forEach(function (kind) {
-      const i = out.length;
-      out.push(fixErase(i, pick(i, nextAutoColor(out[out.length - 1], kind))));
-    });
+
+    place(0, STAGE_COLORS[0]);
+    st.forEach(function (kind) { place(out.length, nextAutoColor(out[out.length - 1], kind)); });
     return out.slice(0, n);
   }
 
@@ -987,7 +1013,7 @@ MZ.packages = (function () {
     const n = stageCount(parts);
     const mode = readMode(parts);           // ぜんぶ読む／その色だけ／その色いがい
     const color = (mode !== 'all');
-    const sc = stageColors(parts, rc.opts); // 段ごとの読む色（既定は「読み直す」で進む・「スタゴル/線けし」で赤にもどる。個別上書き可）
+    const sc = stageColors(parts, rc.opts); // 段ごとの読む色（既定は「まだ使っていない色」を優先。個別上書き可）
     const noise = noiseColor(mode, parts, rc.opts);  // ルートの上にまく「読まれない文字」の色
     const needMust = parts.indexOf('must-circles') >= 0;
     const needAvoid = parts.indexOf('avoid-cross') >= 0;
@@ -999,7 +1025,15 @@ MZ.packages = (function () {
      * 1段めの道は req[0] マス以上ないと、そのあとの段が必ず行きづまる。 */
     const req = stageNeeds(st, texts);
     const baseLoops = (needMust || needAvoid) ? 'none' : rc.loops;
-    const minCells = req[0] + (color ? 4 : 2);
+    // ★同じ大きさのままでも、道を長くすれば通ることがある★
+    //   文字を離して置ける余地は「盤の広さ」ではなく「道の長さ」で決まる。
+    //   伊神さんの指摘：「本当に無理なの？ルートを調節すればいけないか？」
+    //   実測：5段・読み直し4回（1本の道に46文字）は、道を10マス長くしただけで 1/8 → 8/8。
+    //   build() が、同じ大きさで何度かだめなら extraRoute を増やして呼び直す。
+    //   盤に収まらない長さを求めても種が見つからないだけなので、マス数の半分で頭打ちにする。
+    const want = req[0] + (color ? 4 : 2);
+    const minCells = Math.max(want, Math.min(want + (rc.extraRoute || 0),
+                                             Math.floor(rc.rows * rc.cols * 0.5)));
     const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
     if (!s) return stop('seed');
     const maze = s.maze;
@@ -1862,7 +1896,10 @@ MZ.packages = (function () {
       for (let t = 0; t < attempts; t++) {
         totalTries++;
         let out = null;
-        try { out = makeOne(tryRc, diag); }
+        // 同じ大きさで何度もだめなときは、道じたいを長くしてためす（10マスずつ・40まで）。
+        // 大きさを変えずにすむので速く、盤が上限に達したあとの最後の手にもなる。
+        const tryRc2 = Object.assign({}, tryRc, { extraRoute: Math.min(40, Math.floor(t / 4) * 10) });
+        try { out = makeOne(tryRc2, diag); }
         catch (e) {
           out = null;
           // ここで握りつぶすと、プログラムの不具合が「作れませんでした」に化けて
@@ -1916,7 +1953,8 @@ MZ.packages = (function () {
     const grew = ((rows > rc.rows || cols > rc.cols)
         ? '迷路は ' + rc.rows + '×' + rc.cols + ' から ' + size + ' まで自動で大きくして、' + tries + '回ためしました。'
         : size + ' で ' + tries + '回ためしました。')
-      + (maxed ? '迷路の大きさは上限（' + MAX_SIZE + '×' + MAX_SIZE + '）まで試しています。' : '');
+      + (maxed ? '迷路の大きさは上限（' + MAX_SIZE + '×' + MAX_SIZE + '）まで試しています。' : '')
+      + '道の長さも 40マスぶん まで自動で伸ばして試しています。';
     // 「大きくする」は、まだ上限に届いていないときだけ直し方として出す
     const nx = Math.min(MAX_SIZE, Math.max(rows, cols) + 2);
     const bigger = maxed ? null
@@ -1954,8 +1992,14 @@ MZ.packages = (function () {
 
     } else if (top.indexOf('place:') === 0) {
       const i = +top.split(':')[1];
-      what = stageWord(rc, i, true) + ' を、ほかの段の文字とぶつからないように離して置ける場所が足りませんでした。';
-      how = [stageWord(rc, i) + 'を短くする',
+      const sameColor = (function () {
+        const sc = stageColors(rc.parts, rc.opts);
+        return sc.filter(function (c, k) { return k !== i && c === sc[i]; }).length > 0;
+      })();
+      what = stageWord(rc, i, true) + ' を、ほかの段の文字とぶつからないように離して置ける場所が足りませんでした。'
+           + (sameColor ? 'この段は<b>ほかの段と同じ色</b>なので、その段の道の上には置けません。' : '');
+      how = [sameColor ? '②の「色：」欄で、' + stageWord(rc, i) + 'に<b>ほかの段と別の色</b>を選ぶ' : null,
+             stageWord(rc, i) + 'を短くする',
              '「もっと細かく決める」の<b>まわりの文字の量</b>を「少なめ」にする',
              bigger];
 

@@ -482,6 +482,10 @@
           <button id="btnZoomOut" class="zoom" title="小さく">－</button>
           <button id="btnZoomIn" class="zoom" title="大きく">＋</button>
           <button id="btnFit" class="zoom" title="迷路の全体が入る大きさにする">全体</button>
+          <span class="sep"></span>
+          <!-- 手で壁を作ったあと、いまの盤面の最短ルートをその場で確かめるためのボタン。
+               もう一度押すと消える。壁を直すたびに引き直される。 -->
+          <button id="btnShortest" class="zoom" title="いまの壁で、STARTからGOALへのいちばん短い道を出す（もう一度押すと消えます）">🔎 最短ルート</button>
         </div>
         <!-- 「きごう」を選んだときだけ出る（ふだんは出しっぱなしにしない） -->
         <div class="toolbar toolbar-sub" id="symbolBar" hidden>
@@ -646,7 +650,10 @@
                 <button id="btnRouteToSG">ルートの両はしをSTART/GOALにする</button>
               </div>
               <div class="row"><label><input type="checkbox" id="ckShowRoute" checked> 正解ルートを画面に出す</label></div>
-              <div class="row"><label><input type="checkbox" id="ckShowShortest"> 今の最短ルートを出す</label></div>
+              <p class="hint">
+                <b>今の最短ルート</b>を見たいときは、盤面の上のツールバーの
+                <b>「🔎 最短ルート」</b>を押してください（手で壁を直すたびに引き直されます）。
+              </p>
             </div>
           </details>
 

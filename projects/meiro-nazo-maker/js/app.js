@@ -31,7 +31,8 @@
     dummyColors: ['black'],
     player: { index: 0, showAnswer: false, screens: [] },
     openId: null,
-    pngInstBase: null       // #inPngInst に最後に自動で入れた指示文（変わったときだけ上書きする）
+    pngInstBase: null,      // #inPngInst に最後に自動で入れた指示文（変わったときだけ上書きする）
+    showShortest: false     // ツールバーの「🔎 最短ルート」を押しているか（設定はここ1か所だけ）
   };
 
   /* =======================================================================
@@ -228,7 +229,7 @@
     const dh = $('#drawHelp');
     if (dh) dh.hidden = (name !== 'route');
     if (name === 'route') {
-      $('#ckShowShortest').checked = false;
+      setShortest(false);          // ルートを描くときは、じゃまなので消す
       $('#ckShowRoute').checked = true;
       updateRouteView();
     }
@@ -414,7 +415,9 @@
       afterEdit();
     });
     $('#ckShowRoute').addEventListener('change', updateRouteView);
-    $('#ckShowShortest').addEventListener('change', updateRouteView);
+    // 手で壁を作ったあと、いまの最短ルートがどれかを確かめるボタン（伊神さんの要望）。
+    // パネルの奥のチェックだと、壁を直しながら見るには遠かったので、盤面の上に出す。
+    $('#btnShortest').addEventListener('click', function () { setShortest(!A.showShortest); });
 
     /* ---- ③ 文字を置く ---- */
     $('#btnScatter').addEventListener('click', scatter);
@@ -590,6 +593,21 @@
     ['#btnZoomIn', '#btnZoomOut', '#btnFit'].forEach(function (id) { const e = $(id); if (e) e.disabled = false; });
   }
 
+  /**
+   * 「🔎 最短ルート」の入り切り。
+   * 設定は A.showShortest ひとつだけに持ち、ボタンの見た目もここでそろえる
+   * （同じ意味の設定を2か所に持つと、片方だけ直して食いちがう）。
+   */
+  function setShortest(on) {
+    A.showShortest = !!on;
+    const b = $('#btnShortest');
+    if (b) {
+      b.classList.toggle('on', A.showShortest);
+      b.setAttribute('aria-pressed', A.showShortest ? 'true' : 'false');
+    }
+    updateRouteView();
+  }
+
   /** 表示する盤面を決める（設計図か、選んだSTEPの結果か） */
   function updateRouteView() {
     const opts = ED.state.renderOpts;
@@ -603,7 +621,7 @@
     }
     ED.clearDisplay();
     $('#viewBadge').className = 'viewbadge';
-    if ($('#ckShowShortest').checked) {
+    if (A.showShortest) {
       const s = E.solve(A.maze, { useAvoid: true });
       opts.routePath = s.ok ? s.path : null;
       opts.routePaths = null;

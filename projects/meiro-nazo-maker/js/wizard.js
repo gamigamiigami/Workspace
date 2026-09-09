@@ -128,8 +128,9 @@
         return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
                  'move-both': 'STARTもGOALも変わる', 'next-read': '読み方を変えて読み直す' }[k] || k;
       });
-      // 既定では「読み方を変えて読み直す」で次の色へ、「線を消す/START・GOALが変わる」で赤にもどる
-      // （直前がすでに赤なら次の色）。②の欄でこの段だけ個別に色を変えることもできる。
+      // 既定では「まだ使っていない色」から順に使う（同じ色の段どうしは、おたがいの道を
+      // よけて文字を置くことになり、置き場所が足りなくなるため）。
+      // ②の欄でこの段だけ個別に色を変えることもできる。
       const sc = P.stageColors(W.parts, W.opts);
       const colorWords = sc.map(function (c) { return M.COLORS[c].label; });
       info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
