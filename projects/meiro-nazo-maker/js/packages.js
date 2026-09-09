@@ -30,6 +30,11 @@ MZ.packages = (function () {
    * （そのぶん avoidSet は「直前の段」だけでなく「同じ色を使った段すべて」を見て、
    *   一周して同じ色に戻っても前の段の文字を拾わないようにしている）。 */
   const STAGE_COLORS = ['red', 'blue', 'yellow', 'green', 'purple'];
+  /* 同じ色を使ってよい段の数の上限。
+     同じ色の段は、おたがいの道をよけて文字を置かなければならない。
+     2段までなら作れるが、3段になると急に作れなくなる
+     （実測：5段スタゴル2回＋線けしで、3段が赤だと 3/12・42秒。2段までなら 12/12・7秒）。 */
+  const SAME_COLOR_MAX = 2;
   /* 段の上限。STARTやGOALを変える段は色を使い回せるので、色の数より多く積める */
   const MAX_STAGES = 7;
   /* 自動作成が作れる盤面の大きさ。MZ.opt.RANGE と index.html の min/max もこれに合わせる */
@@ -161,85 +166,81 @@ MZ.packages = (function () {
   function usesColor(parts) { return readMode(parts) !== 'all'; }
 
   /**
-   * 次の段の色の「たたき台」。ここでは とりあえずの1色を返すだけで、
-   * ほんとうに使う色は stageColors() が決める（使っていない色を優先する）。
-   *
-   * ★もとは「スタゴル・線けしでは赤にもどす」だった★
-   *   場面の区切りを色でも見せたかったのだが、これは見た目の都合でしかない。
-   *   ところが段の色は「文字が何色か」だけでなく「その段の文字を置けない場所」も決めていて、
-   *   同じ色の段どうしは おたがいの道をよけて置く必要がある。
-   *   「読み直す」と「線を消す」は前の道をほとんどそのまま通るので、
-   *   そこで赤にもどすと 1段めと3段めが同じ色になり、置き場所がほぼ残らなかった
-   *   （伊神さんの4段の例：20×20でも作れず。色を分けるだけで 0/8 → 8/8）。
-   *   いまは stageColors() が「まだ使っていない色」を優先するので、
-   *   ここが返す色は出発点にしかならない。
+   * 段ごとに「読む色」を割りあてる、既定のルール（伊神さんが決めたもの）。
+   *   ・「色でしぼって読む（next-read）」で読み直す段 … **次の色へ進む**（赤→青→黄→緑→紫）
+   *   ・「線を消す」「STARTが変わる」「GOALが変わる」「STARTもGOALも変わる」… **赤にもどす**
+   * 赤にもどすのは「ここで場面が切りかわった」を色でも表すため。
    */
   function nextAutoColor(prevColor, kind) {
     const prevIdx = Math.max(0, STAGE_COLORS.indexOf(prevColor));
     if (kind === 'next-read') return STAGE_COLORS[Math.min(prevIdx + 1, STAGE_COLORS.length - 1)];
-    if (kind === 'erase-wall' && prevIdx === 0) return STAGE_COLORS[Math.min(prevIdx + 1, STAGE_COLORS.length - 1)];
     return STAGE_COLORS[0];
   }
+
   /**
-   * 段ごとの色。opts.stageColor[段番号] があれば、既定のルールより優先してそれを使う
-   * （場面ごとに色を変えたいときの個別指定）。
+   * 段ごとの色。上の既定ルールで決めたあと、**そのままでは謎が成り立たない場合だけ**
+   * 別の色にずらす。ずらした段は returned.forced に入るので、画面で理由を出せる。
+   *
+   * ★ずらさなければならない2つの場合★
+   *
+   * 1) 「線を消す」段どうしが同じ色（`usedErase`）
+   *    消す線の色は、その段の色になる。同じ色が2回出ると、盤面には赤い線が8本立つのに
+   *    STEPは自分の4本しか消さない。ところが問題用紙の指示は「あかいせんをけせ」なので、
+   *    解く人は8本ぜんぶ消してしまい、途中の段が読めなくなる。
+   *
+   * 2) 道が入れかわっていないのに、前の同じ色の段がある（`usedHere`）
+   *    段の色は「文字が何色か」だけでなく「**その段の文字を置けない場所**」も決める。
+   *    同じ色の段が2つあると、その2段はおたがいの道をよけて文字を置かなければならない
+   *    （そうしないと、片方を読むときにもう片方の文字までいっしょに読めてしまう）。
+   *    「読み直す」と「線を消す」は前の道をほとんどそのまま通るので、
+   *    そこで同じ色を2回使うと、置ける場所がほぼ残らず作れない。
+   *    STARTやGOALが変わる段をまたいだら道が別物になるので、そこで赤にもどせる
+   *    （`usedHere` をここでまっさらにする）。
+   *
+   * opts.stageColor[段番号] があれば、既定より優先してその色を使う。
+   * ただし 1) だけは、手で指定されていても直す（紙のとおりに解けなくなるため）。
    */
   function stageColors(parts, opts) {
     const st = stageParts(parts);
     const n = stageCount(parts);
     const override = (opts || {}).stageColor || {};
     const out = [];
-    // ★「線を消す」段の色は、ぜったいに使い回さない★
-    //   消す線の色は、その段の色（st[i] のときの sc[i]）になる。
-    //   同じ色が2回出ると、盤面には赤い線が8本立つのに STEP は自分の4本しか消さない。
-    //   ところが問題用紙の指示は「あかいせんをけせ」なので、解く人は8本ぜんぶ消してしまい、
-    //   途中の段が読めなくなる（＝紙のとおりに解くと解けない謎ができていた）。
-    //   検証は消す線を key で指定して解くので、このズレをすり抜けていた。
-    const usedErase = {};
-    // ★道が入れかわっていない段どうしでは、色を使い回さない★
-    //   「読み直す」と「線を消す」は、前の道をほとんどそのまま通る。
-    //   ここで同じ色を2回使うと、あとの段は「前の同じ色の段の道を避けたマス」にしか
-    //   文字を置けないので、道はじゅうぶん長いのに置き場所が無くなる
-    //   （伊神さんの4段の例：20×20でも「離して置ける場所が足りません」になっていた）。
-    //   STARTやGOALが変わる段をまたいだら、道が別物になるので使い回してよい。
-    let usedHere = {};
-    // 使ったことのある色ぜんぶ。道が入れかわっていれば使い回してよいが、
-    // まだ使っていない色が残っているならそちらを選ぶ。同じ色の段が2つあると、
-    // その2段はおたがいの道をよけて文字を置かなければならず、作れないことが増える。
-    const usedAll = {};
+    const forced = {};        // ずらした段 → { want: 本来の色, got: 実際の色, why: 理由 }
+    const usedErase = {};     // 「線を消す」段が使った色
+    let usedHere = {};        // 道が入れかわってから使った色
+    const count = {};         // 色ごとに、いくつの段が使っているか
     function nextOf(c) { return STAGE_COLORS[(STAGE_COLORS.indexOf(c) + 1) % STAGE_COLORS.length]; }
+    /** その色をこの段で使えるか（道が同じ段とかぶらない・同じ色は2段まで） */
+    function free(c) { return !usedHere[c] && (count[c] || 0) < SAME_COLOR_MAX; }
 
     function place(i, auto) {
       const ov = override[i];
       const hasOv = !!(ov && STAGE_COLORS.indexOf(ov) >= 0);
-      let c = hasOv ? ov : auto;
+      const want = hasOv ? ov : auto;
+      let c = want, why = '';
       // 手で色を指定したときは、その色を尊重する（作りにくくなっても、指定どおりに出す）
-      if (!hasOv) {
-        // ① まだ一度も使っていない色があれば、それを使う
-        let c2 = c, found = false;
-        for (let k = 0; k < STAGE_COLORS.length; k++) {
-          if (!usedAll[c2]) { found = true; break; }
-          c2 = nextOf(c2);
-        }
-        if (found) c = c2;
-        // ② 色を使い切ったら、せめて「道が入れかわってから使っていない色」にする
-        else for (let k = 0; k < STAGE_COLORS.length && usedHere[c]; k++) c = nextOf(c);
+      if (!hasOv && !free(c)) {
+        why = usedHere[c] ? 'route' : 'many';
+        for (let k = 0; k < STAGE_COLORS.length && !free(c); k++) c = nextOf(c);
       }
-      // 消す線の色だけは、手で指定されていても必ず別の色にする（紙のとおりに解けなくなるため）
+      // 消す線の色だけは、手で指定されていても必ず別の色にする
       if (st[i] === 'erase-wall') {
-        for (let k = 0; k < STAGE_COLORS.length && usedErase[c]; k++) c = nextOf(c);
+        if (usedErase[c]) { for (let k = 0; k < STAGE_COLORS.length && usedErase[c]; k++) c = nextOf(c); why = 'erase'; }
         usedErase[c] = true;
       }
+      if (c !== want) forced[i] = { want: want, got: c, why: why };
       usedHere[c] = true;
-      usedAll[c] = true;
+      count[c] = (count[c] || 0) + 1;
       out.push(c);
-      // 道が入れかわる段のあとは、色をまた使えるようにする
+      // 道が入れかわる段のあとは、色をまた使えるようにする（＝ここで赤にもどれる）
       if (st[i] === 'move-start' || st[i] === 'move-goal' || st[i] === 'move-both') usedHere = {};
     }
 
     place(0, STAGE_COLORS[0]);
     st.forEach(function (kind) { place(out.length, nextAutoColor(out[out.length - 1], kind)); });
-    return out.slice(0, n);
+    const sc = out.slice(0, n);
+    sc.forced = forced;       // 配列に添えて返す（呼び出し側は今までどおり配列として使える）
+    return sc;
   }
 
   /**
@@ -460,7 +461,10 @@ MZ.packages = (function () {
       const maze = M.createMaze(rc.rows, rc.cols);
       const start = { r: 0, c: 0 };
       const goal = pickGoalCell(rc, maze, t);
-      const route = randomPath(maze, start, goal, minCells);
+      // 上限は「必要な長さ＋2割（すくなくとも6マス）」。
+      // ぴったりにすると作れないことが増えるが、青天井にすると遠回りになりすぎる。
+      const route = randomPath(maze, start, goal, minCells,
+                               minCells + Math.max(6, Math.round(minCells * 0.2)));
       if (!route) continue;
 
       const gen = G.fromRoute(maze, route, { branchiness: LOOPS[rc.loops] || 0 });
@@ -493,12 +497,25 @@ MZ.packages = (function () {
   }
 
   /** ぐねぐね曲がった一本道をつくる（同じマスは2回通らない） */
-  function randomPath(maze, start, goal, minCells) {
+  /**
+   * START から GOAL まで、minCells マス以上の道をランダムに作る。
+   *
+   * ★maxCells（長さの上限）を入れた理由★
+   *   前は「minCells に届いたら、4回に3回はゴールへ近づく」だけだったので、
+   *   遠くまで行ってから帰ってくるぶん、必要な長さの2〜2.7倍になっていた
+   *   （5段の謎で 必要54マス に対して 実際101〜145マス）。
+   *   伊神さんの指摘：「かなり遠回りになってるから、もう少し短くするか、
+   *   文字数が少ないときにはもう少し短いルートを通るようにしてほしい」。
+   *   ・minCells に届いたら、10回に9回はゴールへ近づく（0.75 → 0.9）
+   *   ・maxCells に届いたら、ゴールへ近づく手しか選ばない（無ければ後戻り）
+   */
+  function randomPath(maze, start, goal, minCells, maxCells) {
     const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
     const path = [{ r: start.r, c: start.c }];
     const used = {};
     used[M.cellKey(start.r, start.c)] = true;
     const maxSteps = maze.rows * maze.cols * 30;
+    const dist = function (p) { return Math.abs(p.r - goal.r) + Math.abs(p.c - goal.c); };
 
     for (let step = 0; step < maxSteps; step++) {
       const cur = path[path.length - 1];
@@ -515,11 +532,12 @@ MZ.packages = (function () {
         const away = opts.filter(function (p) { return !(p.r === goal.r && p.c === goal.c); });
         if (away.length) opts = away;
       } else {
-        const near = opts.filter(function (p) {
-          return Math.abs(p.r - goal.r) + Math.abs(p.c - goal.c) <
-                 Math.abs(cur.r - goal.r) + Math.abs(cur.c - goal.c);
-        });
-        if (near.length && Math.random() < 0.75) opts = near;
+        const near = opts.filter(function (p) { return dist(p) < dist(cur); });
+        // ★「いま まっすぐ帰ったら何マスになるか」で判断する★
+        //   いまの長さだけで見ていると、上限に着いてからゴールまでの帰り道ぶん
+        //   （10マスなど）そのまま超えてしまう。実測で上限75に対して85マスになっていた。
+        if (maxCells && path.length + dist(cur) >= maxCells) opts = near;
+        else if (near.length && Math.random() < 0.9) opts = near;
       }
       if (!opts.length) {
         const dead = path.pop();
@@ -1032,8 +1050,8 @@ MZ.packages = (function () {
     //   build() が、同じ大きさで何度かだめなら extraRoute を増やして呼び直す。
     //   盤に収まらない長さを求めても種が見つからないだけなので、マス数の半分で頭打ちにする。
     const want = req[0] + (color ? 4 : 2);
-    const minCells = Math.max(want, Math.min(want + (rc.extraRoute || 0),
-                                             Math.floor(rc.rows * rc.cols * 0.5)));
+    const minCells = Math.max(want, Math.min(Math.round(want * (1 + (rc.extraRatio || 0))),
+                                             Math.floor(rc.rows * rc.cols * 0.45)));
     const s = seed(Object.assign({}, rc, { loops: baseLoops }), minCells);
     if (!s) return stop('seed');
     const maze = s.maze;
@@ -1052,11 +1070,36 @@ MZ.packages = (function () {
     const routes = [route1];
     const solveOpts = { useMust: needMust, useAvoid: true };
     const transitions = [];
-    // 「線を消す」段は盤面に壁を足すので、前の段の道が変わっていないか検算する。
-    // そのために、段ごとの盤面のひかえを取っておく（線を消す段があるときだけ）。
-    let lastErase = -1;
-    st.forEach(function (k, i) { if (k === 'erase-wall') lastErase = i; });
-    const boards = [];
+    /* ---- 前の段の道が変わっていないかを、いつでも確かめられるようにする ----
+     * 「線を消す」段は壁を足し、「STARTやGOALが変わる」段は遠回りを作るために
+     * 迷路を組み直す（rewireAsTree）。どちらも**盤面ぜんたい**を変えるので、
+     * 前の段の道まで変わってしまうことがある。
+     * そうなると、最後の読み合わせで「1段めの読みがちがう」で落ちるまで気づけず、
+     * せっかく作った迷路をまるごと捨てることになっていた
+     * （実測：4段スタゴル＋線けしの行きづまりの半分が これだった）。
+     * 段ごとに「解いたときの条件」だけ覚えておき、いまの盤面で解き直して確かめる。 */
+    const stageState = [];
+    function snapState() {
+      const dis = Object.keys(work.walls).filter(function (k) { return work.walls[k].disabled; });
+      return { disabled: dis,
+               starts: JSON.parse(JSON.stringify(work.starts)),
+               goals: JSON.parse(JSON.stringify(work.goals)) };
+    }
+    /** いまの盤面でも、0〜upto-1 段めの道がぜんぶそのままか */
+    function earlierRoutesKept(upto) {
+      for (let j = 0; j < upto; j++) {
+        const st2 = stageState[j];
+        if (!st2) return false;
+        const b = M.cloneBoard(work);
+        Object.keys(b.walls).forEach(function (k) { b.walls[k].disabled = false; });
+        st2.disabled.forEach(function (k) { if (b.walls[k]) b.walls[k].disabled = true; });
+        b.starts = JSON.parse(JSON.stringify(st2.starts));
+        b.goals = JSON.parse(JSON.stringify(st2.goals));
+        const res = E.solve(b, solveOpts);
+        if (!res.ok || res.count !== 1 || !E.samePath(res.path, routes[j])) return false;
+      }
+      return true;
+    }
     /** 2つの道について「みじかくなる幅」と「新しく通るマス」を数える */
     function eraseEffect(beforePath, afterPath) {
       const b = uniqueCells(beforePath), a = uniqueCells(afterPath);
@@ -1070,21 +1113,9 @@ MZ.packages = (function () {
       const e = eraseEffect(beforePath, afterPath);
       return e.gain >= E.MARGIN_GOOD && e.fresh >= SHORTCUT_MIN_FRESH;
     }
-    /** 壁の足し引きをしても、前の段の道がぜんぶそのままか */
-    function earlierRoutesOk(changes, upto) {
-      for (let j = 0; j < upto; j++) {
-        const b = boards[j];
-        if (!b) return false;
-        const undo = applyWallChanges(b, changes);
-        const res = E.solve(b, solveOpts);
-        undoWallChanges(b, undo);
-        if (!res.ok || res.count !== 1 || !E.samePath(res.path, routes[j])) return false;
-      }
-      return true;
-    }
     let moveCount = 0;   // STARTGOALの変更が何回めか（★☆→■□→▲△→◆◇ と目印を変える）
     for (let i = 0; i < st.length; i++) {
-      if (i < lastErase) boards[i] = M.cloneBoard(work);   // routes[i] を解いたときの盤面
+      stageState[i] = snapState();      // routes[i] を解いたときの条件
       // 次の段の道に要るマス数。うしろの段ぶんも線を消して短くなるぶんも
       // stageNeeds で織りこみ済みなので、ここではその値を渡すだけでよい。
       const nextNeed = req[i + 1];
@@ -1106,7 +1137,7 @@ MZ.packages = (function () {
         // まず「前の道をふさいで遠回りにする」やり方（必ず道が変わる）。
         // 場所が取れなかったときだけ、いまある近道をさがすやり方に落とす。
         out = forceDetour(maze, work, routes[i], sc[i], solveOpts, nextNeed, function (changes, newPath) {
-          if (!earlierRoutesOk(changes, i)) return false;
+          if (!earlierRoutesKept(i)) return false;
           // ★前の段も「線を消す」だったときの落とし穴★
           //   ここで足した壁は盤面の最初からあるので、前の段で線を消したあとの道も
           //   この遠回りに変わる。そのままだと、前の段は「線を消しても道が変わらない」
@@ -1118,9 +1149,16 @@ MZ.packages = (function () {
         });
         if (!out) out = doEraseWall(maze, work, routes[i], sc[i], solveOpts, nextNeed);
       }
-      if (st[i] === 'move-start') out = doMoveStart(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
-      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
-      if (st[i] === 'move-both') out = doMoveBoth(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++));
+      // ★i+1 まで（＝この段の道もふくめて）確かめる★
+      //   「STARTやGOALが変わる」段は、いまの段の道（routes[i]）から出発して
+      //   新しい道を作る。遠回りを作るときに迷路を組み直すので、
+      //   いまの段の道そのものが変わってしまうことがある。
+      //   i までにしていたころは、1段めの読みがちがう（read:0）で
+      //   作り直しになるのが行きづまりの半分を占めていた。
+      const keepEarlier = function () { return earlierRoutesKept(i + 1); };
+      if (st[i] === 'move-start') out = doMoveStart(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++), keepEarlier);
+      if (st[i] === 'move-goal') out = doMoveGoal(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++), keepEarlier);
+      if (st[i] === 'move-both') out = doMoveBoth(maze, work, priorRoute, nc, solveOpts, nextNeed, ownNeed, markerFor(moveCount++), keepEarlier);
       if (st[i] === 'next-read') {
         // 盤面は変えない。同じ道を、次の色でもう一度読むだけ
         out = { kind: 'next-read', color: nc, path: routes[i] };
@@ -1699,12 +1737,17 @@ MZ.packages = (function () {
    * すでに壁を色つき（線を消すギミック使用ずみ）にしている迷路では、
    * 壁の構造が maze と work とでずれてしまうおそれがあるので試さない。
    */
-  function tryLengthenForRoom(maze, work, best, onRoute, ownNeed) {
+  function tryLengthenForRoom(maze, work, best, onRoute, ownNeed, keepEarlier) {
     if (best.score >= ownNeed) return best;
     if (Object.keys(work.walls).some(function (k) { return work.walls[k].color && work.walls[k].color !== 'black'; })) return best;
+    // ★遠回りを作ると、迷路ぜんたいが組み直される（rewireAsTree）★
+    //   そのままだと前の段の道まで変わってしまい、最後の読み合わせで落ちて
+    //   迷路をまるごと捨てることになる。ここで前の段の道を確かめ、
+    //   変わってしまう案は採用しない（lengthenRoute が自動でもとにもどす）。
     const res = G.lengthenRoute(work, best.res.path, { avoidSet: onRoute, tries: 200,
       accept: function (m, newRoute) {
-        return uniqueCells(newRoute).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length >= ownNeed;
+        if (uniqueCells(newRoute).filter(function (p) { return !onRoute[M.cellKey(p.r, p.c)]; }).length < ownNeed) return false;
+        return keepEarlier ? keepEarlier() : true;
       } });
     if (!res.ok) return best;
     maze.walls = JSON.parse(JSON.stringify(work.walls));
@@ -1713,7 +1756,7 @@ MZ.packages = (function () {
   }
 
   /** STARTを★（複数回めは■▲◆）に変えて次の段へ */
-  function doMoveStart(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+  function doMoveStart(maze, work, route, color, solveOpts, needCells, ownNeed, marker, keepEarlier) {
     const sym = (marker || MARKER_SETS[0]).start;
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
@@ -1730,14 +1773,14 @@ MZ.packages = (function () {
     // 迂回路を試す前に候補のSTARTへ動かしておく必要がある
     work.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
     work.starts = [M.makeStart(p.r, p.c)];
-    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed, keepEarlier);
     if (best.score < ownNeed) return null;
     maze.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
     return { kind: 'move-start', color: color, path: best.res.path, star: p, startSymbol: sym };
   }
 
   /** GOALを☆（複数回めは□△◇）に変えて次の段へ */
-  function doMoveGoal(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+  function doMoveGoal(maze, work, route, color, solveOpts, needCells, ownNeed, marker, keepEarlier) {
     const sym = (marker || MARKER_SETS[0]).goal;
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
@@ -1752,14 +1795,14 @@ MZ.packages = (function () {
     const p = { r: best.r, c: best.c };
     work.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
     work.goals = [M.makeGoal(p.r, p.c)];
-    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed, keepEarlier);
     if (best.score < ownNeed) return null;
     maze.elements.push(M.makeElement(p.r, p.c, sym, { color: color }));
     return { kind: 'move-goal', color: color, path: best.res.path, goal: p, goalSymbol: sym };
   }
 
   /** STARTもGOALも変えて次の段へ（★から☆へ。複数回めは■→□など） */
-  function doMoveBoth(maze, work, route, color, solveOpts, needCells, ownNeed, marker) {
+  function doMoveBoth(maze, work, route, color, solveOpts, needCells, ownNeed, marker, keepEarlier) {
     const mk = marker || MARKER_SETS[0];
     const onRoute = {};
     route.forEach(function (p) { onRoute[M.cellKey(p.r, p.c)] = true; });
@@ -1804,7 +1847,7 @@ MZ.packages = (function () {
     work.elements.push(M.makeElement(b.r, b.c, mk.goal, { color: color }));
     work.starts = [M.makeStart(a.r, a.c)];
     work.goals = [M.makeGoal(b.r, b.c)];
-    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed);
+    best = tryLengthenForRoom(maze, work, best, onRoute, ownNeed, keepEarlier);
     if (best.score < ownNeed) return null;
     maze.elements.push(M.makeElement(a.r, a.c, mk.start, { color: color }));
     maze.elements.push(M.makeElement(b.r, b.c, mk.goal, { color: color }));
@@ -1876,6 +1919,21 @@ MZ.packages = (function () {
    * 指定の大きさで作れなければ、盤面を少しずつ大きくしながら作り直す。
    * 大きさは自動で決めてよいとのことなので、確認なしで広げる。
    */
+  /**
+   * 行きづまりの内わけを見て、「道が短くて置き場所が足りない」のかを決める。
+   * place（離して置けない）と read（ほかの段の文字がまざる）は、道が長くなれば解ける。
+   * seed（種が見つからない）や stage（START/GOALや近道の置き場所）は、のばしても効かない。
+   */
+  function roomShort(diag) {
+    let room = 0, other = 0;
+    Object.keys(diag).forEach(function (k) {
+      if (k === 'errorMsg' || k === 'error') return;
+      if (k.indexOf('place:') === 0 || k.indexOf('read:') === 0) room += diag[k];
+      else other += diag[k];
+    });
+    return room > 0 && room >= other;
+  }
+
   function build(recipe) {
     const rc = defaults(recipe);
     const bad = checkRecipe(rc);
@@ -1896,9 +1954,14 @@ MZ.packages = (function () {
       for (let t = 0; t < attempts; t++) {
         totalTries++;
         let out = null;
-        // 同じ大きさで何度もだめなときは、道じたいを長くしてためす（10マスずつ・40まで）。
-        // 大きさを変えずにすむので速く、盤が上限に達したあとの最後の手にもなる。
-        const tryRc2 = Object.assign({}, tryRc, { extraRoute: Math.min(40, Math.floor(t / 4) * 10) });
+        // 同じ大きさで何度もだめなときは、道じたいを長くしてためす。
+        // ★のばすのは「置き場所が足りない」で行きづまっているときだけ★
+        //   STARTやGOALの置き場所が見つからない系では、のばしても効かないのに
+        //   1回が重くなる（3段スタゴル2回で 8.0秒 → 19.9秒 になっていた）。
+        // ★のばし方はゆっくり★ 必要な長さの1割ずつ・6割まで。
+        //   一気にのばすと、作れはするが必要の2倍以上の遠回りな道になってしまう
+        //   （伊神さんの指摘：「かなり遠回りになってる」）。
+        const tryRc2 = Object.assign({}, tryRc, { extraRatio: roomShort(diag) ? Math.min(0.6, Math.floor(t / 5) * 0.1) : 0 });
         try { out = makeOne(tryRc2, diag); }
         catch (e) {
           out = null;

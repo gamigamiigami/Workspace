@@ -128,13 +128,29 @@
         return { 'erase-wall': '線を消す', 'move-start': 'STARTが変わる', 'move-goal': 'GOALが変わる',
                  'move-both': 'STARTもGOALも変わる', 'next-read': '読み方を変えて読み直す' }[k] || k;
       });
-      // 既定では「まだ使っていない色」から順に使う（同じ色の段どうしは、おたがいの道を
-      // よけて文字を置くことになり、置き場所が足りなくなるため）。
+      // 既定：読み直す段は次の色へ、線を消す・START/GOALが変わる段は赤にもどす。
+      // ただし、赤にもどすと「道がほとんど同じ前の段」と同じ色になってしまうときは、
+      // そのままでは文字を置けないので別の色にずらす（sc.forced に理由が入る）。
       // ②の欄でこの段だけ個別に色を変えることもできる。
       const sc = P.stageColors(W.parts, W.opts);
       const colorWords = sc.map(function (c) { return M.COLORS[c].label; });
+      const shifted = Object.keys(sc.forced || {}).map(Number).filter(function (i) {
+        return sc.forced[i].want === 'red';
+      });
       info.textContent = n + '段の謎になります' + (how.length ? '（' + how.join(' → ') + '）' : '') + '。' +
         (colorForced ? '文字の色は ' + colorWords.join(' → ') + ' の順です（②の欄で段ごとに変えられます）。' : '');
+      // 赤にもどせなかった段があるときは、その理由を1行で出す。
+      // 出さないと「勝手に色が変わっている」ように見える（伊神さんの指摘）。
+      const note = $('#stageColorNote');
+      if (note) {
+        note.hidden = !(colorForced && shifted.length);
+        if (!note.hidden) {
+          note.innerHTML = '※ ' + shifted.map(function (i) { return (i + 1) + '段め'; }).join('・') +
+            ' は<b>赤にもどせません</b>でした。線を消しても道はほとんど同じままなので、' +
+            '前の赤い段と同じ色にすると、その段を読むときに前の段の文字までいっしょに読めてしまいます。' +
+            'ここだけ次の色にずらしています（②の「色：」欄で変えることもできます）。';
+        }
+      }
     }
     $('#btnGenerate').disabled = false;
   }

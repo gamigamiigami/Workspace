@@ -379,6 +379,10 @@
         最初から自分で道を描きたいときは、下の「② 最初から自分で作る」を押してください。</p>
       <div class="pack-grid" id="packGrid"></div>
       <p class="hint" id="stageInfo" style="margin-top:10px"></p>
+      <!-- 「線を消す段では赤にもどす」が使えなかったときだけ、その理由を出す。
+           出さないと「勝手に色が変わっている」ように見える。 -->
+      <p class="hint" id="stageColorNote" style="margin-top:6px;color:#7c5a00;background:#fff8e6;
+         border:1px solid #ffd88a;border-radius:8px;padding:8px 10px" hidden></p>
       <div class="row" style="margin-top:10px">
         <button id="btnDrawSelf" style="flex:1">✏️ 最初から自分で作る（下の盤面に道を描く）</button>
       </div>
