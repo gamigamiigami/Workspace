@@ -317,6 +317,9 @@ MZ.packages = (function () {
       const cur = readIds(parts);
       if (cur.length && cur[0] !== id) return false;
     }
+    // 「線を消す」段は線の色がぜんぶ違う必要がある（紙の指示が「あかいせんをけせ」なので、
+    // 同じ色が2回あると解く人がほかの段の線まで消してしまう）。色は5つしか無いので5回まで
+    if (id === 'erase-wall' && countOf(parts, id) >= STAGE_COLORS.length) return false;
     if (stageCount(parts) >= MAX_STAGES) {
       // 段が上限。ただし読み方の1個目は段を増やさないので足せる
       if (p.kind === 'read' && !readIds(parts).length) return true;
@@ -335,6 +338,9 @@ MZ.packages = (function () {
       if (cur.length && cur[0] !== id) {
         return '「' + part(cur[0]).name + '」と反対の言い方なので、いっしょには選べません（先にそちらを減らしてください）';
       }
+    }
+    if (id === 'erase-wall' && countOf(parts, id) >= STAGE_COLORS.length) {
+      return '「線を消す」は' + STAGE_COLORS.length + '回までです（消す線の色を段ごとに変えるので、色の数が上限です）';
     }
     return '段は' + MAX_STAGES + 'つまでです。ほかの しかけ を減らしてから選んでください';
   }
@@ -927,7 +933,7 @@ MZ.packages = (function () {
   }
 
   /** 本命の線に、消しても答えが変わらない「おとりの線」を足す */
-  function paintWalls(work, maze, realKeys, expectPath, decoys, color) {
+  function paintWalls(work, maze, realKeys, expectPath, decoys, color, solveOpts) {
     const chosen = realKeys.slice();
     const isReal = {};
     chosen.forEach(function (k) { isReal[k] = true; });
@@ -937,7 +943,8 @@ MZ.packages = (function () {
     for (let i = 0; i < keys.length && chosen.length < realKeys.length + decoys; i++) {
       const cand = chosen.concat([keys[i]]);
       cand.forEach(function (k) { work.walls[k].disabled = true; });
-      const res = E.solve(work, {});
+      // ○を通る／×を避ける謎では、その条件つきで解いた道と見くらべる（{} で解くと別の道になり、まぎれ線が1本も置けなかった）
+      const res = E.solve(work, solveOpts || {});
       const same = res.ok && res.count === 1 && E.samePath(res.path, expectPath) &&
                    E.routeMargin(work, res.path).margin >= E.MARGIN_GOOD;
       cand.forEach(function (k) { work.walls[k].disabled = false; });
@@ -1584,7 +1591,7 @@ MZ.packages = (function () {
       if (!key) continue;
       const before = tryChanges([{ key: key, op: 'close' }], key, false);
       if (before) {
-        const keys = paintWalls(work, maze, [key], route, 3, color);
+        const keys = paintWalls(work, maze, [key], route, 3, color, solveOpts);
         keys.forEach(function (k) { work.walls[k].disabled = true; });
         return { kind: 'erase-wall', color: color, path: route, keys: keys, beforePath: before };
       }
@@ -1626,7 +1633,7 @@ MZ.packages = (function () {
         changes.push({ key: blockKey, op: 'close' });
         const before = tryChanges(changes, blockKey, true);
         if (before) {
-          const keys = paintWalls(work, maze, [blockKey], route, 3, color);
+          const keys = paintWalls(work, maze, [blockKey], route, 3, color, solveOpts);
           keys.forEach(function (k) { work.walls[k].disabled = true; });
           return { kind: 'erase-wall', color: color, path: route, keys: keys, beforePath: before };
         }
@@ -1687,7 +1694,7 @@ MZ.packages = (function () {
     }
     if (!best) return null;
     const keys = paintWalls(work, maze, best.keys, best.res.path,
-                            Math.max(1, 4 - best.keys.length), color);
+                            Math.max(1, 4 - best.keys.length), color, solveOpts);
     keys.forEach(function (k) { work.walls[k].disabled = true; });
     return { kind: 'erase-wall', color: color, path: best.res.path, keys: keys };
   }
@@ -2035,7 +2042,7 @@ MZ.packages = (function () {
         ? '迷路は ' + rc.rows + '×' + rc.cols + ' から ' + size + ' まで自動で大きくして、' + tries + '回ためしました。'
         : size + ' で ' + tries + '回ためしました。')
       + (maxed ? '迷路の大きさは上限（' + MAX_SIZE + '×' + MAX_SIZE + '）まで試しています。' : '')
-      + '道の長さも 40マスぶん まで自動で伸ばして試しています。';
+      + '道の長さも、必要な長さの6割増しまで自動で伸ばして試しています。';
     // 「大きくする」は、まだ上限に届いていないときだけ直し方として出す
     const nx = Math.min(MAX_SIZE, Math.max(rows, cols) + 2);
     const bigger = maxed ? null
