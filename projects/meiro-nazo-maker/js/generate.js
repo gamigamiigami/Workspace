@@ -341,7 +341,11 @@ MZ.generate = (function () {
    *   ・しかけに使っている色つきの壁は閉じたまま
    * が同時に守れる。
    */
-  function rewireAsTree(maze, newRoute, extraOpen) {
+  /**
+   * @param keepEdges 新しいルート以外にも、必ず残したい通路の辺（前の段の道など）。
+   *                  いまは壁になっている辺（消した線）は渡さないこと。
+   */
+  function rewireAsTree(maze, newRoute, extraOpen, keepEdges) {
     const n = maze.rows * maze.cols;
     const idx = function (r, c) { return r * maze.cols + c; };
     const parent = new Int32Array(n);
@@ -368,6 +372,11 @@ MZ.generate = (function () {
       keep[key] = true;
       union(idx(newRoute[i].r, newRoute[i].c), idx(newRoute[i + 1].r, newRoute[i + 1].c));
     }
+    (keepEdges || []).forEach(function (key) {
+      const e = M.edgeCells(key);
+      keep[key] = true;
+      union(idx(e.a.r, e.a.c), idx(e.b.r, e.b.c));
+    });
     // ② 残りは、輪っかにならないものだけ残す
     const rest = shuffle(Object.keys(open).filter(function (k) { return !keep[k]; }));
     rest.forEach(function (key) {
@@ -518,6 +527,7 @@ MZ.generate = (function () {
   return {
     checkRoute: checkRoute,
     lengthenRoute: lengthenRoute,
+    rewireAsTree: rewireAsTree,
     fromRoute: fromRoute,
     random: random,
     openRoute: openRoute,
