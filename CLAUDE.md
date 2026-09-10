@@ -36,6 +36,7 @@ Workspace/
 | 外部URL参照 | `defuddle` |
 
 単発の質問・雑談はスキルをスキップしてよい。
+Claudeアカウント移行の作業中は `knowledge/migration/README.md` を読む（移行完了後にこの行を削除する）。
 自動化プロジェクトの継続/撤退で迷ったら `knowledge/scope-decision.md`（3回同じ障壁で失敗＝スコープ縮小）。
 
 ---
