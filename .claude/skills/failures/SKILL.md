@@ -1,37 +1,20 @@
 # failures Skill
 
 ## Overview
-過去にハマった失敗・注意点の集約。
-実装開始前に確認して、同じ失敗を繰り返さない。
+過去にハマった失敗・原因・対処の記録（67項目）。実装前とデバッグ時に見る。
 
-## When to use
-- 実装を開始する前（特にCSS・JavaScript）
-- 不具合が起きたとき（原因の手がかりとして）
+## 使い方（トークン節約・この順で）
+1. 索引 `knowledge/failures.md`（約80行）を読む
+2. 関係しそうな項目だけ行番号で読む → `sed -n '133,173p' knowledge/details/failures.md`
+3. 症状で探す → `grep -n "キーワード" knowledge/details/failures.md`
 
-## 主要な注意点（必ず確認）
+**`knowledge/details/failures.md`（1,800行）を全文読まないこと。**
 
-詳細は `knowledge/failures.md` を読むこと。
+## よく効く定番（毎回思い出すもの）
+- `localStorage` は必ず try-catch で囲む（プライベートモードで例外）
+- iOS の touch イベントは `{ passive: true/false }` を明示する
+- 縦書き `writing-mode: vertical-rl` はブラウザ差異が大きい。実機確認する
 
-| 問題 | 場面 | 対処 |
-|---|---|---|
-| 日本語フォント縦書きのブラウザ差異 | `writing-mode: vertical-rl` 使用時 | 4ブラウザで確認。代替で横書き＋回転を検討 |
-| iOSでのtouchイベント | `touchstart` / `touchmove` 使用時 | `{ passive: true }` または `false` を明示 |
-| localStorage in private mode | localStorage使用時 | 必ず try-catch で囲む |
-
-## localStorage の定型コード
-
-```javascript
-function saveData(key, value) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
-}
-function loadData(key, defaultValue) {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : defaultValue;
-  } catch (e) { return defaultValue; }
-}
-```
-
-## 追加ルール
-
-- 新しいハマりポイントが出たら `knowledge/failures.md` に追記する
+## 追記するとき
+1. `knowledge/details/failures.md` の先頭に「症状／原因／対処」で追記
+2. `bash knowledge/details/build-index.sh` で索引を作り直す

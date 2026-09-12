@@ -21,3 +21,6 @@ Thumbs.db
 # Temporary
 /tmp/
 *.tmp
+
+# テストで作った一時的なスクリーンショット
+projects/*/shot-*.png

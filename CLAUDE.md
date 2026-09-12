@@ -1,7 +1,7 @@
 # CLAUDE.md — ワークスペース運用ルール
 
-このファイルはClaude Codeが自律的に更新・改善してよい。
-改善点に気づいた場合は確認なしで更新すること。
+このファイルはClaude Codeが自律的に更新・改善してよい。改善点に気づいたら確認なしで更新すること。
+**このファイルは毎セッション全文が読まれる。詳細はスキル・knowledge に置き、ここは120行以内に保つ。**
 
 ---
 
@@ -11,78 +11,32 @@
 Workspace/
 ├── CLAUDE.md
 ├── .claude/
-│   ├── settings.json          # セッション開始hookの設定
-│   └── skills/
-│       ├── coding-rules/      # HTML/CSS/JS規約・テンプレート
-│       ├── ui-components/     # 再利用UIパーツ
-│       ├── patterns/          # 成功パターン集
-│       ├── failures/          # 失敗・ハマりポイント集
-│       ├── semiretire/        # セミリタイア・副業コンテキスト
-│       └── defuddle/          # Web取得ツール（トークン節約）
-├── knowledge/
-│   ├── profile.md             # 基本情報（hook で自動読み込み）
-│   ├── mistakes.md            # AIのミス記録（hook で自動読み込み）
-│   ├── rules.md               # coding-rules スキルの詳細参照元
-│   ├── patterns.md            # patterns スキルの詳細参照元
-│   ├── failures.md            # failures スキルの詳細参照元
-│   ├── ui-components.md       # ui-components スキルの詳細参照元
-│   ├── semiretire.md          # semiretire スキルの詳細参照元
-│   ├── task-diary.md          # セッションごとの学びログ（Stop hookが自動記録）
-│   └── log.md                 # 作業ログ（作業終了時のみ書く）
-└── projects/
-    └── {project-name}/        # kebab-case
-        ├── README.md
-        └── *.html
+│   ├── settings.json     # セッション開始・終了 hook（詳細: knowledge/session-hooks.md）
+│   └── skills/           # coding-rules / ui-components / patterns / failures /
+│                         # semiretire / note-writer / defuddle / deploy-pages /
+│                         # my-tool-maker / my-lp-maker
+├── knowledge/            # 各スキルの詳細参照元・ログ・記録
+└── projects/{name}/      # kebab-case・README.md + *.html
 ```
+
+セッション開始時に `knowledge/context.md`（オーナー情報＋ミス防止ルールの要約）が hook で自動読み込みされる。
+詳細が要るときだけ `profile.md` / `mistakes.md` を明示的に読む。
 
 ---
 
-## セッション終了処理・自動保存の仕組み
+## タスクに応じてスキルを使う
 
-✅ **2026-08-22 以降の正常な状態：**
-
-セッション終了フック（Stop event）は Hook 実行タイプを `"type": "command"` に設定することで、シェルが直接実行されるため権限チェックが入らない仕組みになっています。
-
-**実装例：** `.claude/settings.json` の Stop Hook
-```json
-{
-  "Stop": [
-    {
-      "type": "command",
-      "prompt": "セッションの変更を保存しています…",
-      "command": "cd /home/user/Workspace && git add -A && git commit -m 'Auto-save session' && git push || echo '変更がないか、pushスキップ'"
-    }
-  ]
-}
-```
-
-**重要な使い分け：**
-- `"type": "agent"` — Claude が実行 → AI の権限限定で保護 → git push などは不可（セキュリティ上正しい）
-- `"type": "command"` — シェルが直接実行 → 端末の権限で実行 → 全コマンド可能（責任は設定者に）
-
-**セッション終了時の自動処理：**
-1. task-diary.md の先頭に「セッションの振り返り」を追記（Edit ツール）
-2. projects/ に変更がある場合、log.md にも追記（Edit ツール）  
-3. ui-components.md など知識ベースを更新（Edit ツール）
-4. Hook の command で `git add -A && git commit && git push`（シェル実行）
-
----
-
-## 作業開始
-
-`profile.md` と `mistakes.md` はセッション開始時に hook が自動で読み込む。
-
-### タスクに応じてスキルを使う
-
-| タスクの種類 | 使うスキル |
+| タスク | スキル |
 |---|---|
 | HTML・コード作成 | `coding-rules` → `patterns` → `failures` |
 | UIパーツが必要 | `ui-components` |
 | 副業・販売ツール | `semiretire` |
-| note記事執筆・有料記事制作 | `note-writer` |
+| note記事・有料記事 | `note-writer` |
+| GitHub Pages 公開・運用ブランチへのマージ | `deploy-pages` |
 | 外部URL参照 | `defuddle` |
 
 単発の質問・雑談はスキルをスキップしてよい。
+自動化プロジェクトの継続/撤退で迷ったら `knowledge/scope-decision.md`（3回同じ障壁で失敗＝スコープ縮小）。
 
 ---
 
@@ -90,30 +44,27 @@ Workspace/
 
 「後で書く」はしない。該当したらその場で書く。
 
-| 書くファイル | 書くタイミング |
+| ファイル | タイミング |
 |---|---|
-| knowledge/patterns.md | うまくいった実装パターンが出た |
-| knowledge/failures.md | ハマりの原因と解決策がわかった |
-| knowledge/ui-components.md | 再利用できるUIパーツができた |
-| knowledge/mistakes.md | ユーザーから訂正を受け、下記3条件を満たす場合のみ |
-| knowledge/task-diary.md | セッション終了処理時に手動記録（毎セッション必須） |
-| knowledge/log.md | 作業が完了・中断した |
+| `knowledge/details/patterns.md` | うまくいった実装パターンが出た |
+| `knowledge/details/failures.md` | ハマりの原因と解決策がわかった |
+| `knowledge/details/ui-components.md` | 再利用できるUIパーツができた |
+| `knowledge/mistakes.md` | ユーザーの明示的訂正 かつ 再発しうる かつ「する/しない」で書ける（3条件すべて）。書いたら `knowledge/context.md` の行動ルールにも1行で反映する |
+| `knowledge/log.md` | 作業が完了・中断した（直近3ヶ月分のみ保持。古いものは `knowledge/log-archive/` へ） |
+| `knowledge/task-diary.md` | セッション終了処理時（毎セッション必須） |
 
-### mistakes.md への追記条件（3つすべて満たす時のみ）
-1. ユーザーからの明示的な訂正
-2. 繰り返し起こり得るパターン
-3. 「する/しない」で具体的に書ける
+`knowledge/details/` に追記したら **`bash knowledge/details/build-index.sh`** で索引（`knowledge/patterns.md` 等）を作り直す。
+mistakes.md の形式：`YYYY-MM-DD: 一言` / `NG:` / `OK:` / `場面:`
 
-```
-YYYY-MM-DD: [一言で何を間違えたか]
-NG: 実際にやってしまったこと
-OK: 次回からの正しい対応
-場面: このルールが適用される状況
-```
+## トークン節約の原則（重要・毎回効く）
 
-### ファイルサイズのルール
-- 1ファイルが **100行を超えたら分割を検討** する
-- log.md は **直近3ヶ月分のみ** 保持（古いものは `knowledge/log-archive/` へ）
+- **大きいファイルを全文読まない。** `knowledge/details/*.md`（各1,800〜3,500行）と `knowledge/log.md` `knowledge/task-diary.md` は、索引か `grep -n` で場所を特定してから `sed -n 'A,Bp'` で必要な範囲だけ読む。
+- スキルは**そのタスクに要るものだけ**呼ぶ。雑談・単発の質問ではスキルを読まない。
+- 記録ファイルが1,000行を超えたら `knowledge/log-archive/` へ退避する。
+- 長い調べもの・大量ファイルの探索は Explore / general-purpose サブエージェントに任せる（結果だけ返るので本体の文脈が汚れない）。
+- 話題が変わったら `/clear`、会話が長引いたら `/compact`。
+
+**報告ルール：** knowledge/ や skills/ を読み書きしたら必ず報告する（例「knowledge: failures.md に書き込みました」）。サイレントで読み書きしない。
 
 ---
 
@@ -124,160 +75,38 @@ OK: 次回からの正しい対応
 - [ ] `knowledge/log.md` に記録済み
 - [ ] `projects/{name}/README.md` の完了基準チェック済み
 
-### iPad実機確認（パターン化運用）
-
-毎セッション完成時に「iPad実機確認待ち」を申し送り項目に書くことが定着している。
-これは**AIだけでは確認不可な制約**（UI・操作感・レスポンス・キーボード入力体験）であり、
-次セッションでの**ユーザー（伊神さん）のフィードバック待ち**ポイント。
-
-- セッション終了時に log.md の「次のアクション」に「iPad実機テスト待ち（〇〇項目の確認）」と明記すること
-- 次セッション開始時に「前セッションのiPad実機フィードバック」を確認してから新規タスク着手
-- 全機能は「デプロイ完了状態＝iPad実機テストは未実施」として一度は本番環境に上げて、伊神さんから報告を受ける運用
+**iPad実機確認はAIには不可能**なので、完成時は log.md の「次のアクション」に「iPad実機テスト待ち（〇〇の確認）」と必ず書き、次セッションの冒頭でそのフィードバックを確認してから新規タスクに入る。
 
 ---
 
 ## 命名規則
 
-| 対象 | 規則 | 例 |
-|------|------|----|
-| プロジェクトフォルダ | kebab-case | `word-sort-game` / `kanji-quiz` |
-| HTMLファイル | kebab-case | `main.html` / `result-page.html` |
-| CSSクラス | kebab-case | `.answer-button` / `.score-display` |
-| JS変数 | camelCase | `currentScore` / `questionList` |
+プロジェクトフォルダ・HTMLファイル・CSSクラスは **kebab-case**（`word-sort-game` / `main.html` / `.answer-button`）、JS変数は **camelCase**（`currentScore`）。
 
 ---
 
 ## 💰 お金のルール（絶対厳守）
 
 - **有料サービスへの新規課金は一切禁止。今も今後も。**
-- 実装提案時は「無料か有料か」を必ず明記する
-- 有料の代替がある場合は必ず無料手段を先に検討する
-- 有料化が避けられない機能は「実装しない」「半自動運用で代用」を選ぶ
-- 「¥500/月なら安い」と感じても、オーナーの明示OKなしに有料化しない
-- 現在使用中の無料サービス一覧: `projects/rakuda-sensei/automation/README.md` 参照
+- 実装提案時は「無料か有料か」を必ず明記し、無料手段を先に検討する。
+- 有料が避けられない機能は「実装しない」「半自動運用で代用」を選ぶ。「¥500/月なら安い」と感じても、オーナーの明示OKなしに有料化しない。
+- 使用中の無料サービス一覧 → `projects/rakuda-sensei/automation/README.md`
 
----
+## 🌐 GitHub Pages（絶対厳守）
 
-## 🌐 GitHub Pages 公開ルール（絶対厳守）
-
-新しいサイトを公開するときは、**既存の公開ページのリンクを絶対に壊さないこと**。
-
-1. **古典クエスト（kaeriten-quest）は、必ず元々のリンクで開ける状態を保つ**
-   - 旧URL: `https://gamigamiigami.github.io/Workspace/kaeriten-quest/`（生徒へ配布済み）
-   - これが404になる変更は禁止。新URL `/projects/kaeriten-quest/` も併せて維持する。
-2. **全公開サイトは「新旧URL両対応」を保つ**
-   - 公開ワークフロー `deploy-pages.yml` は各サイトを `_site/<名前>/`（旧URL）と `_site/projects/<名前>/`（新URL）の**両方に配置**している。この両配置を消さない。
-3. **リンク集（作品一覧トップ）を継続して使い、新サイトは必ずそこに追加する**
-   - トップページ: `site/index.html`（公開先 `https://gamigamiigami.github.io/Workspace/`）
-   - 新サイトを公開したら、`site/index.html` にカードを1枚追加する。
-4. **公開の手順（新サイト追加時）**
-   - `projects/<名前>/` に作る → `deploy-pages.yml` の `PUBLIC_DIRS` に `<名前>` を追加 → `site/index.html` にカード追加 → 運用ブランチ `claude/workspace-knowledge-base-setup-ccVKP` にマージして push（ここからのみPages公開可）。
-   - 公開係（ワークフロー）は `deploy-pages.yml` の**1本だけ**にする。旧 `deploy-dashboard.yml` は自動実行停止済み（復活させて二重化すると404の原因になる）。
-   - 機密（`knowledge/`・`CLAUDE.md`・`rakuda-sensei` 等）は `PUBLIC_DIRS` に**入れない**＝公開しない。
-5. **運用ブランチへのマージは、毎回確認せずに自動で行う**（2026-08-31 オーナー承認・以後ずっと有効）
-   - 作業ブランチでの作業が終わって検証まで通ったら、
-     `claude/workspace-knowledge-base-setup-ccVKP` にマージして push するところまでを、確認なしで実行する。
-   - **2026-08-31 セッション175で実証済み：Bash git が権限制限を受けても、GitHub PR API 経由なら PR 作成・マージが正常に機能する。**
-     今後 git コマンドが使えない環境では GitHub PR ツール（`gh` コマンド / `mcp__github__*` ツール）を使う。
-   - 手順：`git fetch origin <運用ブランチ>` → 作業ブランチに取りこんで衝突を解消 →
-     運用ブランチへマージ（早送りできるなら早送り）→ push → 作業ブランチにもどる。
-   - **衝突が出たとき・公開ページを消したり404にしたりする変更のときは、マージせずに必ず確認する。**
-   - マージしたら、GitHub Actions の `deploy-pages.yml` が成功したかを確認してから完了報告する。
-
----
+**既存の公開リンクを絶対に壊さない**（特に旧URL `/Workspace/kaeriten-quest/` は生徒に配布済み）。公開・マージの手順は `deploy-pages` スキルを読むこと。
 
 ## Gitコミット前の必須設定
 
-コミット前に必ず以下を実行すること（セッションをまたぐとリセットされる）：
 ```bash
 git config user.email noreply@anthropic.com && git config user.name Claude
 ```
-
-## 操作のコツ
-
-| コマンド | タイミング |
-|---|---|
-| `/compact` | 会話が長くなって動きが重くなったとき。会話を圧縮して軽くする |
-| `/clear` | 話題を変えるとき。ナレッジは消えないので安心 |
-
-**指示のコツ（伊神さんへ）**
-- 具体的に伝える（「いい感じに」はNG。「iPad縦持ち・中学2年向け・クイズ形式」のように）
-- 1回の指示で1つの作業
-- やり直しは何度でもOK（「3問目だけ書き直して」で通じる）
 
 ---
 
 ## エージェントとしての行動原則
 
-- 不明点は作業開始前に一度にまとめて質問する
-- 確信が持てない情報は「確認が必要です」と明示する
-- 推測で実装した箇所は `<!-- 要確認: 理由 -->` とコメントする
-- 指示が非効率と判断した場合は代替案を先に提示する
-- ユーザーはプログラミング完全初心者。専門用語には必ず補足説明を入れる
-
-### 自動化プロジェクトの撤退判定基準
-
-**3回同じ障壁で失敗したら、スコープ縮小への判定フェーズへ移行すること。**
-
-判定軸（順序重要）：
-```
-1️⃣ 技術実現可能性
-   - 実装パターンは存在するか？ → なければ即座に断念
-   - 本番環境でテスト可能か？ → テスト環境なしの場合は適性「低」
-
-2️⃣ ビジネス ROI（月次利用量 × 削減時間 > 初期実装 + 保守コスト）
-   - BOOTH：月3-5件 × 3分削減 = 月15分 < 月5時間保守 → 【赤・スコープ縮小】
-   - note：月10+ 件 × 5分削減 = 月50分 > 月1時間保守 → 【緑・継続】
-
-3️⃣ 仕様透明性（ドキュメント / 実験による理解度）
-   - 仕様が明確ならスコープ縮小の余地あり
-   - 仕様不明確 + テスト環境なしなら、本番環境でのデバッグ地獄化 → 即座に手動へ
-
-判定時機：
-- セッション1-2：「実装できるか」を検証フェーズ
-- セッション3以降：ROI判定フェーズへ（見積もり検証）
-- **同じ障壁で 3回失敗 → 即座に判定「赤・スコープ縮小」**
-  （BOOTH の場合：セッション13で判定が出るべきだった）
-
-実装例：
-```
-[セッション9] 新規出品URL検出 → ✅ 成功
-[セッション10] URL検出ロジック改善 → ✅ 成功
-[セッション11] 商品作成ページ到達 → ✅ 成功 （ここまで OK、ROI算出フェーズへ）
-[セッション12] 商品入力 + PDF + 出品 → ❌ サイレント失敗【初回】
-[セッション13] PDF再実装 + 出品再試 → ❌ サイレント失敗【2回目・3回目】
-               → 判定「赤」が出て、スコープ縮小へ（ハイブリッドモデル選択）
-```
-
-スコープ縮小の選択肢：
-- A. **ハイブリッド**：AI生成 + 人間の最終操作 + 自動リマインダー（推奨）
-- B. **全手動**：AI生成まで自動化して、あとはユーザーに委ねる
-- C. **完全放棄**：時間ROI が完全に負の場合のみ
-
-ハイブリッドを選ぶ基準：
-```
-初期実装 5h < 完全自動化 30h（既投資）+ 月5h保守
-月手動 = 0.5h（月10分×4週） << 月5h保守
-→ 即座にハイブリッドへ転換で月4.3時間削減
-```
-
----
-
-## 報告ルール
-
-knowledge/ や skills/ を読み書きしたら必ず報告する：
-- 「skills: coding-rules を参照しました」
-- 「knowledge: failures.md に書き込みました」
-
-サイレントで読み書きしない。
-
----
-
-## 自己改善メモ
-
-| 日付 | 改善内容 |
-|------|----------|
-| 2026-05-23 | 初版作成 |
-| 2026-05-24 | 選択的読み込み・mistakes.md・hookによる自動読み込みに刷新 |
-| 2026-05-24 | skillsシステム導入・CLAUDE.mdをスリム化 |
-| 2026-05-24 | Task Diary導入・Stopフックで自動振り返り・パターン昇華ルール追加 |
+- 不明点は作業開始前に一度にまとめて質問する。確信が持てない情報は「確認が必要です」と明示する。
+- 推測で実装した箇所は `<!-- 要確認: 理由 -->` とコメントする。
+- 指示が非効率と判断したら代替案を先に提示する。
+- ユーザーはプログラミング完全初心者。専門用語には必ず補足説明を入れる。
