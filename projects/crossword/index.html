@@ -833,6 +833,12 @@
       </div>
       <p id="markCheck" class="diag"></p>
       <p class="hint-line">「手で記号を入れる」を押したあと、上の盤面でマスをタップすると入力できます。</p>
+      <div class="row" style="margin-top:10px;">
+        <button id="btnAutoKeyword" class="sub">登録ワードからキーワードを自動でさがす</button>
+      </div>
+      <p class="hint-line">いま盤面にある語の文字だけを使って、辞書にある言葉になるキーワードの候補をさがします。
+        候補をタップすると、キーワードと記号が両方セットされます。</p>
+      <div id="autoKwResult"></div>
     </div>
 
     <div class="panel">
@@ -4999,6 +5005,104 @@ var qrcode = function() {
       }
     }
 
+    // ===== キーワードを登録ワードから自動でさがす =====
+    // まだキーワードが決まっていない／別の案がほしいときに使う。
+    // 盤面にある文字だけで作れて、かつ辞書にある言葉になる候補をさがし、
+    // 実際にその文字数ぶんの記号がふれるか（pickMarkCells で1つの語に偏りすぎないか）
+    // まで確かめてから候補として出す
+    function boardCellMap() {
+      const m = new Map();
+      state.placed.forEach(p => wordCells(p).forEach(c => m.set(key(c.r, c.c), c.ch)));
+      return m;
+    }
+
+    function markInfoForKeyword() {
+      const cellWords = new Map(), wordOrder = new Map();
+      const reg = new Set(state.words.map(w => w.text));
+      const regIds = new Set();
+      state.placed.forEach(pw => {
+        const ks = wordCells(pw).map(c => key(c.r, c.c));
+        wordOrder.set(pw.id, ks);
+        if (reg.has(pw.text)) regIds.add(pw.id);
+        ks.forEach(k => { if (!cellWords.has(k)) cellWords.set(k, []); cellWords.get(k).push(pw.id); });
+      });
+      return { cellWords, wordOrder, regIds };
+    }
+
+    // 指定した文字数のキーワード候補をさがす（見つかった順に最大 limit 件）
+    function findKeywordCandidates(len, limit, budgetMs) {
+      const cellMap = boardCellMap();
+      if (cellMap.size < len) return [];
+      const avail = new Set(cellMap.values());
+
+      const mode = kanaMode();
+      const conv = (t) => (mode === 'hira' ? toHira(t) : toKata(t));
+      const level = Number(($('#findLevel') || {}).value) || 10000;
+      const onBoard = new Set(state.placed.map(p => p.text));
+      const info = markInfoForKeyword();
+      const markOpts = { regWords: info.regIds.size ? info.regIds : null };
+
+      const seen = new Set();
+      const out = [];
+      const deadline = Date.now() + (budgetMs || 600);
+      for (const d of loadDict()) {
+        if (Date.now() > deadline) break;
+        if (d.rank >= level) continue;
+        const t = conv(d.r);
+        const cs = chars(t);
+        if (cs.length !== len || seen.has(t)) continue;
+        seen.add(t);
+        if (onBoard.has(t)) continue;   // 盤面にそのまま出ている語は、答えが丸見えになるので避ける
+        if (!cs.every(ch => avail.has(ch))) continue;
+        const plan = pickMarkCells(cs, cellMap, info.cellWords, info.wordOrder, markOpts);
+        if (!plan) continue;
+        out.push({ text: t, meta: d.s, rank: d.rank });
+        if (out.length >= (limit || 4)) break;
+      }
+      return out;
+    }
+
+    // 「登録ワードからキーワードを自動でさがす」ボタン本体。
+    // ねらう文字数は「登録ワードの数 ±2文字」を中心に、近い順にいくつも試して
+    // 文字数のちがう候補をまぜて出す（同じ文字数ばかりにならないように）
+    function autoFindKeyword() {
+      if (!state.placed.length) {
+        showMsg('先に②つくるでクロスワードを作ってください。', 'ng');
+        return;
+      }
+      const n = state.words.length || 4;
+      const lens = [...new Set([n, n - 1, n + 1, n - 2, n + 2])].filter(x => x >= 2 && x <= 10);
+      const found = [];
+      const seenText = new Set();
+      for (const len of lens) {
+        const cands = findKeywordCandidates(len, 2, 500);
+        cands.forEach(c => { if (!seenText.has(c.text)) { seenText.add(c.text); found.push(c); } });
+        if (found.length >= 8) break;
+      }
+      const box = $('#autoKwResult');
+      if (!found.length) {
+        box.innerHTML = '<p class="hint-line" style="color:var(--ng)">今の盤面の文字では、辞書にある言葉になるキーワードが見つかりませんでした。'
+          + '語を増やすか、②つくるで別の形にしてから、もう一度試してください。</p>';
+        return;
+      }
+      found.sort((a, b) => chars(a.text).length - chars(b.text).length || a.rank - b.rank);
+      box.innerHTML = '<p class="hint-line">タップで決定（' + found.length + '件・文字数はいろいろ混ぜています）</p>';
+      found.forEach(c => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'find-chip';
+        chip.innerHTML = '<span class="fr">' + escapeHtml(c.text) + '</span>'
+          + '<span class="fs">' + chars(c.text).length + '文字　' + escapeHtml(c.meta || '') + '</span>';
+        chip.addEventListener('click', () => {
+          state.keyword = c.text;
+          $('#keywordInput').value = c.text;
+          box.innerHTML = '';
+          autoMark();
+        });
+        box.appendChild(chip);
+      });
+    }
+
     // ===== キーワードの足りない文字を含む語をさがす（登録はユーザーが選ぶ） =====
     // 盤面には置かない。あくまで「こういう語がありますよ」と候補を並べるだけ。
     // 盤面まで作るのは、①の一番上の「自動で作る」ボタンの役目。
@@ -6133,6 +6237,7 @@ var qrcode = function() {
       $('#modeMark').addEventListener('click', () => setMode(state.mode === 'mark' ? 'place' : 'mark'));
       $('#modePaint').addEventListener('click', () => setMode(state.mode === 'paint' ? 'place' : 'paint'));
       $('#btnAutoMark').addEventListener('click', autoMark);
+      $('#btnAutoKeyword').addEventListener('click', autoFindKeyword);
       // さいしょページ（作りかたの分かれ道）
       $('#btnStartNormal').addEventListener('click', async () => {
         if (state.placed.length || state.words.length) {
