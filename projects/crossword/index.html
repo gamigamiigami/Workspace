@@ -5042,11 +5042,10 @@ var qrcode = function() {
       const info = markInfoForKeyword();
       const markOpts = { regWords: info.regIds.size ? info.regIds : null };
 
+      // まず「文字がそろっている語」だけを軽く集める（pickMarkCellsは呼ばない）
       const seen = new Set();
-      const out = [];
-      const deadline = Date.now() + (budgetMs || 600);
+      const pool = [];
       for (const d of loadDict()) {
-        if (Date.now() > deadline) break;
         if (d.rank >= level) continue;
         const t = conv(d.r);
         const cs = chars(t);
@@ -5054,9 +5053,21 @@ var qrcode = function() {
         seen.add(t);
         if (onBoard.has(t)) continue;   // 盤面にそのまま出ている語は、答えが丸見えになるので避ける
         if (!cs.every(ch => avail.has(ch))) continue;
-        const plan = pickMarkCells(cs, cellMap, info.cellWords, info.wordOrder, markOpts);
+        pool.push({ t, cs, meta: d.s, rank: d.rank });
+      }
+      // 順番をまぜる。辞書の頻度順のまま調べると、毎回まったく同じ候補になるため
+      for (let i = pool.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [pool[i], pool[j]] = [pool[j], pool[i]];
+      }
+
+      const out = [];
+      const deadline = Date.now() + (budgetMs || 600);
+      for (const cand of pool) {
+        if (Date.now() > deadline) break;
+        const plan = pickMarkCells(cand.cs, cellMap, info.cellWords, info.wordOrder, markOpts);
         if (!plan) continue;
-        out.push({ text: t, meta: d.s, rank: d.rank });
+        out.push({ text: cand.t, meta: cand.meta, rank: cand.rank });
         if (out.length >= (limit || 4)) break;
       }
       return out;
@@ -5071,13 +5082,13 @@ var qrcode = function() {
         return;
       }
       const n = state.words.length || 4;
-      const lens = [...new Set([n, n - 1, n + 1, n - 2, n + 2])].filter(x => x >= 2 && x <= 10);
+      const lens = [...new Set([n, n - 1, n + 1, n - 2, n + 2, n - 3, n + 3])].filter(x => x >= 2 && x <= 12);
       const found = [];
       const seenText = new Set();
       for (const len of lens) {
-        const cands = findKeywordCandidates(len, 2, 500);
+        const cands = findKeywordCandidates(len, 6, 500);
         cands.forEach(c => { if (!seenText.has(c.text)) { seenText.add(c.text); found.push(c); } });
-        if (found.length >= 8) break;
+        if (found.length >= 16) break;
       }
       const box = $('#autoKwResult');
       if (!found.length) {
