@@ -4,6 +4,46 @@
 
 ---
 
+### [2026-09-18] 席替え屋さん — GamiBaseへのデプロイ・今後の運用ルール確立
+
+**作業内容：**
+
+- ユーザーから「修正したら毎回、出力するかGamiBase内を更新して」と指示を受けた
+- 「GamiBase」は別リポジトリ `gamigamiigami/GamiBase`（このWorkspaceとは別）の
+  GitHub Pagesサイトで、`tools/sekigae/tool.html` が「席替え屋さん」の実体だと確認
+  （`tools/sekigae/index.html` は使い方ガイド・ダウンロード導線のランディングページ）
+- リポジトリをセッションに追加してクローンし、`tool.html` を Workspace の
+  `projects/seat-assignment/index.html` の最新版で上書き
+- 既存の GitHub Actions ワークフロー（`claude/portal-site-creation-s2woj3` への push で
+  自動デプロイ）にそのまま乗せてプッシュ。新しく設定を作ったわけではない
+- 公開URL：https://gamigamiigami.github.io/GamiBase/tools/sekigae/index.html
+- 今後は、Workspace側で席替え屋さんを直すたびに、GamiBase側の `tool.html` にも
+  同じ内容を反映してプッシュする運用にする
+
+**確認中：**
+- 実名を入力するツールを公開URLでも開けるようにしてよいか（データはlocalStorageのみで
+  サーバー送信はないため、公開しても名前は外部に見えない認識だが、ユーザーに確認中）
+
+---
+
+### [2026-09-18] 席替え屋さん — iPad横向きで座席表が見切れる不具合を修正
+
+**作業内容：**
+
+- ユーザー報告：「座席表が見切れちゃうからスクロールが必要になる。全体表示されるようにして」
+- 根本原因：`@media (max-width: 820px)`（iPadなどのはば）に `.seat { min-width: 68px }` が
+  残っていて、以前入れた自動縮小のしくみがあっても、この下限のせいで列数が多いと
+  結局あふれてスクロールが必要になっていた
+- 対策：
+  - `.seat` / `.seat-grid` の横方向 min-width を完全に撤廃（`minmax(0, 1fr)` に統一）
+  - `.seat-grid-wrap` を `overflow: hidden` にしてスクロールバー自体を出さない
+  - `orientationchange`（画面回転）でも座席表の縮小を計算しなおすようにした
+  - 印刷用のCSSには影響しない（印刷は別の固定サイズを使用）
+- 回帰防止テストを追加（`.seat` に min-width が復活していないかを検査）
+- テスト337件、全件合格。コミット `0f397be` でプッシュ完了
+
+---
+
 ### [2026-09-18] 席替え屋さん — 判定ロジック「同じ班の繰り返し」基準に変更・「▲となりが同じ班」項目追加
 
 **作業内容：**
