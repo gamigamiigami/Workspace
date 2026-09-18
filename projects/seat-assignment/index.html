@@ -917,16 +917,19 @@
 
     // 「良くない席」の減点。数が大きいほど強く避ける。
     // 避けたい順（先生の指定）：
-    //   ×× 前回ととなりが同じ      … 絶対に避けたい
+    //   ×× 前回ととなりが同じ      … 絶対に避けたい（特定の2人が前回もとなり）
     //   ×  前回と席の位置が同じ    … できるだけ避けたい
     //      （ただしNG設定で1か所しか座れない生徒は仕方ないので数えない）
-    //   ▲  前回と前後・斜めが同じ  … 可能なら避けたい
+    //   ▲  前回も今回も同じ班の2人が、いま となり／前後／斜め になっている
+    //      … 可能なら避けたい（「また同じ班！」の繰り返しを、いまの近さで見つける）
+    //      特定の2人が「前回も斜めだった」かは問わない。同じ班であることだけが条件
     //   □  前回近くだった人と同じ班 … 避ける必要はないが知りたい（減点なし・お知らせのみ）
     const PENALTY = {
-      side: 2000,      // ×× 前回と左右のとなりが同じ
+      side: 2000,      // ×× 前回と左右のとなりが同じ（特定の2人の位置の繰り返し）
       sameSeat: 600,   // ×  前回とまったく同じ席
-      frontBack: 120,  // ▲  前回と前後が同じ
-      diagonal: 100,   // ▲  前回と斜めが同じ
+      groupSide: 150,  // ▲  同じ班の2人が、いま となり になっている
+      frontBack: 120,  // ▲  同じ班の2人が、いま 前後 になっている
+      diagonal: 100,   // ▲  同じ班の2人が、いま 斜め になっている
       pastSide: 110,   // ▲  前回より前の回で となり同士 だった（可能なら避けたい）
       oldNear: 8       // もっと前の回で前後だった（軽めに避ける）
     };
@@ -1193,9 +1196,11 @@
 
     // 前回（最新の履歴）とくらべて、何がダブっているかを数える
     function comparePrevious(cr, assignment, prevInfo, forcedSet) {
-      const result = { sameSeat: 0, side: 0, fb: 0, diag: 0, nearThenGroup: 0, sameSeatForced: 0,
+      const result = { sameSeat: 0, side: 0, fb: 0, diag: 0, groupSide: 0,
+                       nearThenGroup: 0, sameSeatForced: 0,
                        hasPrev: !!prevInfo,
-                       seatsSameSeat: [], seatsSide: [], seatsFb: [], seatsDiag: [], seatsGroup: [] };
+                       seatsSameSeat: [], seatsSide: [], seatsFb: [], seatsDiag: [],
+                       seatsGroupSide: [], seatsGroup: [] };
       if (!prevInfo) return result;
       const forced = forcedSet || getForcedSeatStudents(cr);
       const seatOf = {};
@@ -1222,9 +1227,26 @@
           if (seatOf[b]) result[seatKey].push(seatOf[b]);
         }
       };
+      // ×× 「特定の2人」がとなり同士だったかどうかの繰り返し（位置そのものの一致）
       collect(rel.side, prevInfo.rel.side, 'side', 'seatsSide');
-      collect(rel.fb, prevInfo.rel.fb, 'fb', 'seatsFb');
-      collect(rel.diag, prevInfo.rel.diag, 'diag', 'seatsDiag');
+
+      // ▲ 前後・斜め・となり：「前回も今回も同じ班」の2人が、いまその位置関係にある。
+      //   特定の2人が前回どの位置にいたかは問わない。同じ班であることだけを見る。
+      //   （斜め・前後・となりであっても、班が前回とちがえば数えない）
+      const groupRepeat = new Set();
+      for (const pk of rel.group) if (prevInfo.rel.group.has(pk)) groupRepeat.add(pk);
+      const collectGroupRepeat = (set, countKey, seatKey) => {
+        for (const pk of set) {
+          if (!groupRepeat.has(pk)) continue;
+          result[countKey]++;
+          const [a, b] = pk.split('|');
+          if (seatOf[a]) result[seatKey].push(seatOf[a]);
+          if (seatOf[b]) result[seatKey].push(seatOf[b]);
+        }
+      };
+      collectGroupRepeat(rel.side, 'groupSide', 'seatsGroupSide');
+      collectGroupRepeat(rel.fb, 'fb', 'seatsFb');
+      collectGroupRepeat(rel.diag, 'diag', 'seatsDiag');
 
       // □ 前回「近く（となり・前後・斜め）」だった2人が、今回 同じ班になっている
       //   避ける必要はないが知りたい、という項目なので減点はしない
@@ -1247,6 +1269,7 @@
       // 避けたい順に重みをつける（□の「近くだった人が同じ班」は減点しない）
       let p = cmp.side * PENALTY.side +
               cmp.sameSeat * PENALTY.sameSeat +
+              cmp.groupSide * PENALTY.groupSide +
               cmp.fb * PENALTY.frontBack +
               cmp.diag * PENALTY.diagonal;
 
@@ -1680,9 +1703,25 @@
           }
         };
         reportRepeat(rel.side, prevRel.side, 'error', 'となり同士');
-        reportRepeat(rel.fb, prevRel.fb, 'warn', '前後');
-        reportRepeat(rel.diag, prevRel.diag, 'warn', '斜め');
-        // 「同じ班」の重複は □前回近くだった人と同じ班 バッジで見られるので、ここには出さない
+
+        // ▲ 「前回も今回も同じ班」の2人が、いま となり／前後／斜め になっている。
+        //   特定の2人が前回どの位置にいたかは問わない。同じ班であることだけを見る
+        const groupRepeat = new Set();
+        for (const pk of rel.group) if (prevRel.group.has(pk)) groupRepeat.add(pk);
+        const reportGroupRepeat = (set, label) => {
+          for (const pk of set) {
+            if (!groupRepeat.has(pk)) continue;
+            const [a, b] = pk.split('|');
+            warnings.push({
+              level: 'warn',
+              text: '⚠️ ' + nameOf(a) + ' と ' + nameOf(b) + ' は前回も同じ班で、今回も' + label + 'です',
+              seats: [seatOf[a], seatOf[b]].filter(Boolean)
+            });
+          }
+        };
+        reportGroupRepeat(rel.side, 'となり');
+        reportGroupRepeat(rel.fb, '前後');
+        reportGroupRepeat(rel.diag, '斜め');
       }
 
       // --- これまでの回で「となり同士」だったことがあるか（前回ぶんは上で出済み） ---
@@ -1728,8 +1767,9 @@
         '<span class="chk none">前回（' + escapeHtml(latest.label) + '）とくらべて</span>' +
         item('❌', 'となりが同じ', cmp.side, '組', 'bad') +
         item('⚠️', '席が同じ', cmp.sameSeat, '人', 'warn') +
-        item('△', '前後が同じ', cmp.fb, '組', 'mild') +
-        item('△', '斜めが同じ', cmp.diag, '組', 'mild') +
+        item('△', 'となりが同じ班', cmp.groupSide, '組', 'mild') +
+        item('△', '前後が同じ班', cmp.fb, '組', 'mild') +
+        item('△', '斜めが同じ班', cmp.diag, '組', 'mild') +
         item('△', '前にもとなり', countPastSidePairs(cr, cr.currentSeats, buildHistoryRelations(cr)).pairs, '組', 'mild') +
         '<span class="chk note">□前回近くだった人と同じ班 ' + cmp.nearThenGroup + '組</span>';
     }
