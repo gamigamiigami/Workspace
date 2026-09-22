@@ -1,0 +1,23 @@
+{
+  "name": "ポケット秘書",
+  "short_name": "ポケット秘書",
+  "description": "セミナーの予定とやることを、1か所にまとめてお知らせします",
+  "lang": "ja",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#eef1f5",
+  "theme_color": "#1f3a5f",
+  "categories": ["productivity", "business"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "きょうの予定", "url": "/?tab=schedule", "short_name": "きょう" },
+    { "name": "やること", "url": "/?tab=task", "short_name": "やること" }
+  ]
+}

@@ -24,3 +24,10 @@ Thumbs.db
 
 # テストで作った一時的なスクリーンショット
 projects/*/shot-*.png
+
+# Cloudflare Workers（ローカル実行時に自動生成されるもの・秘密の値）
+node_modules
+node_modules/
+.wrangler/
+.dev.vars
+projects/*/wrangler.test.toml

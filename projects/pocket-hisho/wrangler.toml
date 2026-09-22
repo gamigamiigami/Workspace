@@ -1,0 +1,31 @@
+# ポケット秘書 — Cloudflare の設定ファイル
+# ここを直接いじる必要があるのは database_id の1か所だけです（SETUP.md 手順3）。
+
+name = "pocket-hisho"
+main = "src/index.js"
+compatibility_date = "2025-05-01"
+
+# アプリの画面ファイル（web/ の中身）をそのまま配る設定。
+# 見つからないURLは index.html を返す＝どのページを開いてもアプリが立ち上がる。
+[assets]
+directory = "./web"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+
+# 予定とタスクの保管庫
+[[d1_databases]]
+binding = "DB"
+database_name = "pocket-hisho"
+database_id = "ここに手順3で表示されたIDを貼る"
+
+# 1分ごとの見回り（時刻が来た予定の通知を送る）
+[triggers]
+crons = ["* * * * *"]
+
+[observability]
+enabled = true
+
+# ※ 合言葉（APP_PASS）はこのファイルには書きません。
+#    ファイルに書くとGitHubに残ってしまうため、別のコマンドで登録します：
+#      npx wrangler secret put APP_PASS
+#    （SETUP.md 手順5）

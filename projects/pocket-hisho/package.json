@@ -1,0 +1,14 @@
+{
+  "name": "pocket-hisho",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "セミナー講師のためのオンライン秘書アプリ（PWA + Cloudflare Workers）",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init": "wrangler d1 execute pocket-hisho --remote --file=./schema.sql",
+    "db:init:local": "wrangler d1 execute pocket-hisho --local --file=./schema.sql",
+    "test": "node tests/test-core.mjs"
+  }
+}

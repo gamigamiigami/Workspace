@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#1f3a5f">
+  <title>ポケット秘書</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png" sizes="192x192">
+  <!-- iPhone でホーム画面に追加したときのアイコン（通知を使うにはこの形で開く必要がある） -->
+  <link rel="apple-touch-icon" href="/icons/icon-180.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ポケット秘書">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- ===================================================================
+     ログイン画面（合言葉を1回入れれば、次からは自動で入れる）
+     =================================================================== -->
+<section id="screen-login" hidden>
+  <div class="logo">
+    <div class="mark">📓</div>
+    <h1>ポケット秘書</h1>
+    <p>予定とやることを、ポケットの中に</p>
+  </div>
+  <fieldset>
+    <legend>あいことば</legend>
+    <div class="field">
+      <label for="f-pass">教わった合言葉を入れてください</label>
+      <input type="password" id="f-pass" autocomplete="current-password" enterkeyhint="go">
+    </div>
+    <button class="btn primary wide" id="btn-login">はいる</button>
+    <div id="login-msg" class="notice err" hidden></div>
+    <div class="field"><div class="hint">この端末では、次からは合言葉なしで開けます。</div></div>
+  </fieldset>
+</section>
+
+<!-- ===================================================================
+     メイン画面
+     =================================================================== -->
+<section id="screen-app" hidden>
+  <div id="net-bar" class="net-bar" hidden>📴 つながっていません（保存した内容は、つながったときにまとめて送ります）</div>
+
+  <div class="wrap">
+    <header class="app-head">
+      <div class="app-title">ポケット秘書<small id="head-sub">予定とやることを、ポケットの中に</small></div>
+      <div class="spacer"></div>
+      <button class="btn" id="btn-settings" aria-label="設定">⚙</button>
+    </header>
+  </div>
+
+  <!-- 予定タブのときだけ出る操作バー -->
+  <div class="sticky-bar" id="bar-schedule">
+    <div class="wrap">
+      <nav class="scope" id="scope">
+        <button data-scope="day" class="on">日</button>
+        <button data-scope="week">週</button>
+        <button data-scope="month">月</button>
+        <button data-scope="year">年</button>
+      </nav>
+      <div class="datenav">
+        <button class="arrow" id="btn-prev" aria-label="前へ">‹</button>
+        <div class="label" id="date-label">—</div>
+        <button class="arrow" id="btn-next" aria-label="次へ">›</button>
+        <button class="today-btn" id="btn-today">今日</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- やることタブのときだけ出る絞りこみ -->
+  <div class="sticky-bar" id="bar-task" hidden>
+    <div class="wrap">
+      <nav class="scope" id="task-filter">
+        <button data-filter="open" class="on">のこり</button>
+        <button data-filter="today">きょうまで</button>
+        <button data-filter="done">おわった</button>
+      </nav>
+    </div>
+  </div>
+
+  <main class="wrap" id="view"></main>
+
+  <button class="fab" id="btn-add" aria-label="追加">＋</button>
+
+  <nav class="tabbar" id="tabbar">
+    <button data-tab="schedule" class="on"><span class="ic">📅</span>予定</button>
+    <button data-tab="task"><span class="ic">☑️</span>やること<span class="badge" id="task-badge" hidden>0</span></button>
+    <button data-tab="notify"><span class="ic">🔔</span>通知</button>
+  </nav>
+</section>
+
+<!-- ===================================================================
+     予定の入力シート
+     =================================================================== -->
+<section class="sheet" id="sheet-event" aria-hidden="true">
+  <div class="sheet-bar">
+    <button class="btn" id="ev-cancel">やめる</button>
+    <div class="ttl" id="ev-title">予定を追加</div>
+    <button class="btn primary" id="ev-save">保存</button>
+  </div>
+  <div class="sheet-body">
+
+    <fieldset>
+      <legend>① きほん</legend>
+      <div class="field">
+        <label for="f-date">日付 <span class="req">＊必須</span></label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="field">
+        <label for="f-title">セミナー名・テーマ</label>
+        <input type="text" id="f-title" placeholder="例）管理職向け コミュニケーション研修">
+      </div>
+      <div class="field-2">
+        <div class="field"><label for="f-arrive">会場入り</label><input type="time" id="f-arrive"></div>
+        <div class="field"><label for="f-open">開演</label><input type="time" id="f-open"></div>
+        <div class="field"><label for="f-end">終了</label><input type="time" id="f-end"></div>
+      </div>
+      <label class="switch-row">
+        <div class="sl"><b>この予定は通知しない</b><small>ふだんは切らなくて大丈夫です</small></div>
+        <input type="checkbox" id="f-remindoff">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>② ばしょ</legend>
+      <div class="field"><label for="f-place">会場名</label><input type="text" id="f-place" placeholder="例）大阪産業創造館 5Fホール"></div>
+      <div class="field">
+        <label for="f-address">住所</label>
+        <input type="text" id="f-address" placeholder="例）大阪市中央区本町1-4-5">
+        <div class="hint">入れておくと、当日「地図をひらく」ボタンが使えます。</div>
+      </div>
+      <div class="field"><label for="f-vnote">行き方のメモ</label><input type="text" id="f-vnote" placeholder="例）堺筋本町①出口から徒歩5分"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>③ れんらくさき</legend>
+      <div class="field"><label for="f-org">主催（会社・団体名）</label><input type="text" id="f-org" placeholder="例）株式会社〇〇"></div>
+      <div class="field"><label for="f-person">担当者</label><input type="text" id="f-person" placeholder="例）田中 太郎"></div>
+      <div class="field-2">
+        <div class="field"><label for="f-tel">電話</label><input type="tel" id="f-tel" placeholder="06-1234-5678"></div>
+        <div class="field"><label for="f-email">メール</label><input type="email" id="f-email" placeholder="tanaka@example.com"></div>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>④ 当日のながれ</legend>
+      <div id="rep-schedule"></div>
+      <button class="btn wide" id="add-schedule">＋ 行をふやす</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑤ いどう</legend>
+      <div class="field"><label>行き</label></div>
+      <div class="field-2">
+        <div class="field"><label for="f-go-time">出発</label><input type="time" id="f-go-time"></div>
+        <div class="field"><label for="f-go-mins">所要（分）</label><input type="text" inputmode="numeric" id="f-go-mins" placeholder="50"></div>
+      </div>
+      <div class="field"><label for="f-go-route">区間・便名</label><input type="text" id="f-go-route" placeholder="例）名古屋→新大阪 のぞみ21号"></div>
+      <div class="field"><label>帰り</label></div>
+      <div class="field-2">
+        <div class="field"><label for="f-back-time">出発</label><input type="time" id="f-back-time"></div>
+        <div class="field"><label for="f-back-mins">所要（分）</label><input type="text" inputmode="numeric" id="f-back-mins" placeholder="50"></div>
+      </div>
+      <div class="field"><label for="f-back-route">区間・便名</label><input type="text" id="f-back-route" placeholder="例）新大阪→名古屋 のぞみ56号"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑥ しゅくはく</legend>
+      <div class="field"><label for="f-stay-place">宿の名前</label><input type="text" id="f-stay-place" placeholder="例）〇〇ホテル 新大阪"></div>
+      <div class="field-2">
+        <div class="field"><label for="f-stay-date">泊まる日</label><input type="date" id="f-stay-date"></div>
+        <div class="field"><label for="f-stay-tel">電話</label><input type="tel" id="f-stay-tel"></div>
+      </div>
+      <div class="field"><label for="f-stay-address">住所</label><input type="text" id="f-stay-address"></div>
+      <div class="field"><label for="f-stay-note">メモ（チェックイン時刻など）</label><input type="text" id="f-stay-note" placeholder="例）15:00イン／朝食つき"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑦ ないよう</legend>
+      <div class="field-2">
+        <div class="field"><label for="f-audience">対象</label><input type="text" id="f-audience" placeholder="例）管理職"></div>
+        <div class="field"><label for="f-people">人数</label><input type="text" inputmode="numeric" id="f-people" placeholder="40"></div>
+      </div>
+      <div class="field"><label for="f-materials">資料・スライド</label><input type="text" id="f-materials" placeholder="例）資料50部／スライドA"></div>
+      <div class="field"><label for="f-cnote">話す内容のメモ</label><textarea id="f-cnote" placeholder="例）前回この主催者には「傾聴」を話した。今回は「叱り方」を厚めに。"></textarea></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑧ もちもの</legend>
+      <div id="rep-items"></div>
+      <button class="btn wide" id="add-item">＋ 行をふやす</button>
+      <button class="btn wide" id="add-default-items">よく持っていくものを入れる</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑨ おかね</legend>
+      <div id="rep-money"></div>
+      <button class="btn wide" id="add-money">＋ 行をふやす</button>
+      <div class="field"><div class="hint">「入」は売上（講演料など）、「出」は経費（交通費・宿泊費など）です。金額はプラスの数だけ入れてください。</div></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>⑩ そのほかメモ</legend>
+      <div class="field"><textarea id="f-memo" placeholder="控室は3F／駐車券は受付でもらう　など"></textarea></div>
+    </fieldset>
+
+    <button class="btn danger wide" id="ev-delete">この予定を消す</button>
+  </div>
+</section>
+
+<!-- ===================================================================
+     やること（タスク）の入力シート
+     =================================================================== -->
+<section class="sheet" id="sheet-task" aria-hidden="true">
+  <div class="sheet-bar">
+    <button class="btn" id="tk-cancel">やめる</button>
+    <div class="ttl" id="tk-title">やることを追加</div>
+    <button class="btn primary" id="tk-save">保存</button>
+  </div>
+  <div class="sheet-body">
+    <fieldset>
+      <legend>やること</legend>
+      <div class="field">
+        <label for="t-title">なにをする <span class="req">＊必須</span></label>
+        <input type="text" id="t-title" placeholder="例）資料を50部 印刷する">
+      </div>
+      <div class="field-2">
+        <div class="field"><label for="t-due">期限の日</label><input type="date" id="t-due"></div>
+        <div class="field">
+          <label for="t-duetime">時刻（任意）</label><input type="time" id="t-duetime">
+        </div>
+      </div>
+      <div class="field"><div class="hint">時刻を空にすると、期限の日の朝にお知らせします。</div></div>
+      <div class="field">
+        <label for="t-event">どの予定のためのもの？（任意）</label>
+        <select id="t-event"></select>
+      </div>
+      <div class="field"><label for="t-note">メモ</label><textarea id="t-note"></textarea></div>
+      <label class="switch-row">
+        <div class="sl"><b>これは通知しない</b><small>期限のお知らせを出しません</small></div>
+        <input type="checkbox" id="t-remindoff">
+      </label>
+    </fieldset>
+    <button class="btn danger wide" id="tk-delete">このやることを消す</button>
+  </div>
+</section>
+
+<!-- ===================================================================
+     設定シート
+     =================================================================== -->
+<section class="sheet" id="sheet-settings" aria-hidden="true">
+  <div class="sheet-bar">
+    <button class="btn" id="st-close">とじる</button>
+    <div class="ttl">設定</div>
+    <span style="width:44px"></span>
+  </div>
+  <div class="sheet-body">
+
+    <fieldset>
+      <legend>通知</legend>
+      <div id="push-status"></div>
+      <button class="btn primary wide" id="btn-enable-push">通知をオンにする</button>
+      <button class="btn wide" id="btn-test-push">テスト通知を送る</button>
+      <div id="device-list"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>いつ知らせるか</legend>
+      <label class="switch-row">
+        <div class="sl"><b>通知をつかう</b><small>ここを切ると、すべての通知が止まります</small></div>
+        <input type="checkbox" id="n-on">
+      </label>
+      <label class="switch-row">
+        <div class="sl"><b>前日</b><small>開演の24時間前にお知らせ</small></div>
+        <input type="checkbox" id="n-d1">
+      </label>
+      <label class="switch-row">
+        <div class="sl"><b>2時間前</b><small>移動をはじめる目安に</small></div>
+        <input type="checkbox" id="n-h2">
+      </label>
+      <label class="switch-row">
+        <div class="sl"><b>30分前</b><small>直前の確認に</small></div>
+        <input type="checkbox" id="n-m30">
+      </label>
+      <div class="field-2">
+        <div class="field"><label for="n-digest">毎朝のまとめ</label><input type="time" id="n-digest"></div>
+        <div class="field"><label for="n-allday">時刻未定の予定</label><input type="time" id="n-allday"></div>
+        <div class="field"><label for="n-task">やることの期限</label><input type="time" id="n-task"></div>
+      </div>
+      <div class="field"><div class="hint">毎朝のまとめを止めたいときは、時刻を空にしてください。</div></div>
+      <div class="field-2">
+        <div class="field"><label for="n-quiet-from">静かにする時間（から）</label><input type="time" id="n-quiet-from"></div>
+        <div class="field"><label for="n-quiet-to">（まで）</label><input type="time" id="n-quiet-to"></div>
+      </div>
+      <div class="field"><div class="hint">この時間帯は「前日のお知らせ」を出しません。2時間前・30分前は急ぎなので、夜中でも届きます。</div></div>
+      <button class="btn primary wide" id="btn-save-notify">通知の設定を保存する</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>カレンダー① アプリの予定を、カレンダーに出す</legend>
+      <div class="field"><div class="hint">下のURLを、Googleカレンダーの「URLで追加」や、iPhoneの「照会するカレンダーを追加」に貼ると、アプリの予定がカレンダーにも並びます。</div></div>
+      <div class="copybox"><code id="ics-url">—</code><button class="btn" id="btn-copy-ics">コピー</button></div>
+      <div class="field"><div class="hint">※ Googleカレンダーは反映に数時間かかることがあります。急ぎのお知らせは、このアプリの通知が担当します。</div></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>カレンダー② ほかの予定を、アプリに取り込む</legend>
+      <div class="field"><div class="hint">Googleカレンダーの［設定］→ そのカレンダー →「カレンダーの統合」にある<b>シークレットアドレス（iCal形式）</b>をここに貼ってください。ログインは要りません。</div></div>
+      <div id="rep-cals"></div>
+      <button class="btn wide" id="add-cal">＋ カレンダーを足す</button>
+      <button class="btn primary wide" id="btn-save-cals">保存して、いま取り込む</button>
+      <div id="cal-status"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>よく持っていくもの</legend>
+      <div class="field">
+        <textarea id="f-default-items" placeholder="マイク&#10;名刺&#10;電源タップ"></textarea>
+        <div class="hint">1行に1つ。予定の入力画面で「よく持っていくものを入れる」を押すと、まとめて入ります。</div>
+      </div>
+      <button class="btn wide" id="btn-save-items">保存する</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>お金の書き出し（CSV）</legend>
+      <div class="field">
+        <label for="f-csv-year">年をえらぶ</label>
+        <select id="f-csv-year"></select>
+        <div class="hint">エクセルや会計ソフトで開ける表になります。確定申告のときにそのまま渡せます。</div>
+      </div>
+      <button class="btn wide" id="btn-csv">この年のお金を書き出す</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>バックアップ</legend>
+      <div class="field"><div class="hint">データはインターネット上に保管されているので、ふだんのバックアップは要りません。念のため手元にも残したいときに使ってください。</div></div>
+      <button class="btn wide" id="btn-export">ファイルに書き出す</button>
+      <div class="field">
+        <label for="import-file">ファイルから読み込む（いまの内容と置きかわります）</label>
+        <input type="file" id="import-file" accept=".json,application/json">
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>この端末</legend>
+      <div class="field"><div class="hint" id="about-text"></div></div>
+      <button class="btn wide" id="btn-sample">見本の予定を入れてみる</button>
+      <button class="btn wide" id="btn-unlock">別の端末の「入れません」を解除する</button>
+      <div class="field"><div class="hint">合言葉を8回まちがえると、その後15分は入れなくなります。この端末から解除できます。</div></div>
+      <button class="btn danger wide" id="btn-logout">この端末からログアウトする</button>
+    </fieldset>
+
+  </div>
+</section>
+
+<div class="modal" id="modal">
+  <div class="modal-content">
+    <h3 id="modal-title">確認</h3>
+    <p id="modal-text"></p>
+    <div class="modal-btns">
+      <button class="btn" id="modal-no">やめる</button>
+      <button class="btn danger" id="modal-yes">はい</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module" src="/app.js"></script>
+</body>
+</html>
