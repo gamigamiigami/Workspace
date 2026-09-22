@@ -2051,3 +2051,89 @@ document.querySelectorAll('#rep-items .rep-row').forEach(row => {
 「とりあえず1行出しておく」ことができる。
 
 **使用例：** pocket-hisho/index.html（2026-09-22）
+
+## 下タブバー（スマホの親指が届く位置）＋ 浮かせた追加ボタン
+
+機能が3つ以上ある道具は、上のタブより**下のタブバー**が押しやすい。
+iPhoneのホームバーに隠れないよう `env(safe-area-inset-bottom)` を必ず入れる。
+
+```html
+<nav class="tabbar" id="tabbar">
+  <button data-tab="schedule" class="on"><span class="ic">📅</span>予定</button>
+  <button data-tab="task"><span class="ic">☑️</span>やること<span class="badge" id="task-badge" hidden>0</span></button>
+  <button data-tab="notify"><span class="ic">🔔</span>通知</button>
+</nav>
+<button class="fab" id="btn-add" aria-label="追加">＋</button>
+```
+
+```css
+body { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }  /* 下タブに隠れない余白 */
+
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+  display: flex; background: var(--card); border-top: 1px solid var(--line);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.tabbar button {
+  flex: 1; min-height: 60px; padding: 8px 4px 6px;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  background: none; border: none; color: var(--muted); font-size: 11px; font-weight: 700;
+}
+.tabbar button .ic { font-size: 20px; line-height: 1; }
+.tabbar button.on { color: var(--navy); }
+.tabbar button .badge {                      /* 残り件数の赤い印 */
+  position: absolute; transform: translate(14px, -4px);
+  min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px;
+  background: var(--out); color: #fff; font-size: 11px; line-height: 18px;
+}
+
+.fab {                                        /* 追加ボタンは下タブの上に浮かせる */
+  position: fixed; right: 16px; z-index: 40;
+  bottom: calc(84px + env(safe-area-inset-bottom));
+  width: 60px; height: 60px; border-radius: 50%;
+  color: var(--on-navy); background: var(--navy); border: none;
+}
+@media (min-width: 620px) {                   /* パソコン幅では中央に寄せる */
+  .tabbar { max-width: 560px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
+  .fab { right: calc(50vw - 280px + 16px); }
+}
+```
+
+**注意：**
+- `.tabbar button` は背景が `none` なので、コントラストを測るときは
+  **親までさかのぼった実際の背景**と比べること（透明を黒と見なすと誤判定する）
+- 追加ボタンは画面の右下を覆う。**一覧の右端に大事な数字（金額など）を置かない**。
+  2行目に回すと隠れない。
+
+**使用例：** pocket-hisho/web（2026-09-23）
+
+---
+
+## 押せる場所を44pxにする（チェックボックスと設定のオン/オフ行）
+
+チェックボックス自体を44pxにすると大きすぎて不格好。**包んでいる `<label>` を44px**にする。
+
+```html
+<!-- 設定のオン/オフ：行のどこを押しても切りかわる -->
+<label class="switch-row">
+  <div class="sl"><b>前日</b><small>開演の24時間前にお知らせ</small></div>
+  <input type="checkbox" id="n-d1">
+</label>
+```
+
+```css
+.switch-row { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; }
+.switch-row .sl { flex: 1; min-width: 0; }
+.switch-row input[type=checkbox] { flex: none; width: 26px; height: 26px; accent-color: var(--navy); }
+
+/* 一覧の中のチェック：44pxの枠で包む */
+.cb-wrap { flex: none; width: 44px; height: 44px; display: grid; place-items: center; cursor: pointer; }
+.cb-wrap input { width: 24px; height: 24px; accent-color: var(--navy); }
+```
+
+```js
+// 検証するときは「見た目の四角」ではなく「実際に指が当たる範囲」で測る
+const target = e => (e.type === 'checkbox' && e.closest('label')) ? e.closest('label') : e;
+```
+
+**使用例：** pocket-hisho/web（2026-09-23）
