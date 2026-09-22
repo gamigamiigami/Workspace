@@ -2,7 +2,7 @@
 
 コピペで使えるUI部品。
 
-**全文は `knowledge/details/ui-components.md`（1953行）。全文は読まないこと。**
+**全文は `knowledge/details/ui-components.md`（2054行）。全文は読まないこと。**
 必要な項目だけ行番号で読む：`sed -n '120,160p' knowledge/details/ui-components.md`
 キーワードで探す：`grep -n "キーワード" knowledge/details/ui-components.md`
 
@@ -27,3 +27,5 @@
 - `1286-1651` 作品保存・一覧ダイアログ（複数保存管理）
 - `1652-1948` タブ切り替え＋パネルレイアウト（複数モード UI）
 - `1949-1953` 関連リンク
+- `1954-2007` 期間切替バー（日・週・月・年）＋日付おくり
+- `2008-2054` くり返し行（＋行をふやす／× で消す）

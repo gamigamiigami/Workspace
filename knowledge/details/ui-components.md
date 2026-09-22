@@ -1950,3 +1950,104 @@ async function searchProposals() {
 
 - 成功パターン集 → [patterns.md](./patterns.md)
 - コーディング規約 → [rules.md](./rules.md)
+
+## 期間切替バー（日・週・月・年）＋日付おくり
+
+スマホ縦持ちで、上に貼りつけて使う操作バー。**ヘッダーは流し、この2段だけを固定**すると
+画面の縦を無駄にしない（固定は92px程度に収まる）。
+
+```html
+<div class="sticky-bar">
+  <nav class="scope" id="scope">
+    <button data-scope="day" class="on">日</button>
+    <button data-scope="week">週</button>
+    <button data-scope="month">月</button>
+    <button data-scope="year">年</button>
+  </nav>
+  <div class="datenav">
+    <button class="arrow" id="btn-prev">‹</button>
+    <div class="label" id="date-label">2026年9月25日(金)</div>
+    <button class="arrow" id="btn-next">›</button>
+    <button class="today-btn" id="btn-today">今日</button>
+  </div>
+</div>
+```
+
+```css
+.sticky-bar { position: sticky; top: 0; z-index: 30; background: var(--bg); border-bottom: 1px solid var(--line); }
+.scope { display: flex; gap: 4px; padding: 6px 16px 8px; }
+.scope button { flex: 1; min-height: 44px; min-width: 44px; font-size: 15px; font-weight: 700;
+  color: var(--muted); background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+.scope button.on { color: var(--on-navy); background: var(--navy); border-color: var(--navy); }
+.datenav { display: flex; align-items: center; gap: 6px; padding: 0 16px 8px; }
+.datenav .arrow { width: 44px; height: 44px; flex: none; font-size: 20px; }
+.datenav .label { flex: 1; text-align: center; font-size: 17px; font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.datenav .today-btn { height: 44px; min-width: 56px; flex: none; color: var(--gold);
+  background: var(--gold-soft); border: 1px solid var(--gold); }
+```
+
+```js
+// 「進む/戻る」の幅は、いま選んでいる範囲で変える
+function moveCursor(step) {
+  if (state.scope === 'day')        state.cursor = addDays(state.cursor, step);
+  else if (state.scope === 'week')  state.cursor = addDays(state.cursor, step * 7);
+  else if (state.scope === 'month') state.cursor = addMonths(state.cursor, step);
+  else                              state.cursor = addYears(state.cursor, step);
+  render();
+}
+```
+
+**注意：** 月おくり・年おくりは `setMonth()` をそのまま使うと 1/31→3/3 のように飛ぶ。
+その月の最終日にそろえる処理を入れること（`addYears` は `addMonths(s, n*12)` にすれば1本で済む）。
+
+**使用例：** pocket-hisho/index.html（2026-09-22）
+
+---
+
+## くり返し行（＋行をふやす／× で消す）
+
+「当日のながれ」「持ち物」「お金」のように、**何個でも足せる入力欄**。
+3種類とも「中身＋消すボタン」の同じ形にして、作る関数を1本にまとめる。
+
+```js
+function repRow(children) {
+  const row = document.createElement('div');
+  row.className = 'rep-row';
+  children.forEach(c => row.appendChild(c));
+  const del = document.createElement('button');
+  del.type = 'button'; del.className = 'del'; del.textContent = '×';
+  del.setAttribute('aria-label', 'この行を消す');
+  del.addEventListener('click', () => row.parentNode.removeChild(row));
+  row.appendChild(del);
+  return row;
+}
+// 使う側は中身だけを渡す
+function itemRow(text, done) {
+  const c = document.createElement('input'); c.type = 'checkbox'; c.checked = !!done;
+  const t = document.createElement('input'); t.type = 'text'; t.value = text || '';
+  return repRow([c, t]);
+}
+```
+
+```css
+.rep-row { display: flex; gap: 8px; align-items: center; margin-top: 8px; }
+.rep-row input, .rep-row select { min-height: 44px; font-size: 16px; min-width: 0; }
+.rep-row .del { flex: none; width: 44px; height: 44px; color: var(--out);
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px; }
+```
+
+**読み取りは保存のときにまとめて行う**（入力のたびに描きなおすと日本語入力の変換がとぎれる）：
+
+```js
+document.querySelectorAll('#rep-items .rep-row').forEach(row => {
+  const c = row.querySelector('input[type=checkbox]');
+  const t = row.querySelector('input[type=text]');
+  if (t.value.trim()) list.push({ text: t.value.trim(), done: c.checked });
+});
+```
+
+**空の行は捨てる**（中身が何も入っていない行は保存しない）ので、
+「とりあえず1行出しておく」ことができる。
+
+**使用例：** pocket-hisho/index.html（2026-09-22）
