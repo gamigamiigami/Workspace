@@ -42,7 +42,7 @@
 **次回への申し送り**
 - **伊神さんの手作業待ち：`projects/pocket-hisho/SETUP.md` に沿って Cloudflare に公開する**
   （画面の文言は私が実地で確かめたものではない。ボタンが無ければ止めて聞いてもらう）
-  **Database ID が届いたら `projects/pocket-hisho/wrangler.toml` の `database_id = ""` に書いてプッシュする**
+  → ②③は完了（Database ID を受け取り `wrangler.toml` に記入・プッシュ済み）。残りは④〜⑥
 - **スマホ実機テスト待ち**：①番号の自動引き継ぎ ②LINE→Safari ③通知 ④Googleカレンダーのボタン
 - **伊神さんに要確認**：講演料・売上を記録しなくなったこと（前提として決めた）
 - 提案候補（未実装）：「ほかの端末をまとめてログアウト」ボタン（今はスマホをなくしたら SETUP.md の方法B）
