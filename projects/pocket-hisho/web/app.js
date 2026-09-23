@@ -529,9 +529,11 @@ function calendarButtonsHtml() {
   if (!l) return '<div class="gs">つながったときに、ボタンが出ます。</div>';
   const apple = '<a class="btn wide" data-g="cal" href="' + esc(l.apple) + '">📅 iPhoneのカレンダーに表示</a>';
   const google = '<a class="btn wide" data-g="cal" target="_blank" rel="noopener" href="' + esc(l.google) + '">🗓 Googleカレンダーに表示</a>';
-  return (isAndroid() ? google + apple : apple + google) +
-    '<div class="gs" style="margin-top:6px">開いた画面で<b>「照会」</b>または<b>「追加」</b>を押せば終わりです。' +
-    '（Googleカレンダーは、反映まで数時間かかることがあります）</div>';
+  return '<div class="gs" style="margin-bottom:6px">ふだん見ているカレンダーの方を<b>1つだけ</b>押してください' +
+    '（両方押すと、同じ予定が2つずつ出ることがあります）。</div>' +
+    (isAndroid() ? google + apple : apple + google) +
+    '<div class="gs" style="margin-top:6px">開いた画面で<b>「照会」</b>（iPhone）か<b>「追加」</b>（Google）を押せば終わり。' +
+    '<b>やるのは最初の1回だけ</b>で、あとは自動で並びます（iPhoneは15分〜1時間、Googleは数時間〜1日ほどで反映）。</div>';
 }
 
 /* --- ④ 招待リンク --- */

@@ -71,7 +71,11 @@ export function buildIcs(events, opts = {}) {
     'CALSCALE:GREGORIAN',
     'METHOD:PUBLISH',
     'X-WR-CALNAME:' + escapeText(calName),
-    'X-WR-TIMEZONE:Asia/Tokyo'
+    'X-WR-TIMEZONE:Asia/Tokyo',
+    // 「このくらいの間隔で見に来てください」というカレンダー側へのお願い（15分）。
+    // iPhone・Mac はこれを目安にする。Google は従わず、数時間〜1日ごとに自分の都合で見に来る
+    'REFRESH-INTERVAL;VALUE=DURATION:PT15M',
+    'X-PUBLISHED-TTL:PT15M'
   ];
 
   for (const ev of events) {

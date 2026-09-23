@@ -84,6 +84,7 @@ const sample = [{
 const ics = buildIcs(sample, { now: Date.parse('2026-09-22T03:00:00Z') });
 ok('ICSの形になっている', ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.trimEnd().endsWith('END:VCALENDAR'));
 ok('行の区切りは CRLF', ics.includes('\r\n') && !/[^\r]\n/.test(ics));
+ok('カレンダーに「15分ごとに見に来て」と伝えている', ics.includes('REFRESH-INTERVAL;VALUE=DURATION:PT15M\r\n') && ics.includes('X-PUBLISHED-TTL:PT15M\r\n'));
 ok('開演 13:30(日本) が 04:30Z で入る', ics.includes('DTSTART:20260925T043000Z'), ics.match(/DTSTART[^\r]*/g));
 ok('終了 16:30(日本) が 07:30Z で入る', ics.includes('DTEND:20260925T073000Z'));
 ok('時刻のない予定は終日になる', ics.includes('DTSTART;VALUE=DATE:20261008'));
