@@ -6,6 +6,7 @@ import {
   mondayOf, weekdayOf, diffDays, fmtDay, fmtFull, reminderAt, isYmd
 } from '../web/shared-date.js';
 import { buildIcs, parseIcs, expandRecurrences, icsStampUtc } from '../src/ics.js';
+import { normalizeEvent, costOf, toYen, buildCostCsv } from '../web/shared-model.js';
 import {
   generateVapidKeys, makeVapidHeader, encryptPayload, decryptPayloadForTest,
   b64urlToBytes, bytesToB64url
@@ -275,6 +276,50 @@ const tampered = h64 + '.' + bytesToB64url(new TextEncoder().encode(JSON.stringi
 const validTampered = await subtle.verify(
   { name: 'ECDSA', hash: 'SHA-256' }, verifyKey, b64urlToBytes(s64), new TextEncoder().encode(tampered));
 ok('中身を書きかえた証明書は検証に落ちる', !validTampered);
+
+/* =================================================================== */
+console.log('\n【7】かかったお金（運賃・ホテル代・その他）');
+/* =================================================================== */
+
+eq('「28,400」→ 28400', toYen('28,400'), 28400);
+eq('「２８４００円」（全角）→ 28400', toYen('２８４００円'), 28400);
+eq('「2万8400」→ 28400', toYen('2万8400'), 28400);
+eq('「1.5万」→ 15000', toYen('1.5万'), 15000);
+eq('「 9800 」（前後に空白）→ 9800', toYen(' 9800 '), 9800);
+eq('空は 0', toYen(''), 0);
+eq('文字は 0', toYen('わからない'), 0);
+eq('マイナスは 0', toYen(-500), 0);
+
+const evCost = normalizeEvent({ id: 'c1', date: '2026-09-25', title: 'A', cost: { fare: '28,400', hotel: '9800', other: '1000', otherNote: '駐車場' } });
+eq('予定のお金の欄が数にそろう', evCost.cost, { fare: 28400, hotel: 9800, other: 1000, otherNote: '駐車場' });
+eq('合計が出る', costOf(evCost), { fare: 28400, hotel: 9800, other: 1000, total: 39200 });
+eq('お金の欄が無い予定は 0円', costOf(normalizeEvent({ id: 'c2', date: '2026-09-25' })).total, 0);
+
+// 前の版（入/出・項目・金額の行）で保存された形から、名前で振り分ける
+const legacy = normalizeEvent({ id: 'c3', date: '2026-09-25', money: [
+  { kind: 'in', label: '講演料', amount: 80000 },
+  { kind: 'out', label: '新幹線', amount: 28400 },
+  { kind: 'out', label: '宿泊費', amount: 9800 },
+  { kind: 'out', label: '駐車場', amount: 1000 }
+] });
+eq('前の版の形：交通 → 運賃、宿泊 → ホテル代、ほか → その他', legacy.cost, { fare: 28400, hotel: 9800, other: 1000, otherNote: '駐車場' });
+ok('前の版の「講演料」（入ってくるお金）は取りこまない', costOf(legacy).total === 39200);
+ok('前の版の money 欄は残らない', !('money' in legacy));
+
+const csvEvents = [
+  normalizeEvent({ id: 'x1', date: '2026-03-05', title: '研修A', venue: { place: '東京' }, contact: { org: '甲社' }, cost: { fare: 3400, hotel: 0 } }),
+  normalizeEvent({ id: 'x2', date: '2026-03-18', title: '研修"B"', venue: { place: '横浜' }, cost: { fare: 4200, hotel: 9800, other: 500, otherNote: '駐車場' } }),
+  normalizeEvent({ id: 'x3', date: '2026-04-01', title: 'お金なし' }),
+  normalizeEvent({ id: 'x4', date: '2025-12-01', title: '去年', cost: { fare: 9999 } })
+];
+const csv = buildCostCsv(csvEvents, '2026');
+const csvRows = csv.split('\r\n');
+eq('表は 見出し＋お金のある2件＋合計 の4行', csvRows.length, 4);
+eq('見出し', csvRows[0], '"日付","セミナー名","会場","主催","運賃","ホテル代","その他","その他の内容","合計"');
+ok('「"」を含む題名も表が崩れない', csvRows[2].includes('"研修""B"""'), csvRows[2]);
+eq('合計の行', csvRows[3], '"合計","","","","7600","9800","500","","17900"');
+ok('お金の無い予定・ほかの年は入らない', !csv.includes('お金なし') && !csv.includes('去年'));
+eq('記録が無い年は作らない（null）', buildCostCsv(csvEvents, '2030'), null);
 
 /* =================================================================== */
 console.log('\n────────────────────────────');

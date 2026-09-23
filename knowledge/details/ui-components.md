@@ -2137,3 +2137,71 @@ const target = e => (e.type === 'checkbox' && e.closest('label')) ? e.closest('l
 ```
 
 **使用例：** pocket-hisho/web（2026-09-23）
+
+---
+
+## はじめの準備（端末に合わせて、次の1手だけを強調する手順カード）
+
+**用途：** 設定がむずかしいアプリの最初の案内。**その端末で要る手順だけ**を上から並べ、
+いまやる1つ（`now`）を太枠、済んだもの（`done`）は✓にする。済んだかどうかは**アプリが自動で判定**する
+（例：ホーム画面から開いている＝追加済み、通知の許可あり＋宛先登録済み＝通知OK）。
+
+```html
+<div class="guide-step now">
+  <div class="gh"><span class="num">2</span>
+    <div><div class="gt">通知をオンにする</div><div class="gs">時間が来たら、スマホにお知らせが届きます</div></div>
+  </div>
+  <div class="gb"><button class="btn primary wide" data-g="push">通知をオンにする</button></div>
+</div>
+```
+
+```css
+.guide-step { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.guide-step.now  { border: 2px solid var(--navy); box-shadow: var(--shadow); }
+.guide-step.done { background: var(--card-2); }          /* opacity は使わない（中のボタンまで薄くなる） */
+.guide-step .num { /* 丸い番号 */ }
+.guide-step.done .num { background: var(--in); color: #fff; }
+.gs { font-size: 13px; color: var(--muted); }            /* 親に閉じこめない（設定画面でも使う） */
+```
+
+**動きの決まり：**
+- はじめてその端末で入ったときに**1回だけ自動で開く**（次からは勝手に開かない）
+- 閉じたあとも、残りがあれば画面上に「はじめの準備 あと○つ ›」の帯を出す（押すと開く）
+- 任意の手順（カレンダー）は「あと○つ」に数えない
+
+**使用例：** pocket-hisho/web/app.js `guideSteps()` `renderGuide()`（2026-09-23）
+
+---
+
+## たたむ入力欄（details）：よく使う欄だけ開いて、画面を短く見せる
+
+**用途：** 項目の多い入力画面。いつも入れる「きほん」「ばしょ」だけ開き、
+移動・宿泊・持ち物などは `<details>` でたたむ。**中身が入っている欄は自動で開き**、
+見出しの横に中身の要約（例：「… 28,400円」）を出す。
+
+```html
+<details class="fold" id="fold-travel">
+  <summary>🚄 いどう・運賃<span class="sum-hint"></span></summary>
+  <div class="fold-body"> … </div>
+</details>
+```
+
+```js
+// 欄ごとに「要約の作り方」を1つだけ持つ。要約が空でなければ＝中身あり＝開く
+const FOLDS = [
+  { id: 'fold-travel', hint: 'sum-travel', of: ev => ev.cost.fare ? yen(ev.cost.fare) : (ev.travelGo.route || ev.travelBack.route || '') },
+  // …
+];
+for (const f of FOLDS) {
+  const hint = f.of(ev) || '';
+  document.getElementById(f.hint).textContent = hint ? '… ' + hint : '';
+  document.getElementById(f.id).open = !!hint;
+}
+// 金額のボタンから来たときは、その欄を開いて入力欄にカーソル
+openEventEditor(id, 'cost');
+```
+
+**注意：** 設定画面の「くわしい設定」のように**毎回閉じた状態から見せたい**ものは、
+開くたびに `open = false` に戻す（前に開いたままだと、ふだん使う項目が埋もれる）。
+
+**使用例：** pocket-hisho/web/index.html `#sheet-event` `#fold-advanced`（2026-09-23）

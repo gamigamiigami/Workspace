@@ -4319,3 +4319,87 @@ catch (e) {
 つながらなくても**真っ白にならない**。
 
 **タグ：** #オフライン #同期 #キュー #pocket-hisho
+
+---
+
+## 初心者に渡すサーバーを「Deployを押すだけ」にする（Cloudflare Workers + D1）
+
+**場面：** ポケット秘書。前の手順書は「保管庫を作る→SQLを貼る→IDを書きこむ→合言葉をSecretに登録」の
+4つの手作業があり、どれか1つ抜けると動かなかった。
+
+**やり方（3つ重ねて、手作業をゼロにする）：**
+
+1. **`wrangler.toml` に `database_id` を書かない。** wrangler 4 系は、名前（`database_name`）だけあれば
+   公開のときに**その名前の保管庫を探し、無ければ作って**つなぐ（wrangler 4.136 の中身を読んで確認：
+   `isConnectedToExistingResource` が名前で探し、無ければ `runProvisioningFlow` が質問なしで作る）。
+   ```toml
+   [[d1_databases]]
+   binding = "DB"
+   database_name = "pocket-hisho"   # database_id は書かない
+   ```
+2. **表はサーバーが自分で作る。** `CREATE TABLE IF NOT EXISTS` を並べた配列を、
+   その実行環境（isolate）で最初の1回だけ流す。列を足すときは別の配列（UPGRADES）に。
+   ```js
+   let ready = false;
+   export async function ensureSchema(db) {
+     if (ready) return;
+     await db.batch(SCHEMA.map(sql => db.prepare(sql)));
+     for (const u of UPGRADES) {          // { table, column, sql }：列が無いときだけ足す
+       const { results } = await db.prepare(`PRAGMA table_info(${u.table})`).all();
+       if (!(results || []).some(r => r.name === u.column)) await db.prepare(u.sql).run();
+     }
+     ready = true;
+   }
+   ```
+3. **合言葉は「最初に開いた人」が画面で決める**（GitHubに書かずに済む）。2人同時でも1人だけ通るよう、
+   `INSERT … ON CONFLICT(k) DO NOTHING` の `meta.changes` で先着を判定する。
+   Cloudflare 側の秘密の値（`APP_PASS`）があればそちらを優先＝忘れたときの逃げ道。
+
+**残るリスクと手当て：** 公開〜最初に開くまでの間に他人が開くと、その人が決めてしまう。
+→ 手順書で「公開したらすぐ開く」と書き、万一のときのやり直し（表から合言葉とログインを消すSQL）も載せる。
+
+**タグ：** #Cloudflare #D1 #セットアップ #初心者向け #pocket-hisho
+
+---
+
+## iPhone のホーム画面アプリへ、ログインを自動で引き継ぐ（6けたの番号）
+
+**場面：** iPhone は **Safari と「ホーム画面に追加したアイコン」で保存場所（localStorage）が別**。
+Safari でログインしても、アイコンから開くとログアウト状態になる。講師の方に2回ログインさせたくない。
+
+**やり方：** Safari で開いている間に、1回だけ使える6けたの番号（24時間）をサーバーで作り、
+**2か所**に入れておく。アイコン側はどちらかから番号を拾って、自動でログインする。
+
+```js
+// ① アドレス欄（「ホーム画面に追加」はふつう、いま見ているURLを覚える）
+history.replaceState(null, '', '/?h=' + code);
+// ② 説明書（manifest）の start_url。サーバーが番号入りの説明書を作って返す
+document.getElementById('manifest-link').href = '/app.webmanifest?h=' + code;
+```
+
+- 番号が渡らなかったときだけ「6けたの番号で入る」画面を出す（Safari の画面に大きく出しておく）
+- 番号も合言葉と同じく **8回まちがえで15分止める** 仕組みを通す（6けた＝100万通りでも総当たりされないため）
+- Android は保存場所が共通なので、番号は出さない
+
+**未確認：** iPhone 実機で①②のどちらが効くか（テストは Chromium で「ふり」をして確認）。
+
+**タグ：** #PWA #iPhone #ホーム画面 #ログイン #pocket-hisho
+
+---
+
+## LINEで送るリンクを、LINEの中ではなく Safari / Chrome で開かせる
+
+**場面：** 招待リンクをLINEで送ると、LINEの中のブラウザで開く。そこでは「ホーム画面に追加」も通知もできない。
+
+**やり方：**
+```js
+// 送るURLの末尾に openExternalBrowser=1（LINEの決まり。外のブラウザで開く）
+const url = origin + '/?invite=' + code + '&openExternalBrowser=1';
+// 「LINEで送る」ボタン：相手を選ぶ画面が開く（無料・ログイン不要）
+const href = 'https://line.me/R/share?text=' + encodeURIComponent(message + '\n' + url);
+```
+- それでもLINEの中で開いたとき用に、ユーザーエージェントで見分けて（`/\bLine\/|FBAN|FBAV|Instagram|MicroMessenger/i`）
+  「右上（または右下）の︙や共有 →『ブラウザで開く』」を案内し、リンクのコピーボタンも出す
+- 招待リンクで入った印（`via: 'invite'`）を覚えておき、講師の方には「招待リンクを送る」手順を出さない
+
+**タグ：** #LINE #招待 #スマホ #pocket-hisho

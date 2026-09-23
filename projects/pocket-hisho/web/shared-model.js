@@ -35,7 +35,8 @@ export function blankEvent() {
     stay: { place: '', date: '', tel: '', address: '', note: '' },
     content: { audience: '', people: '', materials: '', note: '' },
     items: [],                             // [{text, done}] 持ち物
-    money: [],                             // [{kind:'in'|'out', label, amount}]
+    // かかったお金。細かい帳簿ではなく「運賃」「ホテル代」を書きとめるだけ（円・整数）
+    cost: { fare: 0, hotel: 0, other: 0, otherNote: '' },
     memo: '',
     remindOff: false                       // この予定だけ通知しない
   };
@@ -69,9 +70,7 @@ export function normalizeEvent(e) {
     materials: str(pick(e.content, 'materials')), note: str(pick(e.content, 'note'))
   };
   b.items = arr(e.items).map(r => ({ text: str(pick(r, 'text')), done: pick(r, 'done') === true })).filter(r => r.text);
-  b.money = arr(e.money)
-    .map(r => ({ kind: pick(r, 'kind') === 'out' ? 'out' : 'in', label: str(pick(r, 'label')), amount: posInt(pick(r, 'amount')) }))
-    .filter(r => r.label || r.amount);
+  b.cost = normalizeCost(e);
   b.memo = str(e.memo);
   b.remindOff = e.remindOff === true;
   return b;
@@ -87,10 +86,65 @@ export function eventLabel(ev) {
   return ev.title || ev.venue.place || ev.contact.org || '（名前未入力）';
 }
 
-export function moneyOf(ev) {
-  let income = 0, expense = 0;
-  for (const m of ev.money) { if (m.kind === 'out') expense += m.amount; else income += m.amount; }
-  return { income, expense, net: income - expense };
+/* ---------------------------------------------------------------------
+   かかったお金（運賃・ホテル代・その他）
+   --------------------------------------------------------------------- */
+
+/** 金額の入力をそろえる。「12,000」「1万2000円」のような書き方でも数にする */
+export function toYen(v) {
+  if (typeof v === 'number') return Math.max(0, Math.round(v));
+  let s = String(v == null ? '' : v).replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0));
+  s = s.replace(/[,，\s円]/g, '');
+  const man = /^(\d+(?:\.\d+)?)万(\d*)$/.exec(s);           // 「1万2000」「1.5万」
+  if (man) return Math.round(Number(man[1]) * 10000 + (man[2] ? Number(man[2]) : 0));
+  const n = Number(s);
+  return Number.isFinite(n) ? Math.max(0, Math.round(n)) : 0;
+}
+
+/**
+ * 予定のお金の欄をそろえる。
+ * 前の版は「入/出・項目・金額」の行を何行でも持てる作りだったので、
+ * その形で来たときは、項目の名前から 運賃／ホテル代／その他 に振り分ける。
+ * （講演料などの「入ってくるお金」は、今の版では記録しないので読み飛ばす）
+ */
+function normalizeCost(e) {
+  const c = pick(e, 'cost');
+  if (c && typeof c === 'object') {
+    return { fare: toYen(c.fare), hotel: toYen(c.hotel), other: toYen(c.other), otherNote: str(c.otherNote) };
+  }
+  const out = { fare: 0, hotel: 0, other: 0, otherNote: '' };
+  const notes = [];
+  for (const r of arr(pick(e, 'money'))) {
+    if (pick(r, 'kind') !== 'out') continue;
+    const label = str(pick(r, 'label'));
+    const amount = toYen(pick(r, 'amount'));
+    if (/運賃|交通|新幹線|電車|飛行機|航空|バス|タクシー|高速|ガソリン/.test(label)) out.fare += amount;
+    else if (/ホテル|宿泊|宿/.test(label)) out.hotel += amount;
+    else { out.other += amount; if (label) notes.push(label); }
+  }
+  out.otherNote = notes.join('・');
+  return out;
+}
+
+export function costOf(ev) {
+  const c = ev.cost || { fare: 0, hotel: 0, other: 0 };
+  return { fare: c.fare, hotel: c.hotel, other: c.other, total: c.fare + c.hotel + c.other };
+}
+
+/** 運賃・ホテル代の表（1件＝1行）。確定申告のとき、そのまま渡せる形 */
+export function buildCostCsv(events, year) {
+  const rows = [['日付', 'セミナー名', '会場', '主催', '運賃', 'ホテル代', 'その他', 'その他の内容', '合計']];
+  let sum = { fare: 0, hotel: 0, other: 0, total: 0 };
+  for (const e of events) {
+    if (e.date.slice(0, 4) !== String(year)) continue;
+    const c = costOf(e);
+    if (!c.total) continue;
+    rows.push([e.date, e.title, e.venue.place, e.contact.org, c.fare, c.hotel, c.other, e.cost.otherNote, c.total]);
+    sum = { fare: sum.fare + c.fare, hotel: sum.hotel + c.hotel, other: sum.other + c.other, total: sum.total + c.total };
+  }
+  if (rows.length === 1) return null;
+  rows.push(['合計', '', '', '', sum.fare, sum.hotel, sum.other, '', sum.total]);
+  return rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(',')).join('\r\n');
 }
 
 /* =====================================================================

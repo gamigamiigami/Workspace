@@ -13,6 +13,7 @@
 import { generateVapidKeys, sendPush } from './push.js';
 import { buildIcs, parseIcs, expandRecurrences } from './ics.js';
 import { computeDueNotifications } from './remind.js';
+import { ensureSchema } from './schema.js';
 import { todayStr, addDays, ymdOf, hmOf } from '../web/shared-date.js';
 import {
   normalizeEvent, normalizeTask, normalizeSettings, defaultSettings
@@ -74,47 +75,185 @@ async function ensureIcsKey(env) {
 }
 
 /* =====================================================================
-   ログイン（使う人は1人なので、合言葉ひとつ）
+   ログイン
+
+   入り方は3つ：
+     ① 合言葉          … 伊神さん（作った人）・パソコン
+     ② 招待リンク      … 講師の方。LINEで届いたリンクをタップするだけで入れる
+     ③ 引き継ぎ番号    … iPhone で「ホーム画面に追加」したあと、
+                          ホーム画面のアプリは Safari と保存場所が別なので、
+                          6けたの番号で入り直す（できるだけ自動で渡す）
+
+   合言葉は、はじめて開いた人が決める（Cloudflare 側での秘密の登録を不要にするため）。
+   Cloudflare に APP_PASS が登録されていれば、そちらが優先される。
    ===================================================================== */
 
 const MAX_FAILS = 8;
 const LOCK_MS = 15 * 60 * 1000;
+const PBKDF2_ITER = 5000;          // 無料枠のCPU時間（1回10ms）に収まる回数
+const INVITE_DAYS = 14;
+const HANDOFF_HOURS = 24;
 
-async function handleLogin(request, env) {
-  const body = await request.json().catch(() => ({}));
-  const now = Date.now();
-
+/* --- まちがいが続いたら、しばらく受けつけない（合言葉・番号の両方に効く） --- */
+async function checkLock(env) {
   const fails = (await kvGet(env, 'login_fails')) || { count: 0, until: 0 };
+  const now = Date.now();
   if (fails.until > now) {
     return bad('しばらく試せません。' + Math.ceil((fails.until - now) / 60000) + '分ほどお待ちください。', 429);
   }
-  if (!env.APP_PASS) {
-    return bad('サーバーに合言葉が設定されていません（セットアップ手順の APP_PASS をご確認ください）', 500);
-  }
-  if (!safeEqual(body.pass, env.APP_PASS)) {
-    const count = fails.count + 1;
-    await kvPut(env, 'login_fails', { count, until: count >= MAX_FAILS ? now + LOCK_MS : 0 });
-    return bad('合言葉がちがいます', 401);
-  }
+  return null;
+}
+async function recordFail(env) {
+  const fails = (await kvGet(env, 'login_fails')) || { count: 0, until: 0 };
+  const count = fails.count + 1;
+  await kvPut(env, 'login_fails', { count, until: count >= MAX_FAILS ? Date.now() + LOCK_MS : 0 });
+}
+async function clearFails(env) { await kvPut(env, 'login_fails', { count: 0, until: 0 }); }
 
-  await kvPut(env, 'login_fails', { count: 0, until: 0 });
+async function createSession(env, via) {
   const token = randomHex(32);
-  await env.DB.prepare('INSERT INTO sessions (token, created_at, last_seen) VALUES (?, ?, ?)')
-    .bind(token, now, now).run();
-  return json({ token });
+  const now = Date.now();
+  await env.DB.prepare('INSERT INTO sessions (token, created_at, last_seen, via) VALUES (?, ?, ?, ?)')
+    .bind(token, now, now, via).run();
+  return token;
 }
 
-/** リクエストに付いている合言葉つきの札を確かめる */
+/* --- 合言葉をハッシュにして持つ（そのままの文字では保存しない） --- */
+async function hashPass(pass, saltHex) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pass)), 'PBKDF2', false, ['deriveBits']);
+  const salt = new Uint8Array(saltHex.match(/../g).map(h => parseInt(h, 16)));
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: PBKDF2_ITER }, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function setPass(env, pass, onlyIfEmpty) {
+  const salt = randomHex(16);
+  const value = JSON.stringify({ salt, hash: await hashPass(pass, salt), iter: PBKDF2_ITER });
+  if (onlyIfEmpty) {
+    // 2人が同時に「はじめの合言葉」を決めようとしても、先に書いた1人だけが通る
+    const r = await env.DB.prepare('INSERT INTO kv (k, v) VALUES (?, ?) ON CONFLICT(k) DO NOTHING').bind('pass', value).run();
+    return (r.meta && r.meta.changes) === 1;
+  }
+  await kvPut(env, 'pass', JSON.parse(value));
+  return true;
+}
+async function checkPass(env, pass) {
+  if (env.APP_PASS) return safeEqual(pass, env.APP_PASS);
+  const stored = await kvGet(env, 'pass');
+  if (!stored || !stored.salt) return false;
+  return safeEqual(await hashPass(pass, stored.salt), stored.hash);
+}
+async function needsSetup(env) {
+  if (env.APP_PASS) return false;
+  return !(await kvGet(env, 'pass'));
+}
+
+/* --- ① はじめての合言葉を決める（まだ誰も決めていないときだけ） --- */
+async function handleSetup(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const pass = String(body.pass || '');
+  if (!(await needsSetup(env))) return bad('合言葉はもう決まっています。ログインしてください。', 409);
+  if (pass.length < 8) return bad('合言葉は8文字以上にしてください');
+  if (!(await setPass(env, pass, true))) return bad('合言葉はもう決まっています。ログインしてください。', 409);
+  return json({ token: await createSession(env, 'setup') });
+}
+
+/* --- ① 合言葉で入る --- */
+async function handleLogin(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const locked = await checkLock(env);
+  if (locked) return locked;
+  if (await needsSetup(env)) return bad('まだ合言葉が決まっていません。はじめに合言葉を決めてください。', 409);
+  if (!(await checkPass(env, body.pass))) {
+    await recordFail(env);
+    return bad('合言葉がちがいます', 401);
+  }
+  await clearFails(env);
+  return json({ token: await createSession(env, 'pass') });
+}
+
+/* --- ②③ 招待リンク・引き継ぎ番号で入る --- */
+async function handleRedeem(request, env) {
+  const body = await request.json().catch(() => ({}));
+  const code = String(body.code || '').replace(/[\s-]/g, '').toLowerCase();
+  const locked = await checkLock(env);
+  if (locked) return locked;
+  const now = Date.now();
+  const row = code
+    ? await env.DB.prepare('SELECT * FROM codes WHERE code = ? AND expires_at > ? AND uses_left > 0').bind(code, now).first()
+    : null;
+  if (!row) {
+    await recordFail(env);
+    return bad(/^\d{6}$/.test(code)
+      ? 'この番号は使えません（使い終わったか、期限切れです）。もう一度、番号を出し直してください。'
+      : 'この招待リンクは使えません（期限切れか、取り消されています）。伊神さんに新しいリンクをもらってください。', 401);
+  }
+  await env.DB.prepare('UPDATE codes SET uses_left = uses_left - 1 WHERE code = ?').bind(code).run();
+  await clearFails(env);
+  return json({ token: await createSession(env, row.kind) });
+}
+
+/** 招待リンク。openExternalBrowser=1 は LINE の決まりで、
+    LINEの中のブラウザではなく Safari / Chrome で開かせる（LINEの中では「ホーム画面に追加」ができないため） */
+function inviteUrl(origin, code) {
+  return origin + '/?invite=' + code + '&openExternalBrowser=1';
+}
+
+/** 6けたの番号（見まちがえにくいよう数字だけ） */
+function sixDigits() {
+  const n = crypto.getRandomValues(new Uint32Array(1))[0] % 1000000;
+  return String(n).padStart(6, '0');
+}
+
+async function createInvite(env) {
+  // 招待リンクは1本だけ有効にする（前のものは取り消す）
+  await env.DB.prepare("DELETE FROM codes WHERE kind = 'invite'").run();
+  const code = randomHex(12);
+  const expiresAt = Date.now() + INVITE_DAYS * 86400000;
+  await env.DB.prepare('INSERT INTO codes (code, kind, expires_at, uses_left, created_at) VALUES (?, ?, ?, ?, ?)')
+    .bind(code, 'invite', expiresAt, 20, Date.now()).run();
+  return { code, expiresAt };
+}
+async function createHandoff(env) {
+  const now = Date.now();
+  await env.DB.prepare('DELETE FROM codes WHERE expires_at < ?').bind(now).run();   // ついでに古いものを片づける
+  for (let i = 0; i < 5; i++) {
+    const code = sixDigits();
+    const r = await env.DB.prepare(
+      'INSERT INTO codes (code, kind, expires_at, uses_left, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(code) DO NOTHING')
+      .bind(code, 'handoff', now + HANDOFF_HOURS * 3600000, 1, now).run();
+    if (r.meta && r.meta.changes === 1) return { code, expiresAt: now + HANDOFF_HOURS * 3600000 };
+  }
+  throw new Error('番号を作れませんでした');
+}
+
+/** リクエストに付いている札を確かめる。札があれば {token, via} を返す */
 async function requireAuth(request, env) {
   const h = request.headers.get('Authorization') || '';
   const token = h.startsWith('Bearer ') ? h.slice(7) : '';
   if (!token) return null;
-  const row = await env.DB.prepare('SELECT token FROM sessions WHERE token = ?').bind(token).first();
+  const row = await env.DB.prepare('SELECT token, via FROM sessions WHERE token = ?').bind(token).first();
   if (!row) return null;
-  // 最終利用を記録（1日1回程度でよいので、書き込みは間引く）
+  // 最終利用を記録（数時間に1回でよいので、書き込みは間引く）
   await env.DB.prepare('UPDATE sessions SET last_seen = ? WHERE token = ? AND last_seen < ?')
     .bind(Date.now(), token, Date.now() - 6 * 3600 * 1000).run();
-  return token;
+  return { token, via: row.via || 'pass' };
+}
+
+/* --- ホーム画面に追加するときに読まれる「アプリの説明書」。
+       引き継ぎ番号を起動URLに入れておくと、ホーム画面から開いた瞬間に自動で入れる --- */
+function manifestFor(handoff) {
+  const start = /^\d{6}$/.test(handoff || '') ? '/?h=' + handoff : '/';
+  return {
+    name: 'ポケット秘書', short_name: 'ポケット秘書',
+    description: 'セミナーの予定とやることを、1か所にまとめてお知らせします',
+    lang: 'ja', start_url: start, scope: '/', display: 'standalone', orientation: 'portrait',
+    background_color: '#eef1f5', theme_color: '#1f3a5f',
+    icons: [
+      { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+      { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+    ]
+  };
 }
 
 /* =====================================================================
@@ -304,19 +443,35 @@ export default {
     const path = url.pathname;
 
     try {
-      /* --- カレンダー購読用URL（ログイン不要。推測できない合言葉つき） --- */
-      const icsMatch = /^\/ics\/([0-9a-f]{24,})\.ics$/.exec(path);
-      if (icsMatch) return await handleIcs(env, icsMatch[1]);
-
-      /* --- ここから下はアプリとのやりとり --- */
       if (path === '/api/ping') return json({ ok: true, now: Date.now(), today: todayStr() });
 
-      if (path === '/api/login' && request.method === 'POST') return await handleLogin(request, env);
+      const icsMatch = /^\/ics\/([0-9a-f]{24,})\.ics$/.exec(path);
+      const needsDb = icsMatch || path.startsWith('/api/') || path === '/app.webmanifest';
+      // 表が無ければここで作る（セットアップでSQLを実行する手順を不要にするため）
+      if (needsDb) await ensureSchema(env.DB);
 
+      /* --- カレンダー購読用URL（ログイン不要。推測できない合言葉つき） --- */
+      if (icsMatch) return await handleIcs(env, icsMatch[1]);
+
+      /* --- ホーム画面に追加するときの「アプリの説明書」（引き継ぎ番号つき） --- */
+      if (path === '/app.webmanifest') {
+        return new Response(JSON.stringify(manifestFor(url.searchParams.get('h'))), {
+          headers: { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-store' }
+        });
+      }
+
+      /* --- ログイン前でも使える入口 --- */
+      const method = request.method;
+      if (path === '/api/setup-status' && method === 'GET') return json({ needsSetup: await needsSetup(env) });
+      if (path === '/api/setup' && method === 'POST') return await handleSetup(request, env);
+      if (path === '/api/login' && method === 'POST') return await handleLogin(request, env);
+      if (path === '/api/redeem' && method === 'POST') return await handleRedeem(request, env);
+
+      /* --- ここから下はログインが必要 --- */
       if (path.startsWith('/api/')) {
-        const token = await requireAuth(request, env);
-        if (!token) return bad('ログインしてください', 401);
-        return await handleApi(request, env, url, path, ctx);
+        const auth = await requireAuth(request, env);
+        if (!auth) return bad('ログインしてください', 401);
+        return await handleApi(request, env, url, path, ctx, auth);
       }
 
       /* --- それ以外はアプリの画面ファイル --- */
@@ -330,6 +485,7 @@ export default {
   async scheduled(event, env, ctx) {
     ctx.waitUntil((async () => {
       const now = Date.now();
+      await ensureSchema(env.DB);
       await ensureVapid(env);
       await runReminderSweep(env, now);
 
@@ -365,7 +521,7 @@ async function handleIcs(env, key) {
 }
 
 /* --- ログイン後のやりとり --- */
-async function handleApi(request, env, url, path, ctx) {
+async function handleApi(request, env, url, path, ctx, auth) {
   const method = request.method;
 
   /* いちどに必要なものをまとめて返す（アプリの起動を1往復で終わらせる） */
@@ -377,8 +533,13 @@ async function handleApi(request, env, url, path, ctx) {
     const ext = await loadExtEvents(env, addDays(today, -60), addDays(today, 400));
     const calLast = await kvGet(env, 'calendars_last');
     const subs = await loadSubs(env);
+    const invite = await env.DB.prepare(
+      "SELECT code, expires_at FROM codes WHERE kind = 'invite' AND expires_at > ? AND uses_left > 0").bind(Date.now()).first();
     return json({
       events, tasks, settings, ext,
+      via: auth.via,                                     // どうやって入ったか（案内の出し分けに使う）
+      invite: invite ? { url: inviteUrl(url.origin, invite.code), expiresAt: invite.expires_at } : null,
+      passFromEnv: !!env.APP_PASS,
       vapidPublicKey: vapid.publicKey,
       icsUrl: settings.icsEnabled ? url.origin + '/ics/' + icsKey + '.ics' : '',
       devices: subs.map(s => ({ id: s.id, label: s.label, createdAt: s.created_at, lastOk: s.last_ok })),
@@ -410,6 +571,31 @@ async function handleApi(request, env, url, path, ctx) {
   const tkDel = /^\/api\/tasks\/([\w-]+)$/.exec(path);
   if (tkDel && method === 'DELETE') {
     await env.DB.prepare('UPDATE tasks SET deleted = 1, updated_at = ? WHERE id = ?').bind(Date.now(), tkDel[1]).run();
+    return json({ ok: true });
+  }
+
+  /* 招待リンク（講師の方に送る、合言葉なしで入れるリンク） */
+  if (path === '/api/invite' && method === 'POST') {
+    const r = await createInvite(env);
+    return json({ url: inviteUrl(url.origin, r.code), expiresAt: r.expiresAt });
+  }
+  if (path === '/api/invite' && method === 'DELETE') {
+    await env.DB.prepare("DELETE FROM codes WHERE kind = 'invite'").run();
+    return json({ ok: true });
+  }
+
+  /* 引き継ぎ番号（ホーム画面から開いたアプリに、ログインを渡すための6けた） */
+  if (path === '/api/handoff' && method === 'POST') {
+    return json(await createHandoff(env));
+  }
+
+  /* 合言葉を変える */
+  if (path === '/api/pass' && method === 'POST') {
+    if (env.APP_PASS) return bad('合言葉は Cloudflare の設定（APP_PASS）で決められているため、ここでは変えられません');
+    const body = await request.json().catch(() => ({}));
+    const next = String(body.next || '');
+    if (next.length < 8) return bad('合言葉は8文字以上にしてください');
+    await setPass(env, next, false);
     return json({ ok: true });
   }
 

@@ -288,13 +288,16 @@ main { padding: 12px 16px 0; }
 .sheet-bar .ttl { flex: 1; text-align: center; font-size: 16px; font-weight: 700; }
 .sheet-body { max-width: 560px; margin: 0 auto; padding: 12px 16px calc(40px + env(safe-area-inset-bottom)); }
 
+/* ボタン。<a> でも同じ見た目になるよう、並べ方も決めておく */
 .btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none;
   min-height: 44px; min-width: 44px; padding: 0 14px; font-size: 15px; font-weight: 700; font-family: inherit;
   border-radius: 10px; cursor: pointer; color: var(--navy); background: var(--card); border: 1px solid var(--line);
+  text-align: center; line-height: 1.3;
 }
 .btn.primary { color: var(--on-navy); background: var(--navy); border-color: var(--navy); }
 .btn.danger { color: var(--out); border-color: var(--out); background: var(--card); }
-.btn.wide { display: block; width: 100%; margin-top: 10px; }
+.btn.wide { display: flex; width: 100%; margin-top: 10px; padding: 10px 14px; }
 .btn:disabled { opacity: .5; cursor: default; }
 
 fieldset {
@@ -377,3 +380,76 @@ legend { font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--
   .fab { right: calc(50vw - 280px + 16px); }
   .tabbar { max-width: 560px; margin: 0 auto; border-left: 1px solid var(--line); border-right: 1px solid var(--line); }
 }
+
+/* ===== たたみ式の欄（押すと開く） =====
+   いつも使わない項目は閉じておき、入力画面を短く見せる。中身が入っていれば自動で開く。 */
+.fold-lead { font-size: 13px; color: var(--muted); margin: 4px 4px 10px; }
+details.fold {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  margin-bottom: 10px; min-inline-size: 0; min-width: 0;
+}
+details.fold > summary {
+  list-style: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  min-height: 52px; padding: 12px 44px 12px 14px; position: relative;
+  font-weight: 700; cursor: pointer;
+}
+details.fold > summary::-webkit-details-marker { display: none; }
+details.fold > summary::after {
+  content: '＋'; position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  color: var(--navy); font-weight: 700;
+}
+details.fold[open] > summary::after { content: '－'; }
+details.fold > summary .sum-hint { font-weight: 500; font-size: 13px; color: var(--muted); }
+details.fold > .fold-body { padding: 0 14px 14px; }
+.sub-h { font-size: 13px; letter-spacing: .06em; color: var(--muted); margin: 22px 0 4px; padding-top: 12px; border-top: 1px solid var(--line); }
+.sub-h:first-child { border-top: none; padding-top: 0; margin-top: 4px; }
+
+/* ===== はじめの準備 ===== */
+.guide-intro { font-size: 15px; margin: 4px 2px 14px; }
+.guide-step {
+  background: var(--card); border: 1px solid var(--line); border-radius: 14px;
+  padding: 14px; margin-bottom: 12px;
+}
+.guide-step.now { border: 2px solid var(--navy); box-shadow: var(--shadow); }
+/* 済んだ手順は背景だけ控えめに。うすく（opacity）すると、
+   中の「LINEで送る」などのボタンが押せないように見えてしまうため */
+.guide-step.done { background: var(--card-2); }
+.guide-step .gh { display: flex; align-items: center; gap: 10px; }
+.guide-step .num {
+  flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center;
+  font-weight: 700; color: var(--on-navy); background: var(--navy);
+}
+.guide-step.done .num { background: var(--in); color: #fff; }
+.guide-step.todo .num { background: var(--card-2); color: var(--muted); border: 1px solid var(--line); }
+.guide-step .gt { font-weight: 700; font-size: 16px; }
+/* 補足の小さい文字（はじめの準備と設定の両方で使う） */
+.gs { font-size: 13px; color: var(--muted); }
+.guide-step .gb { margin-top: 10px; font-size: 15px; }
+.guide-step ol { margin: 8px 0 0 22px; }
+.guide-step li { margin-bottom: 6px; }
+.share-ic {
+  display: inline-block; width: 18px; height: 18px; vertical-align: -3px;
+  border: 2px solid currentColor; border-top: none; border-radius: 0 0 4px 4px; position: relative; margin: 0 2px;
+}
+.share-ic::before { content: '↑'; position: absolute; left: 50%; top: -9px; transform: translateX(-50%); font-size: 13px; font-weight: 700; }
+.big-code {
+  margin: 10px 0; padding: 12px; text-align: center; border-radius: 12px;
+  font-size: 34px; font-weight: 700; letter-spacing: .18em; font-variant-numeric: tabular-nums;
+  color: var(--navy); background: var(--navy-soft); border: 1px dashed var(--navy);
+}
+
+/* メイン画面の上に出る「準備がのこっています」の帯 */
+#guide-banner { padding: 0 16px 8px; }
+.guide-banner {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 10px 12px; border-radius: 12px; cursor: pointer; font: inherit; text-align: left;
+  color: var(--ink); background: var(--gold-soft); border: 1px solid var(--gold);
+}
+.guide-banner .gbt { flex: 1; min-width: 0; font-size: 14px; }
+.guide-banner .gbt b { display: block; font-size: 15px; }
+.guide-banner .gbgo { flex: none; font-weight: 700; color: var(--gold); }
+
+.cost-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px dashed var(--line); }
+.cost-row:last-child { border-bottom: none; }
+.cost-row .y { font-weight: 700; font-variant-numeric: tabular-nums; }
+.login-note { font-size: 14px; color: var(--muted); text-align: center; margin-top: 12px; }

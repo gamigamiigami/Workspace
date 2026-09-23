@@ -9,7 +9,7 @@
    通知の条件になる（ブラウザのタブのままでは、この仕組みが使えない）。
    ===================================================================== */
 
-const CACHE = 'pocket-hisho-v1';
+const CACHE = 'pocket-hisho-v2';     // 中身を変えたら数字を上げる（古い取り置きを消すため）
 const SHELL_URL = '/';          // アプリの画面そのもの
 
 /* 最初に端末へ置いておくファイル。
@@ -72,15 +72,19 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  /* --- それ以外のファイル：まず手元にあるものを出し、裏で新しいものを取り直す --- */
+  /* --- それ以外のファイルも、ネット優先・2.5秒で見切ってから手元の取り置き。
+     「手元を先に出す」方式にすると、新しい画面と古いプログラムが
+     混ざって動く瞬間ができ、画面が壊れることがあるため。 --- */
   event.respondWith((async () => {
-    const cached = await caches.match(req);
-    const fresh = fetch(req).then(res => {
-      if (!isUsable(res)) return null;
-      caches.open(CACHE).then(c => c.put(req, res.clone())).catch(() => {});
-      return res;
-    }).catch(() => null);
-    return cached || (await fresh) || Response.error();
+    try {
+      const res = await withTimeout(fetch(req), 2500);
+      if (isUsable(res)) {
+        const copy = res.clone();
+        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        return res;
+      }
+    } catch (e) { /* つながらない → 取り置きへ */ }
+    return (await caches.match(req)) || Response.error();
   })());
 });
 

@@ -1,15 +1,24 @@
 /* ポケット秘書 — アプリ画面の検証（wrangler dev を動かした状態で実行する）
    実行:
-     npx wrangler dev --config wrangler.test.toml --local --port 8788 &
-     node tests/test-ui.mjs                                                */
+     npx wrangler dev --local --port 8788 &
+     node tests/test-ui.mjs
 
+   伊神さん（作った人・パソコン）と、講師の方（招待された人・スマホ）の
+   両方の流れを、画面を実際に操作して確かめる。                          */
+
+import http from 'node:http';
 import { chromium } from 'playwright';
 import { todayStr, addDays, fmtFull } from '../web/shared-date.js';
 import { defaultSettings } from '../web/shared-model.js';
+import { decryptPayloadForTest, bytesToB64url } from '../src/push.js';
 
 const BASE = process.env.PH_BASE || 'http://127.0.0.1:8788';
 const PASS = 'test-pass-1234';
 const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const UA_IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
+const UA_IPHONE_LINE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari Line/14.3.0';
+const UA_ANDROID = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Mobile Safari/537.36';
+const subtle = globalThis.crypto.subtle;
 
 let pass = 0, fail = 0; const failures = [];
 function ok(name, cond, extra) {
@@ -17,38 +26,15 @@ function ok(name, cond, extra) {
   else { fail++; failures.push(name + (extra ? ' → ' + extra : '')); console.log('  ❌ ' + name + (extra ? ' → ' + extra : '')); }
 }
 function eq(name, a, b) { ok(name, JSON.stringify(a) === JSON.stringify(b), 'got ' + JSON.stringify(a) + ' want ' + JSON.stringify(b)); }
+const wait = ms => new Promise(r => setTimeout(r, ms));
 
-/* 読みやすさ（コントラスト比）を測る */
+/* 読みやすさ（コントラスト比） */
 function parseRgb(s) { const m = String(s).match(/(\d+(?:\.\d+)?)/g); return m ? [+m[0], +m[1], +m[2]] : [0, 0, 0]; }
 function lum(rgb) {
   const c = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
   return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
 }
-function contrast(a, b) {
-  const la = lum(parseRgb(a)), lb = lum(parseRgb(b));
-  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
-}
-
-const browser = await chromium.launch({ executablePath: CHROME });
-const ctx = await browser.newContext({
-  viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
-  serviceWorkers: 'allow'
-});
-const page = await ctx.newPage();
-/* 本物のJSエラー（プログラムが落ちた）と、通信の失敗ログは分けて数える。
-   「電波を切ったので通信に失敗した」は想定どおりの出来事で、不具合ではない。 */
-const jsErrors = [];
-const httpFails = [];
-page.on('pageerror', e => jsErrors.push(String(e)));
-page.on('console', m => {
-  if (m.type() !== 'error') return;
-  const t = m.text();
-  if (/favicon/i.test(t)) return;
-  if (/Failed to load resource/i.test(t)) return;   // 通信ログ。下の httpFails で別に見る
-  jsErrors.push('console: ' + t);
-});
-page.on('requestfailed', r => httpFails.push('失敗 ' + new URL(r.url()).pathname + ' … ' + (r.failure() && r.failure().errorText)));
-page.on('response', r => { if (r.status() >= 400) httpFails.push(r.status() + ' ' + new URL(r.url()).pathname); });
+function contrast(a, b) { const la = lum(parseRgb(a)), lb = lum(parseRgb(b)); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
 
 async function api(method, path, body, token) {
   const res = await fetch(BASE + path, {
@@ -57,367 +43,489 @@ async function api(method, path, body, token) {
   });
   return { status: res.status, json: await res.json().catch(() => null) };
 }
-const adminToken = (await api('POST', '/api/login', { pass: PASS })).json.token;
 
-/* どの順番で流しても同じ結果になるよう、はじめに中身を空にする
-   （前に流したテストの予定やカレンダーが残っていると、数が合わなくなる） */
-await api('POST', '/api/restore', {
-  events: [{ id: 'ui_reset_marker', date: '2020-01-01', title: 'reset' }],
-  tasks: [], settings: defaultSettings()
-}, adminToken);
-await api('DELETE', '/api/events/ui_reset_marker', undefined, adminToken);
-await api('POST', '/api/calendar/refresh', undefined, adminToken);   // 取り込み済みの予定も消す
-const startState = (await api('GET', '/api/bootstrap', undefined, adminToken)).json;
-if (startState.events.length || startState.tasks.length || startState.ext.length) {
-  console.log('⚠ 開始時に中身が残っています:', startState.events.length, startState.tasks.length, startState.ext.length);
+/* --- 準備：作った人の合言葉を決めておき、中身を空にする（どの順番で流しても同じ結果にするため） --- */
+if ((await api('GET', '/api/setup-status')).json.needsSetup) await api('POST', '/api/setup', { pass: PASS });
+let adminToken = (await api('POST', '/api/login', { pass: PASS })).json.token;
+await api('POST', '/api/login/unlock', undefined, adminToken);
+await api('POST', '/api/restore', { events: [{ id: 'ui_reset', date: '2020-01-01', title: 'reset' }], tasks: [], settings: defaultSettings() }, adminToken);
+await api('DELETE', '/api/events/ui_reset', undefined, adminToken);
+await api('DELETE', '/api/invite', undefined, adminToken);
+await api('POST', '/api/calendar/refresh', undefined, adminToken);
+
+/* --- 偽の通知サーバーと、偽の「通知の宛先」 ---
+   ヘッドレスのブラウザは本物の通知サーバーにつながらないので、
+   ブラウザの「宛先づくり」を差しかえて、宛先をこの偽サーバーに向ける。
+   サーバーから届いた本文は、端末役の鍵で復号して中身を確かめる。 */
+const received = [];
+const pushServer = http.createServer((req, res) => {
+  const chunks = [];
+  req.on('data', c => chunks.push(c));
+  req.on('end', () => { received.push({ url: req.url, body: Buffer.concat(chunks) }); res.writeHead(201); res.end(); });
+});
+await new Promise(r => pushServer.listen(8796, '127.0.0.1', r));
+const uaPair = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, true, ['deriveBits']);
+const uaPublicRaw = new Uint8Array(await subtle.exportKey('raw', uaPair.publicKey));
+const authSecret = globalThis.crypto.getRandomValues(new Uint8Array(16));
+const fakeSub = { endpoint: 'http://127.0.0.1:8796/push/phone-1', p256dh: bytesToB64url(uaPublicRaw), auth: bytesToB64url(authSecret) };
+
+function fakePushScript(sub) {
+  if (!window.PushManager) return;
+  const obj = {
+    endpoint: sub.endpoint,
+    toJSON() { return { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }; },
+    unsubscribe: async () => { localStorage.removeItem('test:fake-sub'); return true; }
+  };
+  PushManager.prototype.subscribe = async function () { localStorage.setItem('test:fake-sub', '1'); return obj; };
+  PushManager.prototype.getSubscription = async function () { return localStorage.getItem('test:fake-sub') ? obj : null; };
+}
+/* ホーム画面から開いた状態のふり（iPhone） */
+function standaloneScript() {
+  Object.defineProperty(window.navigator, 'standalone', { get: () => true });
+  const orig = window.matchMedia.bind(window);
+  window.matchMedia = q => /display-mode:\s*standalone/.test(q)
+    ? { matches: true, media: q, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }
+    : orig(q);
+}
+
+const browser = await chromium.launch({ executablePath: CHROME });
+const jsErrors = [];
+const httpFails = [];
+function watch(page, who) {
+  page.on('pageerror', e => jsErrors.push(who + ': ' + String(e)));
+  page.on('console', m => {
+    if (m.type() !== 'error') return;
+    const t = m.text();
+    if (/favicon|Failed to load resource/i.test(t)) return;
+    jsErrors.push(who + ' console: ' + t);
+  });
+  page.on('response', r => { if (r.status() >= 400) httpFails.push(r.status() + ' ' + new URL(r.url()).pathname); });
 }
 
 /* =================================================================== */
-console.log('\n【1】ログイン画面');
+console.log('\n【1】作った人（伊神さん）：パソコンで合言葉を入れる');
 /* =================================================================== */
 
-await page.goto(BASE);
-await page.waitForTimeout(600);
-ok('ログイン画面が出る', await page.isVisible('#screen-login'));
-ok('アプリ画面はまだ隠れている', !(await page.isVisible('#screen-app')));
+const pcCtx = await browser.newContext({ viewport: { width: 1280, height: 900 }, serviceWorkers: 'allow' });
+const pc = await pcCtx.newPage();
+watch(pc, 'PC');
+await pc.goto(BASE);
+await wait(700);
+ok('合言葉の画面が出る', await pc.isVisible('#login-pass'));
+ok('「はじめての合言葉」の画面は出ない（もう決まっているため）', !(await pc.isVisible('#login-setup')));
 
-await page.click('#btn-login');
-await page.waitForTimeout(300);
-ok('合言葉が空なら案内が出る', (await page.textContent('#login-msg')).includes('合言葉'));
-
-await page.fill('#f-pass', 'まちがい');
-await page.click('#btn-login');
-await page.waitForTimeout(800);
-ok('まちがった合言葉では入れない', await page.isVisible('#screen-login'));
-ok('まちがいの理由が出る', (await page.textContent('#login-msg')).includes('合言葉'), await page.textContent('#login-msg'));
-
-await page.fill('#f-pass', PASS);
-await page.click('#btn-login');
-await page.waitForTimeout(1500);
-ok('正しい合言葉で入れる', await page.isVisible('#screen-app'));
-ok('合言葉の入力欄は空に戻る', (await page.inputValue('#f-pass')) === '');
-ok('予定が無いので案内が出る', (await page.textContent('#view')).includes('まだ予定がありません'));
+await pc.click('#btn-login');
+await wait(200);
+ok('空のまま押すと案内が出る', (await pc.textContent('#login-msg')).includes('合言葉'));
+await pc.fill('#f-pass', 'まちがい');
+await pc.click('#btn-login');
+await wait(700);
+ok('まちがった合言葉では入れない', await pc.isVisible('#screen-login'));
+await pc.fill('#f-pass', PASS);
+await pc.press('#f-pass', 'Enter');
+await wait(1800);
+ok('正しい合言葉で入れる', await pc.isVisible('#screen-app'));
 
 /* =================================================================== */
-console.log('\n【2】予定を入れる');
+console.log('\n【2】作った人：はじめの準備が自動で開き、招待リンクを作れる');
+/* =================================================================== */
+
+ok('はじめの準備が自動で開く', await pc.isVisible('#sheet-guide'));
+const pcGuide = await pc.textContent('#guide-body');
+ok('いちばん上に「講師の方に招待リンクを送る」', pcGuide.indexOf('招待リンクを送る') >= 0 && pcGuide.indexOf('招待リンクを送る') < pcGuide.indexOf('通知'), pcGuide.slice(0, 120));
+ok('パソコンでは「ホーム画面に追加」は出さない', !pcGuide.includes('ホーム画面に追加する'));
+ok('パソコンでは通知は「なくてもOK」', /通知をオンにする（なくてもOK）/.test(pcGuide), pcGuide.slice(0, 300));
+
+await pc.click('#guide-body [data-g="invite-new"]');
+await wait(900);
+const lineHref = await pc.getAttribute('#guide-body a[data-g="invite-line"]', 'href');
+ok('「LINEで送る」ボタンが出る', !!lineHref && lineHref.startsWith('https://line.me/R/share?text='), lineHref);
+const lineText = decodeURIComponent((lineHref || '').split('text=')[1] || '');
+ok('LINEの文面に招待リンクが入る', /\/\?invite=[0-9a-f]{24}&openExternalBrowser=1/.test(lineText), lineText);
+ok('LINEの文面に「合言葉なしで入れる」と書いてある', lineText.includes('合言葉なし'));
+const inviteUrl = lineText.match(/https?:\/\/\S+invite=\S+/)[0];
+ok('招待を作ると「できています」になる', (await pc.textContent('#guide-body')).includes('できています'));
+
+await pc.click('#guide-body [data-g="close"]');
+await wait(300);
+ok('はじめの準備を閉じられる', !(await pc.isVisible('#sheet-guide')));
+ok('やることが残っていないので、上の帯は出ない', await pc.isHidden('#guide-banner'));
+
+await pc.reload();
+await wait(1500);
+ok('開き直しても、はじめの準備は勝手に開かない（1回だけ）', !(await pc.isVisible('#sheet-guide')));
+
+/* =================================================================== */
+console.log('\n【3】予定を入れる（運賃・ホテル代）');
 /* =================================================================== */
 
 const DAY = addDays(todayStr(), 3);
-await page.click('#btn-add');
-await page.waitForTimeout(400);
-ok('入力シートが開く', await page.isVisible('#sheet-event'));
+await pc.click('#btn-add');
+await wait(400);
+ok('入力画面が開く', await pc.isVisible('#sheet-event'));
+ok('いつも使う「きほん」「ばしょ」は開いている', await pc.isVisible('#f-date') && await pc.isVisible('#f-place'));
+ok('運賃の欄は、はじめは閉じている（画面を短く見せる）', !(await pc.isVisible('#f-fare')));
+const foldCount = await pc.$$eval('#sheet-event details.fold', d => d.length);
+ok('ほかの欄は、押すと開く形になっている', foldCount >= 6, String(foldCount));
 
-await page.fill('#f-date', '');
-await page.click('#ev-save');
-await page.waitForTimeout(300);
-ok('日付なしでは保存されない', await page.isVisible('#sheet-event'));
-ok('理由が画面に出る', (await page.textContent('#toast')).includes('日付'));
+await pc.fill('#f-date', '');
+await pc.click('#ev-save');
+await wait(300);
+ok('日付なしでは保存されない', await pc.isVisible('#sheet-event'));
 
-await page.fill('#f-date', DAY);
-await page.fill('#f-title', '管理職向け コミュニケーション研修');
-await page.fill('#f-open', '13:30');
-await page.fill('#f-arrive', '12:30');
-await page.fill('#f-place', '大阪産業創造館 5Fホール');
-await page.fill('#f-address', '大阪市中央区本町1-4-5');
-await page.fill('#f-tel', '06-1234-5678');
-await page.$eval('#rep-money .rep-row', r => {
-  r.querySelectorAll('input[type=text]')[0].value = '講演料';
-  r.querySelectorAll('input[type=text]')[1].value = '80,000';
-});
-await page.click('#ev-save');
-await page.waitForTimeout(1200);
-ok('保存するとシートが閉じる', !(await page.isVisible('#sheet-event')));
+await pc.fill('#f-date', DAY);
+await pc.fill('#f-title', '管理職向け コミュニケーション研修');
+await pc.fill('#f-open', '13:30');
+await pc.fill('#f-place', '大阪産業創造館 5Fホール');
+await pc.fill('#f-address', '大阪市中央区本町1-4-5');
+await pc.click('#fold-travel summary');
+await wait(200);
+ok('押すと運賃の欄が開く', await pc.isVisible('#f-fare'));
+await pc.fill('#f-fare', '2万8400');
+await pc.click('#fold-stay summary');
+await pc.fill('#f-hotel', '9,800円');
+await pc.fill('#f-stay-place', 'サンプルホテル');
+await pc.click('#ev-save');
+await wait(1200);
+ok('保存するとシートが閉じる', !(await pc.isVisible('#sheet-event')));
 
-const dayText = await page.textContent('#view');
-ok('その日へ移動して予定が出る', dayText.includes('管理職向け'), dayText.slice(0, 120));
-ok('会場が出る', dayText.includes('大阪産業創造館'));
-ok('カウントダウンが出る', dayText.includes('あと3日'));
-ok('カンマ入りの金額が数として入る', dayText.includes('80,000円'));
-eq('日付の見出しが合っている', await page.textContent('#date-label'), fmtFull(DAY));
+let dayText = await pc.textContent('#view');
+ok('その日の画面に予定が出る', dayText.includes('管理職向け'));
+ok('「かかったお金」に運賃が出る（2万8400 → 28,400円）', dayText.includes('28,400円'), dayText.slice(dayText.indexOf('かかったお金'), dayText.indexOf('かかったお金') + 80));
+ok('ホテル代が出る', dayText.includes('9,800円'));
+ok('合計が出る（38,200円）', dayText.includes('38,200円'));
+ok('「講演料」「売上」「差引」は出さない', !/講演料|売上|差引/.test(dayText));
+eq('日付の見出しが合っている', await pc.textContent('#date-label'), fmtFull(DAY));
 
-// サーバー側にも入っているか
-const onServer = await api('GET', '/api/bootstrap', undefined, adminToken);
-eq('サーバーにも1件保存されている', onServer.json.events.length, 1);
-eq('サーバー側の題名も一致', onServer.json.events[0].title, '管理職向け コミュニケーション研修');
+let srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+eq('サーバーにも運賃・ホテル代が保存されている', srv.json.events[0].cost, { fare: 28400, hotel: 9800, other: 0, otherNote: 'サンプルホテル'.slice(0, 0) });
+
+// 編集を開くと、中身の入っている欄だけ開いている
+await pc.click('#view button[data-act="edit-event"]');
+await wait(400);
+ok('中身がある欄（運賃）は開いた状態で出る', await pc.isVisible('#f-fare'));
+ok('見出しの横に中身が出る', (await pc.textContent('#sum-travel')).includes('28,400円'));
+ok('中身がない欄（話す内容）は閉じたまま', !(await pc.isVisible('#f-audience')));
+await pc.click('#ev-cancel');
+await wait(300);
+
+// 「運賃・ホテル代を入れる／直す」ボタンは、運賃の欄を開いて連れていく
+await pc.click('#view button[data-act="edit-cost"]');
+await wait(500);
+ok('金額のボタンから、運賃の欄へ直接行ける', await pc.isVisible('#f-fare'));
+const focused = await pc.evaluate(() => document.activeElement && document.activeElement.id);
+eq('運賃の欄に入力の印（カーソル）がある', focused, 'f-fare');
+await pc.click('#ev-cancel');
+await wait(300);
 
 /* =================================================================== */
-console.log('\n【3】別の端末から見えるか（同期）');
-/* =================================================================== */
-
-const page2 = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
-await page2.goto(BASE);
-await page2.waitForTimeout(500);
-await page2.fill('#f-pass', PASS);
-await page2.click('#btn-login');
-await page2.waitForTimeout(1500);
-await page2.evaluate(d => { const s = window.pocketHisho.getState(); s.cursor = d; s.scope = 'day'; window.pocketHisho.render(); }, DAY);
-await page2.waitForTimeout(300);
-ok('パソコン側でも同じ予定が見える', (await page2.textContent('#view')).includes('管理職向け'));
-const ovfPc = await page2.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-ok('パソコン幅でも横スクロールが出ない', ovfPc <= 0, 'overflow=' + ovfPc);
-
-/* =================================================================== */
-console.log('\n【4】日・週・月・年');
+console.log('\n【4】日・週・月・年（お金は運賃・ホテル代だけ）');
 /* =================================================================== */
 
 for (const [scope, must, mustNot] of [
-  ['week', '大阪産業創造館', '06-1234-5678'],
-  ['month', '1件', '会場入り'],
-  ['year', '80,000円', '大阪市中央区']
+  ['week', 'かかったお金 38,200円', '06-1234'],
+  ['month', '運賃 28,400円', '会場入り'],
+  ['year', '28,400円', '大阪市中央区']
 ]) {
-  await page.click('#scope button[data-scope="' + scope + '"]');
-  await page.waitForTimeout(300);
-  const t = await page.textContent('#view');
-  ok(scope + '：必要な情報が出る', t.includes(must), t.slice(0, 100));
+  await pc.click('#scope button[data-scope="' + scope + '"]');
+  await wait(300);
+  const t = await pc.textContent('#view');
+  ok(scope + '：必要な情報が出る', t.includes(must), t.slice(0, 160));
   ok(scope + '：詳細は出さない', !t.includes(mustNot));
+  ok(scope + '：売上・差引は出さない', !/売上|差引/.test(t));
 }
-await page.click('#scope button[data-scope="month"]');
-await page.waitForTimeout(300);
-const dots = await page.$$eval('#view .cal-cell .dot.sem', d => d.length);
-eq('カレンダーにセミナーの印が1つ', dots, 1);
-await page.click('#view .cal-cell .dot.sem >> xpath=../..');
-await page.waitForTimeout(400);
-ok('印をタップすると日の画面に着地する', (await page.textContent('#view')).includes('管理職向け'));
+const yearText = await pc.textContent('#view');
+ok('年の画面に 運賃・ホテル代・かかったお金 が並ぶ', /運賃/.test(yearText) && /ホテル代/.test(yearText) && /かかったお金/.test(yearText));
+ok('年の画面から表（CSV）を書き出せる', await pc.isVisible('#view button[data-act="csv-year"]'));
+const dl = pc.waitForEvent('download', { timeout: 5000 }).catch(() => null);
+await pc.click('#view button[data-act="csv-year"]');
+const download = await dl;
+ok('押すとファイルが保存される', !!download);
+if (download) {
+  const path = await download.path();
+  const { readFileSync } = await import('node:fs');
+  const text = readFileSync(path, 'utf8');
+  ok('表の先頭にエクセル用の印（BOM）', text.charCodeAt(0) === 0xFEFF);
+  ok('表に運賃とホテル代の列がある', text.includes('"運賃","ホテル代"'));
+  ok('表に今回の金額が入る', text.includes('"28400","9800"'), text.slice(0, 200));
+}
+await pc.click('#scope button[data-scope="day"]');
 
 /* =================================================================== */
-console.log('\n【5】やること');
+console.log('\n【5】講師の方：LINEの招待リンクから、iPhoneで入る');
 /* =================================================================== */
 
-await page.click('#tabbar button[data-tab="task"]');
-await page.waitForTimeout(300);
-ok('やることタブに切りかわる', (await page.textContent('#view')).includes('やることはありません'));
-ok('日付バーは隠れる', !(await page.isVisible('#bar-schedule')));
-ok('絞りこみバーが出る', await page.isVisible('#bar-task'));
-
-await page.click('#btn-add');
-await page.waitForTimeout(400);
-ok('やることの入力シートが開く', await page.isVisible('#sheet-task'));
-await page.click('#tk-save');
-await page.waitForTimeout(300);
-ok('名前が空なら保存されない', await page.isVisible('#sheet-task'));
-
-await page.fill('#t-title', '資料を50部 印刷する');
-await page.fill('#t-due', addDays(todayStr(), 1));
-const opts = await page.$$eval('#t-event option', os => os.map(o => o.textContent));
-ok('ひもづけ先に、いまの予定がならぶ', opts.some(o => o.includes('管理職向け')), JSON.stringify(opts));
-await page.selectOption('#t-event', { index: 1 });
-await page.click('#tk-save');
-await page.waitForTimeout(1000);
-
-const taskText = await page.textContent('#view');
-ok('やることが一覧に出る', taskText.includes('資料を50部'));
-ok('期限が「あと1日」と出る', taskText.includes('あと1日'), taskText.slice(0, 200));
-eq('下のナビに残り件数が出る', await page.textContent('#task-badge'), '1');
-
-// 終わりにする
-await page.click('#view .task-row .box');
-await page.waitForTimeout(800);
-ok('終わったやることは「のこり」から消える', !(await page.textContent('#view')).includes('資料を50部'));
-ok('残り件数の印が消える', await page.isHidden('#task-badge'));
-await page.click('#task-filter button[data-filter="done"]');
-await page.waitForTimeout(300);
-ok('「おわった」で見つかる', (await page.textContent('#view')).includes('資料を50部'));
-
-// 予定の画面にも、ひもづいたやることが出る
-await page.click('#task-filter button[data-filter="open"]');
-await page.click('#tabbar button[data-tab="schedule"]');
-await page.waitForTimeout(400);
-ok('予定の画面に、ひもづくやることが出る', (await page.textContent('#view')).includes('資料を50部'));
-
-/* 予定を消すと、ひもづくやることも消える（サーバー側の動きが画面にも反映されるか） */
-await page.click('#view button[data-act="edit-event"]');
-await page.waitForTimeout(400);
-await page.click('#ev-delete');
-await page.waitForTimeout(300);
-await page.click('#modal-yes');
-await page.waitForTimeout(1000);
-const afterDelete = await api('GET', '/api/bootstrap', undefined, adminToken);
-eq('サーバーから予定が消える', afterDelete.json.events.length, 0);
-eq('ひもづくやることも消える', afterDelete.json.tasks.length, 0);
-await page.click('#tabbar button[data-tab="task"]');
-await page.waitForTimeout(300);
-ok('画面のやることも消えている', !(await page.textContent('#view')).includes('資料を50部'));
-
-/* =================================================================== */
-console.log('\n【6】通知タブ・設定');
-/* =================================================================== */
-
-await page.click('#tabbar button[data-tab="notify"]');
-await page.waitForTimeout(400);
-const notifyText = await page.textContent('#view');
-ok('通知のようすが出る', notifyText.includes('通知のようす'));
-ok('オン・オフが出る', /オン|オフ/.test(notifyText));
-ok('追加ボタンは隠れる', await page.isHidden('#btn-add'));
-
-await page.click('#btn-settings');
-await page.waitForTimeout(600);
-ok('設定が開く', await page.isVisible('#sheet-settings'));
-const icsUrl = await page.textContent('#ics-url');
-ok('カレンダー購読用のURLが出ている', /\/ics\/[0-9a-f]{24,}\.ics$/.test(icsUrl), icsUrl);
-
-// 通知の設定を変えて保存
-await page.uncheck('#n-h2');
-await page.fill('#n-digest', '06:45');
-await page.click('#btn-save-notify');
-await page.waitForTimeout(900);
-const st = await api('GET', '/api/bootstrap', undefined, adminToken);
-eq('2時間前を切った設定が保存される', st.json.settings.notify.rules.h2, false);
-eq('毎朝のまとめの時刻が保存される', st.json.settings.notify.digestAt, '06:45');
-
-// 持ち物のひな形
-await page.fill('#f-default-items', 'マイク\n名刺\n電源タップ');
-await page.click('#btn-save-items');
-await page.waitForTimeout(800);
-const st2 = await api('GET', '/api/bootstrap', undefined, adminToken);
-eq('よく持っていくものが保存される', st2.json.settings.defaultItems, ['マイク', '名刺', '電源タップ']);
-
-/* パソコンのブラウザでは、通知の案内がどう出るか */
-const pushBox = await page.textContent('#push-status');
-ok('通知の状態が案内される', pushBox.length > 5, pushBox.slice(0, 80));
-
-await page.click('#st-close');
-await page.waitForTimeout(300);
-
-/* 持ち物のひな形が、予定の入力で使えるか */
-await page.click('#tabbar button[data-tab="schedule"]');
-await page.click('#btn-add');
-await page.waitForTimeout(400);
-await page.click('#add-default-items');
-await page.waitForTimeout(300);
-const itemVals = await page.$$eval('#rep-items input[type=text]', is => is.map(i => i.value).filter(Boolean));
-eq('よく持っていくものが入る', itemVals, ['マイク', '名刺', '電源タップ']);
-await page.click('#add-default-items');
-await page.waitForTimeout(300);
-const itemVals2 = await page.$$eval('#rep-items input[type=text]', is => is.map(i => i.value).filter(Boolean));
-eq('二度押しても重複しない', itemVals2.length, 3);
-await page.click('#ev-cancel');
-await page.waitForTimeout(300);
-
-/* =================================================================== */
-console.log('\n【7】オフラインでも使えるか');
-/* =================================================================== */
-
-// 見本を入れてから
-await page.click('#btn-settings');
-await page.waitForTimeout(400);
-await page.click('#btn-sample');
-await page.waitForTimeout(1500);
-ok('見本が入る', (await page.textContent('#view')).includes('管理職向け'));
-
-// サービスワーカーが登録されているか
-const swReady = await page.evaluate(async () => {
-  if (!('serviceWorker' in navigator)) return 'なし';
-  const reg = await navigator.serviceWorker.getRegistration();
-  return reg ? 'あり' : 'まだ';
+const phoneCtx = await browser.newContext({
+  userAgent: UA_IPHONE, viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: 'allow'
 });
-ok('サービスワーカーが登録されている', swReady === 'あり', swReady);
-await page.waitForTimeout(1500);   // 画面ファイルが端末に取り込まれるのを待つ
+const phone = await phoneCtx.newPage();
+watch(phone, 'iPhone(Safari)');
+await phone.goto(inviteUrl);
+await wait(2500);
+ok('招待リンクを開くだけで入れる（合言葉を聞かれない）', await phone.isVisible('#screen-app'));
+ok('アドレス欄から招待のしるしが消えている', !(await phone.evaluate(() => location.search.includes('invite'))));
+ok('はじめの準備が自動で開く', await phone.isVisible('#sheet-guide'));
 
-/* ここは一度つまずいた場所。
-   取っておいた画面が「転送された結果」だと、ブラウザは画面をひらく用途に使えず
-   オフラインで真っ白になる。取り置きが転送ぬきであることを確かめておく。 */
-const shellInfo = await page.evaluate(async () => {
+await wait(800);   // 引き継ぎ番号を用意し終わるのを待つ
+const phoneGuide = await phone.textContent('#guide-body');
+ok('講師の方には「招待リンクを送る」は出ない', !phoneGuide.includes('招待リンクを送る'));
+ok('1つめは「ホーム画面に追加する」', /ホーム画面に追加する/.test(phoneGuide));
+ok('iPhone用の手順（共有ボタン → ホーム画面に追加）', phoneGuide.includes('共有ボタン') && phoneGuide.includes('「ホーム画面に追加」'));
+ok('通知は「先にホーム画面に追加して」と案内される', phoneGuide.includes('先に「ホーム画面に追加」'));
+const bigCode = (await phone.textContent('#handoff-code') || '').replace(/\s/g, '');
+ok('ホーム画面のアプリへ渡す6けたの番号が大きく出る', /^\d{6}$/.test(bigCode), bigCode);
+const pageUrl = await phone.evaluate(() => location.href);
+ok('ページのURLにその番号が入っている（ホーム画面に追加したとき一緒に渡る）', pageUrl.endsWith('/?h=' + bigCode), pageUrl);
+const mfHref = await phone.getAttribute('#manifest-link', 'href');
+eq('ホーム画面用の説明書も、その番号入りに差しかわっている', mfHref, '/app.webmanifest?h=' + bigCode);
+const mf = await (await fetch(BASE + mfHref)).json();
+eq('説明書の起動URLに番号が入っている', mf.start_url, '/?h=' + bigCode);
+
+// カレンダーのボタン
+const appleHref = await phone.getAttribute('#guide-body a[data-g="cal"]:first-of-type', 'href');
+ok('iPhoneのカレンダー用ボタン（webcal://）', !!appleHref && appleHref.startsWith('webcal://' + new URL(BASE).host + '/ics/') && /\/ics\/[0-9a-f]{24,}\.ics$/.test(appleHref), appleHref);
+const googleHref = await phone.$$eval('#guide-body a[data-g="cal"]', as => as.map(a => a.getAttribute('href')).find(h => h.includes('google')));
+ok('Googleカレンダー用ボタン（追加画面を直接ひらく）', googleHref && googleHref.startsWith('https://calendar.google.com/calendar/render?cid=webcal%3A%2F%2F'), googleHref);
+
+await phone.click('#guide-body [data-g="close"]');
+await wait(300);
+const banner = await phone.textContent('#guide-banner');
+ok('あとにすると、上に「はじめの準備 あと○つ」の帯が出る', /はじめの準備 あと\d+つ/.test(banner), banner);
+await phone.click('#guide-banner-btn');
+await wait(300);
+ok('帯を押すと、はじめの準備がまた開く', await phone.isVisible('#sheet-guide'));
+await phone.click('#guide-body [data-g="close"]');
+
+// 招待された人にも、伊神さんが入れた予定が見える
+await phone.evaluate(d => { const s = window.pocketHisho.getState(); s.cursor = d; s.scope = 'day'; window.pocketHisho.render(); }, DAY);
+await wait(300);
+ok('講師の方のスマホにも同じ予定が見える', (await phone.textContent('#view')).includes('管理職向け'));
+
+/* =================================================================== */
+console.log('\n【6】講師の方：ホーム画面のアイコンから開く（番号で自動的に引き継ぐ）');
+/* =================================================================== */
+
+const homeCtx = await browser.newContext({
+  userAgent: UA_IPHONE, viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, serviceWorkers: 'allow'
+});
+await homeCtx.addInitScript(standaloneScript);
+await homeCtx.addInitScript(fakePushScript, fakeSub);
+await homeCtx.grantPermissions(['notifications'], { origin: BASE });
+const home = await homeCtx.newPage();
+watch(home, 'iPhone(ホーム画面)');
+await home.goto(BASE + mf.start_url);        // ホーム画面のアイコン＝説明書の起動URLで開く
+await wait(2500);
+ok('ホーム画面から開くと、番号で自動的に入れる（Safariと保存場所が別でも）', await home.isVisible('#screen-app'));
+ok('はじめの準備が自動で開く（この端末でははじめてなので）', await home.isVisible('#sheet-guide'));
+let homeGuide = await home.textContent('#guide-body');
+ok('「ホーム画面に追加」は、できている扱い', /ホーム画面に追加する[\s\S]*できています/.test(homeGuide), homeGuide.slice(0, 200));
+ok('いまやるのは「通知をオンにする」', await home.isVisible('#guide-body .guide-step.now [data-g="enable-push"]'));
+
+received.length = 0;
+await home.click('#guide-body [data-g="enable-push"]');
+await wait(2500);
+homeGuide = await home.textContent('#guide-body');
+ok('ボタン1つで通知がオンになる', homeGuide.includes('通知はオンです'), homeGuide.slice(0, 300));
+ok('オンにしたら、自動でテスト通知が送られる', received.length >= 1, '受け取り=' + received.length);
+if (received.length) {
+  const p = JSON.parse(await decryptPayloadForTest(subtle, received[received.length - 1].body, uaPair.privateKey, uaPublicRaw, authSecret));
+  ok('テスト通知の中身が、そのスマホで読める', p.body.includes('テスト通知'), JSON.stringify(p));
+}
+srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+ok('サーバーに端末（iPhone）が登録されている', srv.json.devices.some(d => d.label === 'iPhone'), JSON.stringify(srv.json.devices));
+ok('通知タブの案内も「届く」に変わる', await (async () => {
+  await home.click('#guide-body [data-g="close"]');
+  await home.click('#tabbar button[data-tab="notify"]');
+  await wait(300);
+  return (await home.textContent('#view')).includes('この端末に届きます');
+})());
+ok('準備が終わったので、上の帯は消える（カレンダーは任意）', await home.isHidden('#guide-banner'));
+
+// 端末側で宛先が消えても、次に開いたときに自動で登録し直す
+await api('POST', '/api/push/unsubscribe', { endpoint: fakeSub.endpoint }, adminToken);
+srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+eq('（サーバーから登録を消してみる）', srv.json.devices.length, 0);
+await home.reload();
+await wait(2500);
+srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+eq('アプリを開き直すだけで、何もしなくても登録し直される', srv.json.devices.length, 1);
+
+/* =================================================================== */
+console.log('\n【7】番号が自動で渡らなかったとき（手で入れる）');
+/* =================================================================== */
+
+const home2Ctx = await browser.newContext({
+  userAgent: UA_IPHONE, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, serviceWorkers: 'allow'
+});
+await home2Ctx.addInitScript(standaloneScript);
+const home2 = await home2Ctx.newPage();
+watch(home2, 'iPhone(番号手入力)');
+await home2.goto(BASE + '/');
+await wait(1500);
+ok('ホーム画面から開いて番号が無いときは「番号で入る」画面になる', await home2.isVisible('#login-code'));
+ok('「もう一度だけ入り直します」と理由が書いてある', (await home2.textContent('#code-hint')).includes('もう一度だけ'));
+await home2.fill('#f-code', '000000');
+await home2.click('#btn-code');
+await wait(800);
+ok('まちがった番号では入れない', await home2.isVisible('#screen-login'));
+ok('理由が出る', (await home2.textContent('#login-msg')).includes('番号'));
+const freshCode = (await api('POST', '/api/handoff', undefined, adminToken)).json.code;
+await home2.fill('#f-code', freshCode.slice(0, 3) + ' ' + freshCode.slice(3));
+await home2.press('#f-code', 'Enter');
+await wait(1800);
+ok('Safariに出ていた番号を入れれば入れる（空白入りでもOK）', await home2.isVisible('#screen-app'));
+await home2Ctx.close();
+
+/* =================================================================== */
+console.log('\n【8】LINEの中で開いてしまったとき・Androidのとき');
+/* =================================================================== */
+
+const lineCtx = await browser.newContext({ userAgent: UA_IPHONE_LINE, viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+const linePage = await lineCtx.newPage();
+watch(linePage, 'LINE内');
+const inv2 = (await api('POST', '/api/invite', undefined, adminToken)).json.url;
+await linePage.goto(inv2);
+await wait(2200);
+ok('LINEの中のブラウザでも入れる', await linePage.isVisible('#screen-app'));
+const lineGuide = await linePage.textContent('#guide-body');
+ok('「LINEの中なので、ブラウザで開いて」と案内する', lineGuide.includes('LINE') && lineGuide.includes('ブラウザで開く'), lineGuide.slice(0, 200));
+await lineCtx.close();
+
+const andCtx = await browser.newContext({ userAgent: UA_ANDROID, viewport: { width: 412, height: 915 }, isMobile: true, hasTouch: true, serviceWorkers: 'allow' });
+const android = await andCtx.newPage();
+watch(android, 'Android');
+await android.goto(inv2);
+await wait(2200);
+let andGuide = await android.textContent('#guide-body');
+ok('Androidには Android 用の手順（︙ → ホーム画面に追加）', andGuide.includes('︙') && andGuide.includes('ホーム画面に追加'));
+ok('Androidでは番号の引き継ぎは要らない（出さない）', !(await android.isVisible('#handoff-code')));
+// Chrome が「ホーム画面に追加」を出せる状態になったら、ボタン1つにする
+await android.evaluate(() => {
+  const e = new Event('beforeinstallprompt');
+  e.prompt = () => { window.__prompted = true; };
+  e.userChoice = Promise.resolve({ outcome: 'accepted' });
+  window.dispatchEvent(e);
+});
+await wait(300);
+ok('追加できる状態になると「ホーム画面に追加する」ボタンに変わる', await android.isVisible('#guide-body [data-g="install"]'));
+await android.click('#guide-body [data-g="install"]');
+await wait(400);
+ok('ボタンを押すと、ブラウザの「追加しますか」が出る', await android.evaluate(() => window.__prompted === true));
+await andCtx.close();
+
+/* =================================================================== */
+console.log('\n【9】やること');
+/* =================================================================== */
+
+await pc.click('#tabbar button[data-tab="task"]');
+await wait(300);
+ok('やることタブ', (await pc.textContent('#view')).includes('やることはありません'));
+await pc.click('#btn-add');
+await wait(400);
+await pc.fill('#t-title', '資料を50部 印刷する');
+await pc.fill('#t-due', addDays(todayStr(), 1));
+await pc.selectOption('#t-event', { index: 1 });
+await pc.click('#tk-save');
+await wait(900);
+ok('やることが一覧に出る', (await pc.textContent('#view')).includes('資料を50部'));
+eq('下のナビに残り件数が出る', await pc.textContent('#task-badge'), '1');
+await pc.click('#view .task-row .box');
+await wait(800);
+ok('終わったら「のこり」から消える', !(await pc.textContent('#view')).includes('資料を50部'));
+await pc.click('#tabbar button[data-tab="schedule"]');
+
+/* =================================================================== */
+console.log('\n【10】設定（よく使うものが上、細かい設定はたたんである）');
+/* =================================================================== */
+
+await pc.click('#btn-settings');
+await wait(600);
+ok('設定の上に「はじめの準備をひらく」', await pc.isVisible('#btn-open-guide'));
+ok('設定に「カレンダーに表示する」ボタンがある', await pc.isVisible('#cal-buttons a[data-g="cal"]'));
+ok('設定に招待リンクの欄がある', (await pc.textContent('#invite-area')).length > 0);
+ok('細かい設定は、はじめは閉じている', !(await pc.isVisible('#n-h2')));
+await pc.click('#fold-advanced summary');
+await wait(200);
+await pc.uncheck('#n-h2');
+await pc.fill('#n-digest', '06:45');
+await pc.click('#btn-save-notify');
+await wait(900);
+srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+eq('通知の設定が保存される', [srv.json.settings.notify.rules.h2, srv.json.settings.notify.digestAt], [false, '06:45']);
+await pc.click('#st-close');
+await wait(300);
+
+/* =================================================================== */
+console.log('\n【11】オフライン（講師の方のスマホで）');
+/* =================================================================== */
+
+await home.bringToFront();
+await home.evaluate(d => { const s = window.pocketHisho.getState(); s.cursor = d; s.scope = 'day'; s.tab = 'schedule'; window.pocketHisho.render(); }, DAY);
+await wait(1500);
+const shellInfo = await home.evaluate(async () => {
   const r = await caches.match('/');
-  return r ? { status: r.status, redirected: r.redirected, type: r.type } : null;
+  return r ? { redirected: r.redirected } : null;
 });
-ok('アプリ画面が端末に取っておかれている', !!shellInfo, JSON.stringify(shellInfo));
-ok('取り置きが「転送された結果」になっていない', shellInfo && shellInfo.redirected === false, JSON.stringify(shellInfo));
-
-await ctx.setOffline(true);
-await page.reload();
-await page.waitForTimeout(1500);
-ok('電波が無くても画面が出る（真っ白にならない）', await page.isVisible('#screen-app'));
-ok('つながっていない印が出る', await page.isVisible('#net-bar'));
-const offlineText = await page.textContent('#view');
-ok('前に見ていた予定が出る', offlineText.includes('管理職向け'), offlineText.slice(0, 120));
-
-// オフラインのまま編集 → ためておく
-await page.click('#btn-add');
-await page.waitForTimeout(400);
-await page.fill('#f-date', addDays(todayStr(), 10));
-await page.fill('#f-title', '電波が無いときに入れた予定');
-await page.click('#ev-save');
-await page.waitForTimeout(1000);
-ok('オフラインでも保存できる', (await page.textContent('#view')).includes('電波が無いときに入れた予定'));
-const queued = await page.evaluate(() => JSON.parse(localStorage.getItem('ph:queue') || '[]').length);
-ok('送れなかったぶんが取ってある', queued >= 1, 'queue=' + queued);
-
-// つながったら送られる
-await ctx.setOffline(false);
-await page.evaluate(() => window.dispatchEvent(new Event('online')));
-await page.waitForTimeout(2500);
-const afterOnline = await api('GET', '/api/bootstrap', undefined, adminToken);
-ok('つながったら、ためた分がサーバーに届く',
-  afterOnline.json.events.some(e => e.title === '電波が無いときに入れた予定'),
-  JSON.stringify(afterOnline.json.events.map(e => e.title)));
-const queuedAfter = await page.evaluate(() => JSON.parse(localStorage.getItem('ph:queue') || '[]').length);
-eq('送り終えたら、ためた分は空になる', queuedAfter, 0);
-ok('つながっていない印が消える', await page.isHidden('#net-bar'));
+ok('アプリ画面が端末に取っておかれている（転送ぬき）', shellInfo && shellInfo.redirected === false, JSON.stringify(shellInfo));
+await homeCtx.setOffline(true);
+await home.reload();
+await wait(2500);
+ok('電波が無くても画面が出る', await home.isVisible('#screen-app'));
+ok('つながっていない印が出る', await home.isVisible('#net-bar'));
+await home.evaluate(d => { const s = window.pocketHisho.getState(); s.cursor = d; s.scope = 'day'; window.pocketHisho.render(); }, DAY);
+ok('前に見ていた予定が出る', (await home.textContent('#view')).includes('管理職向け'));
+await home.click('#view button[data-act="edit-cost"]');
+await wait(400);
+await home.fill('#f-fare', '30000');
+await home.click('#ev-save');
+await wait(800);
+ok('電波が無くても運賃を直せる', (await home.textContent('#view')).includes('30,000円'));
+await homeCtx.setOffline(false);
+await home.evaluate(() => window.dispatchEvent(new Event('online')));
+await wait(2500);
+srv = await api('GET', '/api/bootstrap', undefined, adminToken);
+eq('つながったら、直した運賃がサーバーに届く', srv.json.events.find(e => e.title.includes('管理職向け')).cost.fare, 30000);
+ok('つながっていない印が消える', await home.isHidden('#net-bar'));
 
 /* =================================================================== */
-console.log('\n【8】スマホでの触りやすさ・見やすさ');
+console.log('\n【12】スマホでの触りやすさ・見やすさ');
 /* =================================================================== */
 
-await page.evaluate(d => { const s = window.pocketHisho.getState(); s.cursor = d; s.scope = 'day'; s.tab = 'schedule'; window.pocketHisho.render(); }, addDays(todayStr(), 3));
-await page.waitForTimeout(400);
-
-/* チェックボックスは、それを包んでいる <label> が押せる場所になる。
-   見た目の四角ではなく「実際に指が当たる範囲」で測る。 */
-const small = await page.$$eval('button, a.act, .btn, select, input[type=checkbox]', els => {
-  const target = e => (e.type === 'checkbox' && e.closest('label')) ? e.closest('label') : e;
-  return els.map(e => {
-    const t = target(e);
-    const r = t.getBoundingClientRect();
-    return { id: (e.id || e.className || e.tagName), w: Math.round(r.width), h: Math.round(r.height) };
-  }).filter(o => o.w > 0 && o.h > 0 && (o.h < 44 || o.w < 44));
-});
-ok('タップ領域が44px未満のボタンがない', small.length === 0,
-  small.slice(0, 4).map(o => o.id + ' ' + o.w + 'x' + o.h).join(' / '));
-
-const tiny = await page.$$eval('#view *', els =>
-  els.filter(e => e.children.length === 0 && e.textContent.trim())
-    .map(e => ({ t: e.textContent.trim().slice(0, 10), s: parseFloat(getComputedStyle(e).fontSize) }))
-    .filter(o => o.s < 12));
-ok('本文に12px未満の文字がない', tiny.length === 0, JSON.stringify(tiny));
-
-for (const w of [390, 768, 1280]) {
-  await page.setViewportSize({ width: w, height: 900 });
-  await page.waitForTimeout(250);
+async function checkTouch(page, label) {
+  const small = await page.$$eval('button, a.act, a.btn, .btn, select, input[type=checkbox], summary', els => {
+    const target = e => (e.type === 'checkbox' && e.closest('label')) ? e.closest('label') : e;
+    return els.map(e => { const r = target(e).getBoundingClientRect(); return { id: e.id || e.className || e.tagName, w: Math.round(r.width), h: Math.round(r.height) }; })
+      .filter(o => o.w > 0 && o.h > 0 && (o.h < 44 || o.w < 44));
+  });
+  ok(label + '：押す場所が44px未満のものがない', small.length === 0, small.slice(0, 4).map(o => o.id + ' ' + o.w + 'x' + o.h).join(' / '));
   const o = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  ok(w + 'px で横スクロールが出ない', o <= 0, 'overflow=' + o);
+  ok(label + '：横にはみ出さない', o <= 0, 'overflow=' + o);
 }
-await page.setViewportSize({ width: 390, height: 844 });
-
-// 入力シートもはみ出さないか
-await page.click('#btn-add');
-await page.waitForTimeout(400);
-const ovfSheet = await page.evaluate(() => { const s = document.getElementById('sheet-event'); return s.scrollWidth - s.clientWidth; });
-ok('入力シートが横にはみ出さない', ovfSheet <= 0, 'overflow=' + ovfSheet);
-const timeW = await page.$$eval('#f-arrive, #f-open, #f-end', els => els.map(e => Math.round(e.getBoundingClientRect().width)));
-ok('時刻の入力欄が130px以上（文字が切れない）', timeW.length === 3 && timeW.every(w => w >= 130), JSON.stringify(timeW));
-await page.click('#ev-cancel');
-await page.waitForTimeout(300);
-
-// 下のナビに隠れないか
-const hidden = await page.evaluate(() => {
-  const bar = document.getElementById('tabbar').getBoundingClientRect();
-  const last = document.querySelector('#view .card:last-child');
-  if (!last) return false;
-  window.scrollTo(0, document.body.scrollHeight);
-  const r = last.getBoundingClientRect();
-  return r.bottom > bar.top + 1;
-});
-ok('いちばん下までスクロールしても、下のナビに内容が隠れない', !hidden);
+await checkTouch(home, '日の画面');
+await home.evaluate(() => window.pocketHisho.openGuide());
+await wait(400);
+await checkTouch(home, 'はじめの準備');
+const ovfGuide = await home.evaluate(() => { const s = document.getElementById('sheet-guide'); return s.scrollWidth - s.clientWidth; });
+ok('はじめの準備：シートの中でも横にはみ出さない', ovfGuide <= 0, String(ovfGuide));
+await home.click('#guide-close');
+await home.click('#btn-add');
+await wait(400);
+const ovfSheet = await home.evaluate(() => { const s = document.getElementById('sheet-event'); return s.scrollWidth - s.clientWidth; });
+ok('入力画面：横にはみ出さない', ovfSheet <= 0, String(ovfSheet));
+const timeW = await home.$$eval('#f-arrive, #f-open, #f-end', els => els.map(e => Math.round(e.getBoundingClientRect().width)));
+ok('時刻の欄が130px以上（文字が切れない）', timeW.every(w => w >= 130), JSON.stringify(timeW));
+await home.click('#ev-cancel');
 
 /* =================================================================== */
-console.log('\n【9】色の読みやすさ（明るい画面・暗い画面）');
+console.log('\n【13】色の読みやすさ（明るい画面・暗い画面）');
 /* =================================================================== */
 
+// 帯と大きな番号も見るため、Safari側の iPhone で測る
 for (const scheme of ['light', 'dark']) {
-  await page.emulateMedia({ colorScheme: scheme });
-  await page.waitForTimeout(300);
-  const c = await page.evaluate(() => {
-    // 背景が透明な要素は、実際に後ろに見えている色（親をさかのぼった色）で測る
+  await phone.emulateMedia({ colorScheme: scheme });
+  await phone.evaluate(() => window.pocketHisho.openGuide());
+  await wait(400);
+  const c = await phone.evaluate(() => {
     const bgOf = el => {
       let n = el;
       while (n && n !== document.documentElement) {
@@ -430,59 +538,58 @@ for (const scheme of ['light', 'dark']) {
     };
     const g = el => el ? { bg: bgOf(el), ink: getComputedStyle(el).color } : null;
     return {
-      head: g(document.querySelector('.hero h2')),
-      sub: g(document.querySelector('.sec .sub')),
-      fab: g(document.getElementById('btn-add')),
-      tab: g(document.querySelector('#scope button.on')),
-      nav: g(document.querySelector('#tabbar button.on')),
-      navOff: g(document.querySelector('#tabbar button:not(.on)'))
+      stepTitle: g(document.querySelector('#guide-body .guide-step.now .gt')),
+      stepSub: g(document.querySelector('#guide-body .guide-step .gs')),
+      num: g(document.querySelector('#guide-body .guide-step.now .num')),
+      code: g(document.getElementById('handoff-code')),
+      primary: g(document.querySelector('#guide-body .btn')),
+      banner: g(document.querySelector('.guide-banner .gbt'))
     };
   });
-  for (const [label, pair] of [['見出し', c.head], ['補助文字', c.sub], ['＋ボタン', c.fab],
-                               ['選んだタブ', c.tab], ['下ナビ（選択中）', c.nav], ['下ナビ（未選択）', c.navOff]]) {
+  for (const [label, pair] of Object.entries(c)) {
+    if (!pair) continue;
     const r = contrast(pair.bg, pair.ink);
-    ok(scheme + '：' + label + 'が読める（4.5以上）', r >= 4.5, 'ratio=' + r.toFixed(2));
+    ok(scheme + '：' + label + ' が読める（4.5以上）', r >= 4.5, 'ratio=' + r.toFixed(2));
   }
+  await phone.click('#guide-body [data-g="close"]');
 }
-await page.emulateMedia({ colorScheme: 'light' });
+await phone.emulateMedia({ colorScheme: 'light' });
 
 /* =================================================================== */
-console.log('\n【10】ログアウトと再ログイン');
+console.log('\n【14】ログアウトと、入り直し');
 /* =================================================================== */
 
-await page.click('#btn-settings');
-await page.waitForTimeout(400);
-await page.click('#btn-logout');
-await page.waitForTimeout(300);
-await page.click('#modal-yes');
-await page.waitForTimeout(600);
-ok('ログアウトするとログイン画面に戻る', await page.isVisible('#screen-login'));
-const leftover = await page.evaluate(() => localStorage.getItem('ph:token'));
-ok('この端末から札が消える', !leftover, String(leftover));
-
-await page.fill('#f-pass', PASS);
-await page.click('#btn-login');
-await page.waitForTimeout(1800);
-ok('入り直せる', await page.isVisible('#screen-app'));
-ok('データは残っている', (await page.textContent('#view')).includes('つぎのセミナー') || (await page.textContent('#view')).includes('管理職向け'),
-  (await page.textContent('#view')).slice(0, 80));
+await pc.click('#btn-settings');
+await wait(400);
+ok('設定を開きなおすと、くわしい設定は閉じている', !(await pc.evaluate(() => document.getElementById('fold-advanced').open)));
+await pc.click('#fold-advanced summary');
+await pc.click('#btn-logout');
+await wait(300);
+await pc.click('#modal-yes');
+await wait(800);
+ok('ログアウトすると入口に戻る', await pc.isVisible('#screen-login'));
+ok('札が消える', !(await pc.evaluate(() => localStorage.getItem('ph:token'))));
+await pc.fill('#f-pass', PASS);
+await pc.click('#btn-login');
+await wait(1800);
+ok('入り直せる', await pc.isVisible('#screen-app'));
 
 /* =================================================================== */
-console.log('\n【11】JSエラーと通信');
+console.log('\n【15】JSエラーと通信');
 /* =================================================================== */
 ok('JSエラーが1件も出ていない', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
-
-/* 通信の失敗のうち、このテストが自分で起こしたものは想定内：
-     ・電波を切っている間の失敗
-     ・【1】でわざと入れた、まちがった合言葉（401 /api/login）      */
-const expectedLoginFails = httpFails.filter(f => f === '401 /api/login').length;
-eq('わざと失敗させたログインは1回だけ', expectedLoginFails, 1);
-const unexpected = httpFails.filter(f =>
-  !/ERR_INTERNET_DISCONNECTED|ERR_NETWORK_CHANGED|ERR_FAILED/.test(f) && f !== '401 /api/login');
-ok('それ以外に、想定外の通信エラー（4xx・5xx）が出ていない', unexpected.length === 0, unexpected.slice(0, 5).join(' / '));
+/* テストがわざと起こしたもの：まちがった合言葉（401 /api/login）・まちがった番号（401 /api/redeem） */
+const unexpected = httpFails.filter(f => f !== '401 /api/login' && f !== '401 /api/redeem');
+ok('想定外の通信エラー（4xx・5xx）が出ていない', unexpected.length === 0, unexpected.slice(0, 5).join(' / '));
+eq('わざと失敗させたのは2回だけ（合言葉1・番号1）', httpFails.filter(f => f.startsWith('401')).length, 2);
 
 console.log('\n────────────────────────────');
 console.log('合格 ' + pass + ' ／ 不合格 ' + fail);
 if (failures.length) { console.log('\n不合格の一覧:'); failures.forEach(f => console.log('  - ' + f)); }
+/* あとかたづけ：テスト用の端末の登録と、ロックを消す（ほかのテストの数え方に影響させないため） */
+const endToken = (await api('POST', '/api/login', { pass: PASS })).json.token;
+await api('POST', '/api/push/unsubscribe', { endpoint: fakeSub.endpoint }, endToken);
+await api('POST', '/api/login/unlock', undefined, endToken);
 await browser.close();
+pushServer.close();
 process.exit(fail ? 1 : 0);

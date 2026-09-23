@@ -1,7 +1,8 @@
 /* ポケット秘書 — サーバー全体の検証（wrangler dev を動かした状態で実行する）
    実行:
-     npx wrangler dev --config wrangler.test.toml --local --port 8788 &
-     node tests/test-api.mjs                                                */
+     npx wrangler dev --local --port 8788 &
+     node tests/test-api.mjs
+   まっさらな状態から流すと「はじめての合言葉」から確かめる。2回目以降も同じ結果になる。 */
 
 import http from 'node:http';
 import { decryptPayloadForTest, b64urlToBytes, bytesToB64url } from '../src/push.js';
@@ -72,6 +73,22 @@ ok('サーバーの今日の日付が返る', /^\d{4}-\d{2}-\d{2}$/.test(ping.js
 const noAuth = await call('GET', '/api/bootstrap', undefined, false);
 eq('ログインしていないと中身は見えない', noAuth.status, 401);
 
+// はじめて動かしたときは「合言葉を決める」から。2回目以降に流したときは決まっている。
+const st0 = await call('GET', '/api/setup-status', undefined, false);
+eq('合言葉が決まっているかを聞ける', st0.status, 200);
+if (st0.json.needsSetup) {
+  const shortPass = await call('POST', '/api/setup', { pass: 'short' }, false);
+  eq('8文字未満の合言葉は断られる', shortPass.status, 400);
+  const firstSetup = await call('POST', '/api/setup', { pass: PASS }, false);
+  eq('はじめての合言葉を決められる', firstSetup.status, 200);
+  ok('決めた人はそのまま入れる（札がもらえる）', typeof firstSetup.json.token === 'string');
+} else {
+  console.log('  （合言葉はもう決まっているので、決める手順は飛ばします）');
+}
+const secondSetup = await call('POST', '/api/setup', { pass: 'hijack-pass-999' }, false);
+eq('決まったあとは、ほかの人が合言葉を決め直せない', secondSetup.status, 409);
+eq('合言葉が決まったことが分かる', (await call('GET', '/api/setup-status', undefined, false)).json.needsSetup, false);
+
 const wrong = await call('POST', '/api/login', { pass: 'ちがう合言葉' }, false);
 eq('合言葉がちがうと入れない', wrong.status, 401);
 ok('理由が日本語で返る', String(wrong.json.error).includes('合言葉'), JSON.stringify(wrong.json));
@@ -108,12 +125,12 @@ const ev1 = {
   venue: { place: '大阪産業創造館', address: '大阪市中央区本町1-4-5', note: '' },
   contact: { org: 'サンプル商事', person: '田中', tel: '06-1234-5678', email: '' },
   items: [{ text: 'マイク', done: false }],
-  money: [{ kind: 'in', label: '講演料', amount: 80000 }, { kind: 'out', label: '交通費', amount: 28400 }],
+  cost: { fare: '28,400', hotel: '9800', other: 0, otherNote: '' },
   memo: 'テスト'
 };
 const put1 = await call('PUT', '/api/events', ev1);
 eq('予定を保存できる', put1.status, 200);
-eq('保存された金額が正しい', put1.json.event.money, [{ kind: 'in', label: '講演料', amount: 80000 }, { kind: 'out', label: '交通費', amount: 28400 }]);
+eq('運賃・ホテル代が数としてそろって保存される', put1.json.event.cost, { fare: 28400, hotel: 9800, other: 0, otherNote: '' });
 
 const noDate = await call('PUT', '/api/events', { id: 'ev_bad', title: '日付なし' });
 eq('日付がない予定は断られる', noDate.status, 400);
@@ -130,13 +147,13 @@ eq('上書きの内容が反映される', boot.json.events[0].title, '管理職
 
 // 変な値を送りこんでも形がそろう
 const dirty = await call('PUT', '/api/events', {
-  id: 'ev_dirty', date: DAY, title: 123, openTime: 'あさ', money: [{ kind: 'x', label: 'a', amount: -500 }],
+  id: 'ev_dirty', date: DAY, title: 123, openTime: 'あさ', cost: { fare: -500, hotel: 'たかい' },
   items: 'これは配列ではない', venue: null
 });
 eq('変な値でも保存は通る', dirty.status, 200);
 eq('数字の題名は文字になる', dirty.json.event.title, '123');
 eq('時刻になっていない文字は空になる', dirty.json.event.openTime, '');
-eq('マイナスの金額はプラスに直る', dirty.json.event.money[0], { kind: 'in', label: 'a', amount: 500 });
+eq('マイナスや文字の金額は 0 になる', [dirty.json.event.cost.fare, dirty.json.event.cost.hotel], [0, 0]);
 eq('配列でないものは空の配列になる', dirty.json.event.items, []);
 eq('欠けている入れ物は既定で埋まる', dirty.json.event.venue, { place: '', address: '', note: '' });
 await call('DELETE', '/api/events/ev_dirty');
@@ -273,15 +290,18 @@ const subscription = {
 const badSub = await call('POST', '/api/push/subscribe', { subscription: { endpoint: 'http://x' } });
 eq('中身が足りない登録は断られる', badSub.status, 400);
 
+/* 画面テストなどが残した端末があっても数えまちがえないよう、「もとの台数」からの増減で見る
+   （宛先の分からない他人の登録は、ここからは消せないため） */
+const devBase = (await call('GET', '/api/bootstrap')).json.devices.length;
 const sub = await call('POST', '/api/push/subscribe', { subscription, label: 'テスト端末' });
 eq('通知のあて先を登録できる', sub.status, 200);
 boot = await call('GET', '/api/bootstrap');
-eq('登録した端末が1台見える', boot.json.devices.length, 1);
-eq('端末の名前が入る', boot.json.devices[0].label, 'テスト端末');
+eq('登録した端末が1台ふえる', boot.json.devices.length - devBase, 1);
+ok('端末の名前が入る', boot.json.devices.some(d => d.label === 'テスト端末'), JSON.stringify(boot.json.devices.map(d => d.label)));
 
 await call('POST', '/api/push/subscribe', { subscription, label: 'テスト端末' });
 boot = await call('GET', '/api/bootstrap');
-eq('同じ端末を二重に登録しない', boot.json.devices.length, 1);
+eq('同じ端末を二重に登録しない', boot.json.devices.length - devBase, 1);
 
 received.length = 0;
 const test = await call('POST', '/api/push/test');
@@ -368,17 +388,17 @@ await call('POST', '/api/push/subscribe', {
   subscription: { endpoint: 'http://127.0.0.1:8797/dead', keys: subscription.keys }, label: '死んだ端末'
 });
 boot = await call('GET', '/api/bootstrap');
-eq('いったん2台になる', boot.json.devices.length, 2);
+eq('いったん2台ふえた状態になる', boot.json.devices.length - devBase, 2);
 await call('POST', '/api/push/test');
 await new Promise(r => setTimeout(r, 300));
 boot = await call('GET', '/api/bootstrap');
-eq('受け取れない端末は、登録から自動で消える', boot.json.devices.length, 1);
+eq('受け取れない端末は、登録から自動で消える', boot.json.devices.length - devBase, 1);
 goneServer.close();
 
 const unsub = await call('POST', '/api/push/unsubscribe', { endpoint: subscription.endpoint });
 eq('自分で登録を外せる', unsub.status, 200);
 boot = await call('GET', '/api/bootstrap');
-eq('端末が0台になる', boot.json.devices.length, 0);
+eq('外した端末は一覧から消える（もとの台数に戻る）', boot.json.devices.length - devBase, 0);
 
 /* =================================================================== */
 console.log('\n【9b】本番と同じ経路（1分ごとのCron → 通知）');
@@ -451,6 +471,89 @@ const noApi = await call('GET', '/api/そんな操作はない');
 eq('知らないAPIは404', noApi.status, 404);
 
 /* =================================================================== */
+console.log('\n【11b】合言葉なしで入る（招待リンク・引き継ぎ番号）');
+/* =================================================================== */
+
+boot = await call('GET', '/api/bootstrap');
+eq('合言葉で入った人は「作った人」と分かる', boot.json.via, 'pass');
+
+const inv = await call('POST', '/api/invite');
+eq('招待リンクを作れる', inv.status, 200);
+ok('招待リンクの形', /\/\?invite=[0-9a-f]{24}&openExternalBrowser=1$/.test(inv.json.url), inv.json.url);
+ok('LINEの中ではなく、外のブラウザで開くよう指定されている', inv.json.url.includes('openExternalBrowser=1'));
+ok('14日ほど使える', Math.abs(inv.json.expiresAt - (Date.now() + 14 * 86400000)) < 120000);
+const invCode = inv.json.url.match(/invite=([0-9a-f]+)/)[1];
+
+boot = await call('GET', '/api/bootstrap');
+eq('いまの招待リンクが設定から見える', boot.json.invite && boot.json.invite.url, inv.json.url);
+
+const noAuthInvite = await call('POST', '/api/invite', undefined, false);
+eq('ログインしていない人は招待リンクを作れない', noAuthInvite.status, 401);
+
+const redeem1 = await call('POST', '/api/redeem', { code: invCode }, false);
+eq('招待リンクで、合言葉なしに入れる', redeem1.status, 200);
+const inviteeToken = redeem1.json.token;
+const redeem2 = await call('POST', '/api/redeem', { code: invCode }, false);
+eq('招待リンクは、もう一度押しても入れる（期限内なら）', redeem2.status, 200);
+
+const saved = token;
+token = inviteeToken;
+boot = await call('GET', '/api/bootstrap');
+eq('招待リンクで入った人は「招待された人」と分かる', boot.json.via, 'invite');
+eq('招待された人にも同じ予定が見える', boot.json.events.length > 0, true);
+token = saved;
+
+// 作り直すと、前のリンクは使えなくなる
+const inv2 = await call('POST', '/api/invite');
+const invCode2 = inv2.json.url.match(/invite=([0-9a-f]+)/)[1];
+ok('作り直すと別のリンクになる', invCode2 !== invCode);
+eq('前のリンクは使えなくなる', (await call('POST', '/api/redeem', { code: invCode }, false)).status, 401);
+eq('新しいリンクは使える', (await call('POST', '/api/redeem', { code: invCode2 }, false)).status, 200);
+
+// 取り消す
+eq('招待リンクを使えなくできる', (await call('DELETE', '/api/invite')).status, 200);
+const afterRevoke = await call('POST', '/api/redeem', { code: invCode2 }, false);
+eq('取り消したリンクでは入れない', afterRevoke.status, 401);
+ok('理由が日本語で返る', String(afterRevoke.json.error).includes('招待リンク'), JSON.stringify(afterRevoke.json));
+boot = await call('GET', '/api/bootstrap');
+eq('設定からも消える', boot.json.invite, null);
+eq('取り消しても、すでに入っている人はそのまま使える',
+  (await fetch(BASE + '/api/bootstrap', { headers: { Authorization: 'Bearer ' + inviteeToken } })).status, 200);
+
+// 引き継ぎ番号（iPhone のホーム画面のアプリへ渡す6けた）
+const ho = await call('POST', '/api/handoff');
+eq('引き継ぎ番号を作れる', ho.status, 200);
+ok('番号は6けたの数字', /^\d{6}$/.test(ho.json.code), ho.json.code);
+ok('24時間ほど使える', Math.abs(ho.json.expiresAt - (Date.now() + 24 * 3600000)) < 120000);
+const hoUse = await call('POST', '/api/redeem', { code: ho.json.code.slice(0, 3) + ' ' + ho.json.code.slice(3) }, false);
+eq('「123 456」のように空白が入っていても入れる', hoUse.status, 200);
+const hoAgain = await call('POST', '/api/redeem', { code: ho.json.code }, false);
+eq('番号は1回かぎり（2回目は入れない）', hoAgain.status, 401);
+ok('2回目の理由が分かる', String(hoAgain.json.error).includes('番号'), JSON.stringify(hoAgain.json));
+token = hoUse.json.token;
+eq('番号で入った人は「引き継ぎ」と分かる', (await call('GET', '/api/bootstrap')).json.via, 'handoff');
+token = saved;
+
+// ホーム画面に追加するときの説明書（番号が起動URLに入る）
+const mf = await (await fetch(BASE + '/app.webmanifest?h=' + '482913')).json();
+eq('説明書の起動URLに番号が入る', mf.start_url, '/?h=482913');
+eq('説明書は全画面で開く指定', mf.display, 'standalone');
+const mfBad = await (await fetch(BASE + '/app.webmanifest?h=' + encodeURIComponent('"><script>'))).json();
+eq('番号の形でないものは入れない', mfBad.start_url, '/');
+const mfNone = await (await fetch(BASE + '/app.webmanifest')).json();
+eq('番号が無ければふつうの起動URL', mfNone.start_url, '/');
+
+// 合言葉を変える（最後に元に戻す）
+eq('短い合言葉には変えられない', (await call('POST', '/api/pass', { next: 'short' })).status, 400);
+eq('合言葉を変えられる', (await call('POST', '/api/pass', { next: 'changed-pass-777' })).status, 200);
+eq('前の合言葉では入れない', (await call('POST', '/api/login', { pass: PASS }, false)).status, 401);
+eq('新しい合言葉で入れる', (await call('POST', '/api/login', { pass: 'changed-pass-777' }, false)).status, 200);
+eq('ログインしていない人は合言葉を変えられない', (await fetch(BASE + '/api/pass', { method: 'POST', body: '{"next":"hijack-hijack"}' })).status, 401);
+await call('POST', '/api/pass', { next: PASS });
+eq('元の合言葉に戻せる', (await call('POST', '/api/login', { pass: PASS }, false)).status, 200);
+await call('POST', '/api/login/unlock');   // ここまでのまちがい回数を数え直す
+
+/* =================================================================== */
 console.log('\n【12】合言葉の総当たり対策（※これは最後に行う）');
 /* =================================================================== */
 
@@ -464,6 +567,11 @@ const afterLock = await call('POST', '/api/login', { pass: PASS }, false);
 eq('鍵がかかっている間は、正しい合言葉でも入れない', afterLock.status, 429);
 ok('待ち時間が案内される', String(afterLock.json.error).includes('分'), JSON.stringify(afterLock.json));
 eq('すでに持っている札は使えたまま', (await call('GET', '/api/bootstrap')).status, 200);
+const lockInvite = await call('POST', '/api/invite');
+const lockCode = lockInvite.json.url.match(/invite=([0-9a-f]+)/)[1];
+eq('鍵がかかっている間は、招待リンクでも入れない（番号の総当たりも防ぐ）',
+  (await call('POST', '/api/redeem', { code: lockCode }, false)).status, 429);
+await call('DELETE', '/api/invite');
 
 // 入れている端末から、鍵を外せる（打ちまちがえて閉め出されたときの助け）
 const unlockNoAuth = await fetch(BASE + '/api/login/unlock', { method: 'POST' });

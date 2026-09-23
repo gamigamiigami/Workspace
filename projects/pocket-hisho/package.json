@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "db:init": "wrangler d1 execute pocket-hisho --remote --file=./schema.sql",
-    "db:init:local": "wrangler d1 execute pocket-hisho --local --file=./schema.sql",
-    "test": "node tests/test-core.mjs"
+    "test": "node tests/test-core.mjs && node tests/test-remind.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "^4.136.2"
   }
 }
