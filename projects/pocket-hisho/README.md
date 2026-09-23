@@ -57,6 +57,13 @@
               └──────────────────────────┘
 ```
 
+### 公開のしくみ
+
+- Cloudflare の Worker `pocket-hisho` を、GitHub のこのリポジトリとつないである（Workers Builds）
+- **本番ブランチは `claude/new-tool-creation-klodhg`**、フォルダは `projects/pocket-hisho`
+- **この枝に保存（プッシュ）すると、Cloudflare が自動で公開し直す**（ボタン操作は要らない）
+- 保管庫（D1）`pocket-hisho` の ID は `wrangler.toml` に記入済み。表は初回に自動で作られる
+
 ### なぜ「ふつうのアプリ」ではなく PWA なのか
 
 App Store に出すには **Mac（Xcode）と Apple Developer Program（年間約1.5万円）** が要ります。
