@@ -1,5 +1,5 @@
 # ポケット秘書 — Cloudflare の設定ファイル
-# このファイルは書きかえなくて大丈夫です。
+# 書きかえるのは database_id の1か所だけです（SETUP.md の③）。
 
 name = "pocket-hisho"
 main = "src/index.js"
@@ -12,13 +12,17 @@ directory = "./web"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
 
-# 予定とタスクの保管庫
-# database_id をわざと書いていない。書かないと、公開のときに
-# 「pocket-hisho」という名前のデータベースを自動で作って（あればそれにつないで）くれる。
-# 表（テーブル）も、はじめて動いたときにサーバーが自動で作る（src/schema.js）。
+# 予定とタスクの保管庫（D1）
+# ↓ Cloudflare の画面で作った保管庫の「Database ID」を、database_id の "" の中に貼る。
+#   例）database_id = "a1b2c3d4-5678-90ab-cdef-1234567890ab"
+#   （手順は SETUP.md の②③。Cloudflare の自動公開には保管庫を作る権限が無いため、
+#     保管庫だけは手で作ってIDをここに書く）
+# 表（テーブル）は、はじめて動いたときにサーバーが自動で作る（src/schema.js）。
+# 空のままでも手元のテスト（wrangler dev --local）は動く。
 [[d1_databases]]
 binding = "DB"
 database_name = "pocket-hisho"
+database_id = ""
 
 # 1分ごとの見回り（時刻が来た予定の通知を送る）
 [triggers]

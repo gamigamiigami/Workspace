@@ -4322,21 +4322,27 @@ catch (e) {
 
 ---
 
-## 初心者に渡すサーバーを「Deployを押すだけ」にする（Cloudflare Workers + D1）
+## 初心者に渡すサーバーの手作業を減らす（Cloudflare Workers + D1）
 
 **場面：** ポケット秘書。前の手順書は「保管庫を作る→SQLを貼る→IDを書きこむ→合言葉をSecretに登録」の
 4つの手作業があり、どれか1つ抜けると動かなかった。
 
-**やり方（3つ重ねて、手作業をゼロにする）：**
+**やり方（手作業を「保管庫を作ってIDを渡す」だけにする）：**
 
-1. **`wrangler.toml` に `database_id` を書かない。** wrangler 4 系は、名前（`database_name`）だけあれば
-   公開のときに**その名前の保管庫を探し、無ければ作って**つなぐ（wrangler 4.136 の中身を読んで確認：
-   `isConnectedToExistingResource` が名前で探し、無ければ `runProvisioningFlow` が質問なしで作る）。
+1. **保管庫（D1）だけは手で作り、ID を `wrangler.toml` に書く。**
+   wrangler 4 系には「`database_id` を書かなければ名前で探し、無ければ作る」自動作成があるが、
+   **Cloudflare の自動公開（Workers Builds）が作る鍵には D1 の権限が入っていない**
+   （資料の既定の権限：Account Settings 読み／Workers Scripts・KV・R2 編集／Workers Routes 編集）。
+   → 公開の途中で保管庫を探す・作る処理が権限不足で失敗する見込み。
+   ID が書いてあれば探しも作りもしないので、鍵の権限はそのままで公開できる
+   （「つなぐだけなら保管庫側の権限は要らない」と資料にある）。
    ```toml
    [[d1_databases]]
    binding = "DB"
-   database_name = "pocket-hisho"   # database_id は書かない
+   database_name = "pocket-hisho"
+   database_id = ""        # ← ここに Cloudflare の画面でコピーした ID を貼る（空でも手元のテストは動く）
    ```
+   初心者には「IDをチャットで送ってくれれば書く」を第一の道にする（ファイル編集をさせない）。
 2. **表はサーバーが自分で作る。** `CREATE TABLE IF NOT EXISTS` を並べた配列を、
    その実行環境（isolate）で最初の1回だけ流す。列を足すときは別の配列（UPGRADES）に。
    ```js
