@@ -121,32 +121,36 @@
      **「Only select repositories」**（選んだリポジトリだけ）→ **`Workspace`** を選んで **「Install & Authorize」**（または「Install」）
    - GitHub のパスワードを聞かれたら入れる
 5. Cloudflare の画面に戻ったら、リポジトリの一覧から **`Workspace`** を選ぶ
-6. 設定の画面で、次のように入れる（**太字の3つがとくに大事**）
+6. **「アプリケーションをセットアップする」** の画面で、次のようにする
+   （画面は日本語で出ます。**この画面には「ブランチ（使う枝）」の欄はありません**）
 
-   | 欄の名前 | 入れるもの | メモ |
-   |---|---|---|
-   | **Project name**（名前） | **`pocket-hisho`** | 設定ファイルの名前と**同じでないと失敗**します |
-   | **Git branch / Production branch**（使う枝） | **`claude/new-tool-creation-klodhg`** | 最初は別の枝（`main` など）になっているので**必ず変える** |
-   | Build command（組み立て命令） | 空のまま | |
-   | Deploy command（公開命令） | `npx wrangler deploy` | 最初から入っていればそのまま |
-   | **Root directory / Path**（フォルダ） | **`projects/pocket-hisho`** | 見当たらなければ **「Advanced settings」**（詳細設定）を開くと出てきます |
-   | API token | さわらない（「Create new token」のまま） | |
+   | 欄の名前 | 入れるもの・やること |
+   |---|---|
+   | **プロジェクト名** | **`pocket-hisho`**（設定ファイルの名前と**同じでないと失敗**します） |
+   | ビルド コマンド | 空のまま |
+   | デプロイ コマンド | `npx wrangler deploy`（最初から入っている） |
+   | プレビューコマンド | さわらない |
+   | **プレビュービルドを有効化** | **オフにする**（このリポジトリには枝がたくさんあり、ほかの枝に保存があるたびに組み立てが走ってしまうため） |
+   | **詳細設定** の中の **パス（ルートディレクトリ）** | **`projects/pocket-hisho`**（画面の下のほうにある「詳細設定」を開くと出てきます） |
+   | API トークン | さわらない |
 
-7. **「Deploy」**（または「Save and Deploy」）を押す
-8. 2〜3分待つ。記録（ログ）が流れ、最後に **Success**（成功）の表示が出る
-9. Worker の画面で **「Visit」**（ひらく）を押すか、**Settings → Domains & Routes** を見ると、
-   **`https://pocket-hisho.〇〇.workers.dev`** というURLがあります。**これがアプリのアドレスです。メモ帳に貼る**
+7. **「デプロイ」** を押す
+8. **1回目は失敗して大丈夫です。** Cloudflare は最初、リポジトリの「いつもの枝」
+   （`claude/workspace-knowledge-base-setup-ccVKP`）を見に行きますが、そこにはポケット秘書が入っていないためです
+9. Worker の画面で **「設定」→「ビルド」→「ブランチ コントロール」**（Branch control）を開き、
+   - **本番ブランチ**（Production branch）を **`claude/new-tool-creation-klodhg`** に変える
+   - 「本番以外のブランチのビルド」のような切りかえがあれば **オフ**
+   - **保存**する
+10. **Claude（私）に「変えた」と送る。** 私がこの枝に保存し直すと、それをきっかけに Cloudflare が自動で公開します
+   （自分でやる場合は「デプロイ」の一覧から、`claude/new-tool-creation-klodhg` の組み立てをやり直す）
+11. 2〜3分待つ。Worker の画面で **「アクセス」**（Visit）を押すか、**「設定」→「ドメインとルート」** を見ると、
+    **`https://pocket-hisho.〇〇.workers.dev`** というURLがあります。**これがアプリのアドレスです。メモ帳に貼る**
 
 ✅ **こうなればOK：** URLを開くと、ポケット秘書の **「はじめての合言葉」** の画面が出る
 
 > 💡 **workers.dev の名前を聞かれたら**
 > はじめて Workers を使うアカウントでは、URLの「〇〇」の部分（サブドメイン）を
 > 決める画面が出ることがあります。英小文字で好きな名前を入れてください（例：`igami-apps`）。
-
-> 💡 **枝（ブランチ）を選ぶ欄が無かったとき**
-> いったん「Deploy」を押してかまいません（失敗します）。そのあと
-> **Settings → Build → Branch control** で Production branch を
-> `claude/new-tool-creation-klodhg` に変えて保存し、**Deployments** の画面から公開をやり直してください。
 
 > 💡 **このあとは自動です**
 > この枝にアプリの修正が届くたびに、Cloudflare が自動で公開し直します。
