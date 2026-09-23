@@ -77,7 +77,13 @@ export const SCHEMA = [
      via         TEXT
    )`,
 
-  // 合言葉なしで入るための札（招待リンク・ホーム画面への引き継ぎ番号）
+  // Googleカレンダーから消すのを待っている予定（アプリで消した直後・通信の失敗に備えて残す）
+  `CREATE TABLE IF NOT EXISTS g_deletes (
+     google_id   TEXT PRIMARY KEY,
+     created_at  INTEGER NOT NULL
+   )`,
+
+  // 合言葉なしで入るための札（招待リンク・ホーム画面への引き継ぎ番号・Googleの本人確認）
   `CREATE TABLE IF NOT EXISTS codes (
      code        TEXT PRIMARY KEY,
      kind        TEXT NOT NULL,
@@ -89,7 +95,18 @@ export const SCHEMA = [
 
 /* 以前の版で作られた表に、あとから足した列を加える（すでにあれば何もしない） */
 export const UPGRADES = [
-  { table: 'sessions', column: 'via', sql: `ALTER TABLE sessions ADD COLUMN via TEXT` }
+  { table: 'sessions', column: 'via', sql: `ALTER TABLE sessions ADD COLUMN via TEXT` },
+  // Googleカレンダーとのつながり（アプリの画面からは書きかえない。サーバーだけが持つ）
+  { table: 'events', column: 'google_id', sql: `ALTER TABLE events ADD COLUMN google_id TEXT` },   // Google側の予定ID
+  { table: 'events', column: 'g_updated', sql: `ALTER TABLE events ADD COLUMN g_updated TEXT` },   // Googleで最後に直された時刻
+  { table: 'events', column: 'g_dirty', sql: `ALTER TABLE events ADD COLUMN g_dirty INTEGER NOT NULL DEFAULT 0` },  // Googleへの書きこみ待ち
+  { table: 'events', column: 'g_error', sql: `ALTER TABLE events ADD COLUMN g_error TEXT` }
+];
+
+/* 列を足したあとでないと作れない索引 */
+export const AFTER_UPGRADES = [
+  `CREATE INDEX IF NOT EXISTS idx_events_gid ON events (google_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_events_gdirty ON events (g_dirty) WHERE g_dirty = 1`
 ];
 
 let ready = false;   // 同じ入れ物（isolate）の中では1回だけ行う
@@ -102,5 +119,6 @@ export async function ensureSchema(db) {
     const { results } = await db.prepare(`PRAGMA table_info(${u.table})`).all();
     if (!(results || []).some(r => r.name === u.column)) await db.prepare(u.sql).run();
   }
+  await db.batch(AFTER_UPGRADES.map(sql => db.prepare(sql)));
   ready = true;
 }

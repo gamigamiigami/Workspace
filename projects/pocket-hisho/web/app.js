@@ -48,13 +48,15 @@ const state = {
   cursor: todayStr(),
   taskFilter: 'open',         // open / today / done
   online: navigator.onLine,
-  handoff: null               // iPhone のホーム画面へ渡す6けたの番号 {code, expiresAt}
+  handoff: null,              // iPhone のホーム画面へ渡す6けたの番号 {code, expiresAt}
+  gDraft: { clientId: '', clientSecret: '' }   // Google の身分証の書きかけ（描きなおしても消えないように）
 };
 
 let data = {
   events: [], tasks: [], settings: defaultSettings(), ext: [],
   vapidPublicKey: '', icsUrl: '', devices: [], calendarsLast: null,
-  via: '', invite: null, passFromEnv: false
+  via: '', invite: null, passFromEnv: false,
+  google: null                 // Googleカレンダーとのつながり {configured, connected, account, lastSyncAt, ...}
 };
 
 let editingEventId = null;
@@ -168,6 +170,7 @@ async function loadAll(showSpinner) {
   try {
     await flushQueue();
     const r = await api('GET', '/api/bootstrap');
+    const wasConnected = !!(data.google && data.google.connected);
     data = {
       events: (r.events || []).map(normalizeEvent),
       tasks: (r.tasks || []).map(normalizeTask),
@@ -179,10 +182,16 @@ async function loadAll(showSpinner) {
       calendarsLast: r.calendarsLast || null,
       via: r.via || 'pass',
       invite: r.invite || null,
-      passFromEnv: !!r.passFromEnv
+      passFromEnv: !!r.passFromEnv,
+      google: r.google || null
     };
     lsSet(LS_CACHE, data);
     setOnline(true);
+    // Googleの許可画面から戻ってきたとき：つながったことを知らせ、案内を描きなおす
+    if (!wasConnected && data.google && data.google.connected && state.token) {
+      showToast('Googleカレンダーとつながりました');
+      refreshGuideViews();
+    }
   } catch (e) {
     if (isNetworkError(e)) {
       setOnline(false);
@@ -389,9 +398,14 @@ function askConfirm(title, text, yesLabel, onYes) {
 
 function isOwner() { return data.via === 'setup' || data.via === 'pass'; }
 
+function googleReady() { return !!(data.google && data.google.configured); }
+function googleOn() { return !!(data.google && data.google.connected); }
+
 function guideSteps() {
   const steps = [];
   if (isOwner()) {
+    // 講師の方が「Googleカレンダーとつなぐ」を押せるように、先に身分証を登録しておく
+    steps.push({ id: 'gsetup', title: 'Googleカレンダーとつなぐ準備をする', sub: 'Google Cloud で作る「クライアントID」を登録します（最初の1回だけ・30分ほど）', done: googleReady() });
     steps.push({ id: 'invite', title: '講師の方に招待リンクを送る', sub: 'LINEで送れます。合言葉を伝えなくても入ってもらえます', done: !!data.invite });
   }
   if (isMobile()) {
@@ -401,7 +415,13 @@ function guideSteps() {
     id: 'notify', title: '通知をオンにする', sub: '時間が来たら、スマホにお知らせが届きます',
     done: pushReady(), optional: !isMobile() || isOwner()
   });
-  steps.push({ id: 'calendar', title: 'いつものカレンダーにも表示する', sub: 'なくても大丈夫です', done: lsGet(LS_CAL_DONE, false) === true, optional: true });
+  if (!isOwner()) {
+    if (googleReady() || googleOn() || (data.google && data.google.needsReconnect)) {
+      steps.push({ id: 'google', title: 'Googleカレンダーとつなぐ', sub: 'アプリ・Googleカレンダー・iPhoneのカレンダーの予定が、1つにまとまります', done: googleOn() });
+    } else {
+      steps.push({ id: 'calendar', title: 'いつものカレンダーにも表示する', sub: 'なくても大丈夫です', done: lsGet(LS_CAL_DONE, false) === true, optional: true });
+    }
+  }
   return steps;
 }
 function remainingRequired() { return guideSteps().filter(s => !s.done && !s.optional); }
@@ -438,7 +458,7 @@ function renderGuide() {
       '<div class="num">' + (s.done ? '✓' : (i + 1)) + '</div>' +
       '<div><div class="gt">' + esc(s.title) + (s.optional ? '（なくてもOK）' : '') + '</div>' +
       '<div class="gs">' + esc(s.done ? 'できています' : s.sub) + '</div></div></div>';
-    if (!s.done || s.id === 'notify' || s.id === 'invite') h += '<div class="gb">' + guideBody(s) + '</div>';
+    if (!s.done || s.id === 'notify' || s.id === 'invite' || s.id === 'google') h += '<div class="gb">' + guideBody(s) + '</div>';
     h += '</div>';
   });
   h += '<button class="btn wide" data-g="close">' + (nowIndex < 0 ? 'はじめる' : 'あとでやる') + '</button>';
@@ -453,6 +473,8 @@ function guideBody(step) {
   if (step.id === 'notify') return notifyBody(step.done);
   if (step.id === 'calendar') return calendarButtonsHtml();
   if (step.id === 'invite') return inviteHtml();
+  if (step.id === 'gsetup') return googleSetupHtml();
+  if (step.id === 'google') return googleConnectHtml();
   return '';
 }
 
@@ -536,6 +558,71 @@ function calendarButtonsHtml() {
     '<b>やるのは最初の1回だけ</b>で、あとは自動で並びます（iPhoneは15分〜1時間、Googleは数時間〜1日ほどで反映）。</div>';
 }
 
+/* --- ⑤ Googleカレンダー（アプリ・Google・iPhoneの予定を1つにする） --- */
+const GOOGLE_SETUP_DOC = 'https://github.com/gamigamiigami/Workspace/blob/claude/new-tool-creation-klodhg/projects/pocket-hisho/SETUP.md';
+
+/** 伊神さん用：Google Cloud で作った身分証（クライアントID・シークレット）を登録する欄 */
+function googleSetupHtml() {
+  if (!state.online) return '<div class="gs">つながったときに登録できます。</div>';
+  const g = data.google || {};
+  const d = state.gDraft;
+  return '<div class="gs" style="margin-bottom:6px">アプリが講師の方のGoogleカレンダーに書きこむための「身分証」を、Googleで作って登録します。' +
+    '<b>お金はかかりません。</b>手順は<a href="' + GOOGLE_SETUP_DOC + '" target="_blank" rel="noopener">手順書（SETUP.md）の⑦</a>にあります。</div>' +
+    '<ol class="g-steps">' +
+    '<li><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud</a> でプロジェクトを作る</li>' +
+    '<li>「Google Calendar API」を<b>有効</b>にする</li>' +
+    '<li>同意画面を作り、<b>「本番環境」に公開</b>する（しないと7日でつながりが切れます）</li>' +
+    '<li>「OAuth クライアント ID」を<b>ウェブ アプリケーション</b>で作り、下の<b>リダイレクトURI</b>を登録する</li>' +
+    '<li>できた<b>クライアントID</b>と<b>シークレット</b>を下に貼って「保存する」</li></ol>' +
+    '<div class="field"><label>リダイレクトURI（コピーして Google Cloud に貼る）</label>' +
+    '<div class="copybox"><code>' + esc(g.redirectUri || '') + '</code><button class="btn" data-g="g-copy-redirect">コピー</button></div></div>' +
+    '<div class="field"><label>クライアントID</label>' +
+    '<input type="text" class="g-in" data-gd="clientId" autocomplete="off" autocapitalize="off" spellcheck="false" ' +
+    'placeholder="1234…apps.googleusercontent.com" value="' + esc(d.clientId || g.clientId || '') + '"></div>' +
+    '<div class="field"><label>クライアントシークレット</label>' +
+    '<input type="password" class="g-in" data-gd="clientSecret" autocomplete="off" spellcheck="false" ' +
+    'placeholder="' + (g.configured ? '（登録済み。変えるときだけ貼る）' : 'GOCSPX-…') + '" value="' + esc(d.clientSecret || '') + '"></div>' +
+    '<button class="btn primary wide" data-g="g-save">保存する</button>';
+}
+
+/** 講師の方用：つなぐボタン・つながっているときの様子 */
+function googleConnectHtml() {
+  const g = data.google || {};
+  if (!state.online) return '<div class="gs">つながったときに操作できます。</div>';
+  if (g.connected) {
+    const t = g.lastSyncAt ? new Date(g.lastSyncAt) : null;
+    return '<div class="notice ok"><b>Googleカレンダーとつながっています</b>' + esc(g.account || '') +
+      (t ? '<br>最後に同期：' + (t.getMonth() + 1) + '/' + t.getDate() + ' ' + String(t.getHours()).padStart(2, '0') + ':' + String(t.getMinutes()).padStart(2, '0') : '') + '</div>' +
+      (g.error ? '<div class="notice warn">' + esc(g.error) + '</div>' : '') +
+      '<div class="gs">アプリで入れた予定は<b>数秒で</b>Googleに、Google・iPhoneで入れた予定は<b>1分以内に</b>アプリに入ります。</div>' +
+      '<button class="btn wide" data-g="g-sync">いま同期する</button>' +
+      '<details class="g-more"><summary>iPhoneのカレンダーにも出すには</summary><div class="gs">' +
+      'iPhoneの「設定」→「カレンダー」→「アカウント」に <b>Google</b> が入っていれば、そのまま出ます。' +
+      '入っていなければ「アカウントを追加」→「Google」で、このGoogleアカウントを入れてください。<br>' +
+      '前に「iPhoneのカレンダーに表示」「Googleカレンダーに表示」を押していたら、そのカレンダーは消してください（同じ予定が2つずつ出るため）。</div></details>' +
+      '<button class="btn danger wide" data-g="g-disconnect">Googleとのつながりを切る</button>';
+  }
+  if (!g.configured && !g.needsReconnect) {
+    return '<div class="gs">伊神さんの準備（Google Cloud の設定）がすむと、ここでGoogleカレンダーとつなげます。</div>';
+  }
+  let h = '';
+  if (g.needsReconnect) h += '<div class="notice err"><b>Googleとのつながりが切れました</b>' + esc(g.error || 'もう一度つないでください') + '</div>';
+  if (isOwner()) {
+    h += '<div class="notice warn"><b>このボタンは、講師の方のスマホで押してもらうものです</b>' +
+      '伊神さんのGoogleでつなぐと、伊神さんのカレンダーの予定が講師の方のアプリに入ってしまいます。</div>';
+  }
+  h += '<button class="btn ' + (isOwner() ? '' : 'primary ') + 'wide" data-g="g-connect">' + (g.needsReconnect ? 'もう一度つなぐ' : 'Googleカレンダーとつなぐ') + '</button>';
+  if (isOwner()) return h;                       // 手順は講師の方の画面にだけ出す
+  h += '<div class="gs" style="margin-top:6px">Googleの画面が開きます。' +
+    '<ol class="g-steps">' +
+    '<li>いつも使っている <b>Googleアカウント</b> を選ぶ</li>' +
+    '<li>「<b>このアプリは Google で確認されていません</b>」と出たら、<b>「詳細」</b>→<b>「ポケット秘書（安全ではないページ）に移動」</b>' +
+    '（伊神さんが作った個人用のアプリで、Googleの審査を受けていないという意味です）</li>' +
+    '<li><b>「カレンダーの予定の表示と編集」にチェック</b>を入れて「続行」</li>' +
+    '<li>「つながりました」と出たら、その画面を閉じてアプリに戻る</li></ol></div>';
+  return h;
+}
+
 /* --- ④ 招待リンク --- */
 function inviteMessage(url) {
   return 'ポケット秘書の招待です。\n下のリンクを押すと、合言葉なしで入れます（14日間有効）。\n' + url +
@@ -575,6 +662,16 @@ function bindGuide(root) {
       else if (g === 'test-push') sendTestPush();
       else if (g === 'cal') { lsSet(LS_CAL_DONE, true); setTimeout(refreshGuideViews, 400); }
       else if (g === 'invite-new') { await makeInvite(); refreshGuideViews(); }
+      else if (g === 'g-copy-redirect') { if (data.google) copyText(data.google.redirectUri, 'リダイレクトURIをコピーしました'); }
+      else if (g === 'g-save') await saveGoogleApp(root);
+      else if (g === 'g-connect') await connectGoogle();
+      else if (g === 'g-sync') await syncGoogle();
+      else if (g === 'g-disconnect') {
+        askConfirm('Googleとのつながりを切りますか', 'アプリの予定は残ります。切ったあとに入れた予定は、Googleには出なくなります。', '切る', async () => {
+          try { data.google = await api('POST', '/api/google/disconnect'); lsSet(LS_CACHE, data); showToast('つながりを切りました'); refreshGuideViews(); }
+          catch (e) { showToast(e.message); }
+        });
+      }
       else if (g === 'invite-copy') { if (data.invite) copyText(inviteMessage(data.invite.url), '招待の文とリンクをコピーしました'); }
       else if (g === 'invite-line') { /* リンクがそのまま開く */ }
       else if (g === 'invite-revoke') {
@@ -586,6 +683,45 @@ function bindGuide(root) {
       }
     });
   });
+}
+
+/* 書きかけの身分証を覚えておく（描きなおしても消えないように） */
+document.addEventListener('input', (e) => {
+  const k = e.target && e.target.dataset && e.target.dataset.gd;
+  if (k) state.gDraft[k] = e.target.value;
+});
+
+async function saveGoogleApp(root) {
+  const val = k => { const el = root.querySelector('[data-gd="' + k + '"]'); return el ? el.value.trim() : ''; };
+  try {
+    data.google = await api('PUT', '/api/google/app', { clientId: val('clientId'), clientSecret: val('clientSecret') });
+    state.gDraft = { clientId: '', clientSecret: '' };
+    lsSet(LS_CACHE, data);
+    showToast('登録しました。講師の方のスマホで「Googleカレンダーとつなぐ」を押してもらってください', 5000);
+    refreshGuideViews();
+  } catch (e) { showToast(e.message, 5000); }
+}
+
+async function connectGoogle() {
+  try {
+    const r = await api('POST', '/api/google/auth');
+    location.href = r.url;                      // Googleの許可画面へ（終わったら戻ってくる）
+  } catch (e) { showToast(e.message, 5000); }
+}
+
+async function syncGoogle() {
+  try {
+    const r = await api('POST', '/api/google/sync');
+    data.events = (r.events || []).map(normalizeEvent);
+    data.google = r.google || data.google;
+    lsSet(LS_CACHE, data);
+    const p = r.pull || {};
+    showToast(p.added || p.changed || p.removed
+      ? '同期しました（新しく' + (p.added || 0) + '件・直った' + (p.changed || 0) + '件・消えた' + (p.removed || 0) + '件）'
+      : '同期しました（変わったところはありません）');
+    render();
+    refreshGuideViews();
+  } catch (e) { showToast(e.message); }
 }
 
 /** 案内が出ている場所をまとめて描きなおす */
@@ -1358,6 +1494,15 @@ function openSettings() {
 /** 設定画面のうち、状況で中身が変わる部分（通知・カレンダー・招待） */
 function renderSettingsLive() {
   renderPushStatus();
+  // Googleカレンダー：伊神さんには準備の欄、講師の方には「つなぐ」ボタン
+  const ga = document.getElementById('google-area');
+  ga.innerHTML = (isOwner() && !googleReady())
+    ? googleSetupHtml()
+    : googleConnectHtml() + (isOwner()
+        ? '<details class="g-more"><summary>身分証（クライアントID）を登録し直す</summary>' + googleSetupHtml() + '</details>' : '');
+  bindGuide(ga);
+  // Googleとつなぐなら、購読（照会）のボタンは要らない（同じ予定が2つずつ出てしまう）
+  document.getElementById('cal-box').hidden = googleReady() || googleOn();
   const cal = document.getElementById('cal-buttons');
   cal.innerHTML = calendarButtonsHtml();
   bindGuide(cal);

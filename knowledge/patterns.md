@@ -2,7 +2,7 @@
 
 うまくいった実装パターン。実装方針を決める前に見る。
 
-**全文は `knowledge/details/patterns.md`（4412行）。全文は読まないこと。**
+**全文は `knowledge/details/patterns.md`（4446行）。全文は読まないこと。**
 必要な項目だけ行番号で読む：`sed -n '120,160p' knowledge/details/patterns.md`
 キーワードで探す：`grep -n "キーワード" knowledge/details/patterns.md`
 
@@ -136,4 +136,5 @@
 - `4284-4324` [設計] 電波が切れる前提の道具には、書き込みを取っておく列を作る
 - `4325-4370` 初心者に渡すサーバーの手作業を減らす（Cloudflare Workers + D1）
 - `4371-4395` iPhone のホーム画面アプリへ、ログインを自動で引き継ぐ（6けたの番号）
-- `4396-4412` LINEで送るリンクを、LINEの中ではなく Safari / Chrome で開かせる
+- `4396-4414` LINEで送るリンクを、LINEの中ではなく Safari / Chrome で開かせる
+- `4415-4446` Googleカレンダーと双方向同期する（Cloudflare Workers・無料・審査なし）

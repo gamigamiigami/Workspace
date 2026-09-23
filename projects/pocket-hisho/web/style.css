@@ -422,6 +422,22 @@ details.fold > .fold-body { padding: 0 14px 14px; }
 .guide-step.done .num { background: var(--in); color: #fff; }
 .guide-step.todo .num { background: var(--card-2); color: var(--muted); border: 1px solid var(--line); }
 .guide-step .gt { font-weight: 700; font-size: 16px; }
+/* 文の中のリンク。ブラウザの既定の青は、暗い画面では読めないので変数の色にする */
+.gs a, .g-steps a, .hint a, .guide-intro a { color: var(--sat); font-weight: 700; }
+
+/* ===== Googleカレンダー（準備の手順・つなぐときの手順） ===== */
+.g-steps { margin: 6px 0 10px 20px; font-size: 14px; }
+.g-steps li { margin-bottom: 5px; }
+details.g-more { margin: 8px 0; border-top: 1px solid var(--line); }
+details.g-more > summary {
+  min-height: 44px; display: flex; align-items: center; cursor: pointer; list-style: none;
+  font-weight: 700; font-size: 14px; color: var(--ink);
+}
+/* 開けることが分かるように、ほかのたたむ欄と同じ「＋／－」を付ける */
+details.g-more > summary::-webkit-details-marker { display: none; }
+details.g-more > summary::after { content: '＋'; margin-left: auto; padding-left: 8px; color: var(--navy); font-weight: 700; }
+details.g-more[open] > summary::after { content: '－'; }
+
 /* 補足の小さい文字（はじめの準備と設定の両方で使う） */
 .gs { font-size: 13px; color: var(--muted); }
 .guide-step .gb { margin-top: 10px; font-size: 15px; }

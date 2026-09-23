@@ -5,7 +5,8 @@
      ① アプリの画面（web/ の中身）を配る
      ② 予定とタスクを保管し、スマホとパソコンの両方に同じものを見せる
      ③ 1分ごとに見回って、時刻が来た予定の通知をスマホへ送る
-     ④ カレンダーとやりとりする（購読用URLを配る／外部カレンダーを取り込む）
+     ④ カレンダーとやりとりする（Googleカレンダーと直接同期する（src/google.js）／
+        購読用URLを配る／外部カレンダーを取り込む）
 
    お金はかかりません（すべて Cloudflare の無料枠の中で動きます）。
    ===================================================================== */
@@ -14,6 +15,10 @@ import { generateVapidKeys, sendPush } from './push.js';
 import { buildIcs, parseIcs, expandRecurrences } from './ics.js';
 import { computeDueNotifications } from './remind.js';
 import { ensureSchema } from './schema.js';
+import {
+  googleStatus, saveGoogleApp, startAuth, handleCallback, disconnect as googleDisconnect,
+  pushPending, syncNow, msSinceLastPull, isConnected as googleConnected
+} from './google.js';
 import { todayStr, addDays, ymdOf, hmOf } from '../web/shared-date.js';
 import {
   normalizeEvent, normalizeTask, normalizeSettings, defaultSettings
@@ -279,10 +284,12 @@ function safeParse(s) { try { return JSON.parse(s); } catch { return {}; } }
 async function putEvent(env, raw) {
   const ev = normalizeEvent(raw);
   if (!ev.date) return { error: '日付を入れてください' };
+  // g_dirty = 1 は「Googleカレンダーへの書きこみ待ち」の印（つないでいなければ何も起きない）。
+  // google_id などGoogleとのつながりの列は、ここでは触らない（画面の古い写しで消さないため）
   await env.DB.prepare(
-    `INSERT INTO events (id, date, data, updated_at, deleted) VALUES (?, ?, ?, ?, 0)
+    `INSERT INTO events (id, date, data, updated_at, deleted, g_dirty) VALUES (?, ?, ?, ?, 0, 1)
      ON CONFLICT(id) DO UPDATE SET date = excluded.date, data = excluded.data,
-                                   updated_at = excluded.updated_at, deleted = 0`)
+                                   updated_at = excluded.updated_at, deleted = 0, g_dirty = 1`)
     .bind(ev.id, ev.date, JSON.stringify(ev), Date.now()).run();
   return { event: ev };
 }
@@ -466,6 +473,8 @@ export default {
       if (path === '/api/setup' && method === 'POST') return await handleSetup(request, env);
       if (path === '/api/login' && method === 'POST') return await handleLogin(request, env);
       if (path === '/api/redeem' && method === 'POST') return await handleRedeem(request, env);
+      // Googleの許可画面から戻ってくる先（ブラウザが直接開くので札は付かない。中で本人確認する）
+      if (path === '/api/google/callback' && method === 'GET') return await handleCallback(env, url, ctx);
 
       /* --- ここから下はログインが必要 --- */
       if (path.startsWith('/api/')) {
@@ -487,6 +496,8 @@ export default {
       const now = Date.now();
       await ensureSchema(env.DB);
       await ensureVapid(env);
+      // 先に Googleカレンダーと同期する（Googleで入れたばかりの予定にも通知が間に合うように）
+      await syncNow(env);
       await runReminderSweep(env, now);
 
       const minute = new Date(now).getUTCMinutes();
@@ -526,6 +537,13 @@ async function handleApi(request, env, url, path, ctx, auth) {
 
   /* いちどに必要なものをまとめて返す（アプリの起動を1往復で終わらせる） */
   if (path === '/api/bootstrap' && method === 'GET') {
+    // Googleカレンダーとつないでいれば、開いたその場で変化を取りこむ（2.5秒で見切る）
+    const since = await msSinceLastPull(env);
+    if (since > 15 * 1000) {
+      const job = syncNow(env).catch(() => {});
+      ctx.waitUntil(job);                                   // 見切ったあとも最後まで続ける
+      await Promise.race([job, new Promise(r => setTimeout(r, 2500))]);
+    }
     const today = todayStr();
     const [events, tasks, settings, vapid, icsKey] = await Promise.all([
       loadEvents(env), loadTasks(env), loadSettings(env), ensureVapid(env), ensureIcsKey(env)
@@ -544,6 +562,7 @@ async function handleApi(request, env, url, path, ctx, auth) {
       icsUrl: settings.icsEnabled ? url.origin + '/ics/' + icsKey + '.ics' : '',
       devices: subs.map(s => ({ id: s.id, label: s.label, createdAt: s.created_at, lastOk: s.last_ok })),
       calendarsLast: calLast,
+      google: await googleStatus(env, url.origin),
       serverNow: Date.now(),
       today
     });
@@ -552,11 +571,21 @@ async function handleApi(request, env, url, path, ctx, auth) {
   /* 予定 */
   if (path === '/api/events' && method === 'PUT') {
     const r = await putEvent(env, await request.json().catch(() => ({})));
-    return r.error ? bad(r.error) : json(r);
+    if (r.error) return bad(r.error);
+    // Googleカレンダーへは裏で書きこむ（返事を待たせない。失敗しても1分ごとの見回りでやり直す）
+    if (await googleConnected(env)) ctx.waitUntil(pushPending(env, r.event.id).catch(() => {}));
+    return json(r);
   }
   const evDel = /^\/api\/events\/([\w-]+)$/.exec(path);
   if (evDel && method === 'DELETE') {
-    await env.DB.prepare('UPDATE events SET deleted = 1, updated_at = ? WHERE id = ?').bind(Date.now(), evDel[1]).run();
+    const linked = await env.DB.prepare('SELECT google_id FROM events WHERE id = ?').bind(evDel[1]).first();
+    if (linked && linked.google_id) {
+      // Googleカレンダーからも消す（失敗に備えて「消す待ち」に記録してから）
+      await env.DB.prepare('INSERT OR IGNORE INTO g_deletes (google_id, created_at) VALUES (?, ?)')
+        .bind(linked.google_id, Date.now()).run();
+      if (await googleConnected(env)) ctx.waitUntil(pushPending(env, { deletesOnly: true }).catch(() => {}));
+    }
+    await env.DB.prepare('UPDATE events SET deleted = 1, g_dirty = 0, updated_at = ? WHERE id = ?').bind(Date.now(), evDel[1]).run();
     // その予定にひもづくタスクも一緒に片づける
     await env.DB.prepare('UPDATE tasks SET deleted = 1, updated_at = ? WHERE id IN (SELECT id FROM tasks WHERE deleted = 0 AND json_extract(data, \'$.eventId\') = ?)')
       .bind(Date.now(), evDel[1]).run();
@@ -682,6 +711,38 @@ async function handleApi(request, env, url, path, ctx, auth) {
       loadEvents(env, addDays(today, -2), addDays(today, 3)), loadTasks(env), loadSettings(env)
     ]);
     return json({ now, due: computeDueNotifications({ events, tasks, settings, now }) });
+  }
+
+  /* ---------- Googleカレンダー ---------- */
+  if (path === '/api/google/status' && method === 'GET') {
+    return json(await googleStatus(env, url.origin));
+  }
+  // 伊神さんが Google Cloud で作った身分証（クライアントID・シークレット）を登録する
+  if (path === '/api/google/app' && method === 'PUT') {
+    const r = await saveGoogleApp(env, await request.json().catch(() => ({})));
+    return r.error ? bad(r.error) : json(await googleStatus(env, url.origin));
+  }
+  // 身分証の登録を消す（つながりも切る）。作り直すとき・テストのやり直し用
+  if (path === '/api/google/app' && method === 'DELETE') {
+    await googleDisconnect(env);
+    await env.DB.prepare("DELETE FROM kv WHERE k = 'google_app'").run();
+    return json(await googleStatus(env, url.origin));
+  }
+  // 「Googleカレンダーとつなぐ」：Googleの許可画面のURLを返す
+  if (path === '/api/google/auth' && method === 'POST') {
+    const r = await startAuth(env, url.origin);
+    return r.error ? bad(r.error) : json(r);
+  }
+  // 「いま同期する」
+  if (path === '/api/google/sync' && method === 'POST') {
+    if (!(await googleConnected(env))) return bad('Googleカレンダーとつながっていません');
+    const body = await request.json().catch(() => ({}));
+    const r = await syncNow(env, { full: body.full === true });
+    return json({ ...r, google: await googleStatus(env, url.origin), events: await loadEvents(env) });
+  }
+  if (path === '/api/google/disconnect' && method === 'POST') {
+    await googleDisconnect(env);
+    return json(await googleStatus(env, url.origin));
   }
 
   /* 外部カレンダーをいま取り込む */

@@ -51,6 +51,7 @@ await api('POST', '/api/login/unlock', undefined, adminToken);
 await api('POST', '/api/restore', { events: [{ id: 'ui_reset', date: '2020-01-01', title: 'reset' }], tasks: [], settings: defaultSettings() }, adminToken);
 await api('DELETE', '/api/events/ui_reset', undefined, adminToken);
 await api('DELETE', '/api/invite', undefined, adminToken);
+await api('DELETE', '/api/google/app', undefined, adminToken);      // Googleとつなぐ準備も、まだの状態から
 await api('POST', '/api/calendar/refresh', undefined, adminToken);
 
 /* --- 偽の通知サーバーと、偽の「通知の宛先」 ---
@@ -132,7 +133,22 @@ console.log('\n【2】作った人：はじめの準備が自動で開き、招�
 
 ok('はじめの準備が自動で開く', await pc.isVisible('#sheet-guide'));
 const pcGuide = await pc.textContent('#guide-body');
-ok('いちばん上に「講師の方に招待リンクを送る」', pcGuide.indexOf('招待リンクを送る') >= 0 && pcGuide.indexOf('招待リンクを送る') < pcGuide.indexOf('通知'), pcGuide.slice(0, 120));
+ok('いちばん上は「Googleカレンダーとつなぐ準備」、次に「招待リンクを送る」',
+  pcGuide.indexOf('つなぐ準備') >= 0 && pcGuide.indexOf('つなぐ準備') < pcGuide.indexOf('招待リンクを送る') &&
+  pcGuide.indexOf('招待リンクを送る') < pcGuide.indexOf('通知'), pcGuide.slice(0, 160));
+ok('準備の欄に、Google Cloud に貼るリダイレクトURIが出る', pcGuide.includes(BASE + '/api/google/callback'));
+for (const scheme of ['light', 'dark']) {
+  await pc.emulateMedia({ colorScheme: scheme });
+  await wait(200);
+  const lc = await pc.$eval('#guide-body .g-steps a', a => {
+    let bg = 'rgba(0, 0, 0, 0)', el = a;
+    while (el && /rgba\(0, 0, 0, 0\)|transparent/.test(bg)) { bg = getComputedStyle(el).backgroundColor; el = el.parentElement; }
+    return { ink: getComputedStyle(a).color, bg };
+  });
+  const r = contrast(lc.bg, lc.ink);
+  ok(scheme + '：準備の手順の中のリンクが読める（4.5以上）', r >= 4.5, 'ratio=' + r.toFixed(2) + ' ' + JSON.stringify(lc));
+}
+await pc.emulateMedia({ colorScheme: 'light' });
 ok('パソコンでは「ホーム画面に追加」は出さない', !pcGuide.includes('ホーム画面に追加する'));
 ok('パソコンでは通知は「なくてもOK」', /通知をオンにする（なくてもOK）/.test(pcGuide), pcGuide.slice(0, 300));
 
@@ -149,7 +165,7 @@ ok('招待を作ると「できています」になる', (await pc.textContent(
 await pc.click('#guide-body [data-g="close"]');
 await wait(300);
 ok('はじめの準備を閉じられる', !(await pc.isVisible('#sheet-guide')));
-ok('やることが残っていないので、上の帯は出ない', await pc.isHidden('#guide-banner'));
+ok('Googleの準備が残っているので、上の帯で知らせる', (await pc.textContent('#guide-banner')).includes('つなぐ準備'));
 
 await pc.reload();
 await wait(1500);
@@ -456,6 +472,58 @@ await pc.click('#st-close');
 await wait(300);
 
 /* =================================================================== */
+console.log('\n【10b】Googleカレンダーとつなぐ（伊神さんが準備 → 講師の方がつなぐ）');
+/* =================================================================== */
+
+await pc.click('#btn-settings');
+await wait(400);
+ok('伊神さんの設定に、Googleとつなぐ準備の欄がある', await pc.isVisible('#google-area [data-gd="clientId"]'));
+eq('リダイレクトURIを見せる', (await pc.textContent('#google-area .copybox code')).trim(), BASE + '/api/google/callback');
+await pc.fill('#google-area [data-gd="clientId"]', 'まちがい');
+await pc.fill('#google-area [data-gd="clientSecret"]', 'GOCSPX-ui-test-secret');
+await pc.click('#google-area [data-g="g-save"]');
+await wait(600);
+ok('形のちがうクライアントIDは、理由を出して断る', (await pc.textContent('#toast')).includes('クライアントID'));
+await pc.fill('#google-area [data-gd="clientId"]', '999-uitest.apps.googleusercontent.com');
+await pc.click('#st-close');
+await wait(300);
+await pc.click('#btn-settings');
+await wait(400);
+eq('書きかけの内容は、設定を開き直しても消えない', await pc.inputValue('#google-area [data-gd="clientId"]'), '999-uitest.apps.googleusercontent.com');
+await pc.click('#google-area [data-g="g-save"]');
+await wait(800);
+ok('保存すると「講師の方のスマホで押してもらって」と出る', (await pc.textContent('#google-area')).includes('講師の方のスマホで押してもらう'));
+ok('伊神さんの画面では「つなぐ」は主役のボタンにしない', !(await pc.$eval('#google-area [data-g="g-connect"]', b => b.classList.contains('primary'))));
+ok('Googleとつなぐなら、購読（照会）のボタンは隠す', await pc.isHidden('#cal-box'));
+await pc.click('#st-close');
+await wait(300);
+ok('準備が終わったので、伊神さんの上の帯は消える', await pc.isHidden('#guide-banner'));
+
+// 講師の方（ホーム画面のアプリ）：開き直すと「Googleカレンダーとつなぐ」が次の手順になる
+await home.reload();
+await wait(2000);
+ok('講師の方の上の帯に「Googleカレンダーとつなぐ」', (await home.textContent('#guide-banner')).includes('Googleカレンダーとつなぐ'));
+await home.click('#guide-banner-btn');
+await wait(400);
+const hg = await home.textContent('#guide-body');
+ok('講師の方には「つなぐ」が主役のボタンで出る', await home.$eval('#guide-body [data-g="g-connect"]', b => b.classList.contains('primary')));
+ok('「確認されていません」と出たときの進み方を先に書いてある', hg.includes('このアプリは Google で確認されていません') && hg.includes('詳細'));
+ok('「カレンダーの予定の表示と編集」にチェック、と書いてある', hg.includes('カレンダーの予定の表示と編集'));
+ok('講師の方の案内から、購読（照会）のボタンは消える', !(await home.$('#guide-body a[data-g="cal"]')));
+let googleUrl = '';
+await home.route('https://accounts.google.com/**', route => { googleUrl = route.request().url(); route.fulfill({ status: 200, contentType: 'text/html', body: '<p>google</p>' }); });
+await home.click('#guide-body [data-g="g-connect"]');
+await wait(1200);
+const gu = googleUrl ? new URL(googleUrl) : null;
+ok('押すと Google の許可画面へ行く', !!gu && gu.origin + gu.pathname === 'https://accounts.google.com/o/oauth2/v2/auth', googleUrl);
+eq('許可画面に渡すもの（ID・戻り先・カレンダーの権限・長く使える合鍵）', gu && [gu.searchParams.get('client_id'), gu.searchParams.get('redirect_uri'),
+  gu.searchParams.get('scope'), gu.searchParams.get('access_type')],
+  ['999-uitest.apps.googleusercontent.com', BASE + '/api/google/callback', 'https://www.googleapis.com/auth/calendar.events', 'offline']);
+await home.unroute('https://accounts.google.com/**');
+await home.goto(BASE + '/');
+await wait(2000);
+
+/* =================================================================== */
 console.log('\n【11】オフライン（講師の方のスマホで）');
 /* =================================================================== */
 
@@ -579,7 +647,8 @@ console.log('\n【15】JSエラーと通信');
 /* =================================================================== */
 ok('JSエラーが1件も出ていない', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 /* テストがわざと起こしたもの：まちがった合言葉（401 /api/login）・まちがった番号（401 /api/redeem） */
-const unexpected = httpFails.filter(f => f !== '401 /api/login' && f !== '401 /api/redeem');
+/* ＋ わざと形のちがうクライアントIDを保存した（400 /api/google/app） */
+const unexpected = httpFails.filter(f => f !== '401 /api/login' && f !== '401 /api/redeem' && f !== '400 /api/google/app');
 ok('想定外の通信エラー（4xx・5xx）が出ていない', unexpected.length === 0, unexpected.slice(0, 5).join(' / '));
 eq('わざと失敗させたのは2回だけ（合言葉1・番号1）', httpFails.filter(f => f.startsWith('401')).length, 2);
 
@@ -589,6 +658,7 @@ if (failures.length) { console.log('\n不合格の一覧:'); failures.forEach(f 
 /* あとかたづけ：テスト用の端末の登録と、ロックを消す（ほかのテストの数え方に影響させないため） */
 const endToken = (await api('POST', '/api/login', { pass: PASS })).json.token;
 await api('POST', '/api/push/unsubscribe', { endpoint: fakeSub.endpoint }, endToken);
+await api('DELETE', '/api/google/app', undefined, endToken);
 await api('POST', '/api/login/unlock', undefined, endToken);
 await browser.close();
 pushServer.close();

@@ -2205,3 +2205,35 @@ openEventEditor(id, 'cost');
 開くたびに `open = false` に戻す（前に開いたままだと、ふだん使う項目が埋もれる）。
 
 **使用例：** pocket-hisho/web/index.html `#sheet-event` `#fold-advanced`（2026-09-23）
+
+---
+
+## 外部サービスとつなぐ欄（準備前／つなぐ前／つながった／切れた の4つの顔）
+
+**用途：** Googleなど外部サービスとつなぐ設定。**状態ごとに出すものを変える**ことで、迷わせない。
+
+| 状態 | 出すもの |
+|---|---|
+| 準備前（身分証の未登録） | 作った人：登録の欄（手順5つ・コピーボタンつきの戻り先URL・ID・シークレット）／使う人：「準備待ち」の一文 |
+| つなぐ前 | 使う人：**主役のボタン**＋「確認されていないアプリ」画面の進み方を**先に**書く／作った人：注意書き＋控えめなボタン |
+| つながった | ✓の帯（アカウント・最後に同期した時刻）・「いま同期する」・たたんだ補足・「つながりを切る」（確認つき） |
+| 切れた | 赤の帯（理由）＋「もう一度つなぐ」 |
+
+```js
+// 書きかけの入力は描きなおしても消えないように、入力のたびに覚えておく
+document.addEventListener('input', (e) => {
+  const k = e.target && e.target.dataset && e.target.dataset.gd;
+  if (k) state.gDraft[k] = e.target.value;
+});
+// 描くときは value="' + esc(state.gDraft.clientId || 保存済みの値) + '"
+```
+
+```css
+/* 文の中のリンク：ブラウザの既定の青は暗い画面で読めない（実測 1.7）ので変数の色に */
+.gs a, .g-steps a, .hint a { color: var(--sat); font-weight: 700; }
+/* たたむ補足にも「＋／－」を付けて、開けることが分かるように */
+details.g-more > summary::after { content: '＋'; margin-left: auto; color: var(--navy); }
+details.g-more[open] > summary::after { content: '－'; }
+```
+
+**使用例：** pocket-hisho/web/app.js `googleSetupHtml()` `googleConnectHtml()`（2026-09-23）
