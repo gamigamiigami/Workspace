@@ -35,6 +35,8 @@ Google同期は**偽の Google**（Node のサーバー）に向けて通しで�
 
 **knowledge 追記：** patterns.md 1件、failures.md 1件、ui-components.md 1件。索引は再生成済み。
 
+**公開：** コミット a97926e を Cloudflare が自動公開（Workers Builds = success）。
+
 **次のアクション：**
 - **伊神さんの手作業待ち：`SETUP.md` ⑦（Google Cloud の準備・30分・無料）** → アプリに クライアントID とシークレットを貼る
   （シークレットは Claude に送らない）

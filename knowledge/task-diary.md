@@ -32,7 +32,7 @@
 - **伊神さんの手作業待ち：`projects/pocket-hisho/SETUP.md` ⑦（Google Cloud・30分・無料）**。シークレットは Claude に送らず、アプリに貼る
 - そのあと講師の方が「Googleカレンダーとつなぐ」。**本物の Google では未確認**なので、うまくいかなければ画面の写真をもらう
 - 伊神さんの端末では「Googleカレンダーとつなぐ」を押さない（1冊の手帳を2人で見る作りのため）
-- 最新の公開はこのあとのコミット（Workers Builds の結果を確認すること）
+- 最新の公開：コミット a97926e（Workers Builds = success。Googleとの同期の入った版が本番に出ている）
 
 ---
 
