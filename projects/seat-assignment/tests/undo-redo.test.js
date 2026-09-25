@@ -170,4 +170,28 @@ console.log('===== NG設定タブの黒板の向きが、席替えタブと連�
 }
 
 console.log('');
+console.log('===== NG警告：座席表を左に寄せるためのクラス付け外し =====');
+{
+  const cr = getActiveClassroom();
+  cr.rows = 1; cr.cols = 4; cr.students = []; cr.ngPairs = []; cr.history = [];
+  cr.deskMeta = {}; cr.tempFixed = {};
+  for (let i = 0; i < 4; i++) cr.students.push({ id: 's' + i, name: '生徒' + i, inactive: false, gender: 'm', number: null });
+  cr.currentSeats = { '0-0': 's0', '0-1': 's1', '0-2': 's2', '0-3': 's3' };
+  cr.ngPairs = [{ id: 'n1', a: 's0', b: 's1', reason: '' }];
+  getDeskMeta(cr, 0, 0);
+  getDeskMeta(cr, 0, 1);
+
+  renderHardAlert(cr);
+  assert('NG違反があるとき document.body に has-ng-alert クラスがつく',
+    global.document.body.classList.contains('has-ng-alert'));
+  assert('警告リストの項目に title 属性（全文）がついている',
+    /title="/.test(byId('hardAlert').innerHTML));
+
+  cr.ngPairs = [];
+  renderHardAlert(cr);
+  assert('NG違反がなくなったら has-ng-alert クラスも消える',
+    !global.document.body.classList.contains('has-ng-alert'));
+}
+
+console.log('');
 console.log(process.exitCode ? '❌ 失敗したテストがあります' : '✅ すべてのテストに合格しました');
