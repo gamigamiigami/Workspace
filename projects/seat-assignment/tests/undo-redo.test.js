@@ -194,4 +194,29 @@ console.log('===== NG警告：座席表を左に寄せるためのクラス付�
 }
 
 console.log('');
+console.log('===== 🔁男女を逆に：NG設定にひっかかっても、入れかえを止めずにあとで知らせる =====');
+{
+  const cr = getActiveClassroom();
+  cr.rows = 1; cr.cols = 4; cr.students = []; cr.ngPairs = []; cr.history = [];
+  cr.deskMeta = {}; cr.tempFixed = {}; cr.checkerMaleParity = null;
+  for (let i = 0; i < 4; i++) {
+    cr.students.push({ id: 's' + i, name: '生徒' + i, inactive: false, gender: (i < 2 ? 'm' : 'f'), number: null });
+  }
+  cr.currentSeats = { '0-0': 's0', '0-1': 's2', '0-2': 's1', '0-3': 's3' };
+  // s0(0-0) と s1(0-2) がとなり同士NG。入れかえ（0-0/0-1, 0-2/0-3）をすると
+  // s0が0-1へ、s1が0-3へ動くため、s0とs1はとなりでなくなる想定だが、
+  // ここでは「着席NG（0-1がs0にとってNG）」を使って、入れかえた先そのものがNGになるケースを作る
+  getDeskMeta(cr, 0, 1).ngStudentIds = ['s0'];
+
+  global.alertLog.length = 0;
+  const before = Object.assign({}, cr.currentSeats);
+  byId('btnInvertGender').dispatch('click');
+
+  assert('NG設定があっても、その組は入れかえられる（止めない）',
+    cr.currentSeats['0-0'] === before['0-1'] && cr.currentSeats['0-1'] === before['0-0']);
+  assert('入れかえたあとにNG設定のことをアラートで知らせる',
+    global.alertLog.some(m => m.includes('NG設定にひっかかりました')), global.alertLog.join(' / '));
+}
+
+console.log('');
 console.log(process.exitCode ? '❌ 失敗したテストがあります' : '✅ すべてのテストに合格しました');
