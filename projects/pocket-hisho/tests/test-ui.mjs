@@ -126,6 +126,8 @@ await pc.fill('#f-pass', PASS);
 await pc.press('#f-pass', 'Enter');
 await wait(1800);
 ok('正しい合言葉で入れる', await pc.isVisible('#screen-app'));
+ok('講師用のアプリには「テスト用」の印を出さない', await pc.isHidden('#app-label'));
+eq('講師用のアプリの題名はそのまま', await pc.title(), 'ポケット秘書');
 
 /* =================================================================== */
 console.log('\n【2】作った人：はじめの準備が自動で開き、招待リンクを作れる');

@@ -208,7 +208,8 @@ const dev = spawn('npx', ['wrangler', 'dev', '--local', '--port', String(PORT), 
   '--var', 'GOOGLE_AUTH_URL:' + G + '/auth',
   '--var', 'GOOGLE_TOKEN_URL:' + G + '/token',
   '--var', 'GOOGLE_REVOKE_URL:' + G + '/revoke',
-  '--var', 'GOOGLE_API_BASE:' + G + '/calendar/v3'], {
+  '--var', 'GOOGLE_API_BASE:' + G + '/calendar/v3',
+  '--var', 'APP_LABEL:テスト用'], {
   cwd: new URL('..', import.meta.url).pathname, stdio: ['ignore', 'pipe', 'pipe'], detached: true
 });
 let devLog = '';
@@ -237,10 +238,16 @@ try {
   /* =================================================================== */
   console.log('\n【2】Google とつなぐ準備（伊神さんの身分証の登録）');
   /* =================================================================== */
+  /* テスト用のアプリの印（講師用と取りちがえないように） */
+  eq('ログイン前の画面でも「テスト用」と分かる', (await call('GET', '/api/setup-status', undefined, false)).json.appLabel, 'テスト用');
+  const mfT = (await call('GET', '/app.webmanifest', undefined, false)).json;
+  eq('ホーム画面に追加したときの名前に「テスト用」が付く', [mfT.name, mfT.short_name], ['ポケット秘書（テスト用）', 'ポケット秘書テスト用']);
+
   await call('POST', '/api/setup', { pass: PASS }, false);
   token = (await call('POST', '/api/login', { pass: PASS }, false)).json.token;
   let boot = (await call('GET', '/api/bootstrap')).json;
   eq('はじめは準備前', [boot.google.configured, boot.google.connected], [false, false]);
+  eq('ログイン後も「テスト用」の印が届く', boot.appLabel, 'テスト用');
   eq('Google Cloud に登録するリダイレクトURIを教える', boot.google.redirectUri, BASE + '/api/google/callback');
   eq('準備前に「つなぐ」を押すと理由が出る', (await call('POST', '/api/google/auth')).status, 400);
   eq('形のちがうクライアントIDは断る', (await call('PUT', '/api/google/app', { clientId: 'abc', clientSecret: CLIENT_SECRET })).status, 400);

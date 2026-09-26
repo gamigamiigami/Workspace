@@ -78,6 +78,13 @@ body {
 .app-title small { display: block; font-size: 11px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
 .app-head .spacer { flex: 1; }
 
+/* テスト用のアプリの印（講師用と取りちがえないように） */
+.env-badge {
+  display: inline-block; margin-left: 6px; padding: 0 8px; vertical-align: 2px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0; border-radius: 999px;
+  color: var(--gold); background: var(--gold-soft); border: 1px solid var(--gold);
+}
+
 /* つながっていないときの帯 */
 .net-bar {
   padding: 8px 16px; font-size: 13px; font-weight: 700; text-align: center;

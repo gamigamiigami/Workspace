@@ -183,8 +183,10 @@ async function loadAll(showSpinner) {
       via: r.via || 'pass',
       invite: r.invite || null,
       passFromEnv: !!r.passFromEnv,
-      google: r.google || null
+      google: r.google || null,
+      appLabel: r.appLabel || ''
     };
+    applyAppLabel(data.appLabel);
     lsSet(LS_CACHE, data);
     setOnline(true);
     // Googleの許可画面から戻ってきたとき：つながったことを知らせ、案内を描きなおす
@@ -232,13 +234,32 @@ function showLoginMode(mode, message) {
   }
 }
 
+/**
+ * テスト用など、同じアプリを2つ公開しているときの印。
+ * ヘッダー・タブの題名・ホーム画面に追加したときの名前に付けて、講師用と取りちがえないようにする。
+ */
+function applyAppLabel(label) {
+  const badge = document.getElementById('app-label');
+  badge.hidden = !label;
+  badge.textContent = label;
+  if (!label) return;
+  document.title = 'ポケット秘書（' + label + '）';
+  const meta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (meta) meta.setAttribute('content', 'ポケット秘書' + label);
+  // ホーム画面用の説明書も、名前に印が付いたもの（サーバーが作る）に差しかえる
+  const link = document.getElementById('manifest-link');
+  if (!/app\.webmanifest/.test(link.getAttribute('href'))) link.setAttribute('href', '/app.webmanifest');
+}
+
 /** ログインしていないとき、どの入口を見せるか決める */
 async function showLogin(message) {
   showScreen('login');
   let setup = false;
   try {
     const res = await fetch('/api/setup-status');
-    setup = (await res.json()).needsSetup === true;
+    const st = await res.json();
+    setup = st.needsSetup === true;
+    applyAppLabel(st.appLabel || '');
   } catch { /* つながらないときは合言葉の画面を出しておく */ }
   if (setup) showLoginMode('setup', message);
   else if (isIOS() && isStandalone()) showLoginMode('code', message);   // Safari と保存場所が別なので番号で入り直す
@@ -415,7 +436,8 @@ function guideSteps() {
     id: 'notify', title: '通知をオンにする', sub: '時間が来たら、スマホにお知らせが届きます',
     done: pushReady(), optional: !isMobile() || isOwner()
   });
-  if (!isOwner()) {
+  // Googleとつなぐのは講師の方。ただしテスト用のアプリでは、伊神さんが自分のGoogleでつないで試す
+  if (!isOwner() || data.appLabel) {
     if (googleReady() || googleOn() || (data.google && data.google.needsReconnect)) {
       steps.push({ id: 'google', title: 'Googleカレンダーとつなぐ', sub: 'アプリ・Googleカレンダー・iPhoneのカレンダーの予定が、1つにまとまります', done: googleOn() });
     } else {
@@ -607,12 +629,16 @@ function googleConnectHtml() {
   }
   let h = '';
   if (g.needsReconnect) h += '<div class="notice err"><b>Googleとのつながりが切れました</b>' + esc(g.error || 'もう一度つないでください') + '</div>';
-  if (isOwner()) {
+  // テスト用のアプリでは、伊神さんが自分のGoogleでつないで試す
+  const ownerOnly = isOwner() && !data.appLabel;
+  if (ownerOnly) {
     h += '<div class="notice warn"><b>このボタンは、講師の方のスマホで押してもらうものです</b>' +
       '伊神さんのGoogleでつなぐと、伊神さんのカレンダーの予定が講師の方のアプリに入ってしまいます。</div>';
+  } else if (isOwner()) {
+    h += '<div class="notice ok"><b>' + esc(data.appLabel) + 'のアプリです</b>伊神さん自身のGoogleでつないで試して大丈夫です（講師の方のアプリとは別のデータです）。</div>';
   }
-  h += '<button class="btn ' + (isOwner() ? '' : 'primary ') + 'wide" data-g="g-connect">' + (g.needsReconnect ? 'もう一度つなぐ' : 'Googleカレンダーとつなぐ') + '</button>';
-  if (isOwner()) return h;                       // 手順は講師の方の画面にだけ出す
+  h += '<button class="btn ' + (ownerOnly ? '' : 'primary ') + 'wide" data-g="g-connect">' + (g.needsReconnect ? 'もう一度つなぐ' : 'Googleカレンダーとつなぐ') + '</button>';
+  if (ownerOnly) return h;                       // 手順は講師の方の画面にだけ出す
   h += '<div class="gs" style="margin-top:6px">Googleの画面が開きます。' +
     '<ol class="g-steps">' +
     '<li>いつも使っている <b>Googleアカウント</b> を選ぶ</li>' +

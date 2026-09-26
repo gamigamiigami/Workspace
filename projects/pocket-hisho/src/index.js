@@ -246,10 +246,11 @@ async function requireAuth(request, env) {
 
 /* --- ホーム画面に追加するときに読まれる「アプリの説明書」。
        引き継ぎ番号を起動URLに入れておくと、ホーム画面から開いた瞬間に自動で入れる --- */
-function manifestFor(handoff) {
+function manifestFor(handoff, label) {
   const start = /^\d{6}$/.test(handoff || '') ? '/?h=' + handoff : '/';
+  // テスト用など、同じアプリを2つ公開しているときは名前に印を付ける（ホーム画面で見分けるため）
   return {
-    name: 'ポケット秘書', short_name: 'ポケット秘書',
+    name: 'ポケット秘書' + (label ? '（' + label + '）' : ''), short_name: 'ポケット秘書' + (label || ''),
     description: 'セミナーの予定とやることを、1か所にまとめてお知らせします',
     lang: 'ja', start_url: start, scope: '/', display: 'standalone', orientation: 'portrait',
     background_color: '#eef1f5', theme_color: '#1f3a5f',
@@ -260,6 +261,9 @@ function manifestFor(handoff) {
     ]
   };
 }
+
+/** このアプリの印（テスト用のほうだけ wrangler.toml の [env.test.vars] で APP_LABEL = "テスト用"） */
+function appLabel(env) { return String(env.APP_LABEL || '').slice(0, 12); }
 
 /* =====================================================================
    予定・タスク・設定の読み書き
@@ -462,14 +466,14 @@ export default {
 
       /* --- ホーム画面に追加するときの「アプリの説明書」（引き継ぎ番号つき） --- */
       if (path === '/app.webmanifest') {
-        return new Response(JSON.stringify(manifestFor(url.searchParams.get('h'))), {
+        return new Response(JSON.stringify(manifestFor(url.searchParams.get('h'), appLabel(env))), {
           headers: { 'Content-Type': 'application/manifest+json; charset=utf-8', 'Cache-Control': 'no-store' }
         });
       }
 
       /* --- ログイン前でも使える入口 --- */
       const method = request.method;
-      if (path === '/api/setup-status' && method === 'GET') return json({ needsSetup: await needsSetup(env) });
+      if (path === '/api/setup-status' && method === 'GET') return json({ needsSetup: await needsSetup(env), appLabel: appLabel(env) });
       if (path === '/api/setup' && method === 'POST') return await handleSetup(request, env);
       if (path === '/api/login' && method === 'POST') return await handleLogin(request, env);
       if (path === '/api/redeem' && method === 'POST') return await handleRedeem(request, env);
@@ -563,6 +567,7 @@ async function handleApi(request, env, url, path, ctx, auth) {
       devices: subs.map(s => ({ id: s.id, label: s.label, createdAt: s.created_at, lastOk: s.last_ok })),
       calendarsLast: calLast,
       google: await googleStatus(env, url.origin),
+      appLabel: appLabel(env),
       serverNow: Date.now(),
       today
     });

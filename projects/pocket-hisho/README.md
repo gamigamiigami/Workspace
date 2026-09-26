@@ -63,10 +63,18 @@
 
 ### 公開のしくみ
 
-- Cloudflare の Worker `pocket-hisho` を、GitHub のこのリポジトリとつないである（Workers Builds）
-- **本番ブランチは `claude/new-tool-creation-klodhg`**、フォルダは `projects/pocket-hisho`
-- **この枝に保存（プッシュ）すると、Cloudflare が自動で公開し直す**（ボタン操作は要らない）
-- 保管庫（D1）`pocket-hisho` の ID は `wrangler.toml` に記入済み。表は初回に自動で作られる
+- 同じコードを **2つ** 公開する（2026-09-26 伊神さんの希望：「自分のテスト用と講師用を分けたい」）
+
+  | | 講師用 | 伊神さんのテスト用 |
+  |---|---|---|
+  | Worker | `pocket-hisho` | `pocket-hisho-test` |
+  | デプロイ コマンド | `npx wrangler deploy` | `npx wrangler deploy --env test` |
+  | 保管庫（D1） | `pocket-hisho` | `pocket-hisho-test`（`[env.test]` に書く） |
+  | 印 | なし | `APP_LABEL = "テスト用"`（画面・タブ・ホーム画面の名前に付く） |
+
+- どちらも GitHub のこのリポジトリとつないである（Workers Builds）。**本番ブランチは `claude/new-tool-creation-klodhg`**、フォルダは `projects/pocket-hisho`
+- **この枝に保存（プッシュ）すると、2つとも自動で公開し直す**（伊神さんと決めた：両方いっしょに更新）
+- 表は初回に自動で作られる
 
 ### なぜ「ふつうのアプリ」ではなく PWA なのか
 
