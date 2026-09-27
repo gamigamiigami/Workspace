@@ -19,6 +19,7 @@ import {
   stableGid, appIdFor, timesOf
 } from '../src/google.js';
 import { normalizeEvent } from '../web/shared-model.js';
+import { parseIcs, icsToGoogleItems } from '../web/shared-ics.js';
 
 const PORT = 8793, GPORT = 8795;
 const BASE = 'http://127.0.0.1:' + PORT;
@@ -101,8 +102,10 @@ console.log('\n【1】変換（通信なし）');
 /* =================================================================== */
 const fake = {
   events: new Map(), revoked: false, tokenN: 0, validTokens: new Set(), log: [],
-  failNext: {},             // { 'PATCH': 500 } のように、次の1回だけ失敗させる
+  failNext: {},             // { 'PATCH': 500 } のように、次の1回だけ失敗させる（{status, body} でも可）
   forbid: new Set(),        // この予定は書きかえ禁止（招待された予定のまね）
+  failIds: new Map(),       // この予定IDで新しく入れようとしたら、いつもこの番号で断る
+  ics: {},                  // 公開カレンダー（iCloud のまね）: /ics/名前 で返す
   clock: Date.now()
 };
 function stamp() { fake.clock = Math.max(fake.clock + 5, Date.now()); return new Date(fake.clock).toISOString(); }
@@ -150,6 +153,11 @@ const gServer = http.createServer(async (req, res) => {
     return send(400, { error: 'unsupported_grant_type' });
   }
   if (u.pathname === '/revoke') { fake.revoked = true; fake.validTokens.clear(); return send(200, {}); }
+  if (u.pathname.startsWith('/ics/')) {                  // iPhone の「公開カレンダー」のリンク（鍵はいらない）
+    const text = fake.ics[u.pathname.slice(5)];
+    if (text === undefined) { res.writeHead(404); return res.end('not found'); }
+    res.writeHead(200, { 'Content-Type': 'text/calendar; charset=utf-8' }); return res.end(text);
+  }
 
   const auth = (req.headers.authorization || '').replace(/^Bearer /, '');
   if (!fake.validTokens.has(auth)) return send(401, { error: { code: 401, message: 'Invalid Credentials' } });
@@ -157,7 +165,10 @@ const gServer = http.createServer(async (req, res) => {
   const m = /^\/calendar\/v3\/calendars\/primary\/events(?:\/([^/]+))?$/.exec(u.pathname);
   if (!m) return send(404, { error: 'no route' });
   const id = m[1] ? decodeURIComponent(m[1]) : '';
-  if (fake.failNext[req.method]) { const st = fake.failNext[req.method]; delete fake.failNext[req.method]; return send(st, { error: 'forced' }); }
+  if (fake.failNext[req.method]) {
+    const f = fake.failNext[req.method]; delete fake.failNext[req.method];
+    return typeof f === 'object' ? send(f.status, f.body) : send(f, { error: 'forced' });
+  }
 
   if (req.method === 'GET' && !id) {
     fake.lastFields = u.searchParams.get('fields');
@@ -178,6 +189,7 @@ const gServer = http.createServer(async (req, res) => {
   }
   if (req.method === 'POST' && !id) {
     const b = JSON.parse(body);
+    if (fake.failIds.has(b.id)) return send(fake.failIds.get(b.id), { error: { code: fake.failIds.get(b.id), message: 'Invalid recurrence rule.' } });
     if (fake.events.has(b.id)) return send(409, { error: { code: 409, message: 'The requested identifier already exists.' } });
     if (!/^[0-9a-v]{5,1024}$/.test(b.id)) return send(400, { error: 'bad id' });
     return send(200, gEvent(b.id, b));
@@ -455,6 +467,116 @@ try {
   const s4 = (await call('POST', '/api/google/sync')).json;
   eq('そろったあとは増えない（二重にならない）', [bulkCount(s4.events), s4.pull.added], [400, 0]);
   eq('Googleに「必要な欄だけ」を頼んでいる', fake.lastFields, 'nextPageToken,summary,items(id,status,summary,location,description,start,end,updated,eventType,extendedProperties)');
+
+  /* =================================================================== */
+  console.log('\n【8d】iPhone（iCloud）の予定を Google にまとめる');
+  /* =================================================================== */
+  const d8 = d => d.replace(/-/g, '');
+  const vev = (uid, lines) => ['BEGIN:VEVENT', 'UID:' + uid, ...lines, 'END:VEVENT'];
+  fake.ics['icloud.ics'] = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Apple Inc.//iOS 17.5//EN',
+    // 2週間前から毎週。1週間前の回は取り消し、来週の回だけ時間を変えた
+    ...vev('wk@icloud', ['DTSTART;TZID=Asia/Tokyo:' + d8(addDays(T, -14)) + 'T100000', 'DTEND;TZID=Asia/Tokyo:' + d8(addDays(T, -14)) + 'T110000',
+      'RRULE:FREQ=WEEKLY', 'EXDATE;TZID=Asia/Tokyo:' + d8(addDays(T, -7)) + 'T100000', 'SUMMARY:毎週の打合せ',
+      'BEGIN:VALARM', 'ACTION:DISPLAY', 'TRIGGER:-PT15M', 'END:VALARM']),
+    ...vev('wk@icloud', ['RECURRENCE-ID;TZID=Asia/Tokyo:' + d8(addDays(T, 7)) + 'T100000',
+      'DTSTART;TZID=Asia/Tokyo:' + d8(addDays(T, 7)) + 'T150000', 'DTEND;TZID=Asia/Tokyo:' + d8(addDays(T, 7)) + 'T160000', 'SUMMARY:毎週の打合せ（午後）']),
+    ...vev('trip@icloud', ['DTSTART;VALUE=DATE:' + d8(addDays(T, 3)), 'DTEND;VALUE=DATE:' + d8(addDays(T, 6)), 'SUMMARY:iPhoneの出張', 'LOCATION:福岡']),
+    ...vev('past@icloud', ['DTSTART;TZID=Asia/Tokyo:' + d8(addDays(T, -100)) + 'T090000', 'DTEND;TZID=Asia/Tokyo:' + d8(addDays(T, -100)) + 'T100000', 'SUMMARY:すんだ講演']),
+    ...vev('old@icloud', ['DTSTART;TZID=Asia/Tokyo:' + d8(addDays(T, -500)) + 'T090000', 'DTEND;TZID=Asia/Tokyo:' + d8(addDays(T, -500)) + 'T100000', 'SUMMARY:ずっと前の予定']),
+    ...Array.from({ length: 60 }, (_, i) => vev('many' + i + '@icloud', [
+      'DTSTART;TZID=Asia/Tokyo:' + d8(addDays(T, 30 + i)) + 'T100000', 'DTEND;TZID=Asia/Tokyo:' + d8(addDays(T, 30 + i)) + 'T120000',
+      'SUMMARY:iPhoneの予定' + i])).flat(),
+    'END:VCALENDAR'
+  ].join('\r\n');
+  const LINK = G + '/ics/icloud.ics';
+
+  // ① リンクから読む（読むのは画面。サーバーは中身をそのまま渡すだけ）
+  let fr = await call('POST', '/api/google/import/fetch', { url: 'ここにリンク' });
+  eq('リンクでないものは断る', fr.status, 400);
+  fr = await call('POST', '/api/google/import/fetch', { url: G + '/ics/nothing.ics' });
+  ok('開けないリンクは「公開カレンダーがオンか」を案内する', fr.status === 400 && /公開カレンダー/.test(fr.json.error), fr.text);
+  ok('ログインしていない人には渡さない', (await call('POST', '/api/google/import/fetch', { url: LINK }, false)).status === 401);
+  fr = await call('POST', '/api/google/import/fetch', { url: LINK });
+  eq('カレンダーの中身をそのまま画面に渡す', [fr.status, fr.text.startsWith('BEGIN:VCALENDAR')], [200, true]);
+
+  // ② 画面と同じ部品で読んで変換（1年前から）
+  const impItems = await icsToGoogleItems(parseIcs(fr.text), { fromYmd: addDays(T, -365) });
+  eq('移す予定の数（1年より前は除く）', impItems.length, 64);
+  const gidOf = title => impItems.find(x => x.title === title).gid;
+  fake.failIds.set(gidOf('iPhoneの予定59'), 400);          // Google が受けつけない予定（1件）
+
+  // 同じリンクを「ほかのカレンダーを表示」にも入れていた場合
+  boot = (await call('GET', '/api/bootstrap')).json;
+  await call('PUT', '/api/settings', { ...boot.settings, calendars: [{ name: 'iPhoneのカレンダー', url: 'webcal://127.0.0.1:' + GPORT + '/ics/icloud.ics' }] });
+
+  // ③ 待ち行列に入れる（200件ずつ）→ その場で少し書きこむ
+  const posts = () => fake.log.filter(l => l === 'POST /calendar/v3/calendars/primary/events' || l === 'POST /token').length;
+  let p0 = posts();
+  const add1 = await call('POST', '/api/google/import/add', { items: impItems, fresh: true, source: LINK });
+  eq('受けつける', add1.status, 200);
+  eq('64件を待ち行列に入れる', [add1.json.added, add1.json.import.total], [64, 64]);
+  ok('1回で Google に頼むのは予算（30回）まで', posts() - p0 <= 30, posts() - p0);
+  ok('その場で少し書きこむ（残りは続きで）', add1.json.import.done > 0 && add1.json.import.left > 0, JSON.stringify(add1.json.import));
+  eq('同じリンクの「表示だけ」は外す（二重に出ないように）', add1.json.removedCal, 'iPhoneのカレンダー');
+  boot = (await call('GET', '/api/bootstrap')).json;
+  eq('設定からも消えている', boot.settings.calendars.length, 0);
+  const wkG = fake.events.get(gidOf('毎週の打合せ'));
+  ok('続いている繰り返しを先に移す', !!wkG, fake.log.slice(-5).join(','));
+  eq('繰り返しは繰り返しのまま（取り消した回・直した回を外して）', wkG && wkG.recurrence,
+    ['RRULE:FREQ=WEEKLY', 'EXDATE:' + d8(addDays(T, -7)) + 'T010000Z,' + d8(addDays(T, 7)) + 'T010000Z']);
+  eq('終日の出張は日にちのまま', fake.events.get(gidOf('iPhoneの出張')) && fake.events.get(gidOf('iPhoneの出張')).end, { date: addDays(T, 6) });
+  ok('すんだ予定は後まわし', !fake.events.has(gidOf('すんだ講演')));
+
+  // ④ 画面を開いている間は「続き」をくり返す
+  let st8 = add1.json.import, runs = 0, maxPerRun = 0, rateSeen = false;
+  fake.failNext.POST = { status: 403, body: { error: { code: 403, message: 'Rate Limit Exceeded', errors: [{ reason: 'rateLimitExceeded' }] } } };
+  while (st8.left > 0 && runs < 10) {
+    p0 = posts();
+    const rr = (await call('POST', '/api/google/import/run')).json;
+    maxPerRun = Math.max(maxPerRun, posts() - p0);
+    if (rr.slowDown) rateSeen = true;
+    st8 = rr.import; runs++;
+  }
+  ok('「急ぎすぎ」と言われたら、その回はやめて少し待つ', rateSeen);
+  ok('1回で Google に頼むのは予算（40回）まで', maxPerRun <= 40, maxPerRun);
+  eq('最後まで移しきる', [st8.left, st8.done, st8.failed], [0, 63, 1]);
+  eq('「急ぎすぎ」の予定は失敗あつかいにしない（あとで入る）', st8.failedItems.map(f => f.title), ['iPhoneの予定59']);
+  ok('移せなかった理由も見られる', /recurrence|HTTP 400/.test(st8.failedItems[0].error), st8.failedItems[0].error);
+  eq('Google に全部入った（1件を除く）', impItems.filter(x => fake.events.has(x.gid)).length, 63);
+
+  // ⑤ Google から戻ってきて、アプリにも出る（これからの予定）
+  const sizeBeforePull = fake.events.size;
+  let s8 = (await call('POST', '/api/google/sync')).json;
+  for (let i = 0; i < 3 && s8.pull && s8.pull.more; i++) s8 = (await call('POST', '/api/google/sync')).json;
+  await wait(700);
+  ok('iPhoneにあった予定が、アプリにも出る', s8.events.some(e => e.title === 'iPhoneの出張' && e.date === addDays(T, 3)));
+  eq('アプリに入った予定を、Googleに書き戻して二重にしない', fake.events.size, sizeBeforePull);
+
+  // ⑥ もう一度おしても二重にならない。前回だめだった予定は、もう一度ためす
+  fake.failIds.clear();
+  const before8 = fake.events.size;
+  const add2 = (await call('POST', '/api/google/import/add', { items: impItems, fresh: true, source: LINK })).json;
+  let st9 = add2.import;
+  for (let i = 0; i < 5 && st9.left > 0; i++) st9 = (await call('POST', '/api/google/import/run')).json.import;
+  eq('2回目：もう移した予定は「移してあった」になる', [st9.total, st9.already, st9.done, st9.failed, st9.left], [64, 63, 1, 0, 0]);
+  eq('2回目でも Google の予定は増えない（前回だめだった1件だけ入る）', fake.events.size, before8 + 1);
+
+  // ⑦ 見回り（1分ごと）でも続きを書きこむ（画面を閉じても終わる）
+  const cronItems = await icsToGoogleItems(parseIcs(fake.ics['icloud.ics'].replace(/@icloud/g, '@icloud2')), { fromYmd: addDays(T, -365) });
+  await call('POST', '/api/google/import/add', { items: cronItems, fresh: true });
+  let st10 = (await call('GET', '/api/bootstrap')).json.google.import;
+  const left10 = st10.left;
+  await fetch(BASE + '/cdn-cgi/local/scheduled');
+  await wait(1500);
+  st10 = (await call('GET', '/api/bootstrap')).json.google.import;
+  ok('見回りでも続きを書きこむ', st10.left < left10 && left10 > 0, left10 + ' → ' + st10.left);
+  for (let i = 0; i < 5 && st10.left > 0; i++) st10 = (await call('POST', '/api/google/import/run')).json.import;
+
+  // ⑧ 「閉じる」で報告を片づける
+  const cl = (await call('DELETE', '/api/google/import')).json;
+  eq('閉じると報告が消える', cl.import, null);
+  eq('形のちがう予定は受けつけない', (await call('POST', '/api/google/import/add', { items: [{ gid: 'ph123', body: { start: {} } }] })).status, 400);
 
   /* =================================================================== */
   console.log('\n【9】鍵の取り直し・つながりが切れたとき・切るとき');

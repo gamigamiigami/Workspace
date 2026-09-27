@@ -2237,3 +2237,31 @@ details.g-more[open] > summary::after { content: '－'; }
 ```
 
 **使用例：** pocket-hisho/web/app.js `googleSetupHtml()` `googleConnectHtml()`（2026-09-23）
+
+## 時間のかかる作業の欄（はじめる前／進み具合／終わった＋最後の手順／たたむ の4つの顔）
+
+**場面：** 数分かかる作業（予定のまとめ移しなど）を、初心者がスマホで1人で最後までやれるようにする。
+
+| 状態 | 出すもの |
+|---|---|
+| はじめる前 | 何が起きるか3行（範囲・**元は消さない**・**2回やっても二重にならない**）→ 相手の画面での手順（番号つき）→ 貼る欄＋「貼り付け」ボタン → 主役のボタン |
+| 進み具合 | 紺の帯「○○しています…」＋「150／412件（のこり262件）」＋緑のバー＋「開いたままだと早い・閉じても続く」 |
+| 終わった | ✓の帯（新しく○件・前からあった○件）→ できなかったものは**題名と日付**の一覧 →「最後に、○○で次の3つ」→「3つとも終わった（閉じる）」 |
+| 閉じたあと | 「別の○○も移す」にたたむ（もう一度やる入口だけ残す） |
+
+```js
+const pct = s.total ? Math.round((s.total - s.left) / s.total * 100) : 0;
+'<div class="imp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><span style="width:' + pct + '%"></span></div>'
+```
+
+```css
+.notice.run { color: var(--navy); background: var(--navy-soft); border: 1px solid var(--navy); }
+.imp-bar { height: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.imp-bar > span { display: block; height: 100%; background: var(--in); transition: width .4s; }
+/* 貼る欄とボタンを横にならべる（狭い画面でもボタンは44px以上残す） */
+.imp-url { display: flex; gap: 8px; } .imp-url input { flex: 1; } .imp-url .btn { flex: none; min-height: 44px; }
+```
+
+**貼り付けボタン：** `navigator.clipboard.readText()` は iPhone で「ペースト」の吹き出しが出る。失敗したら「欄を長押しして『ペースト』」と案内する。
+
+**使用例：** pocket-hisho/web/app.js `importHtml()`（2026-09-27）

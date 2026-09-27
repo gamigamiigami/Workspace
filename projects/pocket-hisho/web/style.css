@@ -445,6 +445,20 @@ details.g-more > summary::-webkit-details-marker { display: none; }
 details.g-more > summary::after { content: '＋'; margin-left: auto; padding-left: 8px; color: var(--navy); font-weight: 700; }
 details.g-more[open] > summary::after { content: '－'; }
 
+/* ===== iPhoneの予定を Google にまとめる ===== */
+.imp-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.imp-title { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.notice.run { color: var(--navy); background: var(--navy-soft); border: 1px solid var(--navy); }
+.imp-bar { height: 12px; margin: 10px 0 6px; background: var(--card-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.imp-bar > span { display: block; height: 100%; background: var(--in); transition: width .4s; }
+.imp-facts { margin: 8px 0 8px 18px; }
+.imp-facts li { margin-bottom: 3px; }
+.imp-failed { margin: 8px 0 0 18px; font-size: 13px; }
+/* リンクの欄と「貼り付け」ボタンを横にならべる（狭い画面でもボタンが押せる幅を残す） */
+.imp-url { display: flex; gap: 8px; align-items: stretch; }
+.imp-url input { flex: 1; }
+.imp-url .btn { flex: none; min-height: 44px; }
+
 /* 補足の小さい文字（はじめの準備と設定の両方で使う） */
 .gs { font-size: 13px; color: var(--muted); }
 .guide-step .gb { margin-top: 10px; font-size: 15px; }

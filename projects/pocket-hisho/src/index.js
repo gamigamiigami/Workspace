@@ -12,12 +12,13 @@
    ===================================================================== */
 
 import { generateVapidKeys, sendPush } from './push.js';
-import { buildIcs, parseIcs, expandRecurrences } from './ics.js';
+import { buildIcs, parseIcs, expandRecurrences } from '../web/shared-ics.js';
 import { computeDueNotifications } from './remind.js';
 import { ensureSchema } from './schema.js';
 import {
   googleStatus, saveGoogleApp, startAuth, handleCallback, disconnect as googleDisconnect,
-  pushPending, syncNow, msSinceLastPull, isConnected as googleConnected
+  pushPending, syncNow, msSinceLastPull, isConnected as googleConnected,
+  newBudget, importAdd, importPending, importStatus, importClear
 } from './google.js';
 import { todayStr, addDays, ymdOf, hmOf } from '../web/shared-date.js';
 import {
@@ -367,6 +368,20 @@ async function refreshCalendars(env) {
   return report;
 }
 
+/** 「ほかのカレンダーを表示」から、このリンクを外す（Googleに移した後に二重に出ないように）。外した名前を返す */
+async function dropCalendarUrl(env, source) {
+  const norm = u => String(u || '').trim().replace(/^(webcal|https?):\/\//i, '').replace(/\/+$/, '').toLowerCase();
+  const target = norm(source);
+  if (!target) return '';
+  const st = await loadSettings(env);
+  const hit = st.calendars.find(c => norm(c.url) === target);
+  if (!hit) return '';
+  st.calendars = st.calendars.filter(c => c !== hit);
+  await kvPut(env, 'settings', st);
+  await env.DB.prepare('DELETE FROM ext_events WHERE source = ?').bind(hit.url).run();
+  return hit.name || 'カレンダー';
+}
+
 async function loadExtEvents(env, fromYmd, toYmd) {
   const { results } = await env.DB.prepare(
     'SELECT uid, date, start_time, end_time, title, location, all_day FROM ext_events WHERE date BETWEEN ? AND ? ORDER BY date')
@@ -500,8 +515,9 @@ export default {
       const now = Date.now();
       await ensureSchema(env.DB);
       await ensureVapid(env);
-      // 先に Googleカレンダーと同期する（Googleで入れたばかりの予定にも通知が間に合うように）
-      await syncNow(env);
+      // 先に Googleカレンダーと同期する（Googleで入れたばかりの予定にも通知が間に合うように）。
+      // 外への通信は1回50回まで（無料枠）なので、同期は35回まで。残りを通知の送信に使う
+      await syncNow(env, { budget: newBudget(35) });
       await runReminderSweep(env, now);
 
       const minute = new Date(now).getUTCMinutes();
@@ -544,7 +560,7 @@ async function handleApi(request, env, url, path, ctx, auth) {
     // Googleカレンダーとつないでいれば、開いたその場で変化を取りこむ（2.5秒で見切る）
     const since = await msSinceLastPull(env);
     if (since > 15 * 1000) {
-      const job = syncNow(env).catch(() => {});
+      const job = syncNow(env, { budget: newBudget(20) }).catch(() => {});
       ctx.waitUntil(job);                                   // 見切ったあとも最後まで続ける
       await Promise.race([job, new Promise(r => setTimeout(r, 2500))]);
     }
@@ -578,7 +594,7 @@ async function handleApi(request, env, url, path, ctx, auth) {
     const r = await putEvent(env, await request.json().catch(() => ({})));
     if (r.error) return bad(r.error);
     // Googleカレンダーへは裏で書きこむ（返事を待たせない。失敗しても1分ごとの見回りでやり直す）
-    if (await googleConnected(env)) ctx.waitUntil(pushPending(env, r.event.id).catch(() => {}));
+    if (await googleConnected(env)) ctx.waitUntil(pushPending(env, r.event.id, newBudget(6)).catch(() => {}));
     return json(r);
   }
   const evDel = /^\/api\/events\/([\w-]+)$/.exec(path);
@@ -588,7 +604,7 @@ async function handleApi(request, env, url, path, ctx, auth) {
       // Googleカレンダーからも消す（失敗に備えて「消す待ち」に記録してから）
       await env.DB.prepare('INSERT OR IGNORE INTO g_deletes (google_id, created_at) VALUES (?, ?)')
         .bind(linked.google_id, Date.now()).run();
-      if (await googleConnected(env)) ctx.waitUntil(pushPending(env, { deletesOnly: true }).catch(() => {}));
+      if (await googleConnected(env)) ctx.waitUntil(pushPending(env, { deletesOnly: true }, newBudget(6)).catch(() => {}));
     }
     await env.DB.prepare('UPDATE events SET deleted = 1, g_dirty = 0, updated_at = ? WHERE id = ?').bind(Date.now(), evDel[1]).run();
     // その予定にひもづくタスクも一緒に片づける
@@ -742,9 +758,46 @@ async function handleApi(request, env, url, path, ctx, auth) {
   if (path === '/api/google/sync' && method === 'POST') {
     if (!(await googleConnected(env))) return bad('Googleカレンダーとつながっていません');
     const body = await request.json().catch(() => ({}));
-    const r = await syncNow(env, { full: body.full === true });
+    const r = await syncNow(env, { full: body.full === true, budget: newBudget(40) });
     return json({ ...r, google: await googleStatus(env, url.origin), events: await loadEvents(env) });
   }
+  /* ---------- 別のカレンダー（iCloud など）の予定を Google に移す ---------- */
+  // ① カレンダーのファイルを取ってきて、そのまま画面に渡す（読むのは画面。サーバーは読まない＝計算時間を使わない）
+  if (path === '/api/google/import/fetch' && method === 'POST') {
+    if (!(await googleConnected(env))) return bad('先に「Googleカレンダーとつなぐ」をしてください');
+    const body = await request.json().catch(() => ({}));
+    const src = String(body.url || '').trim().replace(/^webcal:\/\//i, 'https://');
+    if (!/^https?:\/\/[^\s]+$/i.test(src)) return bad('カレンダーのリンクの形がちがいます（webcal:// か https:// で始まるもの）');
+    let res;
+    try { res = await fetch(src, { headers: { 'User-Agent': 'pocket-hisho/1.0' }, redirect: 'follow' }); }
+    catch (e) { return bad('カレンダーのリンクを開けませんでした。リンクが正しいか、「公開カレンダー」がオンか確かめてください'); }
+    if (!res.ok) return bad('カレンダーのリンクを開けませんでした（' + res.status + '）。「公開カレンダー」がオンか確かめてください');
+    const len = Number(res.headers.get('content-length') || 0);
+    if (len > 8 * 1024 * 1024) return bad('カレンダーが大きすぎます');
+    return new Response(res.body, { headers: { 'Content-Type': 'text/calendar; charset=utf-8', 'Cache-Control': 'no-store' } });
+  }
+  // ② 画面で変換した「移す予定」を受け取って、待ち行列に入れる（その場で少し書きこむ）
+  if (path === '/api/google/import/add' && method === 'POST') {
+    if (!(await googleConnected(env))) return bad('先に「Googleカレンダーとつなぐ」をしてください');
+    const body = await request.json().catch(() => ({}));
+    const r = await importAdd(env, body.items, { fresh: body.fresh === true });
+    if (r.error) return bad(r.error);
+    // 同じリンクを「ほかのカレンダーを表示」にも入れていたら外す（Googleに移したので、そのままだと二重に出る）
+    const removedCal = body.fresh === true ? await dropCalendarUrl(env, body.source) : '';
+    const run = await importPending(env, newBudget(30));
+    return json({ added: r.added, removedCal, slowDown: !!run.slowDown, import: await importStatus(env) });
+  }
+  // ③ 続きを書きこむ（画面を開いている間は、画面がこれをくり返し呼んで早く終わらせる）
+  if (path === '/api/google/import/run' && method === 'POST') {
+    const run = await importPending(env, newBudget(40));
+    return json({ slowDown: !!run.slowDown, import: await importStatus(env) });
+  }
+  // ④ 終わった報告を閉じる
+  if (path === '/api/google/import' && method === 'DELETE') {
+    await importClear(env);
+    return json({ import: await importStatus(env) });
+  }
+
   if (path === '/api/google/disconnect' && method === 'POST') {
     await googleDisconnect(env);
     return json(await googleStatus(env, url.origin));

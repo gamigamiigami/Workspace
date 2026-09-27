@@ -5,7 +5,7 @@ import {
   jstParts, jstToMs, toMs, ymdOf, hmOf, todayStr, addDays, addMonths, addYears,
   mondayOf, weekdayOf, diffDays, fmtDay, fmtFull, reminderAt, isYmd
 } from '../web/shared-date.js';
-import { buildIcs, parseIcs, expandRecurrences, icsStampUtc } from '../src/ics.js';
+import { buildIcs, parseIcs, expandRecurrences, icsStampUtc, icsToGoogleItems, importGid } from '../web/shared-ics.js';
 import { normalizeEvent, costOf, toYen, buildCostCsv } from '../web/shared-model.js';
 import {
   generateVapidKeys, makeVapidHeader, encryptPayload, decryptPayloadForTest,
@@ -323,6 +323,62 @@ ok('お金の無い予定・ほかの年は入らない', !csv.includes('お金�
 eq('記録が無い年は作らない（null）', buildCostCsv(csvEvents, '2030'), null);
 
 /* =================================================================== */
+console.log('\n【8】iCloud の予定を Google に移す（読み取りと変換）');
+/* iPhone（iCloud）の公開カレンダーに近い形。VALARM（お知らせ）の中に UID と DESCRIPTION がある */
+const icloud = [
+  'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Apple Inc.//iOS 17.5//EN',
+  'BEGIN:VTIMEZONE', 'TZID:Asia/Tokyo', 'BEGIN:STANDARD', 'TZOFFSETFROM:+0900', 'TZOFFSETTO:+0900', 'DTSTART:19700101T000000', 'END:STANDARD', 'END:VTIMEZONE',
+  // 毎週火曜 10:00-11:00（2026-09-01から）。10/6 は取り消し（EXDATE）、10/13 だけ 14:00 に変更（RECURRENCE-ID）
+  'BEGIN:VEVENT', 'UID:weekly-1@icloud', 'DTSTART;TZID=Asia/Tokyo:20260901T100000', 'DTEND;TZID=Asia/Tokyo:20260901T110000',
+  'RRULE:FREQ=WEEKLY;BYDAY=TU', 'EXDATE;TZID=Asia/Tokyo:20261006T100000', 'SUMMARY:定例ミーティング', 'DESCRIPTION:本当のメモ',
+  'BEGIN:VALARM', 'UID:ALARM-UID-SHOULD-NOT-WIN', 'ACTION:DISPLAY', 'DESCRIPTION:Reminder', 'TRIGGER:-PT15M', 'END:VALARM',
+  'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:weekly-1@icloud', 'RECURRENCE-ID;TZID=Asia/Tokyo:20261013T100000',
+  'DTSTART;TZID=Asia/Tokyo:20261013T140000', 'DTEND;TZID=Asia/Tokyo:20261013T150000', 'SUMMARY:定例ミーティング（午後に変更）', 'END:VEVENT',
+  // 10/20 の回は取り消し（STATUS:CANCELLED の変更回）
+  'BEGIN:VEVENT', 'UID:weekly-1@icloud', 'RECURRENCE-ID;TZID=Asia/Tokyo:20261020T100000',
+  'DTSTART;TZID=Asia/Tokyo:20261020T100000', 'DTEND;TZID=Asia/Tokyo:20261020T110000', 'STATUS:CANCELLED', 'SUMMARY:定例ミーティング', 'END:VEVENT',
+  // 3日間の出張（終日）
+  'BEGIN:VEVENT', 'UID:trip-1@icloud', 'DTSTART;VALUE=DATE:20261105', 'DTEND;VALUE=DATE:20261108', 'SUMMARY:福岡出張', 'LOCATION:福岡', 'END:VEVENT',
+  // 取り消された予定
+  'BEGIN:VEVENT', 'UID:cancel-1@icloud', 'DTSTART;TZID=Asia/Tokyo:20261101T090000', 'DTEND;TZID=Asia/Tokyo:20261101T100000', 'STATUS:CANCELLED', 'SUMMARY:中止', 'END:VEVENT',
+  // ずっと前の予定（移す範囲の外）と、もう終わった繰り返し
+  'BEGIN:VEVENT', 'UID:old-1@icloud', 'DTSTART;TZID=Asia/Tokyo:20230105T090000', 'DTEND;TZID=Asia/Tokyo:20230105T100000', 'SUMMARY:昔の予定', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:oldrule-1@icloud', 'DTSTART;TZID=Asia/Tokyo:20220105T090000', 'DTEND;TZID=Asia/Tokyo:20220105T100000',
+  'RRULE:FREQ=MONTHLY;UNTIL=20230105T000000Z', 'SUMMARY:昔の繰り返し', 'END:VEVENT',
+  // 時刻が世界標準時（Z）の予定
+  'BEGIN:VEVENT', 'UID:utc-1@icloud', 'DTSTART:20261201T010000Z', 'DTEND:20261201T023000Z', 'SUMMARY:世界標準時の予定', 'END:VEVENT',
+  'END:VCALENDAR'
+].join('\r\n');
+const pi = parseIcs(icloud);
+const master = pi.find(e => e.uid === 'weekly-1@icloud' && !e.recurrenceId);
+eq('お知らせ（VALARM）の中の UID で予定のIDが上書きされない', master && master.uid, 'weekly-1@icloud');
+eq('お知らせ（VALARM）の中の DESCRIPTION でメモが上書きされない', master && master.desc, '本当のメモ');
+eq('取り消した回（EXDATE）の正確な時刻を覚える（世界標準時）', master && master.exdateStamps, ['20261006T010000Z']);
+eq('「この回だけ直した」回を見分ける', pi.filter(e => e.recurrenceId).map(e => e.recurrenceId.date), ['2026-10-13', '2026-10-20']);
+eq('終日の予定の終わりの日を覚える', pi.find(e => e.uid === 'trip-1@icloud').endDate, '2026-11-08');
+
+const items = await icsToGoogleItems(pi, { fromYmd: '2025-09-27' });
+const byTitle = t => items.filter(x => x.title === t);
+const wk = byTitle('定例ミーティング')[0];
+eq('繰り返しは繰り返しのまま移す', wk && wk.body.recurrence[0], 'RRULE:FREQ=WEEKLY;BYDAY=TU');
+eq('取り消した回・直した回・取り消しになった回を、元の繰り返しから外す', wk && wk.body.recurrence[1],
+  'EXDATE:20261006T010000Z,20261013T010000Z,20261020T010000Z');
+eq('繰り返しの開始は日本時間で', wk && [wk.body.start.dateTime, wk.body.start.timeZone], ['2026-09-01T10:00:00+09:00', 'Asia/Tokyo']);
+const moved = byTitle('定例ミーティング（午後に変更）')[0];
+eq('直した回は1回だけの予定として移す', moved && [moved.body.start.dateTime, moved.body.recurrence], ['2026-10-13T14:00:00+09:00', undefined]);
+ok('取り消しになった回は、予定としては移さない', items.filter(x => x.title === '定例ミーティング').length === 1);
+const trip = byTitle('福岡出張')[0];
+eq('3日間の終日の予定は3日間のまま', trip && [trip.body.start.date, trip.body.end.date], ['2026-11-05', '2026-11-08']);
+ok('取り消された予定は移さない', byTitle('中止').length === 0);
+ok('移す範囲（1年前）より前の予定は移さない', byTitle('昔の予定').length === 0 && byTitle('昔の繰り返し').length === 0);
+eq('世界標準時の予定は日本時間に直す', byTitle('世界標準時の予定')[0].body.start.dateTime, '2026-12-01T10:00:00+09:00');
+ok('Googleの予定IDは 0-9a-v だけ', items.every(x => /^[0-9a-v]{5,1024}$/.test(x.gid)), items.map(x => x.gid).join(','));
+eq('同じ予定からは、いつも同じID（2回移しても2つにならない）', (await icsToGoogleItems(pi, { fromYmd: '2025-09-27' })).map(x => x.gid), items.map(x => x.gid));
+ok('予定ごとにIDがちがう', new Set(items.map(x => x.gid)).size === items.length);
+ok('アプリで作る予定のID（ph…）とはぶつからない', items.every(x => x.gid.startsWith('ic')) && (await importGid('a')) !== (await importGid('b')));
+eq('移した予定には印を付ける', wk.body.extendedProperties.private.phImport, '1');
+
 console.log('\n────────────────────────────');
 console.log('合格 ' + pass + ' ／ 不合格 ' + fail);
 if (failures.length) { console.log('\n不合格の一覧:'); failures.forEach(f => console.log('  - ' + f)); }

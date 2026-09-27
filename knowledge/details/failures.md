@@ -2755,3 +2755,19 @@ run_worker_first = ["/api/*", "/ics/*", "/app.webmanifest"]   # ブラウザで�
 - SPA の設定（not_found_handling）を使うときは、サーバーが答えるべき入口を `run_worker_first` に必ず並べる
 
 **タグ：** #Cloudflare #Workers #SPA #OAuth #テストの穴 #pocket-hisho
+
+## プロセスを止めるコマンドが、自分自身（そのコマンドを動かしているシェル）まで止めた
+
+**症状：** 手元のサーバー（wrangler dev）を止めようとして `pkill -f "port 8790"` や
+`for p in $(pgrep -f "wrangler dev --local --port 8790|port 8790"); do kill $p; done` を実行すると、終了コード 144 で落ちる。
+サーバーの一部（workerd）も残る。
+
+**原因：** `pgrep -f` はコマンドの文字列全体を見る。**止めるコマンドの文字列の中にも "port 8790" が入っている**ので、
+自分を動かしているシェルまで見つかって止められた。`[p]ort` と書いても、**同じ行の別の場所に素の文字列（--port 8790）があれば**やはり当たる。
+
+**対処：**
+- 止めるのは**別の Bash 呼び出し**にして、そこには起動コマンドの文字列を入れない
+- パターンは全部 `[w]rangler dev|[w]orkerd` のように**先頭1文字を [] で囲み、素の文字列を1つも書かない**
+- 残ったものは `pgrep -af "wrangler|workerd"` で番号を見て、`kill 番号` で個別に止める
+
+**タグ：** #シェル #テスト環境 #wrangler

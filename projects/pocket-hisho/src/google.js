@@ -218,7 +218,8 @@ export async function googleStatus(env, origin) {
     needsReconnect: !!(g && g.needsReconnect),
     account: g ? (g.account || '') : '',
     lastSyncAt: g ? (g.lastPullAt || 0) : 0,
-    error: g ? (g.error || '') : ''
+    error: g ? (g.error || '') : '',
+    import: await importStatus(env)
   };
 }
 
@@ -352,13 +353,27 @@ async function noteError(env, e) {
   await kvPut(env, 'google', g);
 }
 
+/* ---------------------------------------------------------------------
+   1回の実行でGoogleに問い合わせてよい回数（予算）
+   Cloudflare の無料枠では、1回の実行で外に出せる通信が50回まで。
+   それを超えると実行ごと失敗するので、同期・書きこみ・移す作業は、この予算の中で止めて続きは次に回す。
+   --------------------------------------------------------------------- */
+export function newBudget(n) { return { left: n }; }
+function spend(budget) {
+  if (!budget) return true;
+  if (budget.left <= 0) return false;
+  budget.left--;
+  return true;
+}
+
 /** 使える短期の鍵（アクセストークン）を返す。切れていれば合鍵で取り直す */
-async function accessToken(env) {
+async function accessToken(env, budget) {
   const g = await kvGet(env, 'google');
   if (!g || !g.refreshToken || g.needsReconnect) return null;
   if (g.accessToken && g.expiresAt > Date.now() + 60 * 1000) return g.accessToken;
   const app = await kvGet(env, 'google_app');
   if (!app) return null;
+  if (!spend(budget)) return null;
   const res = await fetch(endpoints(env).token, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -384,9 +399,10 @@ async function accessToken(env) {
 }
 
 /** Googleカレンダーへの問い合わせ */
-async function gapi(env, method, path, body, retried) {
-  const token = await accessToken(env);
+async function gapi(env, method, path, body, budget, retried) {
+  const token = await accessToken(env, budget);
   if (!token) return { status: 0, json: null, noAuth: true };
+  if (!spend(budget)) return { status: 0, json: null, noBudget: true };
   const res = await fetch(endpoints(env).api + path, {
     method,
     headers: { Authorization: 'Bearer ' + token, ...(body ? { 'Content-Type': 'application/json' } : {}) },
@@ -396,7 +412,7 @@ async function gapi(env, method, path, body, retried) {
     // 短期の鍵が先に切れていた → 捨てて取り直し、1回だけやり直す
     const g = await kvGet(env, 'google');
     if (g) { g.accessToken = ''; g.expiresAt = 0; await kvPut(env, 'google', g); }
-    return gapi(env, method, path, body, true);
+    return gapi(env, method, path, body, budget, true);
   }
   const text = await res.text();
   let j = null;
@@ -423,7 +439,7 @@ function shouldPush(row, today) {
 }
 
 /** 1件を Google に書きこむ。成功・書かなくてよい → true、あとでやり直す → false */
-async function pushRow(env, row, today) {
+async function pushRow(env, row, today, budget) {
   if (!shouldPush(row, today)) {
     await env.DB.prepare('UPDATE events SET g_dirty = 0 WHERE id = ?').bind(row.id).run();
     return true;
@@ -432,15 +448,15 @@ async function pushRow(env, row, today) {
   const body = toGoogle(ev);
   let r;
   if (row.google_id) {
-    r = await gapi(env, 'PATCH', evPath(row.google_id), body);
+    r = await gapi(env, 'PATCH', evPath(row.google_id), body, budget);
     if (r.status === 404 || r.status === 410) {
       // Google側で消されていた → アプリで直したほうを、新しいIDで書きこみ直す
-      r = await insert(env, body, 'ph' + randomHex(15));
+      r = await insert(env, body, 'ph' + randomHex(15), budget);
     }
   } else {
-    r = await insert(env, body, await stableGid(ev.id));
+    r = await insert(env, body, await stableGid(ev.id), budget);
   }
-  if (r.noAuth) return false;
+  if (r.noAuth || r.noBudget) return false;
   if (r.status >= 200 && r.status < 300 && r.json && r.json.id) {
     await env.DB.prepare('UPDATE events SET google_id = ?, g_updated = ?, g_dirty = 0, g_error = NULL WHERE id = ?')
       .bind(r.json.id, r.json.updated || '', row.id).run();
@@ -473,36 +489,37 @@ export async function stableGid(appId) {
   return 'ph' + [...new Uint8Array(buf)].slice(0, 15).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-async function insert(env, body, gid) {
-  const r = await gapi(env, 'POST', '/calendars/' + CAL + '/events', { id: gid, ...stripNulls(body) });
+async function insert(env, body, gid, budget) {
+  const r = await gapi(env, 'POST', '/calendars/' + CAL + '/events', { id: gid, ...stripNulls(body) }, budget);
   if (r.status !== 409) return r;
   // もうある（同時に書きこんだ・前に消した）→ 書きかえる。消されていたら新しいIDで作り直す
-  const p = await gapi(env, 'PATCH', evPath(gid), { ...body, status: 'confirmed' });
+  const p = await gapi(env, 'PATCH', evPath(gid), { ...body, status: 'confirmed' }, budget);
   if (p.status === 404 || p.status === 410) {
-    return gapi(env, 'POST', '/calendars/' + CAL + '/events', { id: 'ph' + randomHex(15), ...stripNulls(body) });
+    return gapi(env, 'POST', '/calendars/' + CAL + '/events', { id: 'ph' + randomHex(15), ...stripNulls(body) }, budget);
   }
   return p;
 }
 
 /** 書きこみ待ちを片づける（アプリで保存・削除した直後と、1分ごとの見回りで呼ぶ） */
-export async function pushPending(env, only) {
+export async function pushPending(env, only, budget = newBudget(20)) {
   if (!(await isConnected(env))) return { skipped: true };
   const today = todayStr();
   const onlyId = typeof only === 'string' ? only : '';
   const deletesOnly = !!(only && only.deletesOnly);
   const q = onlyId
     ? env.DB.prepare('SELECT id, date, data, google_id FROM events WHERE id = ? AND g_dirty = 1 AND deleted = 0').bind(onlyId)
-    : env.DB.prepare('SELECT id, date, data, google_id FROM events WHERE g_dirty = 1 AND deleted = 0 LIMIT 20');
+    : env.DB.prepare('SELECT id, date, data, google_id FROM events WHERE g_dirty = 1 AND deleted = 0 LIMIT 10');
   const { results } = deletesOnly ? { results: [] } : await q.all();
   let pushed = 0, failed = 0;
   for (const row of results || []) {
-    if (await pushRow(env, row, today)) pushed++; else failed++;
+    if (budget.left <= 0) break;                    // 予算切れ → 残りは次の見回りで
+    if (await pushRow(env, row, today, budget)) pushed++; else failed++;
   }
-  const dels = await env.DB.prepare('SELECT google_id FROM g_deletes LIMIT 20').all();
+  const dels = await env.DB.prepare('SELECT google_id FROM g_deletes LIMIT 10').all();
   let deleted = 0;
   for (const d of dels.results || []) {
-    const r = await gapi(env, 'DELETE', evPath(d.google_id));
-    if (r.noAuth) break;
+    const r = await gapi(env, 'DELETE', evPath(d.google_id), undefined, budget);
+    if (r.noAuth || r.noBudget) break;
     if ((r.status >= 200 && r.status < 300) || r.status === 404 || r.status === 410 || r.status === 403) {
       await env.DB.prepare('DELETE FROM g_deletes WHERE google_id = ?').bind(d.google_id).run();
       deleted++;
@@ -546,9 +563,11 @@ export async function pullFromGoogle(env, opts = {}) {
     if (full) q.set('showDeleted', 'false');
     else q.set('updatedMin', new Date(g.lastPullAt - 2 * 60 * 1000).toISOString());   // 2分の重なりで取りこぼさない
     if (pageToken) q.set('pageToken', pageToken);
-    const r = await gapi(env, 'GET', '/calendars/' + CAL + '/events?' + q.toString());
+    const r = await gapi(env, 'GET', '/calendars/' + CAL + '/events?' + q.toString(), undefined, opts.budget);
     if (r.noAuth) return { skipped: true };
-    if (r.status === 410) return pullFromGoogle(env, { full: true });              // 古すぎる → 全部見直し
+    // 予算切れ：途中までの結果では「消えた予定」を正しく判断できないので、今回は取りこまず次に回す
+    if (r.noBudget) return { incomplete: true };
+    if (r.status === 410) return pullFromGoogle(env, { full: true, budget: opts.budget });   // 古すぎる → 全部見直し
     if (r.status !== 200 || !r.json) { await noteError(env, 'Googleから読めませんでした（' + r.status + '）'); return { error: r.status }; }
     if (r.json.summary) calName = r.json.summary;
     items.push(...(r.json.items || []));
@@ -637,22 +656,142 @@ export async function pullFromGoogle(env, opts = {}) {
 
 /** つないだ直後：Googleの予定を取りこみ、アプリにだけある予定を Google に書きこむ */
 export async function firstSync(env) {
-  await pullFromGoogle(env, { full: true });
+  const budget = newBudget(40);
+  await pullFromGoogle(env, { full: true, budget });
   const today = todayStr();
   await env.DB.prepare(
     "UPDATE events SET g_dirty = 1 WHERE deleted = 0 AND google_id IS NULL AND date >= ? AND id NOT LIKE 'sample\\_%' ESCAPE '\\'")
     .bind(addDays(today, -WINDOW_PAST_DAYS)).run();
-  // 20件ずつ。残りは1分ごとの見回りで続ける
-  return pushPending(env);
+  // 予算の中で書きこむ。残りは1分ごとの見回りで続ける
+  return pushPending(env, null, budget);
+}
+
+/* =====================================================================
+   5. 別のカレンダー（iCloud など）の予定を Google に移す
+
+   重い読み取り（ICSを読む）は画面（スマホ・パソコン）でやってもらい、
+   サーバーは「Googleに送る中身」を待ち行列に入れて、予算の中で少しずつ書きこむ。
+   Googleでの予定IDは元の予定から決まっているので、2回移しても2つにならない（2回目は 409＝もうある）。
+   ===================================================================== */
+
+const IMPORT_MAX_TRIES = 5;
+
+async function importStat(env) {
+  return (await kvGet(env, 'g_import_stat')) || { total: 0, done: 0, already: 0, failed: 0, startedAt: 0, updatedAt: 0 };
+}
+
+/** 画面から届いた「移す予定」を待ち行列に入れる。
+    fresh＝「移す」ボタンを押し直した最初の1回。前回うまくいかなかった予定も、もう一度ためす */
+export async function importAdd(env, items, opts = {}) {
+  if (!Array.isArray(items) || !items.length) return { error: '移す予定がありませんでした' };
+  if (items.length > 200) return { error: '一度に送れるのは200件までです' };
+  const now = Date.now();
+  const st = await importStat(env);
+  if (opts.fresh || !st.startedAt) {
+    await env.DB.prepare('DELETE FROM g_import WHERE error IS NOT NULL').run();
+    // まだ残っている前回の分も、今回の数に入れる（「全部で○件」と「のこり」がずれないように）
+    Object.assign(st, { total: await importLeft(env), done: 0, already: 0, failed: 0, startedAt: now });
+  }
+  const stmts = [];
+  for (const it of items) {
+    const body = it && it.body;
+    if (!/^ic[0-9a-f]{30}$/.test(String(it && it.gid)) || !body || typeof body !== 'object' || !body.start) {
+      return { error: '移す予定の形がちがいます' };
+    }
+    const json = JSON.stringify(body);
+    if (json.length > 20000) continue;                                // 大きすぎる予定は飛ばす（メモが長すぎるなど）
+    stmts.push(env.DB.prepare(
+      'INSERT OR IGNORE INTO g_import (gid, title, date, body, tries, error, created_at) VALUES (?, ?, ?, ?, 0, NULL, ?)')
+      .bind(it.gid, String(it.title || '').slice(0, 200), String(it.date || '').slice(0, 10), json, now));
+  }
+  let added = 0;
+  for (let i = 0; i < stmts.length; i += 100) {
+    const rs = await env.DB.batch(stmts.slice(i, i + 100));
+    for (const r of rs) added += (r.meta && r.meta.changes) || 0;
+  }
+  st.total += added;
+  st.updatedAt = now;
+  await kvPut(env, 'g_import_stat', st);
+  return { added };
+}
+
+async function importLeft(env) {
+  const r = await env.DB.prepare('SELECT COUNT(*) AS n FROM g_import WHERE error IS NULL').first();
+  return r ? r.n : 0;
+}
+
+/** 待ち行列から、予算の中で Google に書きこむ */
+export async function importPending(env, budget = newBudget(30)) {
+  if (!(await isConnected(env))) return { skipped: true };
+  const limit = Math.max(0, budget.left - 1);                        // 鍵の取り直しに1回ぶん残す
+  if (!limit) return { skipped: 'budget' };
+  const today = todayStr();
+  // 先に移す順：いまも続いている繰り返し・これからの予定 → すんだ予定
+  const { results } = await env.DB.prepare(
+    `SELECT gid, body, tries FROM g_import WHERE error IS NULL
+     ORDER BY CASE WHEN date >= ? OR json_extract(body, '$.recurrence') IS NOT NULL THEN 0 ELSE 1 END, date LIMIT ?`)
+    .bind(today, limit).all();
+  if (!results || !results.length) return { done: 0 };
+  const st = await importStat(env);
+  let done = 0, slowDown = false;
+  for (const row of results) {
+    const r = await gapi(env, 'POST', '/calendars/' + CAL + '/events', { id: row.gid, ...JSON.parse(row.body) }, budget);
+    if (r.noAuth || r.noBudget) break;
+    if (isRateLimited(r)) { slowDown = true; break; }                // 「急ぎすぎ」→ その予定は失敗にせず、少し待ってから続ける
+    if (r.status >= 200 && r.status < 300) {
+      st.done++; done++;
+      await env.DB.prepare('DELETE FROM g_import WHERE gid = ?').bind(row.gid).run();
+    } else if (r.status === 409) {
+      st.already++; done++;                                          // もう移してあった
+      await env.DB.prepare('DELETE FROM g_import WHERE gid = ?').bind(row.gid).run();
+    } else if (r.status === 400 || r.status === 403 || row.tries + 1 >= IMPORT_MAX_TRIES) {
+      st.failed++;
+      const msg = (r.json && r.json.error && (r.json.error.message || r.json.error)) || ('HTTP ' + r.status);
+      await env.DB.prepare('UPDATE g_import SET error = ?, tries = tries + 1 WHERE gid = ?')
+        .bind(String(msg).slice(0, 200), row.gid).run();
+    } else {
+      await env.DB.prepare('UPDATE g_import SET tries = tries + 1 WHERE gid = ?').bind(row.gid).run();   // 混雑など → あとでもう一度
+    }
+  }
+  st.updatedAt = Date.now();
+  await kvPut(env, 'g_import_stat', st);
+  return slowDown ? { done, slowDown } : { done };
+}
+
+/** Googleの「短い時間に頼みすぎ」の返事（429、または理由つきの403）。本当に書けない403とは分ける */
+function isRateLimited(r) {
+  if (r.status === 429) return true;
+  if (r.status !== 403) return false;
+  const e = (r.json && r.json.error) || {};
+  const reasons = [e.status, e.message, ...((e.errors || []).map(x => x && x.reason))].join(' ');
+  return /rate ?limit|quota|usage ?limit|RESOURCE_EXHAUSTED/i.test(reasons);
+}
+
+/** 画面に出す「移す作業」のようす */
+export async function importStatus(env) {
+  const st = await importStat(env);
+  if (!st.startedAt) return null;
+  const left = await importLeft(env);
+  const { results } = await env.DB.prepare('SELECT title, date, error FROM g_import WHERE error IS NOT NULL ORDER BY date LIMIT 10').all();
+  return { ...st, left, failedItems: (results || []).map(r => ({ title: r.title, date: r.date, error: r.error })) };
+}
+
+/** 「閉じる」：終わった報告と、移せなかった予定の記録を片づける */
+export async function importClear(env) {
+  await env.DB.prepare('DELETE FROM g_import WHERE error IS NOT NULL').run();
+  if ((await importLeft(env)) === 0) await env.DB.prepare("DELETE FROM kv WHERE k = 'g_import_stat'").run();
+  return { ok: true };
 }
 
 /** 見回り・「いま同期する」ボタン・アプリを開いたとき に呼ぶ */
 export async function syncNow(env, opts = {}) {
   if (!(await isConnected(env))) return { skipped: true };
+  const budget = opts.budget || newBudget(30);
   try {
-    const push = await pushPending(env);
-    const pull = await pullFromGoogle(env, opts);
-    return { push, pull };
+    const push = await pushPending(env, null, budget);
+    const pull = await pullFromGoogle(env, { ...opts, budget });
+    const imp = await importPending(env, budget);
+    return { push, pull, import: imp };
   } catch (e) {
     await noteError(env, e);
     return { error: String(e && e.message || e) };

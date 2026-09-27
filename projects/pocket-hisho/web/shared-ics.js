@@ -15,7 +15,7 @@
 import {
   jstParts, jstToMs, toMs, ymdOf, hmOf, pad2, isYmd, isHm,
   splitYmd, addDays, weekdayOf, daysInMonth
-} from '../web/shared-date.js';
+} from './shared-date.js';
 
 /* =====================================================================
    1. 組み立て（アプリ → カレンダー）
@@ -225,14 +225,18 @@ export function parseIcs(text) {
   const tzOffsets = readTimezones(lines);
   const out = [];
   let cur = null;
+  let nested = 0;          // 予定の中の小さな部品（VALARM＝お知らせ など）の深さ。中の UID や DESCRIPTION を予定のものと取りちがえないため
   for (const raw of lines) {
     const up = raw.toUpperCase();
-    if (up === 'BEGIN:VEVENT') { cur = { exdates: [] }; continue; }
+    if (up === 'BEGIN:VEVENT') { cur = { exdates: [], exdateStamps: [] }; nested = 0; continue; }
     if (up === 'END:VEVENT') {
       if (cur && cur.date) out.push(normalizeParsed(cur));
       cur = null; continue;
     }
     if (!cur) continue;
+    if (up.startsWith('BEGIN:')) { nested++; continue; }
+    if (up.startsWith('END:')) { if (nested > 0) nested--; continue; }
+    if (nested > 0) continue;
     const p = parseLine(raw);
     if (!p) continue;
     switch (p.name) {
@@ -244,18 +248,24 @@ export function parseIcs(text) {
       case 'RRULE': cur.rrule = p.value.trim(); break;
       case 'DTSTART': {
         const v = parseDateValue(p.value, p.params, tzOffsets);
-        if (v) { cur.date = v.date; cur.startTime = v.allDay ? '' : v.time; cur.allDay = v.allDay; }
+        if (v) { cur.date = v.date; cur.startTime = v.allDay ? '' : v.time; cur.allDay = v.allDay; cur.startMs = v.ms; }
         break;
       }
       case 'DTEND': {
         const v = parseDateValue(p.value, p.params, tzOffsets);
-        if (v) { cur.endDate = v.date; cur.endTime = v.allDay ? '' : v.time; }
+        if (v) { cur.endDate = v.date; cur.endTime = v.allDay ? '' : v.time; cur.endMs = v.ms; }
+        break;
+      }
+      case 'RECURRENCE-ID': {
+        // 繰り返し予定のうち「この回だけ直した」もの。どの回かを覚えておく
+        const v = parseDateValue(p.value, p.params, tzOffsets);
+        if (v) cur.recurrenceId = { date: v.date, ms: v.ms, allDay: v.allDay };
         break;
       }
       case 'EXDATE': {
         for (const one of p.value.split(',')) {
           const v = parseDateValue(one, p.params, tzOffsets);
-          if (v) cur.exdates.push(v.date);
+          if (v) { cur.exdates.push(v.date); cur.exdateStamps.push(v.allDay ? v.date.replace(/-/g, '') : icsStampUtc(v.ms)); }
         }
         break;
       }
@@ -271,14 +281,113 @@ function normalizeParsed(c) {
     date: c.date,
     startTime: c.startTime || '',
     endTime: c.endTime || '',
+    endDate: c.endDate || '',
+    startMs: Number.isFinite(c.startMs) ? c.startMs : null,
+    endMs: Number.isFinite(c.endMs) ? c.endMs : null,
     allDay: !!c.allDay,
     title: c.title || '(名前なし)',
     location: c.location || '',
     desc: c.desc || '',
     status: c.status || '',
     rrule: c.rrule || '',
-    exdates: c.exdates || []
+    exdates: c.exdates || [],
+    exdateStamps: c.exdateStamps || [],
+    recurrenceId: c.recurrenceId || null
   };
+}
+
+/* =====================================================================
+   3. 別のカレンダー（iCloud など）の予定を、Googleカレンダーに移すための形にする
+
+   ・繰り返しの予定は、繰り返しのまま（RRULE）移す
+   ・「この回だけ直した」回（RECURRENCE-ID）は、元の繰り返しから外して（EXDATE）、1回だけの予定として移す
+   ・取り消された予定（STATUS:CANCELLED）は移さない
+   ・Googleでの予定IDは、元の予定のIDから決まる → 2回移しても2つにならない（2回目は「もうある」）
+   ・重い読み取りなので、サーバーではなく画面（スマホ・パソコン）で動かす（サーバーの無料枠は1回10ミリ秒）
+   ===================================================================== */
+
+function rfcJstOf(ms) { return ymdOf(ms) + 'T' + hmOf(ms) + ':00+09:00'; }
+
+function timesForGoogle(ev) {
+  if (ev.allDay || !Number.isFinite(ev.startMs)) {
+    const end = isYmd(ev.endDate) && ev.endDate > ev.date ? ev.endDate : addDays(ev.date, 1);
+    return { start: { date: ev.date }, end: { date: end } };
+  }
+  const endMs = Number.isFinite(ev.endMs) && ev.endMs > ev.startMs ? ev.endMs : ev.startMs + 60 * 60 * 1000;
+  return {
+    start: { dateTime: rfcJstOf(ev.startMs), timeZone: 'Asia/Tokyo' },
+    end: { dateTime: rfcJstOf(endMs), timeZone: 'Asia/Tokyo' }
+  };
+}
+
+/** 繰り返しが、いつまで続くか（UNTIL）。書いていなければ null */
+function untilYmd(rrule) {
+  const m = /(?:^|;)UNTIL=(\d{4})(\d{2})(\d{2})/i.exec(rrule || '');
+  return m ? m[1] + '-' + m[2] + '-' + m[3] : null;
+}
+
+/** 文字から、Googleの予定ID（0-9 と a-v だけ）を決める */
+export async function importGid(key) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('pocket-hisho-import:' + key));
+  return 'ic' + [...new Uint8Array(buf)].slice(0, 15).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * parseIcs の結果を、Googleカレンダーに書きこむ形の一覧にする。
+ * @param {Array} parsed parseIcs の結果
+ * @param {object} opts {fromYmd: この日より前に終わった予定は移さない}
+ * @returns {Promise<Array<{gid, title, date, body}>>}
+ */
+export async function icsToGoogleItems(parsed, opts = {}) {
+  const from = opts.fromYmd || '0000-01-01';
+  const masters = new Map(), overrides = [];
+  for (const ev of parsed) {
+    if (!ev.uid || !isYmd(ev.date)) continue;
+    if (ev.recurrenceId) overrides.push(ev); else masters.set(ev.uid, ev);
+  }
+  const items = [];
+
+  // 「この回だけ直した・取り消した」回は、元の繰り返しから外す
+  const extraEx = new Map();
+  for (const o of overrides) {
+    const r = o.recurrenceId;
+    const stamp = r.allDay || !Number.isFinite(r.ms) ? r.date.replace(/-/g, '') : icsStampUtc(r.ms);
+    if (!extraEx.has(o.uid)) extraEx.set(o.uid, []);
+    extraEx.get(o.uid).push(stamp);
+  }
+
+  for (const ev of masters.values()) {
+    if (ev.status === 'CANCELLED') continue;
+    const body = {
+      summary: ev.title, location: ev.location, description: ev.desc,
+      ...timesForGoogle(ev),
+      extendedProperties: { private: { phImport: '1' } }
+    };
+    if (ev.rrule) {
+      const until = untilYmd(ev.rrule);
+      if (until && until < from) continue;                                   // もう終わった繰り返し
+      if (!until && /COUNT=/i.test(ev.rrule) && ev.date < addDays(from, -730)) continue;
+      const allDay = !body.start.dateTime;
+      const ex = [...new Set([...(ev.exdateStamps || []), ...(extraEx.get(ev.uid) || [])])];
+      body.recurrence = ['RRULE:' + ev.rrule.replace(/^RRULE:/i, '')];
+      if (ex.length) body.recurrence.push((allDay ? 'EXDATE;VALUE=DATE:' : 'EXDATE:') + ex.join(','));
+    } else if (ev.date < from) {
+      continue;                                                              // 移す範囲より前の予定
+    }
+    items.push({ gid: await importGid(ev.uid), title: ev.title, date: ev.date, body });
+  }
+
+  for (const o of overrides) {
+    if (o.status === 'CANCELLED' || o.date < from) continue;
+    const r = o.recurrenceId;
+    const key = o.uid + '|' + (r.allDay || !Number.isFinite(r.ms) ? r.date : icsStampUtc(r.ms));
+    items.push({
+      gid: await importGid(key), title: o.title, date: o.date,
+      body: { summary: o.title, location: o.location, description: o.desc, ...timesForGoogle(o),
+              extendedProperties: { private: { phImport: '1' } } }
+    });
+  }
+  return items;
 }
 
 /* ---------------------------------------------------------------------

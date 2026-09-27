@@ -83,6 +83,18 @@ export const SCHEMA = [
      created_at  INTEGER NOT NULL
    )`,
 
+  // 別のカレンダー（iCloud など）から Google に移す予定の待ち行列。
+  // 読み取りと変換は画面（スマホ・パソコン）で済ませ、ここには Google に送る中身（body）だけを置く
+  `CREATE TABLE IF NOT EXISTS g_import (
+     gid         TEXT PRIMARY KEY,
+     title       TEXT,
+     date        TEXT,
+     body        TEXT NOT NULL,
+     tries       INTEGER NOT NULL DEFAULT 0,
+     error       TEXT,
+     created_at  INTEGER NOT NULL
+   )`,
+
   // 合言葉なしで入るための札（招待リンク・ホーム画面への引き継ぎ番号・Googleの本人確認）
   `CREATE TABLE IF NOT EXISTS codes (
      code        TEXT PRIMARY KEY,

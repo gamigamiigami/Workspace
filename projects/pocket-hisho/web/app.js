@@ -49,7 +49,9 @@ const state = {
   taskFilter: 'open',         // open / today / done
   online: navigator.onLine,
   handoff: null,              // iPhone のホーム画面へ渡す6けたの番号 {code, expiresAt}
-  gDraft: { clientId: '', clientSecret: '' }   // Google の身分証の書きかけ（描きなおしても消えないように）
+  gDraft: { clientId: '', clientSecret: '' },  // Google の身分証の書きかけ（描きなおしても消えないように）
+  importUrl: '',              // iPhoneの公開カレンダーのリンクの書きかけ
+  importing: null             // iPhoneの予定を移しはじめる途中 {phase: 画面に出す文}
 };
 
 let data = {
@@ -194,6 +196,9 @@ async function loadAll(showSpinner) {
       showToast('Googleカレンダーとつながりました');
       refreshGuideViews();
     }
+    // iPhoneの予定を移している途中なら、開いている間は続きを進める
+    const imp = importStat();
+    if (imp && imp.left > 0) runImportLoop();
   } catch (e) {
     if (isNetworkError(e)) {
       setOnline(false);
@@ -440,6 +445,11 @@ function guideSteps() {
   if (!isOwner() || data.appLabel) {
     if (googleReady() || googleOn() || (data.google && data.google.needsReconnect)) {
       steps.push({ id: 'google', title: 'Googleカレンダーとつなぐ', sub: 'アプリ・Googleカレンダー・iPhoneのカレンダーの予定が、1つにまとまります', done: googleOn() });
+      if (googleOn()) {
+        steps.push({ id: 'import', title: 'iPhoneに前からある予定をGoogleにまとめる', optional: true,
+          sub: 'iPhone（iCloud）のカレンダーに入っている予定を、Googleに移します。iPhoneだけに入れた予定がなければ飛ばしてOK',
+          done: importDone() && !state.importing });
+      }
     } else {
       steps.push({ id: 'calendar', title: 'いつものカレンダーにも表示する', sub: 'なくても大丈夫です', done: lsGet(LS_CAL_DONE, false) === true, optional: true });
     }
@@ -480,7 +490,7 @@ function renderGuide() {
       '<div class="num">' + (s.done ? '✓' : (i + 1)) + '</div>' +
       '<div><div class="gt">' + esc(s.title) + (s.optional ? '（なくてもOK）' : '') + '</div>' +
       '<div class="gs">' + esc(s.done ? 'できています' : s.sub) + '</div></div></div>';
-    if (!s.done || s.id === 'notify' || s.id === 'invite' || s.id === 'google') h += '<div class="gb">' + guideBody(s) + '</div>';
+    if (!s.done || s.id === 'notify' || s.id === 'invite' || s.id === 'google' || s.id === 'import') h += '<div class="gb">' + guideBody(s) + '</div>';
     h += '</div>';
   });
   h += '<button class="btn wide" data-g="close">' + (nowIndex < 0 ? 'はじめる' : 'あとでやる') + '</button>';
@@ -497,6 +507,7 @@ function guideBody(step) {
   if (step.id === 'invite') return inviteHtml();
   if (step.id === 'gsetup') return googleSetupHtml();
   if (step.id === 'google') return googleConnectHtml();
+  if (step.id === 'import') return importHtml();
   return '';
 }
 
@@ -692,6 +703,9 @@ function bindGuide(root) {
       else if (g === 'g-save') await saveGoogleApp(root);
       else if (g === 'g-connect') await connectGoogle();
       else if (g === 'g-sync') await syncGoogle();
+      else if (g === 'imp-start') await startImport();
+      else if (g === 'imp-paste') await pasteImportUrl(root);
+      else if (g === 'imp-close') await closeImport();
       else if (g === 'g-disconnect') {
         askConfirm('Googleとのつながりを切りますか', 'アプリの予定は残ります。切ったあとに入れた予定は、Googleには出なくなります。', '切る', async () => {
           try { data.google = await api('POST', '/api/google/disconnect'); lsSet(LS_CACHE, data); showToast('つながりを切りました'); refreshGuideViews(); }
@@ -715,6 +729,7 @@ function bindGuide(root) {
 document.addEventListener('input', (e) => {
   const k = e.target && e.target.dataset && e.target.dataset.gd;
   if (k) state.gDraft[k] = e.target.value;
+  if (e.target && e.target.dataset && e.target.dataset.gi === 'url') state.importUrl = e.target.value;
 });
 
 async function saveGoogleApp(root) {
@@ -746,6 +761,195 @@ async function syncGoogle() {
       ? '同期しました（新しく' + (p.added || 0) + '件・直った' + (p.changed || 0) + '件・消えた' + (p.removed || 0) + '件）'
       : '同期しました（変わったところはありません）');
     render();
+    refreshGuideViews();
+  } catch (e) { showToast(e.message); }
+}
+
+/* --- ⑥ iPhone（iCloud）に前からある予定を、Googleにまとめる ---
+   iPhoneの「公開カレンダー」のリンクを貼ってもらい、
+   読む・変換するのはこの画面（サーバーの無料枠の計算時間を使わないため）、
+   Googleに書きこむのはサーバー（少しずつ。画面を閉じても1分ごとに続く）。 */
+const LS_IMPORT_DONE = 'ph:import-done';     // 移し終えて「閉じる」を押したか（案内の✓に使う）
+
+function importStat() { return (data.google && data.google.import) || null; }
+function importDone() {
+  const s = importStat();
+  return (!!s && s.total > 0 && s.left === 0) || lsGet(LS_IMPORT_DONE, false) === true;
+}
+function setImportStat(s) {
+  if (!data.google) return;
+  data.google.import = s || null;
+  lsSet(LS_CACHE, data);
+}
+
+/** 公開カレンダーのファイルを、サーバー経由で取ってくる（iCloudは画面から直接は読めないため） */
+async function fetchCalendarText(url) {
+  const res = await fetch('/api/google/import/fetch', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(state.token ? { Authorization: 'Bearer ' + state.token } : {}) },
+    body: JSON.stringify({ url })
+  });
+  if (!res.ok) {
+    const j = await res.json().catch(() => ({}));
+    throw new Error(j.error || ('カレンダーを読めませんでした（' + res.status + '）'));
+  }
+  return res.text();
+}
+
+function importHtml() {
+  if (!state.online) return '<div class="gs">つながったときに操作できます。</div>';
+  const s = importStat();
+  const job = state.importing;
+  // 読みこみ中・Googleに書きこみ中
+  if (job || (s && s.left > 0)) {
+    const moved = s ? s.total - s.left : 0;
+    const pct = s && s.total ? Math.round(moved / s.total * 100) : 0;
+    return '<div class="notice run"><b>' + esc(job ? job.phase : 'Googleに移しています…') + '</b>' +
+      (s && s.total ? moved + '／' + s.total + '件（のこり' + s.left + '件）' : 'しばらくお待ちください') + '</div>' +
+      '<div class="imp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><span style="width:' + pct + '%"></span></div>' +
+      '<div class="gs">この画面を開いたままにすると早く終わります。閉じても、1分ごとに少しずつ自動で続きます。</div>';
+  }
+  // 移し終わった
+  if (s && s.total > 0) {
+    let h = '<div class="notice ok"><b>移し終わりました</b>新しく ' + s.done + '件をGoogleカレンダーに入れました' +
+      (s.already ? '（前に移してあった ' + s.already + '件は、そのままにしています）' : '') + '</div>';
+    if (s.failed) {
+      h += '<div class="notice warn"><b>移せなかった予定が ' + s.failed + '件あります</b>お手数ですが、Googleカレンダーに手で入れ直してください。' +
+        '<ul class="imp-failed">' + (s.failedItems || []).map(f =>
+          '<li>' + esc(f.date ? fmtDay(f.date) : '') + '　' + esc(f.title || '（題名なし）') + '</li>').join('') +
+        (s.failed > (s.failedItems || []).length ? '<li>ほか ' + (s.failed - s.failedItems.length) + '件</li>' : '') + '</ul></div>';
+    }
+    h += '<div class="gs" style="margin-top:12px"><b>最後に、iPhoneで次の3つをしてください</b>（同じ予定が2つずつ出ないように）</div>' +
+      '<ol class="g-steps">' +
+      '<li>さっきの ⓘ の画面で、<b>「公開カレンダー」をオフ</b>に戻す（オンのままだと、リンクを知っている人に予定が見えるため）</li>' +
+      '<li>「カレンダー」アプリの下の<b>「カレンダー」</b>で、移した iCloud のカレンダーの<b>チェックを外す</b>' +
+      '（予定は消えません。見えなくなるだけです。Googleの方に同じ予定が出ます）</li>' +
+      '<li>iPhoneの<b>「設定」→「カレンダー」→「デフォルトカレンダー」</b>を、<b>Google</b> の下のカレンダーにする' +
+      '（これからiPhoneで入れる予定も、Googleとアプリに入るようになります）</li></ol>' +
+      '<button class="btn primary wide" data-g="imp-close">3つとも終わった（この報告を閉じる）</button>';
+    return h;
+  }
+  // はじめる前
+  const form =
+    '<ul class="gs imp-facts">' +
+    '<li>移すのは<b>1年前から先</b>の予定です（くり返しの予定は、くり返しのまま）</li>' +
+    '<li>iPhoneにある元の予定は<b>消しません</b></li>' +
+    '<li>2回やっても、同じ予定が2つにはなりません</li></ul>' +
+    // 要確認: iOS のバージョンで、ボタンの名前が少しちがうことがある（iOS 17 の表記）
+    '<ol class="g-steps">' +
+    '<li>iPhoneの<b>「カレンダー」アプリ</b>を開き、画面の下の<b>「カレンダー」</b>を押す</li>' +
+    '<li>「iCloud」の下にある、移したいカレンダー（例：「ホーム」「仕事」）の右の <b>ⓘ</b> を押す</li>' +
+    '<li>下のほうの<b>「公開カレンダー」をオン</b>にする</li>' +
+    '<li>出てきた<b>「リンクを共有…」</b>を押して<b>「コピー」</b>を押す</li>' +
+    '<li>このアプリに戻り、下の欄に貼って<b>「Googleにまとめる」</b>を押す</li></ol>' +
+    '<div class="field"><label>公開カレンダーのリンク</label><div class="imp-url">' +
+    '<input type="url" data-gi="url" autocomplete="off" autocapitalize="off" spellcheck="false" ' +
+    'placeholder="webcal://p…-caldav.icloud.com/published/…" value="' + esc(state.importUrl || '') + '">' +
+    '<button class="btn" data-g="imp-paste">貼り付け</button></div></div>' +
+    '<button class="btn primary wide" data-g="imp-start">Googleにまとめる</button>' +
+    '<div class="gs" style="margin-top:6px">iCloudのカレンダーが2つ以上あるときは、1つずつ同じことをくり返してください。</div>';
+  if (lsGet(LS_IMPORT_DONE, false) === true) {
+    return '<details class="g-more"><summary>別のカレンダーも移す</summary>' + form + '</details>';
+  }
+  return '<div class="gs">iPhoneのカレンダーに<b>前から入っている予定</b>を、Googleカレンダーにまとめて移します。' +
+    '移したあとは、アプリ・Google・iPhoneのどれで見ても同じ予定が出ます。</div>' + form;
+}
+
+async function startImport() {
+  if (state.importing) return;
+  const url = (state.importUrl || '').trim();
+  if (!/^(webcal|https?):\/\/\S+$/i.test(url)) {
+    showToast('iPhoneでコピーした「公開カレンダー」のリンク（webcal:// で始まるもの）を貼ってください', 6000);
+    return;
+  }
+  const step = phase => { state.importing = { phase }; refreshGuideViews(); };
+  try {
+    step('iPhoneのカレンダーを読んでいます…');
+    const text = await fetchCalendarText(url);
+    const { parseIcs, icsToGoogleItems } = await import('./shared-ics.js');
+    const items = await icsToGoogleItems(parseIcs(text), { fromYmd: addDays(todayStr(), -365) });
+    if (!items.length) throw new Error('移す予定が見つかりませんでした。1年前から先の予定がないか、リンクがちがうかもしれません');
+    for (let i = 0; i < items.length; i += 200) {
+      step('Googleに送っています…（' + Math.min(i + 200, items.length) + '／' + items.length + '件）');
+      const r = await api('POST', '/api/google/import/add', { items: items.slice(i, i + 200), fresh: i === 0, source: url });
+      setImportStat(r.import);
+      if (r.removedCal) showToast('「' + r.removedCal + '」の表示用リンクは外しました（Googleに移したので、二重に出ないように）', 5000);
+    }
+    state.importUrl = '';
+    lsDel(LS_IMPORT_DONE);
+    const s = importStat();
+    if (s && s.left === 0) syncGoogleQuiet();     // 少ないと送った時点で終わっている → アプリの予定を最新に
+  } catch (e) {
+    showToast(e.message, 6000);
+  }
+  state.importing = null;
+  refreshGuideViews();
+  runImportLoop();                   // 途中で失敗しても、もう送れた分は続けて書きこむ
+}
+
+/** 画面を開いている間、のこりをくり返し書きこむ（閉じても、サーバーの見回りが続ける） */
+let importLoopOn = false;
+async function runImportLoop() {
+  const first = importStat();
+  if (importLoopOn || !first || first.left <= 0) return;   // 移している途中のときだけ（終わった報告を出し直さない）
+  importLoopOn = true;
+  try {
+    for (;;) {
+      const s = importStat();
+      if (!s || s.left <= 0 || !state.token) break;
+      if (document.hidden) { await sleep(5000); continue; }          // 裏にあるときは待つ（見回りが続ける）
+      let pause = 3000;
+      try {
+        const r = await api('POST', '/api/google/import/run');
+        setImportStat(r.import);
+        if (r.slowDown) pause = 20000;                                  // Googleに「急ぎすぎ」と言われた
+      } catch (e) {
+        if (String(e.message).includes('ログイン')) break;
+        pause = 15000;
+      }
+      refreshGuideViews();
+      await sleep(pause);
+    }
+  } finally {
+    importLoopOn = false;
+  }
+  const s = importStat();
+  if (s && s.total > 0 && s.left === 0) {
+    showToast('iPhoneの予定をGoogleに移し終わりました。最後の3つの手順を見てください', 6000);
+    syncGoogleQuiet();                                                    // 移した予定をアプリにも出す
+  }
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+/** 音を立てない同期（移し終わったあと、アプリの予定を最新にする） */
+async function syncGoogleQuiet() {
+  try {
+    const r = await api('POST', '/api/google/sync');
+    data.events = (r.events || []).map(normalizeEvent);
+    data.google = r.google || data.google;
+    lsSet(LS_CACHE, data);
+    render();
+    refreshGuideViews();
+  } catch { /* 1分ごとの見回りで入るので、ここでは知らせない */ }
+}
+
+async function pasteImportUrl(root) {
+  try {
+    const t = (await navigator.clipboard.readText()).trim();
+    if (!t) throw new Error('empty');
+    state.importUrl = t;
+    const el = root.querySelector('[data-gi="url"]');
+    if (el) el.value = t;
+  } catch {
+    showToast('欄を長押しして「ペースト」を選んでください', 4000);
+  }
+}
+
+async function closeImport() {
+  try {
+    const r = await api('DELETE', '/api/google/import');
+    setImportStat(r.import);
+    lsSet(LS_IMPORT_DONE, true);
     refreshGuideViews();
   } catch (e) { showToast(e.message); }
 }
@@ -1526,6 +1730,8 @@ function renderSettingsLive() {
     ? googleSetupHtml()
     : googleConnectHtml() + (isOwner()
         ? '<details class="g-more"><summary>身分証（クライアントID）を登録し直す</summary>' + googleSetupHtml() + '</details>' : '');
+  // つながったら：iPhoneに前からある予定を Google にまとめる
+  if (googleOn()) ga.innerHTML += '<div class="imp-box"><div class="imp-title">📲 iPhoneの予定をGoogleにまとめる</div>' + importHtml() + '</div>';
   bindGuide(ga);
   // Googleとつなぐなら、購読（照会）のボタンは要らない（同じ予定が2つずつ出てしまう）
   document.getElementById('cal-box').hidden = googleReady() || googleOn();

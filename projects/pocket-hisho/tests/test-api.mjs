@@ -453,11 +453,14 @@ for (const [path, must] of [
   ['/sw.js', 'addEventListener(\'push\''],
   ['/shared-date.js', 'JST_OFFSET_MS'],
   ['/shared-model.js', 'normalizeEvent'],
+  ['/shared-ics.js', 'icsToGoogleItems'],        // iPhoneの予定を移すとき、画面が読みこむ
   ['/manifest.webmanifest', '"display": "standalone"']
 ]) {
   const r = await fetch(BASE + path);
   const text = await r.text();
   ok('配られる: ' + path, r.status === 200 && text.includes(must), 'status=' + r.status);
+  // 画面が import() で読むファイルは、JavaScript の種類で配られないと読みこめない
+  if (path.endsWith('.js')) ok('JavaScriptとして配られる: ' + path, /javascript/.test(r.headers.get('content-type') || ''), r.headers.get('content-type'));
 }
 const icon = await fetch(BASE + '/icons/icon-192.png');
 const iconBuf = Buffer.from(await icon.arrayBuffer());
@@ -591,6 +594,12 @@ ok('ふつうのページはアプリの画面のまま', appNav.includes('id="s
 const priv = await fetch(BASE + '/privacy.html');
 const privText = await priv.text();
 ok('プライバシーポリシーのページが開ける', priv.status === 200 && privText.includes('プライバシーポリシー') && privText.includes('限定使用'));
+
+/* iPhoneの予定を Google に移す入口：Googleとつないでいないときは、何もしないで案内する */
+const impFetch = await call('POST', '/api/google/import/fetch', { url: 'webcal://example.com/x.ics' });
+ok('つないでいないと、カレンダーを取りに行かない（先につないで、と案内）', impFetch.status === 400 && /つなぐ/.test(impFetch.json.error), JSON.stringify(impFetch.json));
+eq('つないでいないと、移す予定を受けつけない', (await call('POST', '/api/google/import/add', { items: [] })).status, 400);
+eq('ログインしていない人は使えない', (await call('POST', '/api/google/import/fetch', { url: 'webcal://example.com/x.ics' }, false)).status, 401);
 
 console.log('\n────────────────────────────');
 console.log('合格 ' + pass + ' ／ 不合格 ' + fail);

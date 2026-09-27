@@ -526,6 +526,126 @@ await home.goto(BASE + '/');
 await wait(2000);
 
 /* =================================================================== */
+console.log('\n【10c】iPhoneに前からある予定を Google にまとめる（講師の方のスマホで）');
+/* =================================================================== */
+/* Google とのつながりは本物を使えないので、画面とサーバーのやりとりを差しかえて確かめる
+   （サーバー側の動きは tests/test-google.mjs で、偽の Google を相手に確かめている） */
+const icsDay = d => d.replace(/-/g, '');
+const T0 = todayStr();
+const uiIcs = ['BEGIN:VCALENDAR', 'VERSION:2.0',
+  'BEGIN:VEVENT', 'UID:ui-trip@icloud', 'DTSTART;VALUE=DATE:' + icsDay(addDays(T0, 3)), 'DTEND;VALUE=DATE:' + icsDay(addDays(T0, 5)), 'SUMMARY:iPhoneの出張', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:ui-weekly@icloud', 'DTSTART;TZID=Asia/Tokyo:' + icsDay(addDays(T0, -7)) + 'T100000', 'DTEND;TZID=Asia/Tokyo:' + icsDay(addDays(T0, -7)) + 'T110000', 'RRULE:FREQ=WEEKLY', 'SUMMARY:毎週の打合せ', 'END:VEVENT',
+  'BEGIN:VEVENT', 'UID:ui-old@icloud', 'DTSTART;TZID=Asia/Tokyo:' + icsDay(addDays(T0, -500)) + 'T100000', 'DTEND;TZID=Asia/Tokyo:' + icsDay(addDays(T0, -500)) + 'T110000', 'SUMMARY:ずっと前', 'END:VEVENT',
+  ...Array.from({ length: 50 }, (_, i) => ['BEGIN:VEVENT', 'UID:ui-many' + i + '@icloud',
+    'DTSTART;TZID=Asia/Tokyo:' + icsDay(addDays(T0, 10 + i)) + 'T090000', 'DTEND;TZID=Asia/Tokyo:' + icsDay(addDays(T0, 10 + i)) + 'T100000', 'SUMMARY:予定' + i, 'END:VEVENT']).flat(),
+  'END:VCALENDAR'].join('\r\n');
+const imp = { stat: null, adds: [], runs: 0, fetched: '', deleted: 0, synced: 0 };
+const fakeGoogle = () => ({ configured: true, connected: true, account: 'lecturer@example.com', lastSyncAt: Date.now(), import: imp.stat });
+const jsonRes = obj => ({ status: 200, contentType: 'application/json', body: JSON.stringify(obj) });
+await home.route('**/api/bootstrap', async route => {
+  const real = await route.fetch();
+  const j = await real.json();
+  route.fulfill(jsonRes({ ...j, google: fakeGoogle() }));
+});
+await home.route('**/api/google/import/fetch', async route => {
+  if (imp.failFetch) return route.fulfill({ status: 400, contentType: 'application/json',
+    body: JSON.stringify({ error: 'カレンダーのリンクを開けませんでした（404）。「公開カレンダー」がオンか確かめてください' }) });
+  imp.fetched = JSON.parse(route.request().postData() || '{}').url;
+  route.fulfill({ status: 200, contentType: 'text/calendar', body: uiIcs });
+});
+await home.route('**/api/google/import/add', async route => {
+  const b = JSON.parse(route.request().postData() || '{}');
+  imp.adds.push(b);
+  const n = b.items.length;
+  const base = b.fresh ? { total: 0, done: 0, already: 0, failed: 0, left: 0, failedItems: [] } : imp.stat;
+  const done = Math.min(29, n);
+  imp.stat = { ...base, total: base.total + n, done: base.done + done, left: base.left + n - done };
+  route.fulfill(jsonRes({ added: n, removedCal: '', import: imp.stat }));
+});
+await home.route('**/api/google/import/run', async route => {
+  imp.runs++;
+  if (imp.runs === 1) await wait(2500);            // 本物の Google は数秒かかる（その間に進み具合が見えるか確かめる）
+  const s = imp.stat, k = Math.min(39, s.left);
+  const lastOne = s.left - k === 0;
+  imp.stat = { ...s, left: s.left - k, done: s.done + k - (lastOne ? 1 : 0), failed: lastOne ? 1 : 0,
+    failedItems: lastOne ? [{ title: '予定49', date: addDays(T0, 59), error: 'Invalid recurrence rule.' }] : [] };
+  route.fulfill(jsonRes({ slowDown: false, import: imp.stat }));
+});
+await home.route('**/api/google/sync', async route => {
+  imp.synced++;
+  const j = await (await route.fetch({ url: BASE + '/api/bootstrap', method: 'GET' })).json();
+  route.fulfill(jsonRes({ events: j.events, google: fakeGoogle(), pull: {} }));
+});
+await home.route('**/api/google/import', async route => {
+  if (route.request().method() !== 'DELETE') return route.continue();
+  imp.deleted++; imp.stat = null;
+  route.fulfill(jsonRes({ import: null }));
+});
+await home.reload();
+await wait(2000);
+await home.click('#btn-settings');
+await wait(500);
+const impBox = await home.textContent('#google-area .imp-box');
+ok('つながったら、設定に「iPhoneの予定をGoogleにまとめる」が出る', impBox.includes('iPhoneの予定をGoogleにまとめる'));
+ok('iPhoneで公開カレンダーのリンクを取る手順が書いてある', ['「カレンダー」アプリ', 'ⓘ', '「公開カレンダー」をオン', '「リンクを共有…」', '「コピー」'].every(w => impBox.includes(w)));
+ok('元の予定は消さない・二重にならない、と先に書いてある', impBox.includes('消しません') && impBox.includes('2つにはなりません'));
+const pasteBtn = await home.$eval('#google-area [data-g="imp-paste"]', b => { const r = b.getBoundingClientRect(); return { w: r.width, h: r.height, right: r.right }; });
+const vw = await home.evaluate(() => window.innerWidth);
+ok('「貼り付け」ボタンが指で押せる大きさで、画面からはみ出さない', pasteBtn.w >= 44 && pasteBtn.h >= 44 && pasteBtn.right <= vw, JSON.stringify(pasteBtn) + ' / ' + vw);
+
+await home.click('#google-area [data-g="imp-start"]');
+await wait(300);
+ok('リンクが空のまま押すと、貼ってと案内する', (await home.textContent('#toast')).includes('公開カレンダー') && imp.adds.length === 0);
+
+const LINK_UI = 'webcal://p01-caldav.icloud.com/published/2/UITEST';
+await home.fill('#google-area [data-gi="url"]', LINK_UI);
+await home.click('#google-area [data-g="imp-start"]');
+await wait(1000);
+eq('貼ったリンクをサーバーに渡して読む', imp.fetched, LINK_UI);
+eq('画面で読んで、1年より前を除いた予定を送る（最初の1回は「やり直し」の印つき）',
+  imp.adds.map(a => [a.items.length, a.fresh, a.source]), [[52, true, LINK_UI]]);
+const sentWeekly = imp.adds[0] && imp.adds[0].items.find(x => x.title === '毎週の打合せ');
+ok('くり返しの予定は、くり返しのまま送る', !!sentWeekly && /^RRULE:FREQ=WEEKLY/.test(sentWeekly.body.recurrence[0]));
+ok('移している間は、進み具合が見える', await home.isVisible('#google-area .imp-bar') && (await home.textContent('#google-area .imp-box')).includes('のこり'));
+for (let i = 0; i < 20 && !(imp.stat && imp.stat.left === 0 && imp.synced); i++) await wait(500);
+await wait(500);
+const doneBox = await home.textContent('#google-area .imp-box');
+ok('画面を開いている間は、続きを自分で進めて終わらせる', imp.runs >= 1 && imp.stat.left === 0, 'runs=' + imp.runs);
+ok('終わったら「移し終わりました」と件数が出る', doneBox.includes('移し終わりました') && doneBox.includes('新しく ' + imp.stat.done + '件'));
+ok('移せなかった予定は、題名つきで出る', doneBox.includes('移せなかった予定が 1件') && doneBox.includes('予定49'));
+ok('最後の3つの手順（公開をオフ・iCloudのチェックを外す・デフォルトをGoogleに）が出る',
+  doneBox.includes('「公開カレンダー」をオフ') && doneBox.includes('チェックを外す') && doneBox.includes('デフォルトカレンダー'));
+ok('移し終わったら、アプリの予定も最新にする', imp.synced >= 1);
+await home.click('#google-area [data-g="imp-close"]');
+await wait(500);
+eq('「閉じる」で報告を片づける', imp.deleted, 1);
+ok('閉じたあとは「別のカレンダーも移す」にたたまれる',
+  await home.$eval('#google-area .imp-box details.g-more', d => !d.open && d.querySelector('summary').textContent.includes('別のカレンダーも移す')));
+// 2つ目のカレンダー：リンクが開けなかったとき
+await home.$eval('#google-area .imp-box details.g-more', d => { d.open = true; });
+imp.failFetch = true;
+const syncedBefore = imp.synced, addsBefore = imp.adds.length;
+await home.fill('#google-area [data-gi="url"]', LINK_UI + '2');
+await home.click('#google-area [data-g="imp-start"]');
+await wait(900);
+ok('リンクが開けないときは理由を出す', (await home.textContent('#toast')).includes('「公開カレンダー」がオンか'));
+ok('そのとき「移し終わりました」をまた出したり、同期したりしない',
+  !(await home.textContent('#google-area .imp-box')).includes('移し終わりました') && imp.synced === syncedBefore && imp.adds.length === addsBefore);
+imp.failFetch = false;
+await home.click('#st-close');
+await wait(300);
+await home.evaluate(() => window.pocketHisho.openGuide());
+await wait(400);
+const gImp = await home.$$eval('#guide-body .guide-step', els => els.map(e => [e.querySelector('.gt').textContent, e.classList.contains('done')]));
+ok('はじめの準備にも「iPhoneに前からある予定をGoogleにまとめる」があり、終わると✓になる',
+  gImp.some(([t, d]) => t.includes('iPhoneに前からある予定をGoogleにまとめる') && t.includes('なくてもOK') && d), JSON.stringify(gImp));
+await home.evaluate(() => { const b = document.querySelector('#guide-body [data-g="close"]'); if (b) b.click(); });
+await home.unrouteAll({ behavior: 'ignoreErrors' });
+await home.evaluate(() => localStorage.removeItem('ph:import-done'));
+await home.goto(BASE + '/');
+await wait(2000);
+
+/* =================================================================== */
 console.log('\n【11】オフライン（講師の方のスマホで）');
 /* =================================================================== */
 
@@ -650,7 +770,8 @@ console.log('\n【15】JSエラーと通信');
 ok('JSエラーが1件も出ていない', jsErrors.length === 0, jsErrors.slice(0, 3).join(' | '));
 /* テストがわざと起こしたもの：まちがった合言葉（401 /api/login）・まちがった番号（401 /api/redeem） */
 /* ＋ わざと形のちがうクライアントIDを保存した（400 /api/google/app） */
-const unexpected = httpFails.filter(f => f !== '401 /api/login' && f !== '401 /api/redeem' && f !== '400 /api/google/app');
+/* ＋ 開けないカレンダーのリンク（400 /api/google/import/fetch。【10c】で差しかえたもの） */
+const unexpected = httpFails.filter(f => f !== '401 /api/login' && f !== '401 /api/redeem' && f !== '400 /api/google/app' && f !== '400 /api/google/import/fetch');
 ok('想定外の通信エラー（4xx・5xx）が出ていない', unexpected.length === 0, unexpected.slice(0, 5).join(' / '));
 eq('わざと失敗させたのは2回だけ（合言葉1・番号1）', httpFails.filter(f => f.startsWith('401')).length, 2);
 

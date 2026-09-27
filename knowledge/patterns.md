@@ -2,7 +2,7 @@
 
 うまくいった実装パターン。実装方針を決める前に見る。
 
-**全文は `knowledge/details/patterns.md`（4446行）。全文は読まないこと。**
+**全文は `knowledge/details/patterns.md`（4470行）。全文は読まないこと。**
 必要な項目だけ行番号で読む：`sed -n '120,160p' knowledge/details/patterns.md`
 キーワードで探す：`grep -n "キーワード" knowledge/details/patterns.md`
 
@@ -138,3 +138,4 @@
 - `4371-4395` iPhone のホーム画面アプリへ、ログインを自動で引き継ぐ（6けたの番号）
 - `4396-4414` LINEで送るリンクを、LINEの中ではなく Safari / Chrome で開かせる
 - `4415-4446` Googleカレンダーと双方向同期する（Cloudflare Workers・無料・審査なし）
+- `4447-4470` 無料枠の Worker から外部サービスへ大量に書きこむ（予算・待ち行列・重い読み取りは画面で）
