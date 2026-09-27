@@ -484,6 +484,76 @@ URLを開いて合言葉を入れるだけです。ブックマークしてお�
 
 ---
 
+## ⑩ 残りを Claude in Chrome にまとめて任せる（⑦の続き＋⑨）
+
+Claude（このチャット）はクラウドで動いているので、伊神さんのChromeは操作できません。
+かわりに、入れてある **Claude in Chrome** に次の2つの文を順に貼ると、残りをまとめてやってくれます。
+**合言葉の入力と、Googleの「許可」画面だけは伊神さんが操作**します（拡張機能には任せない）。
+
+**1回目に貼る文（Cloudflare と GitHub）**
+
+```text
+ポケット秘書の残りの設定をお願いします。パートが終わるたびに、やったことを報告してから次へ進んでください。
+
+【絶対に守ること】
+・お金がかかる操作はしない（「無料トライアル」「お支払い」「請求先アカウント」「アップグレード」は押さない。カードは入れない）。求められたら止めて私に聞く
+・合言葉（パスワード）の入力と、Googleのアカウント選択・「許可」の画面は私がやる。そこに来たら止めて私を呼ぶ
+・クライアントシークレットは、ポケット秘書の入力欄に貼る以外、どこにも書かない（返事にも出さない）
+・講師用アプリ（https://pocket-hisho.igamiigamiigami.workers.dev/）の「Googleカレンダーとつなぐ」は押さない
+・「Lecturer Calendar Sync」プロジェクトや、ほかの設定は変えない
+・画面が説明とちがう・迷ったときは、進めずに私に聞く
+
+【パート1：テスト用の保管庫と Worker（Cloudflare）】
+1. https://dash.cloudflare.com/ →「Storage & databases」→「D1 SQL database」→「Create Database」。
+   名前「pocket-hisho-test」、ほかはそのままで作成。表示された Database ID を覚えておく
+2. 「Compute (Workers)」→「Create」→「Import a repository」→ gamigamiigami/Workspace を選ぶ。
+   プロジェクト名「pocket-hisho-test」、ビルドコマンドは空、デプロイコマンド「npx wrangler deploy --env test」、
+   プレビュービルドはオフ、詳細設定のパス「projects/pocket-hisho」、APIトークンはそのまま → デプロイ（1回目は失敗してよい）
+3. その Worker の「設定」→「ビルド」→「ブランチ コントロール」で、本番ブランチを「claude/new-tool-creation-klodhg」に変えて保存
+   （本番以外のブランチのビルドがあればオフ）
+
+【パート2：ID を設定ファイルに書く（GitHub）】
+4. https://github.com/gamigamiigami/Workspace/edit/claude/new-tool-creation-klodhg/projects/pocket-hisho/wrangler.toml を開く
+5. ファイルのいちばん下の「[[env.test.d1_databases]]」の中にある  database_id = ""  の "" の間に、1の Database ID を貼る
+   （上のほうにある講師用の database_id は変えない）
+6. 「Commit changes...」→ コミット先が「claude/new-tool-creation-klodhg」に直接になっていることを確かめて「Commit changes」
+7. 3分ほど待って https://pocket-hisho-test.igamiigamiigami.workers.dev/ を開き、「はじめての合言葉」の画面が出るか確かめる。
+   出たら、ここで止めて私を呼ぶ（合言葉は私が入れる）
+```
+
+→ 伊神さんが **テスト用アプリの合言葉を決める**（講師用と同じでもOK）。画面の上に「テスト用」の印が出ればOK。
+
+**2回目に貼る文（Google Cloud）**
+
+```text
+続きをお願いします（守ることは前と同じです）。Google Cloud はプロジェクト「pocket-hisho」で作業してください。
+
+【パート3：ブランディングを完成させて、本番環境に公開】
+1. 「Google Auth Platform」→「ブランディング」を開き、次を入れて保存する（アプリのロゴは入れない）
+   ・アプリのホームページ：https://pocket-hisho.igamiigamiigami.workers.dev/
+   ・アプリのプライバシー ポリシーへのリンク：https://pocket-hisho.igamiigamiigami.workers.dev/privacy.html
+   ・承認済みドメイン：igamiigamiigami.workers.dev
+   ・ほかに必須の欄（赤い印）があれば、入れずに、何が必要か私に報告する
+2. 「対象」→「アプリを公開」で本番環境にする。審査（確認）は申し込まない。押せなければ、出ている文言をそのまま報告する
+
+【パート4：身分証（クライアント）を2つ作って、それぞれのアプリに登録】
+3. 講師用：講師用アプリ（https://pocket-hisho.igamiigamiigami.workers.dev/）の ⚙設定 →「Googleカレンダー」に
+   「このボタンは、講師の方のスマホで押してもらうものです」と出ていれば登録済みなので、このステップは飛ばす。
+   出ていなければ「クライアント」→「クライアントを作成」→ ウェブ アプリケーション、名前「pocket-hisho」、
+   承認済みのリダイレクト URI「https://pocket-hisho.igamiigamiigami.workers.dev/api/google/callback」→ 作成 →
+   すぐに ID とシークレットを講師用アプリの「Googleカレンダー」欄に貼って「保存する」
+4. テスト用：「クライアントを作成」→ ウェブ アプリケーション、名前「pocket-hisho-test」、
+   承認済みのリダイレクト URI「https://pocket-hisho-test.igamiigamiigami.workers.dev/api/google/callback」→ 作成 →
+   すぐに ID とシークレットを、テスト用アプリ（https://pocket-hisho-test.igamiigamiigami.workers.dev/）の ⚙設定 →
+   「Googleカレンダー」欄に貼って「保存する」
+5. テスト用アプリの設定に「テスト用のアプリです」と出ていることを確かめ、やったことを報告する（シークレットは書かない）
+```
+
+→ 伊神さんが、**テスト用アプリ**で「Googleカレンダーとつなぐ」を押し、**自分のGoogle**で許可する。
+Googleカレンダーで予定を1つ入れて、1分ほどでテスト用アプリに出れば成功です。
+
+---
+
 ## Googleとつながないときだけ：購読でカレンダーに出す（前のやり方）
 
 ⑦の「Googleカレンダーとつなぐ」を使うなら、**この章は読まなくて大丈夫です**
