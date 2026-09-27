@@ -9,7 +9,7 @@
    通知の条件になる（ブラウザのタブのままでは、この仕組みが使えない）。
    ===================================================================== */
 
-const CACHE = 'pocket-hisho-v2';     // 中身を変えたら数字を上げる（古い取り置きを消すため）
+const CACHE = 'pocket-hisho-v3';     // 中身を変えたら数字を上げる（古い取り置きを消すため）
 const SHELL_URL = '/';          // アプリの画面そのもの
 
 /* 最初に端末へ置いておくファイル。
@@ -62,8 +62,12 @@ self.addEventListener('fetch', (event) => {
       try {
         const res = await withTimeout(fetch(req), 2500);
         if (isUsable(res)) {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(SHELL_URL, copy)).catch(() => {});
+          // 取っておくのは「アプリの画面（/）」だけ。プライバシーポリシーなど別のページを
+          // アプリの画面として取っておくと、電波が無いときにそのページが出てしまう
+          if (url.pathname === SHELL_URL && res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then(c => c.put(SHELL_URL, copy)).catch(() => {});
+          }
           return res;
         }
       } catch (e) { /* つながらない・時間切れ → 下の取り置きへ */ }

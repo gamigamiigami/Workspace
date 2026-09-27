@@ -579,6 +579,14 @@ eq('ログインしていない人は鍵を外せない', unlockNoAuth.status, 4
 eq('入っている端末からは外せる', (await call('POST', '/api/login/unlock')).status, 200);
 eq('外したあとは、正しい合言葉で入れる', (await call('POST', '/api/login', { pass: PASS }, false)).status, 200);
 
+/* ブラウザで直接開かれるサーバーの入口は、アプリの画面ではなくサーバーが答える
+   （Googleの許可画面から戻る先。2026-09-27、実機でアプリの画面が返ってつながらなかった） */
+const navHeaders = { 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document', Accept: 'text/html' };
+const cbNav = await (await fetch(BASE + '/api/google/callback?code=x&state=y', { headers: navHeaders })).text();
+ok('ブラウザで開いたGoogleの戻り先に、サーバーが答える（アプリの画面を返さない）', cbNav.includes('つなげませんでした') && !cbNav.includes('id="screen-app"'), cbNav.slice(0, 120));
+const appNav = await (await fetch(BASE + '/', { headers: navHeaders })).text();
+ok('ふつうのページはアプリの画面のまま', appNav.includes('id="screen-app"'));
+
 /* プライバシーポリシーのページ（Google の同意画面に載せる） */
 const priv = await fetch(BASE + '/privacy.html');
 const privText = await priv.text();

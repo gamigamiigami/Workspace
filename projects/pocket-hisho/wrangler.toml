@@ -11,6 +11,10 @@ compatibility_date = "2025-05-01"
 directory = "./web"
 binding = "ASSETS"
 not_found_handling = "single-page-application"
+# ↓ 大事：ブラウザで直接開かれるサーバーの入口は、画面ファイルより先にサーバー（src/index.js）に渡す。
+#   これが無いと、Googleの許可画面から戻ってきたとき（/api/google/callback）に
+#   アプリの画面が返されてしまい、Googleとつながらない（2026-09-27 に実機で発覚）。
+run_worker_first = ["/api/*", "/ics/*", "/app.webmanifest"]
 
 # 予定とタスクの保管庫（D1）
 # ↓ Cloudflare の画面で作った保管庫の「Database ID」を、database_id の "" の中に貼る。

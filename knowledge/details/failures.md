@@ -2717,3 +2717,41 @@ README に書き、Googleカレンダーとは購読（ICS）だけでつない�
 条件つきの制限を無条件の制限として覚えていると、よりよい方式を最初から捨ててしまう。
 
 **タグ：** #思い込み #OAuth #設計 #確認不足 #pocket-hisho
+
+---
+
+## Googleから戻ってきたのに「つながらない」：ブラウザで開くとサーバーではなく画面ファイルが返っていた
+
+**症状：** ポケット秘書（Cloudflare Workers）。本物の Google で「Googleカレンダーとつなぐ」→ 許可 → 戻ってくると、
+アプリの画面に戻るだけで、ずっと「はじめの準備 あと1つ：Googleカレンダーとつなぐ」のまま。偽の Google を使ったテスト（99項目）は全部合格していた。
+
+**原因：** `wrangler.toml` の `[assets]` で `not_found_handling = "single-page-application"` にしていると、
+`compatibility_date` が新しい（2025-04 以降）場合、**ブラウザが「ページとして開く」要求（`Sec-Fetch-Mode: navigate`）は、
+サーバー（Worker）を通さずに index.html が返る**。Google の戻り先 `/api/google/callback` はブラウザが開くので、
+合鍵の受け取りが一度も動いていなかった。
+
+**なぜテストで見つからなかったか：** テストは Node の `fetch()` で戻り先を呼んでいた（`Sec-Fetch-Mode: navigate` が付かない）ので、サーバーが答えた。
+**本物のブラウザと同じ呼び方になっていなかった。**
+
+**見つけ方（最小の実験）：** 同じURLを `curl` で2通りに呼んで比べた。
+```bash
+curl -s "$U" | head                                              # → サーバーの答え（つなげませんでした）
+curl -s -H 'Sec-Fetch-Mode: navigate' -H 'Accept: text/html' "$U" | head   # → アプリの index.html（ここが本番の動き）
+```
+
+**対処：**
+```toml
+[assets]
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/ics/*", "/app.webmanifest"]   # ブラウザで開かれる入口は先にサーバーへ
+```
+テストの戻り先の呼び出しに `Sec-Fetch-Mode: navigate` を付け、「アプリの画面を返さない」ことを確かめる項目を足した。
+
+**あわせて見つけたもの：** Service Worker がどのページを開いても「アプリの画面」として取っておいていた（プライバシーポリシーのページを開くと、
+電波が無いときにそのページが出る）。取っておくのは `/` だけにした。
+
+**教訓：**
+- **ブラウザが直接開くURL**（OAuth の戻り先・メールのリンク先など）は、テストでも**ブラウザと同じ印（`Sec-Fetch-Mode: navigate`）を付けて**呼ぶ
+- SPA の設定（not_found_handling）を使うときは、サーバーが答えるべき入口を `run_worker_first` に必ず並べる
+
+**タグ：** #Cloudflare #Workers #SPA #OAuth #テストの穴 #pocket-hisho

@@ -223,9 +223,13 @@ for (let i = 0; i < 60; i++) {
 
 let token = '';
 async function call(method, path, body, useToken = true) {
+  // Googleから戻ってくる先は、ブラウザが「ページとして開く」。本物と同じ印を付けて呼ぶ
+  // （付けないと、Cloudflare がアプリの画面を返してしまう不具合を見逃す。2026-09-27 に実機で発覚）
+  const nav = path.startsWith('/api/google/callback')
+    ? { 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document', Accept: 'text/html' } : {};
   const res = await fetch(BASE + path, {
     method, redirect: 'manual',
-    headers: { 'Content-Type': 'application/json', ...(useToken && token ? { Authorization: 'Bearer ' + token } : {}) },
+    headers: { 'Content-Type': 'application/json', ...nav, ...(useToken && token ? { Authorization: 'Bearer ' + token } : {}) },
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const text = await res.text();
