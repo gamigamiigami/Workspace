@@ -52,4 +52,4 @@ APP_LABEL = "テスト用"          # 画面・タブ・ホーム画面の名前
 binding = "DB"
 database_name = "pocket-hisho-test"
 # ↓ テスト用の保管庫「pocket-hisho-test」の Database ID を、この下の行の "" の中に貼る
-database_id = ""
+database_id = "741387b9-d940-482a-8369-3606651162f4"
