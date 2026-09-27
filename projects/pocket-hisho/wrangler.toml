@@ -35,3 +35,21 @@ enabled = true
 #    （ここに書くとGitHubに残ってしまうため、ファイルには書かない）
 #    どうしてもCloudflare側で決めたいときだけ、APP_PASS という秘密の値を登録すると
 #    そちらが優先されます。
+
+# =====================================================================
+# 伊神さんのテスト用（2つ目の公開）。講師用とはデータ・URL・Googleのつながりが別。
+# Cloudflare 側の Worker 名は「pocket-hisho-test」、デプロイコマンドは
+#   npx wrangler deploy --env test
+# （手順は SETUP.md の⑨）
+# =====================================================================
+[env.test]
+name = "pocket-hisho-test"
+
+[env.test.vars]
+APP_LABEL = "テスト用"          # 画面・タブ・ホーム画面の名前に「テスト用」の印を付ける
+
+[[env.test.d1_databases]]
+binding = "DB"
+database_name = "pocket-hisho-test"
+# ↓ テスト用の保管庫「pocket-hisho-test」の Database ID を、この下の行の "" の中に貼る
+database_id = ""

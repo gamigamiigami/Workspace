@@ -579,6 +579,11 @@ eq('ログインしていない人は鍵を外せない', unlockNoAuth.status, 4
 eq('入っている端末からは外せる', (await call('POST', '/api/login/unlock')).status, 200);
 eq('外したあとは、正しい合言葉で入れる', (await call('POST', '/api/login', { pass: PASS }, false)).status, 200);
 
+/* プライバシーポリシーのページ（Google の同意画面に載せる） */
+const priv = await fetch(BASE + '/privacy.html');
+const privText = await priv.text();
+ok('プライバシーポリシーのページが開ける', priv.status === 200 && privText.includes('プライバシーポリシー') && privText.includes('限定使用'));
+
 console.log('\n────────────────────────────');
 console.log('合格 ' + pass + ' ／ 不合格 ' + fail);
 if (failures.length) { console.log('\n不合格の一覧:'); failures.forEach(f => console.log('  - ' + f)); }
