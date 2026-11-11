@@ -1,0 +1,59 @@
+const {chromium}=require('playwright'); const fs=require('fs'); const assert=require('node:assert/strict');
+const path=require('node:path');
+const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
+(async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
+for(let seed=1;seed<=19;seed++){
+ const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
+ await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
+ const result=await page.evaluate(async(seed)=>{
+  let randomSeed=seed;Math.random=()=>{randomSeed^=randomSeed<<13;randomSeed^=randomSeed>>>17;randomSeed^=randomSeed<<5;return (randomSeed>>>0)/4294967296;};
+  docA.words=['こまき','こども','おうじ'].map((text,i)=>({text,id:'a'+i}));docB.words=['こまき','のえる','おうじ'].map((text,i)=>({text,id:'b'+i}));docA.keyword='こまでおれ';docB.keyword='';
+  dual.mode=3;dual.commonSame=false;dual.commonPlacement='free';dual.sameMark=true;dual.wordCount={mode:'max',n:7};
+  if(seed===11){[docA.words,docB.words]=[docB.words,docA.words];[docA.keyword,docB.keyword]=[docB.keyword,docA.keyword];}
+  if(seed===12)docB.keyword='こうきのう';
+  if(seed===13){dual.commonPlacement='different';dual.commonDifferent='all';}
+  if(seed===14)dual.wordCount={mode:'exact',n:7};
+  if(seed===15)docA.maxSize=docB.maxSize=7;
+  if(seed>=16&&seed<=18){
+    docA.words=['さくら','からす','すいか'].map((text,i)=>({text,id:'a'+i}));
+    docB.words=['さくら','からす','すいか'].map((text,i)=>({text,id:'b'+i}));
+    docA.keyword=docB.keyword='さくら';dual.commonSame=true;
+    if(seed===17)dual.mode=1;if(seed===18)dual.mode=2;
+  }
+  if(seed===19)dual.wordCount={mode:'max',n:2};
+  const inputs={a:docA.words.map(w=>w.text),b:docB.words.map(w=>w.text),ka:docA.keyword,kb:docB.keyword};
+  const start=Date.now();await buildDualImpl();
+  const a=structuredClone(docA),b=structuredClone(docB);
+  // Independent geometry checks, without the production completion validator.
+  const check=doc=>{
+    const cells=new Map(),edges=[];const placed=doc.placed;
+    for(let i=0;i<placed.length;i++){
+      const p=placed[i];Array.from(p.text).forEach((ch,j)=>{
+        const r=p.r+(p.dir==='down'?j:0),c=p.c+(p.dir==='across'?j:0),k=r+','+c;
+        if(cells.has(k)&&cells.get(k).ch!==ch)throw Error('crossing mismatch');
+        if(!cells.has(k))cells.set(k,{ch,words:[]});cells.get(k).words.push(i);
+      });
+    }
+    for(const [k,cell] of cells){
+      const [r,c]=k.split(',').map(Number);
+      for(const next of [(r+1)+','+c,r+','+(c+1)])if(cells.has(next)&&!cell.words.some(i=>cells.get(next).words.includes(i)))throw Error('unintended adjacency');
+      for(const i of cell.words)for(const j of cell.words)if(i!==j)edges.push([i,j]);
+    }
+    const reached=new Set([0]);for(let n=0;n<placed.length;n++)for(const [i,j]of edges)if(reached.has(i))reached.add(j);
+    if(reached.size!==placed.length)throw Error('disconnected');
+    return Object.entries(doc.marks).sort((x,y)=>x[1].localeCompare(y[1])).map(([k])=>cells.get(k)?.ch).join('');
+  };
+  return {inputs,seed,ms:Date.now()-start,result:document.querySelector('#dualResult').textContent,a:a.placed,b:b.placed,ka:a.keyword,kb:b.keyword,marksA:a.marks,marksB:b.marks,readA:a.placed.length?check(a):'',readB:b.placed.length?check(b):'',realB:dualDict(0).some(d=>d.text===b.keyword)};
+ },seed);
+ console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
+ if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
+ assert(result.a.length>=3&&result.a.length<=7,result.result);assert.equal(result.a.length,result.b.length);
+ for(const w of result.inputs.a)assert(result.a.some(p=>p.text===w));for(const w of result.inputs.b)assert(result.b.some(p=>p.text===w));
+ if(result.inputs.ka)assert.equal(result.ka,result.inputs.ka);if(result.inputs.kb)assert.equal(result.kb,result.inputs.kb);assert.equal(result.readA,result.ka);assert.equal(result.readB,result.kb);if(!result.inputs.kb)assert(result.realB);if(seed===14)assert.equal(result.a.length,7);
+ if(seed===13)for(const text of ['こまき','おうじ']){const a=result.a.find(p=>p.text===text),b=result.b.find(p=>p.text===text);assert.notDeepEqual([a.r,a.c,a.dir],[b.r,b.c,b.dir]);}
+ if(seed>=16&&seed<=18)for(const text of result.inputs.a){const a=result.a.find(p=>p.text===text),b=result.b.find(p=>p.text===text);assert.deepEqual([a.r,a.c,a.dir],[b.r,b.c,b.dir]);}assert.deepEqual(result.marksA,result.marksB);
+ for(let i=0;i<result.a.length;i++){for(const k of ['r','c','dir'])assert.equal(result.a[i][k],result.b[i][k]);assert.equal(result.a[i].text.length,result.b[i].text.length)}
+ if(seed===1&&process.env.SCREENSHOT_PATH)await page.screenshot({path:process.env.SCREENSHOT_PATH,fullPage:true});
+ await page.close();
+}
+await browser.close();})();

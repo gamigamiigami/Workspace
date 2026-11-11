@@ -6536,14 +6536,18 @@ var qrcode = function() {
       showBusyText(out, 'A と B が両方成り立つ形をさがしています…');
       await tick();
 
-      // Start with the established pool, then broaden to every eligible word.
-      // Both stages share the old ten-second seed budget; registered words remain
-      // mandatory even when they are new additions or user dictionary entries.
+      // Joint slot/mark search uses the full eligible dictionary first. Retain
+      // the established layout searches as fallbacks within the seed budget.
       const seedStart=Date.now();
       const coreByLen=new Map([...dictByLen].map(([n,words])=>[n,words.filter(d=>
         !Object.prototype.hasOwnProperty.call(WORD_PREFERENCE,toKata(d.text)))]).filter(([,words])=>words.length));
       const hasExpansion=[...coreByLen.values()].reduce((n,words)=>n+words.length,0)<dict.length;
-      let seeded=await seedOneSideLayout(hasExpansion?coreByLen:dictByLen,maxLen,countBounds,10000);
+      let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,7000,
+        (shapes,nodes)=>showBusyText(out,'A・Bを同時に組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'));
+      if(!seeded&&JSON.stringify(serializeBoth())===originalSignature){
+        seeded=await seedOneSideLayout(hasExpansion?coreByLen:dictByLen,maxLen,countBounds,
+          Math.max(0,10000-(Date.now()-seedStart)));
+      }
       if(!seeded&&hasExpansion&&JSON.stringify(serializeBoth())===originalSignature){
         seeded=await seedOneSideLayout(dictByLen,maxLen,countBounds,Math.max(0,10000-(Date.now()-seedStart)));
       }
@@ -10721,6 +10725,161 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         if(ordered.map(([k])=>map.get(k)||'').join('')!==word)return 'キーワードの記号から読む文字が一致していません。';
       }
       return '';
+    }
+
+    // ===== 空の形に A・B を同時に割り当てる制約探索 =====
+    // Registered words remain mandatory. A free keyword is kept as a domain of
+    // real dictionary words until registered placements narrow its possible marks.
+    // Required placements, keyword cells and helper words all backtrack together.
+    async function searchDualTemplates(dictByLen,maxLen,bounds,budgetMs=7000,onProgress){
+      if(dual.mode!==3||![docA,docB].some(d=>registeredKeyword(d)))return null;
+      const docs=[docA,docB], required=docs.map(d=>new Set(ownWords(d).map(w=>w.text)));
+      const kw=docs.map(registeredKeyword),dict=[...dictByLen.values()].flat(), deadline=Date.now()+budgetMs;
+      const vocab=docs.map((d,s)=>[...new Set(dict.filter(w=>!required[1-s].has(w.text)||required[s].has(w.text)).map(w=>w.text).concat([...required[s]]))]);
+      const lens=docs.map(d=>ownWords(d).map(w=>chars(w.text).length));
+      const metadata=new Map(dict.map(d=>[d.text,d.meta]));
+      const byLength=vocab.map(v=>{const m=new Map();v.forEach(text=>{const cs=chars(text);if(!m.has(cs.length))m.set(cs.length,[]);m.get(cs.length).push({text,cs});});return m;});
+      const keywordSide=kw[0]?0:kw[1]?1:-1;
+      const keywordChoices=keywordSide<0||!dual.sameMark?null:kw[1-keywordSide]?[chars(kw[1-keywordSide])]:dict.filter(d=>d.len===chars(kw[keywordSide]).length&&d.text!==kw[keywordSide]).map(d=>chars(d.text));
+      let rounds=0,nodes=0,lastYield=Date.now();
+      while(Date.now()<deadline){
+        // A small branching shape is a fast starting point, not a saved answer.
+        // Its slots have no words, letters or marks. Other lengths and shapes are
+        // generated below; both sides are solved against the same empty slots.
+        const branching=[[1,3,3,'across'],[1,4,4,'down'],[3,2,4,'across'],
+          [0,5,2,'down'],[3,2,3,'down'],[4,0,3,'across'],[4,0,3,'down']]
+          .map(([r,c,n,dir])=>({r,c,dir,text:'□'.repeat(n)}));
+        let template,slots;
+        const useBranching=rounds%3===0&&wordCountFits(branching.length)
+          &&(!maxLen||maxLen>=7)
+          &&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length));
+        if(useBranching){
+          slots=branching;template={placed:slots,w:6,h:7};
+        }else{
+          const lengths=[];
+          for(const n of new Set(lens.flat())){
+            const count=Math.max(...lens.map(list=>list.filter(x=>x===n).length));
+            for(let i=0;i<count;i++)lengths.push(n);
+          }
+          if(lengths.length>bounds.max)return null;
+          const target=Math.min(bounds.max,Math.max(lengths.length+2,bounds.min)+rounds%3);
+          if(target>20)return null; // Leave large boards to the established pool search.
+          const helperLengths=[...dictByLen.keys()].filter(n=>n<=Math.min(maxLen||5,5));
+          while(lengths.length<target){
+            if(!helperLengths.length)break;
+            lengths.push(helperLengths[Math.floor(Math.random()*helperLengths.length)]);
+          }
+          if(!lengths.length)return null;
+          const items=lengths.map((n,i)=>({text:'slot'+i,cs:Array(n).fill('□')}));
+          template=tryLayout(items,connectivity(items),maxLen||12,new Set());
+          if(template.placed.length!==target||!wordCountFits(target)){rounds++;await tick();continue;}
+          slots=template.placed.map(p=>({...p,text:'□'.repeat(lengths[Number(p.text.slice(4))])}));
+        }
+        rounds++;
+        const cellKeys=slots.map(p=>wordCells(p).map(c=>key(c.r,c.c))),allKeys=[...new Set(cellKeys.flat())];
+        const vars=[0,1].flatMap(s=>slots.map((p,i)=>({s,i,keys:cellKeys[i],domain:shuffleArr(byLength[s].get(cellKeys[i].length)||[])})));
+        const indexes=vars.map(v=>v.keys.map((_,j)=>{const idx=new Map();v.domain.forEach(w=>{const ch=w.cs[j];if(!idx.has(ch))idx.set(ch,[]);idx.get(ch).push(w);});return idx;}));
+        const cellOwners=new Map();vars.forEach((v,i)=>v.keys.forEach((k,j)=>{const id=v.s+':'+k;if(!cellOwners.has(id))cellOwners.set(id,[]);cellOwners.get(id).push({i,j});}));
+        const assigned=Array(vars.length).fill(null),maps=[new Map(),new Map()],used=[new Set(),new Set()];
+        const shapeDeadline=Math.min(deadline,Date.now()+(useBranching?1400:600));
+        let result=null;
+        async function search(count,choicesKw,keywordLocked=false){
+          if(Date.now()>shapeDeadline)return false;
+          nodes++;
+          if(Date.now()-lastYield>40){
+            if(onProgress)onProgress(rounds,nodes);
+            await tick();lastYield=Date.now();
+          }
+          if(count===vars.length){
+            const placed=slots.map((p,i)=>({...p,text:pairOf(assigned[i].text,assigned[i+slots.length].text)}));
+            const saved=keywordSearchTarget;let plan;
+            try{keywordSearchTarget=keywordLocked?(keywordSide===0?{a:kw[0],b:keywordLocked}:{a:keywordLocked,b:kw[1]}):null;plan=planDualKeywords(placed,30);}finally{keywordSearchTarget=saved;}
+            if(plan&&!validateHardDualConditions(placed,plan)){result={res:{...template,placed,failed:[],kwMiss:0},plan,pairs:placed.map(p=>({a:pairA(p.text),b:pairB(p.text),text:p.text,metaA:metadata.get(pairA(p.text))||'',metaB:metadata.get(pairB(p.text))||''}))};return true;}
+            return false;
+          }
+          const available=new Map();let bestI=-1,best=null;
+          for(let i=0;i<vars.length;i++)if(!assigned[i]){
+            const v=vars[i],map=maps[v.s];let domain=v.domain;
+            v.keys.forEach((k,j)=>{if(map.has(k)){const matching=indexes[i][j].get(map.get(k))||[];if(matching.length<domain.length)domain=matching;}});
+            const valid=domain.filter(w=>!used[v.s].has(w.text)&&v.keys.every((k,j)=>!map.has(k)||map.get(k)===w.cs[j]));
+            if(!valid.length)return false;available.set(i,valid);
+            if(!best||valid.length<best.length){best=valid;bestI=i;}
+          }
+          // Place mandatory words on BOTH sides before choosing helper words.
+          // A scarce slot is reserved, but any conflicting assignment can unwind.
+          let forced=null;
+          for(let s=0;s<2;s++)for(const text of required[s])if(!used[s].has(text)){
+            const fits=[];available.forEach((vs,i)=>{if(vars[i].s===s){const w=vs.find(w=>w.text===text);if(w)fits.push({i,w});}});
+            if(!fits.length)return false;if(!forced||fits.length<forced.length)forced=fits;
+          }
+          if(choicesKw&&count>=required[0].size+required[1].size-1){
+            const possible=[new Map(),new Map()];
+            for(let s=0;s<2;s++)for(const k of allKeys){
+              if(maps[s].has(k)){possible[s].set(k,new Set([maps[s].get(k)]));continue;}
+              let set=null;
+              for(const owner of cellOwners.get(s+':'+k)||[]){
+                if(assigned[owner.i])continue;
+                const values=new Set((available.get(owner.i)||[]).map(w=>w.cs[owner.j]));
+                set=set?new Set([...set].filter(ch=>values.has(ch))):values;
+              }
+              possible[s].set(k,set||new Set());
+            }
+            const allowed=new Map();
+            for(const ch of new Set(chars(kw[keywordSide]))){
+              const values=new Set();for(const k of allKeys)if(possible[keywordSide].get(k).has(ch))possible[1-keywordSide].get(k).forEach(b=>values.add(b));allowed.set(ch,values);
+            }
+            choicesKw=choicesKw.filter(cs=>cs.every((ch,i)=>allowed.get(chars(kw[keywordSide])[i]).has(ch)));
+            if(!choicesKw.length)return false;
+          }
+          // Narrow the free keyword from currently possible cell pairs. Then
+          // branch on distinct mark cells and propagate their letters into both
+          // word domains; do not guess one keyword before placing registrations.
+          if(!forced&&choicesKw&&!keywordLocked){
+            const knownChars=chars(kw[keywordSide]);
+            const supports=(s,k,ch)=>maps[s].has(k)?maps[s].get(k)===ch:(cellOwners.get(s+':'+k)||[]).every(({i,j})=>assigned[i]?assigned[i].cs[j]===ch:available.get(i)?.some(w=>w.cs[j]===ch));
+            const candidates=choicesKw.map(cs=>{const matches=knownChars.map((ch,i)=>allKeys.filter(k=>supports(keywordSide,k,ch)&&supports(1-keywordSide,k,cs[i])));return {cs,matches,cost:matches.reduce((n,ks)=>n*Math.max(1,ks.length),1)};})
+              .filter(c=>c.matches.every(ks=>ks.length)).sort((a,b)=>a.cost-b.cost);
+            for(const candidate of candidates){
+              const order=candidate.matches.map((ks,i)=>({ks,i})).sort((a,b)=>a.ks.length-b.ks.length),taken=new Set();
+              async function marks(at){
+                if(Date.now()>shapeDeadline)return false;
+                if(at===order.length)return search(count,null,candidate.cs.join(''));
+                const {ks,i}=order[at];
+                for(const k of ks){
+                  if(taken.has(k))continue;
+                  const oldMaps=maps.slice();maps[0]=new Map(maps[0]);maps[1]=new Map(maps[1]);
+                  maps[keywordSide].set(k,knownChars[i]);maps[1-keywordSide].set(k,candidate.cs[i]);taken.add(k);
+                  if(await marks(at+1))return true;
+                  maps[0]=oldMaps[0];maps[1]=oldMaps[1];taken.delete(k);
+                }
+                return false;
+              }
+              if(await marks(0))return true;
+              if(Date.now()>shapeDeadline)break;
+            }
+            return false;
+          }
+          const branches=forced?shuffleArr(forced):best.map(w=>({i:bestI,w}));
+          for(const {i,w} of branches){
+            if(Date.now()>shapeDeadline)break;
+            const v=vars[i],s=v.s,old=maps[s];
+            if(dual.commonSame){
+              const mateIndex=(1-s)*slots.length+v.i,otherPlaced=assigned[mateIndex];
+              if(required[1-s].has(w.text)&&otherPlaced&&otherPlaced.text!==w.text)continue;
+              if(assigned.some((x,j)=>x?.text===w.text&&vars[j].s===1-s&&vars[j].i!==v.i))continue;
+            }
+            assigned[i]=w;maps[s]=new Map(old);v.keys.forEach((k,j)=>maps[s].set(k,w.cs[j]));used[s].add(w.text);
+            if(await search(count+1,choicesKw,keywordLocked))return true;
+            assigned[i]=null;maps[s]=old;used[s].delete(w.text);
+          }
+          return false;
+        }
+        await search(0,keywordChoices);
+        if(result)return result;
+
+        await tick();
+      }
+      return null;
     }
 
     async function seedOneSideLayout(dictByLen, maxLen, countBounds, budgetMs=10000) {
