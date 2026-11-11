@@ -6479,6 +6479,8 @@ var qrcode = function() {
       // キーワードを自動で決めるかどうかは、作りはじめる前に決めておく
       // （作ったあとに決めると、盤面の大きさが足りなくなるため）
       const inputKeywordA=registeredKeyword(docA), inputKeywordB=registeredKeyword(docB);
+      const avoidKeywords=[docA,docB].map(doc=>doc.keywordAuto&&doc.keyword?[doc.keyword]:[]);
+      const changingKeyword=avoidKeywords.some(list=>list.length);
       const oneKeyword = !!inputKeywordA !== !!inputKeywordB;
       const autoKw = oneKeyword || wantAutoKeyword();
       const originalSignature = JSON.stringify(serializeBoth());
@@ -6530,7 +6532,7 @@ var qrcode = function() {
         ? kwA.map((ch, i) => pairOf(ch, kwB[i])) : [];
 
       const t0 = Date.now();
-      const BUDGET = dual.mode===3?15000:9000;   // 全体でこれくらいまで（組文字は交差しにくいので、ふつうより長めに取る）
+      const BUDGET = dual.mode===3?(changingKeyword?25000:15000):9000;   // 全体でこれくらいまで（組文字は交差しにくいので、ふつうより長めに取る）
       let best = null, bestPairs = null, bestKeywordPlan = null;
       let round = 0;
       showBusyText(out, 'A と B が両方成り立つ形をさがしています…');
@@ -6542,8 +6544,12 @@ var qrcode = function() {
       const coreByLen=new Map([...dictByLen].map(([n,words])=>[n,words.filter(d=>
         !Object.prototype.hasOwnProperty.call(WORD_PREFERENCE,toKata(d.text)))]).filter(([,words])=>words.length));
       const hasExpansion=[...coreByLen.values()].reduce((n,words)=>n+words.length,0)<dict.length;
-      let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,7000,
-        (shapes,nodes)=>showBusyText(out,'A・Bを同時に組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'));
+      let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,changingKeyword?14000:7000,
+        (shapes,nodes)=>showBusyText(out,(changingKeyword?'別のキーワードで':'A・Bを同時に')+'組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'),
+        {avoidKeywords});
+      if(!seeded&&changingKeyword&&JSON.stringify(serializeBoth())===originalSignature){
+        seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,3000);
+      }
       if(!seeded&&JSON.stringify(serializeBoth())===originalSignature){
         seeded=await seedOneSideLayout(hasExpansion?coreByLen:dictByLen,maxLen,countBounds,
           Math.max(0,10000-(Date.now()-seedStart)));
@@ -6759,6 +6765,8 @@ var qrcode = function() {
             : '')
         : ' <span style="color:var(--ng)">' + mk.msg + '</span>';
       msg += autoMsg;
+      if(changingKeyword&&!avoidKeywords.some((list,i)=>list.length&&!list.includes([docA,docB][i].keyword)))
+        msg += ' 別のキーワードは今回の探索で見つからなかったため、前回と同じキーワードです。';
       if(best.reused)msg += ' 今の条件を確認し、前回の配置を再利用しました。';
       msg += '<br>「👀 見くらべ」で、A と B が同じ形になっているか確かめてください。';
       out.innerHTML = msg;
@@ -10418,11 +10426,26 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       dualRefilling=true;renderDualTools();out.textContent='形と確定した語を保って、A・Bの候補を探しています…';
       try {
         let result=null;
+        const refillDeadline=Date.now()+9000;
+        const freeKeyword=[docA,docB].some(doc=>doc.keywordAuto&&doc.keyword);
+        let keywordSearchMissed=false;
+        if(freeKeyword&&dual.mode===3){
+          const dictionary=dualDict(0),byLength=new Map();
+          dictionary.forEach(d=>{if(!byLength.has(d.len))byLength.set(d.len,[]);byLength.get(d.len).push(d);});
+          const sizes=[docA.maxSize,docB.maxSize].filter(n=>n>0);
+          const found=await searchDualTemplates(byLength,sizes.length?Math.min(...sizes):0,wordCountBounds(),6000,
+            (shapes,nodes)=>{out.textContent='同じ形で別のキーワードを探しています…（'+nodes+'通り）';},
+            {slots:pa,avoidKeywords:[docA,docB].map(doc=>doc.keywordAuto?[doc.keyword]:[])});
+          if(found){
+            result={a:found.res.placed.map(p=>pairA(p.text)),b:found.res.placed.map(p=>pairB(p.text)),
+              marks:[found.plan.marksA,found.plan.marksB],keywords:[found.plan.a,found.plan.b]};
+          }else keywordSearchMissed=true;
+        }
         const vocabularyA=vocab(docA),vocabularyB=vocab(docB);
         const docs=[docA,docB],old=[pa,pb],required=[requiredA,requiredB],vocabularies=[vocabularyA,vocabularyB];
         const fixedCells=docs.map(doc=>doc.keyword?new Map():marked(doc));
         const diversity=refillDiversity(JSON.stringify(['dual',pa.map(p=>[p.r,p.c,p.dir,chars(p.text).length]),[...requiredA].sort(),[...requiredB].sort(),docA.keyword,docB.keyword,[...fixedCells[0]],[...fixedCells[1]],dual.mode,dual.sameMark,commonPlacementMode(),dual.commonDifferent,$('#findLevel').value,$('#findKyoiku').checked,$('#findKana').value]),[pa.map(p=>p.text),pb.map(p=>p.text)]);
-        const deadline=Date.now()+9000;
+        const deadline=refillDeadline;
         const first=Math.random()<.5?0:1;
         for(const lead of [first,1-first]){
           if(result||Date.now()>=deadline)break;
@@ -10467,17 +10490,21 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           });
         }
         if(JSON.stringify(serializeBoth())!==before){out.textContent='編集中の変更があったため中止しました。もう一度押してください。';return;}
-        if(!result){out.textContent='今回の探索では別の配置・語の組み合わせが見つかりませんでした。過去の候補も含めて探索しています。もう一度試すか、条件を見直してください。';return;}
+        if(!result){out.textContent=keywordSearchMissed?'この形では、別のキーワードや語の組み合わせが今回の探索で見つかりませんでした。別のキーワードを優先して形から探すには「同時に作る」を押してください。':'今回の探索では別の配置・語の組み合わせが見つかりませんでした。過去の候補も含めて探索しています。もう一度試すか、条件を見直してください。';return;}
         snapshot();diversity.remember([result.a,result.b]);let count=0;
-        [[docA,pa,result.a,result.marks[0]],[docB,pb,result.b,result.marks[1]]].forEach(([doc,old,texts,marks])=>{
+        [[docA,pa,result.a,result.marks[0]],[docB,pb,result.b,result.marks[1]]].forEach(([doc,old,texts,marks],index)=>{
+          if(result.keywords)doc.keyword=result.keywords[index];
           doc.marks=marks;
           doc.placed=old.map((p,i)=>{if(p.text!==texts[i])count++;return {...p,text:texts[i]};});
           doc.words=doc.words.filter(w=>!w.auto||w.fixed||texts.includes(w.text));
           texts.forEach(t=>{if(!doc.words.some(w=>w.text===t))doc.words.push({id:uid(),text:t,auto:true});});
           doc.selWordId=null;doc.selPlacedId=null;
         });
-        clueSig='';clearCycle();refresh();renderCompare();
-        out.textContent='A・Bで'+count+'語を入れ替えました。もう一度押すと別の候補を探します。';
+        syncWordFields();clueSig='';clearCycle();refresh();renderCompare();
+        out.textContent=(count?'A・Bで'+count+'語を入れ替えました。':'語の配置を保って、キーワードを変更しました。')
+          +(result.keywords?' キーワード：A「'+docA.keyword+'」／B「'+docB.keyword+'」。':
+            keywordSearchMissed?' この形では別のキーワードが今回見つからなかったため、キーワードを保って語を入れ替えました。':'')
+          +'もう一度押すと別の候補を探します。';
       } finally {dualRefilling=false;renderDualTools();}
     }
 
@@ -10731,7 +10758,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
     // Registered words remain mandatory. A free keyword is kept as a domain of
     // real dictionary words until registered placements narrow its possible marks.
     // Required placements, keyword cells and helper words all backtrack together.
-    async function searchDualTemplates(dictByLen,maxLen,bounds,budgetMs=7000,onProgress){
+    async function searchDualTemplates(dictByLen,maxLen,bounds,budgetMs=7000,onProgress,options={}){
       if(dual.mode!==3||![docA,docB].some(d=>registeredKeyword(d)))return null;
       const docs=[docA,docB], required=docs.map(d=>new Set(ownWords(d).map(w=>w.text)));
       const kw=docs.map(registeredKeyword),dict=[...dictByLen.values()].flat(), deadline=Date.now()+budgetMs;
@@ -10740,21 +10767,36 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       const metadata=new Map(dict.map(d=>[d.text,d.meta]));
       const byLength=vocab.map(v=>{const m=new Map();v.forEach(text=>{const cs=chars(text);if(!m.has(cs.length))m.set(cs.length,[]);m.get(cs.length).push({text,cs});});return m;});
       const keywordSide=kw[0]?0:kw[1]?1:-1;
-      const keywordChoices=keywordSide<0||!dual.sameMark?null:kw[1-keywordSide]?[chars(kw[1-keywordSide])]:dict.filter(d=>d.len===chars(kw[keywordSide]).length&&d.text!==kw[keywordSide]).map(d=>chars(d.text));
+      const keywordChoices=keywordSide<0||!dual.sameMark?null:kw[1-keywordSide]?[chars(kw[1-keywordSide])]:dict.filter(d=>d.len===chars(kw[keywordSide]).length&&d.text!==kw[keywordSide]&&!(options.avoidKeywords?.[1-keywordSide]||[]).includes(d.text)).map(d=>chars(d.text));
       let rounds=0,nodes=0,lastYield=Date.now();
       while(Date.now()<deadline){
         // A small branching shape is a fast starting point, not a saved answer.
         // Its slots have no words, letters or marks. Other lengths and shapes are
         // generated below; both sides are solved against the same empty slots.
-        const branching=[[1,3,3,'across'],[1,4,4,'down'],[3,2,4,'across'],
-          [0,5,2,'down'],[3,2,3,'down'],[4,0,3,'across'],[4,0,3,'down']]
+        const catalogue=[
+          [[1,3,3,'across'],[1,4,4,'down'],[3,2,4,'across'],
+            [0,5,2,'down'],[3,2,3,'down'],[4,0,3,'across'],[4,0,3,'down']],
+          [[2,1,4,'across'],[2,1,4,'down'],[2,3,3,'down'],
+            [4,3,3,'across'],[3,5,3,'down'],[5,0,3,'across'],[0,2,3,'down']],
+          [[2,0,4,'across'],[2,2,4,'down'],[4,1,3,'across'],
+            [1,0,3,'down'],[0,3,3,'down'],[0,3,3,'across'],[0,5,2,'down']]
+        ];
+        const alternative=options.avoidKeywords?.some(list=>list.length)?1:0;
+        const branching=catalogue[(Math.floor(rounds/3)+alternative)%catalogue.length]
           .map(([r,c,n,dir])=>({r,c,dir,text:'□'.repeat(n)}));
+        const branchCells=branching.flatMap(wordCells),branchWidth=Math.max(...branchCells.map(c=>c.c))+1,branchHeight=Math.max(...branchCells.map(c=>c.r))+1;
         let template,slots;
         const useBranching=rounds%3===0&&wordCountFits(branching.length)
-          &&(!maxLen||maxLen>=7)
+          &&(!maxLen||Math.max(branchWidth,branchHeight)<=maxLen)
           &&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length));
-        if(useBranching){
-          slots=branching;template={placed:slots,w:6,h:7};
+        if(options.slots){
+          slots=options.slots.map(p=>({...p,text:'□'.repeat(chars(p.text).length)}));
+          if(!wordCountFits(slots.length))return null;
+          const cells=slots.flatMap(wordCells),rs=cells.map(c=>c.r),cs=cells.map(c=>c.c);
+          template={placed:slots,w:Math.max(...cs)-Math.min(...cs)+1,h:Math.max(...rs)-Math.min(...rs)+1};
+          if(maxLen&&(template.w>maxLen||template.h>maxLen))return null;
+        }else if(useBranching){
+          slots=branching;template={placed:slots,w:branchWidth,h:branchHeight};
         }else{
           const lengths=[];
           for(const n of new Set(lens.flat())){
@@ -10770,9 +10812,14 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             lengths.push(helperLengths[Math.floor(Math.random()*helperLengths.length)]);
           }
           if(!lengths.length)return null;
+          // Reuse useful length distributions without reusing their letters or
+          // crossings. Moving registrations often needs a fourth matching slot.
+          if(rounds%3===1&&wordCountFits(branching.length)&&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length))){
+            lengths.splice(0,lengths.length,...branching.map(p=>p.text.length));
+          }
           const items=lengths.map((n,i)=>({text:'slot'+i,cs:Array(n).fill('□')}));
           template=tryLayout(items,connectivity(items),maxLen||12,new Set());
-          if(template.placed.length!==target||!wordCountFits(target)){rounds++;await tick();continue;}
+          if(template.placed.length!==items.length||!wordCountFits(items.length)){rounds++;await tick();continue;}
           slots=template.placed.map(p=>({...p,text:'□'.repeat(lengths[Number(p.text.slice(4))])}));
         }
         rounds++;
@@ -10781,7 +10828,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         const indexes=vars.map(v=>v.keys.map((_,j)=>{const idx=new Map();v.domain.forEach(w=>{const ch=w.cs[j];if(!idx.has(ch))idx.set(ch,[]);idx.get(ch).push(w);});return idx;}));
         const cellOwners=new Map();vars.forEach((v,i)=>v.keys.forEach((k,j)=>{const id=v.s+':'+k;if(!cellOwners.has(id))cellOwners.set(id,[]);cellOwners.get(id).push({i,j});}));
         const assigned=Array(vars.length).fill(null),maps=[new Map(),new Map()],used=[new Set(),new Set()];
-        const shapeDeadline=Math.min(deadline,Date.now()+(useBranching?1400:600));
+        const shapeDeadline=Math.min(deadline,Date.now()+(useBranching?(options.avoidKeywords?.some(list=>list.length)?6000:1400):600));
         let result=null;
         async function search(count,choicesKw,keywordLocked=false){
           if(Date.now()>shapeDeadline)return false;
