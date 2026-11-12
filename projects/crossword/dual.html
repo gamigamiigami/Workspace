@@ -6463,16 +6463,34 @@ var qrcode = function() {
       return !chars(registeredKeyword(docA)).length || !chars(registeredKeyword(docB)).length;
     }
 
+    // Compare visible cell shapes independently of their origin, letters and
+    // word order. Rotating or mirroring an old shape is not a new shape.
+    function dualShapeKey(placed){
+      const cells=new Map();
+      placed.forEach(p=>wordCells({...p,text:p.text.includes(PSEP)?pairA(p.text):p.text})
+        .forEach(c=>cells.set(key(c.r,c.c),[c.r,c.c])));
+      if(!cells.size)return '';
+      const variants=[];
+      for(const swap of [false,true])for(const flipR of [-1,1])for(const flipC of [-1,1]){
+        const points=[...cells.values()].map(([r,c])=>swap?[c*flipR,r*flipC]:[r*flipR,c*flipC]);
+        const minR=Math.min(...points.map(p=>p[0])),minC=Math.min(...points.map(p=>p[1]));
+        variants.push(points.map(([r,c])=>[r-minR,c-minC]).sort((a,b)=>a[0]-b[0]||a[1]-b[1]).map(p=>p.join(',')).join(';'));
+      }
+      return variants.sort()[0];
+    }
+
     // ===== 本体：A と B を同時に作る =====
-    async function buildDual() {
+    async function buildDual(options={}) {
       if (dualBuilding || dualRefilling) return;
       dualBuilding = true; renderDualTools();
-      try { await buildDualImpl(); }
+      try { await buildDualImpl(options); }
       finally { keywordSearchTarget=null; dualBuilding = false; renderDualTools(); }
     }
 
-    async function buildDualImpl() {
+    async function buildDualImpl(options={}) {
       const out = $('#dualResult');
+      const differentShape=!!options.differentShape&&docA.placed.length>0;
+      const rejectShapes=new Set(differentShape?[dualShapeKey(docA.placed)]:[]);
       if (rejectWordCount()) return;
       const countBounds=wordCountBounds();
       const minBoardWords=countBounds.max===1?1:2;
@@ -6546,16 +6564,16 @@ var qrcode = function() {
       const hasExpansion=[...coreByLen.values()].reduce((n,words)=>n+words.length,0)<dict.length;
       let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,changingKeyword?14000:7000,
         (shapes,nodes)=>showBusyText(out,(changingKeyword?'別のキーワードで':'A・Bを同時に')+'組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'),
-        {avoidKeywords});
+        {avoidKeywords,rejectShapes});
       if(!seeded&&changingKeyword&&JSON.stringify(serializeBoth())===originalSignature){
-        seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,3000);
+        seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,3000,null,{rejectShapes});
       }
       if(!seeded&&JSON.stringify(serializeBoth())===originalSignature){
         seeded=await seedOneSideLayout(hasExpansion?coreByLen:dictByLen,maxLen,countBounds,
-          Math.max(0,10000-(Date.now()-seedStart)));
+          Math.max(0,10000-(Date.now()-seedStart)),{rejectShapes});
       }
       if(!seeded&&hasExpansion&&JSON.stringify(serializeBoth())===originalSignature){
-        seeded=await seedOneSideLayout(dictByLen,maxLen,countBounds,Math.max(0,10000-(Date.now()-seedStart)));
+        seeded=await seedOneSideLayout(dictByLen,maxLen,countBounds,Math.max(0,10000-(Date.now()-seedStart)),{rejectShapes});
       }
       if(seeded){best=seeded.res;bestPairs=seeded.pairs;bestKeywordPlan=seeded.plan;
         best._rank={missing:0,ready:true,words:best.placed.length};}
@@ -6632,7 +6650,7 @@ var qrcode = function() {
         const res = await generatePairLayout(items, 220, 1400, req, maxLen,
           (n) => showBusyText(out, 'A と B が両方成り立つ形をさがしています…（'
             + round + '回目・' + n + '通り）'));
-        if (res) {
+        if (res && !rejectShapes.has(dualShapeKey(res.placed))) {
           anyLayout = true;
           const missing = missingRegistered(res.placed);
           const plan = !missing.length && res.placed.length >= minBoardWords && !res.kwMiss && wordCountFits(res.placed.length)
@@ -6651,7 +6669,7 @@ var qrcode = function() {
       // A larger dictionary can change randomized exploration. If no new answer
       // was found, a previous layout is usable only after every current constraint
       // and keyword has been checked again. Never retain a stale invalid answer.
-      if(!bestKeywordPlan && dual.mode===3 && reusableDualLayout(dict)
+      if(!differentShape && !bestKeywordPlan && dual.mode===3 && reusableDualLayout(dict)
           && JSON.stringify(serializeBoth())===originalSignature
           && docA.placed.length && docA.placed.length===docB.placed.length
           && docA.placed.every((p,i)=>{const q=docB.placed[i];return p.r===q.r&&p.c===q.c&&p.dir===q.dir&&chars(p.text).length===chars(q.text).length;})){
@@ -6668,6 +6686,11 @@ var qrcode = function() {
             bestKeywordPlan=plan;
           }
         }
+      }
+
+      if(differentShape&&(!bestKeywordPlan||!best?.placed.length||rejectShapes.has(dualShapeKey(best.placed)))){
+        out.textContent='今回の探索では、条件を満たす別の形が見つかりませんでした。現在の盤面は変更していません。';
+        $('#genResult').textContent=out.textContent;return;
       }
 
       // 「登録した語が全部入る」ことは①②③どのモードでも約束する。1語でも入らなければ作らない。
@@ -6767,6 +6790,7 @@ var qrcode = function() {
       msg += autoMsg;
       if(changingKeyword&&!avoidKeywords.some((list,i)=>list.length&&!list.includes([docA,docB][i].keyword)))
         msg += ' 別のキーワードは今回の探索で見つからなかったため、前回と同じキーワードです。';
+      if(differentShape)msg += ' 前回とは別の形です。';
       if(best.reused)msg += ' 今の条件を確認し、前回の配置を再利用しました。';
       msg += '<br>「👀 見くらべ」で、A と B が同じ形になっているか確かめてください。';
       out.innerHTML = msg;
@@ -8239,11 +8263,12 @@ var qrcode = function() {
         saveLocal();
       });
       // 同時に作る（このページの「作る」は、すべてここを通る）
-      runDual = () => {
+      runDual = (event) => {
+        const differentShape=['btnDualMore','btnRegenerate'].includes(event?.currentTarget?.id);
         const btns = ['#btnDualBuild', '#btnDualMore', '#btnGenerate', '#btnGoBuild', '#btnFitWords', '#btnRegenerate']
           .map(sel => $(sel)).filter(Boolean);
         setWorking(btns, true);
-        Promise.resolve(buildDual()).finally(() => setWorking(btns, false));
+        Promise.resolve(buildDual({differentShape})).finally(() => setWorking(btns, false));
       };
       $('#btnDualBuild').addEventListener('click', runDual);
       $('#btnDualMore').addEventListener('click', runDual);
@@ -10871,6 +10896,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           slots=template.placed.map(p=>({...p,text:'□'.repeat(lengths[Number(p.text.slice(4))])}));
         }
         rounds++;
+        if(options.rejectShapes?.has(dualShapeKey(slots))){await tick();continue;}
         const cellKeys=slots.map(p=>wordCells(p).map(c=>key(c.r,c.c))),allKeys=[...new Set(cellKeys.flat())];
         const vars=[0,1].flatMap(s=>slots.map((p,i)=>({s,i,keys:cellKeys[i],
           domain:shuffleArr(byLength[s].get(cellKeys[i].length)||[]).sort((a,b)=>
@@ -10984,7 +11010,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       return null;
     }
 
-    async function seedOneSideLayout(dictByLen, maxLen, countBounds, budgetMs=10000) {
+    async function seedOneSideLayout(dictByLen, maxLen, countBounds, budgetMs=10000, options={}) {
       if(dual.mode!==3)return null;
       // An unlimited board also includes compact solutions. Search those first;
       // the caller's general search still uses the user's original size limit.
@@ -11069,6 +11095,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         let template=null;
         for(let attempt=0;attempt<100;attempt++){
           const r=tryLayout(items,conn,maxLen,templateRequired);
+          if(options.rejectShapes?.has(dualShapeKey(r.placed)))continue;
           if([...templateRequired].some(t=>!r.placed.some(p=>p.text===t))||missing(r.placed)||!wordCountFits(r.placed.length))continue;
           // Before accepting a shape, check the opposite side's forced slots.
           // Otherwise the first A-only layout can consume every retry even when

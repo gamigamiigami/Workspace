@@ -23,3 +23,7 @@ checked independently for every intermediate refill result.
 
 History saturation regressions ensure that all previously seen local replacements remain
 available, including after a separate confirmed word changes from わきん to れきし.
+
+Different-shape button checks exercise both DOM handlers, compare occupied-cell geometry
+independently (including translations, rotations and reflections), and verify that an
+impossible different-shape search preserves the entire project and reports failure.

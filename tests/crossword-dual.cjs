@@ -1,9 +1,15 @@
 const {chromium}=require('playwright'); const fs=require('fs'); const assert=require('node:assert/strict');
 const path=require('node:path');
 const fixtureCount=seed=>seed>=24?8:7;
+function equivalentShape(a,b){
+ const cells=words=>{const set=new Set();for(const w of words)Array.from(w.text).forEach((_,i)=>set.add([w.r+(w.dir==='down'?i:0),w.c+(w.dir==='across'?i:0)].join(',')));return [...set].map(k=>k.split(',').map(Number));};
+ const normalize=points=>{const top=Math.min(...points.map(p=>p[0])),left=Math.min(...points.map(p=>p[1]));return points.map(([r,c])=>[r-top,c-left].join(',')).sort().join(';');};
+ const original=cells(a),target=normalize(cells(b));
+ return [false,true].some(swap=>[-1,1].some(x=>[-1,1].some(y=>normalize(original.map(([r,c])=>swap?[c*x,r*y]:[r*x,c*y]))===target)));
+}
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=29;seed++){
+for(let seed=1;seed<=33;seed++){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -22,9 +28,34 @@ for(let seed=1;seed<=29;seed++){
     if(seed===17)dual.mode=1;if(seed===18)dual.mode=2;
   }
   if(seed===19)dual.wordCount={mode:'max',n:2};
+  if(seed===33){
+    docA.words=['あり','りす'].map((text,i)=>({text,id:'a'+i}));
+    docB.words=['あり','りす'].map((text,i)=>({text,id:'b'+i}));
+    docA.keyword=docB.keyword='あり';dual.mode=1;dual.commonSame=true;dual.wordCount={mode:'max',n:2};
+  }
   if(fixture)applyBoth(fixture);
   const inputs={a:ownWords(docA).map(w=>w.text),b:ownWords(docB).map(w=>w.text),ka:docA.keyword,kb:docB.keyword};
   const start=Date.now();if(!fixture)await buildDualImpl();
+  let beforeShape=null;
+  if(seed===30){
+    const base=[{r:0,c:0,text:'あ',dir:'across'},{r:0,c:1,text:'い',dir:'across'},{r:1,c:0,text:'う',dir:'across'}];
+    const shape=dualShapeKey(base);
+    for(const swap of [false,true])for(const flip of [-1,1])for(const turn of [-1,1]){
+      const moved=base.map(p=>({...p,r:20+flip*(swap?p.c:p.r),c:20+turn*(swap?p.r:p.c),text:'か'}));
+      if(dualShapeKey(moved)!==shape)throw Error('shape key depends on position, orientation or letters');
+    }
+    if(dualShapeKey(base.map((p,i)=>({...p,r:0,c:i})))===shape)throw Error('different occupied shapes considered equal');
+  }
+  if(seed===31||seed===32||seed===33){
+    beforeShape=structuredClone(docA.placed);const before=JSON.stringify(serializeBoth());
+    document.querySelector(seed===31?'#btnDualMore':'#btnRegenerate').click();
+    while(dualBuilding)await tick();
+    if(seed===33){
+      if(JSON.stringify(serializeBoth())!==before)throw Error('failed different-shape search mutated the project');
+      const message=document.querySelector('#dualResult').textContent;
+      if(!message.includes('別の形が見つかりません')||!message.includes('変更していません'))throw Error('same shape reported as successful replacement');
+    }
+  }
   const geometry=()=>JSON.stringify(docA.placed.map(p=>[p.r,p.c,p.dir,p.text.length]));
   const keywordFlow=[docB.keyword],flowBoards=[];
   let sameGeometry=true;
@@ -115,14 +146,15 @@ for(let seed=1;seed<=29;seed++){
     return Object.entries(doc.marks).sort((x,y)=>x[1].localeCompare(y[1])).map(([k])=>cells.get(k)?.ch).join('');
   };
   for(const boards of flowBoards)for(const doc of boards)if(check(doc)!==doc.keyword)throw Error('intermediate keyword mismatch');
-  return {keywordFlow,sameGeometry,inputB:document.querySelector('#keywordInputB').value,autoB:docB.keywordAuto,inputs,seed,ms:Date.now()-start,result:document.querySelector('#dualResult').textContent,a:a.placed,b:b.placed,ka:a.keyword,kb:b.keyword,marksA:a.marks,marksB:b.marks,readA:a.placed.length?check(a):'',readB:b.placed.length?check(b):'',realB:dualDict(0).some(d=>d.text===b.keyword)};
- },{seed,fixture:seed>=24?JSON.parse(fs.readFileSync(path.join(__dirname,seed===27?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
+  return {beforeShape,keywordFlow,sameGeometry,inputB:document.querySelector('#keywordInputB').value,autoB:docB.keywordAuto,inputs,seed,ms:Date.now()-start,result:document.querySelector('#dualResult').textContent,a:a.placed,b:b.placed,ka:a.keyword,kb:b.keyword,marksA:a.marks,marksB:b.marks,readA:a.placed.length?check(a):'',readB:b.placed.length?check(b):'',realB:dualDict(0).some(d=>d.text===b.keyword)};
+ },{seed,fixture:seed>=24&&seed<=29?JSON.parse(fs.readFileSync(path.join(__dirname,seed===27?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
  console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
  if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
+ if(seed===31||seed===32)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
  if(seed===20||seed===21||seed===23){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}
  if(seed===21||seed===23){assert(result.sameGeometry);assert.equal(result.inputB,result.kb);}
  if(seed===22){assert.equal(result.keywordFlow[0],result.keywordFlow[1]);assert.equal(result.autoB,false);}
- assert(result.a.length>=3&&result.a.length<=(fixtureCount(result.seed)),result.result);assert.equal(result.a.length,result.b.length);
+ assert(result.a.length>=(seed===33?2:3)&&result.a.length<=(fixtureCount(result.seed)),result.result);assert.equal(result.a.length,result.b.length);
  for(const w of result.inputs.a)assert(result.a.some(p=>p.text===w));for(const w of result.inputs.b)assert(result.b.some(p=>p.text===w));
  if(result.inputs.ka)assert.equal(result.ka,result.inputs.ka);if(result.inputs.kb)assert.equal(result.kb,result.inputs.kb);assert.equal(result.readA,result.ka);assert.equal(result.readB,result.kb);if(!result.inputs.kb)assert(result.realB);if(seed===14)assert.equal(result.a.length,7);
  if(seed===13)for(const text of ['こまき','おうじ']){const a=result.a.find(p=>p.text===text),b=result.b.find(p=>p.text===text);assert.notDeepEqual([a.r,a.c,a.dir],[b.r,b.c,b.dir]);}
