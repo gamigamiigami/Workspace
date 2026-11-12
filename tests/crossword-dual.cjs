@@ -9,7 +9,7 @@ function equivalentShape(a,b){
 }
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=49;seed++){
+for(let seed=1;seed<=52;seed++){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -192,6 +192,32 @@ for(let seed=1;seed<=49;seed++){
     await refillDualShape();if(!document.querySelector('#dualRefillMsg').textContent.includes('NGと登録'))throw Error('NG-required refill conflict not reported');
     if(JSON.stringify(serializeBoth())!==before)throw Error('NG conflict discarded required words or modified board');
   }
+  if(seed===50){
+    addNgWords(['うんも','じゃがー','ところ','あおき']);
+    document.querySelector('#findLevel').value='10000';
+    beforeShape=structuredClone(docA.placed);
+    document.querySelector('#btnDualMore').click();while(dualBuilding)await tick();
+    if([docA,docB].some(doc=>doc.placed.some(p=>isNgWord(p.text))))throw Error('four-NG generation retained banned word');
+  }
+  if(seed===52){
+    const backup=serializeBoth();let counts=null;
+    try{
+      docA.keyword='12345';docB.keyword='67890';docA.keywordAuto=docB.keywordAuto=false;
+      const by=new Map();dualDict(0).forEach(d=>{if(!by.has(d.len))by.set(d.len,[]);by.get(d.len).push(d);});
+      const found=await searchDualTemplates(by,0,wordCountBounds(),150,(shapes,nodes)=>counts={shapes,nodes},{slots:docA.placed});
+      if(found||counts?.shapes!==1||counts?.nodes!==1)throw Error('fully exhausted template was searched repeatedly or counts were not distinct');
+    }finally{applyBoth(backup);}
+  }
+  if(seed===51){
+    const before=JSON.stringify(serializeBoth()),out=document.querySelector('#dualResult');
+    out.textContent='今回の探索では見つかりませんでした。';
+    let retried=0;showDualSearchScope(out,()=>retried++);
+    if(!out.textContent.includes('全組み合わせを調べ切った結果ではありません'))throw Error('search limit not explained');
+    const button=out.querySelector('button');if(!button)throw Error('missing explicit vocabulary expansion');
+    if(document.querySelector('#findLevel').value!=='3000')throw Error('vocabulary expanded without click');
+    button.click();if(retried!==1||document.querySelector('#findLevel').value!=='10000')throw Error('vocabulary retry failed');
+    if(JSON.stringify(serializeBoth())!==before)throw Error('vocabulary advice mutated project');
+  }
   if(seed===49){
     addNgWords(['パンコ','ワキン']);const saved=serializeBothFile(),payload=editableSharePayload();
     dual.ngWords=[];applyBoth(saved);if(JSON.stringify(dual.ngWords)!==JSON.stringify(['ぱんこ','わきん']))throw Error('NG lost on file round trip');
@@ -225,7 +251,7 @@ for(let seed=1;seed<=49;seed++){
  },{seed,fixture:((seed>=24&&seed<=29)||(seed>=36&&seed<=39)||seed===41||seed>=43)?JSON.parse(fs.readFileSync(path.join(__dirname,seed===36?'fixtures/dual-return-favor-seven.json':(seed===27||seed===37||seed===39)?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
  console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
  if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
- if(seed===31||seed===32||seed===36||seed===37||seed===38||seed===48)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
+ if(seed===31||seed===32||seed===36||seed===37||seed===38||seed===48||seed===50)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
  if(seed===20||seed===21||seed===23){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}
  if(seed===21||seed===23){assert(result.sameGeometry);assert.equal(result.inputB,result.kb);}
  if(seed===22){assert.equal(result.keywordFlow[0],result.keywordFlow[1]);assert.equal(result.autoB,false);}

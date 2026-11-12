@@ -101,7 +101,7 @@
     .panel h2 .hint { font-weight: 400; font-size: 12px; color: var(--gray); }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .ng-word-group { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid #dce2ea; border-radius: 8px; }
-    #dualNgPanel button, [data-ng-word] { min-height: 44px; font-size: 16px; }
+    #dualNgPanel button, [data-ng-word], .dual-search-expand { min-height: 44px; font-size: 16px; }
     .note { font-size: 13px; color: #5c6672; margin-top: 8px; }
 
     /* ===== ボタン・入力 ===== */
@@ -6520,12 +6520,35 @@ var qrcode = function() {
       return variants.sort()[0];
     }
 
+    // A timeout is not a proof of impossibility. Make the vocabulary boundary
+    // visible and let the user explicitly widen it without changing hard rules.
+    function showDualSearchScope(out,retry){
+      if(!out.textContent.includes('見つかりません'))return;
+      const easy=$('#findLevel').value==='3000';
+      const note=document.createElement('p');note.className='hint-line';
+      note.textContent='探索範囲：'+(easy?'かんたん':'ふつう')+'の辞書'
+        +($('#findKyoiku').checked?'（小学校の漢字を使う語のみ）':'')
+        +'・時間制限あり。全組み合わせを調べ切った結果ではありません。';
+      out.append(note);
+      if(easy){
+        const button=document.createElement('button');button.type='button';button.className='sub dual-search-expand';
+        button.textContent='辞書を「ふつう」に広げて探す';
+        button.addEventListener('click',()=>{
+          if(dualBuilding||dualRefilling)return;
+          button.disabled=true;$('#findLevel').value='10000';$('#findLevel').dispatchEvent(new Event('change'));
+          retry();
+        });
+        out.append(button);
+      }
+    }
+
     // ===== 本体：A と B を同時に作る =====
     async function buildDual(options={}) {
       if (dualBuilding || dualRefilling) return;
       dualBuilding = true; renderDualTools();
       try { await buildDualImpl(options); }
       finally { keywordSearchTarget=null; dualBuilding = false; renderDualTools(); }
+      showDualSearchScope($('#dualResult'),()=>buildDual(options));
     }
 
     async function buildDualImpl(options={}) {
@@ -6608,7 +6631,7 @@ var qrcode = function() {
         !Object.prototype.hasOwnProperty.call(WORD_PREFERENCE,toKata(d.text)))]).filter(([,words])=>words.length));
       const hasExpansion=[...coreByLen.values()].reduce((n,words)=>n+words.length,0)<dict.length;
       let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,changingKeyword||harderShapeSearch?14000:7000,
-        (shapes,nodes)=>showBusyText(out,(changingKeyword?'別のキーワードで':'A・Bを同時に')+'組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'),
+        (shapes,nodes)=>showBusyText(out,(changingKeyword?'別のキーワードで':'A・Bを同時に')+'組み立てています…（'+shapes+'種類の形・分岐'+nodes+'回）'),
         {avoidKeywords,rejectShapes});
       if(!seeded&&changingKeyword&&JSON.stringify(serializeBoth())===originalSignature){
         seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,3000,null,{rejectShapes});
@@ -10647,7 +10670,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             keywordSearchMissed?' この形では別のキーワードが今回見つからなかったため、キーワードを保って語を入れ替えました。':'')
           +(changes.length?' 変更：'+changes.join('、')+'。':'')
           +'もう一度押すと別の候補を探します。';
-      } finally {dualRefilling=false;renderDualTools();}
+      } finally {dualRefilling=false;renderDualTools();showDualSearchScope(out,()=>refillDualShape());}
     }
 
 
@@ -10963,6 +10986,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       const keywordChoices=keywordSide<0||!dual.sameMark?null:kw[1-keywordSide]?[chars(kw[1-keywordSide])]:dict.filter(d=>d.len===chars(kw[keywordSide]).length&&d.text!==kw[keywordSide]&&!(options.avoidKeywords?.[1-keywordSide]||[]).includes(d.text)).map(d=>chars(d.text));
       const learnedTemplates=loadDualTemplates().reverse();
       const neighbours=options.rejectShapes?.size?mutateDualTemplates(docA.placed):[];
+      const exhaustedTemplates=new Set(),searchedShapes=new Set();
       let rounds=0,nodes=0,lastYield=Date.now(),randomShapeRound=0;
       while(Date.now()<deadline){
         // A small branching shape is a fast starting point, not a saved answer.
@@ -11043,6 +11067,9 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         }
         rounds++;
         if(options.rejectShapes?.has(dualShapeKey(slots))){await tick();continue;}
+        const templateId=JSON.stringify(normalizeDualTemplate(slots.map(p=>[p.r,p.c,chars(p.text).length,p.dir]))?.sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]||a[3].localeCompare(b[3])));
+        if(exhaustedTemplates.has(templateId)){await tick();continue;}
+        searchedShapes.add(dualShapeKey(slots));
         const cellKeys=slots.map(p=>wordCells(p).map(c=>key(c.r,c.c))),allKeys=[...new Set(cellKeys.flat())];
         const vars=[0,1].flatMap(s=>slots.map((p,i)=>({s,i,keys:cellKeys[i],
           domain:shuffleArr(byLength[s].get(cellKeys[i].length)||[]).sort((a,b)=>
@@ -11053,12 +11080,13 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         const assigned=Array(vars.length).fill(null),maps=[new Map(),new Map()],used=[new Set(),new Set()];
         const fixedLetters=fixedPair?kw.map(chars):null,chosenMarks=new Map(),takenMarks=new Set();
         const shapeDeadline=Math.min(deadline,Date.now()+(useBranching?(options.avoidKeywords?.some(list=>list.length)?6000:1400):600));
-        let result=null;
+        let result=null,shapeTimedOut=false;
+        const shapeTimeUp=()=>{if(Date.now()>shapeDeadline){shapeTimedOut=true;return true;}return false;};
         async function search(count,choicesKw,keywordLocked=false){
-          if(Date.now()>shapeDeadline)return false;
+          if(shapeTimeUp())return false;
           nodes++;
           if(Date.now()-lastYield>40){
-            if(onProgress)onProgress(rounds,nodes);
+            if(onProgress)onProgress(searchedShapes.size,nodes);
             await tick();lastYield=Date.now();
           }
           if(count===vars.length){
@@ -11117,7 +11145,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             }
             if(mark&&mark.cells.length<(forced?forced.length:best.length)){
               for(const k of shuffleArr(mark.cells)){
-                if(Date.now()>shapeDeadline)break;
+                if(shapeTimeUp())break;
                 const oldMaps=maps.slice();maps[0]=new Map(maps[0]);maps[1]=new Map(maps[1]);
                 maps[0].set(k,fixedLetters[0][mark.i]);maps[1].set(k,fixedLetters[1][mark.i]);
                 chosenMarks.set(mark.i,k);takenMarks.add(k);
@@ -11138,7 +11166,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             for(const candidate of candidates){
               const order=candidate.matches.map((ks,i)=>({ks,i})).sort((a,b)=>a.ks.length-b.ks.length),taken=new Set();
               async function marks(at){
-                if(Date.now()>shapeDeadline)return false;
+                if(shapeTimeUp())return false;
                 if(at===order.length)return search(count,null,candidate.cs.join(''));
                 const {ks,i}=order[at];
                 for(const k of ks){
@@ -11151,7 +11179,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
                 return false;
               }
               if(await marks(0))return true;
-              if(Date.now()>shapeDeadline)break;
+              if(shapeTimeUp())break;
             }
             return false;
           }
@@ -11159,7 +11187,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             Number(options.preferredBoards?.[vars[b.i].s]?.[vars[b.i].i]===b.w.text)-Number(options.preferredBoards?.[vars[a.i].s]?.[vars[a.i].i]===a.w.text))
             :best.map(w=>({i:bestI,w}));
           for(const {i,w} of branches){
-            if(Date.now()>shapeDeadline)break;
+            if(shapeTimeUp())break;
             const v=vars[i],s=v.s,old=maps[s];
             if(dual.commonSame){
               const mateIndex=(1-s)*slots.length+v.i,otherPlaced=assigned[mateIndex];
@@ -11174,9 +11202,11 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         }
         await search(0,keywordChoices);
         if(result)return result;
+        if(!shapeTimedOut)exhaustedTemplates.add(templateId);
 
         await tick();
       }
+      if(onProgress)onProgress(searchedShapes.size,nodes);
       return null;
     }
 
