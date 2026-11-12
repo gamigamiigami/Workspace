@@ -100,6 +100,8 @@
     }
     .panel h2 .hint { font-weight: 400; font-size: 12px; color: var(--gray); }
     .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .ng-word-group { display: inline-flex; align-items: center; gap: 6px; padding: 3px 6px; border: 1px solid #dce2ea; border-radius: 8px; }
+    #dualNgPanel button, [data-ng-word] { min-height: 44px; font-size: 16px; }
     .note { font-size: 13px; color: #5c6672; margin-top: 8px; }
 
     /* ===== ボタン・入力 ===== */
@@ -992,6 +994,13 @@
         <span class="hint">手で置くときも、この大きさを守ります</span>
       </div>
       <p id="genResult" class="hint-line"></p>
+      <details open id="dualNgPanel">
+        <summary>使わないワード（NG・A/B共通）</summary>
+        <p class="hint-line">この作品の自動生成・別の形・ワードの入れ替えで選ばない語です。今の盤面は、次に探し直すまで残ります。</p>
+        <div class="row"><label for="dualNgInput">NGにする語（読み）</label><textarea id="dualNgInput" rows="2" placeholder="例：うんも、わきん（改行・読点・スペースでまとめて追加可）" style="font-size:16px;min-height:64px;flex:1;min-width:180px"></textarea><button id="btnDualNgAdd" class="sub">NGに追加</button></div>
+        <div id="dualNgList" class="row" style="margin-top:8px"></div>
+        <p id="dualNgMsg" class="hint-line" role="status"></p>
+      </details>
       <details open id="dualRefillPanel">
         <summary>この形を使って、A・Bのワードを入れ替える</summary>
         <p class="hint-line">登録語と入力したキーワードは初めから確定しています。残したいものにチェックしてください。下の入れ替えでは、形と記号を保ち、確定した語も同じ文字数の別の枠へ移しながら、A・Bの組み合わせを探します。</p>
@@ -3698,6 +3707,7 @@ var qrcode = function() {
       sameMark: true,     // 記号（キーワード）の位置を A と B で同じにするか
       commonSame: true,   // 共通ワードを同じマスに置くか（①②では必ず true）
       wordCount: {mode:'none',n:6,max:10},
+      ngWords: [],       // この作品のA・Bで使わない語（かなを正規化）
       commonClues: {}     // 番号 -> A・B 共通のカギ（謎解き用。書くと両方でこの文が使われる）
     };
 
@@ -5889,6 +5899,37 @@ var qrcode = function() {
       return true;
     }
 
+    function normalizeNgWord(text){return toHira(String(text).normalize('NFKC')).trim().toLowerCase();}
+    function normalizeNgWords(words){
+      return [...new Set((Array.isArray(words)?words:[]).filter(w=>typeof w==='string').map(normalizeNgWord).filter(w=>w&&chars(w).length<=100))].slice(0,1000);
+    }
+    let ngWordsReference=null,ngWordsLookup=new Set();
+    function isNgWord(text){
+      if(ngWordsReference!==dual.ngWords){ngWordsReference=dual.ngWords;ngWordsLookup=new Set(normalizeNgWords(dual.ngWords));}
+      return ngWordsLookup.has(normalizeNgWord(text));
+    }
+    function ngRequiredConflict(){
+      const words=[...new Set([docA,docB].flatMap(doc=>ownWords(doc).filter(w=>isNgWord(w.text)).map(w=>w.text)))];
+      return words.length?'NGと登録・確定した語が重なっています：'+words.join('・')+'。NGを解除するか、その語の登録・確定を解除してください。':'';
+    }
+    function renderNgWords(){
+      const list=$('#dualNgList');if(!list)return;
+      list.replaceChildren();
+      for(const text of normalizeNgWords(dual.ngWords)){
+        const button=document.createElement('button');button.type='button';button.className='sub small';
+        button.textContent=text+' × 解除';button.dataset.ngRemove=text;button.disabled=dualBuilding||dualRefilling;
+        list.append(button);
+      }
+      if(!list.children.length)list.textContent='NGの語はありません。';
+      $('#dualNgMsg').textContent=ngRequiredConflict();
+      $('#dualNgInput').disabled=$('#btnDualNgAdd').disabled=dualBuilding||dualRefilling;
+    }
+    function addNgWords(words){
+      const next=normalizeNgWords([...(dual.ngWords||[]),...words]);
+      if(JSON.stringify(next)===JSON.stringify(dual.ngWords))return;
+      snapshot();dual.ngWords=next;refresh();
+    }
+
     function dualDict(maxLen) {
       const primary=ownWords(state).length||registeredKeyword(state)?state:(state===docA?docB:docA);
       const mode = generationKanaMode(primary);
@@ -5901,7 +5942,7 @@ var qrcode = function() {
         if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) continue;
         const t = conv(d.r);
         const n = chars(t).length;
-        if (n < 2 || (maxLen && n > maxLen)) continue;
+        if (n < 2 || (maxLen && n > maxLen) || isNgWord(t)) continue;
         if (seen.has(t)) continue;
         seen.add(t);
         out.push({ text: t, meta: d.s, len: n, rank: d.rank, noun:!!d.noun });
@@ -5909,7 +5950,7 @@ var qrcode = function() {
       // マイ辞書も候補にするが、作品に登録しない限り必須語にはしない。
       state.favDict.forEach(d => {
         const t=conv(d.text), n=chars(t).length;
-        if(n<2 || (maxLen && n>maxLen) || seen.has(t))return;
+        if(n<2 || (maxLen && n>maxLen) || seen.has(t) || isNgWord(t))return;
         seen.add(t);out.push({text:t,meta:d.meta||'',len:n,rank:100});
       });
       return out;
@@ -6394,7 +6435,7 @@ var qrcode = function() {
       for (const d of loadDict()) {
         if (d.rank >= level) continue;
         const t = conv(d.r);
-        if (chars(t).length !== len || seen.has(t)) continue;
+        if (chars(t).length !== len || seen.has(t) || isNgWord(t)) continue;
         seen.add(t);
         words.push({ t, cs: chars(t), rank: d.rank });
       }
@@ -6493,6 +6534,8 @@ var qrcode = function() {
       const differentShape=!!options.differentShape&&docA.placed.length>0;
       const rejectShapes=new Set(differentShape?[dualShapeKey(docA.placed)]:[]);
       if (rejectWordCount()) return;
+      const ngConflict=ngRequiredConflict();
+      if(ngConflict){out.textContent=ngConflict;$('#genResult').textContent=ngConflict;return;}
       const countBounds=wordCountBounds();
       const minBoardWords=countBounds.max===1?1:2;
       // キーワードを自動で決めるかどうかは、作りはじめる前に決めておく
@@ -7245,6 +7288,7 @@ var qrcode = function() {
           mode: dual.mode, wordCount: dual.wordCount,
           sameMark: dual.sameMark,
           commonSame: dual.commonSame, commonPlacement: commonPlacementMode(), commonDifferent: dual.commonDifferent==='all'?'all':'one',
+          ngWords: normalizeNgWords(dual.ngWords),
           commonClues: dual.commonClues
         },
         A: serializeSide(docA),
@@ -7262,6 +7306,7 @@ var qrcode = function() {
     function applyBoth(d) {
       if (!d) return false;
       if (!d.dual) {
+        dual.ngWords=[];
         dual.wordCount=normalizeWordCount(d.wordCount);
         // ふつうモードで作った1問ぶんのデータを読んだとき：A面として読みこむ
         withDoc(docA, () => applyData(d));
@@ -7270,6 +7315,7 @@ var qrcode = function() {
         return true;
       }
       const o = d.dualOpts || {};
+      dual.ngWords=normalizeNgWords(o.ngWords);
       dual.wordCount=normalizeWordCount(o.wordCount);
       dual.mode = (o.mode === 1 || o.mode === 2 || o.mode === 3) ? o.mode : 2;
       dual.sameMark = o.sameMark !== false;
@@ -7443,6 +7489,7 @@ var qrcode = function() {
       }));
       blank(docA); blank(docB);
       dual.commonClues = {};
+      dual.ngWords=[];
       history = [];
       docA.folder = docB.folder = '';
       docA.shapeId = docB.shapeId = null;
@@ -8606,7 +8653,7 @@ var qrcode = function() {
       const hits = [];
       for (const item of pool) {
         const text = item.r;
-        if (!text || have.has(text) || seen.has(text)) continue;
+        if (!text || have.has(text) || seen.has(text) || isNgWord(text)) continue;
         const cs = chars(text);
         if (len && cs.length !== len) continue;
         if (cs.length < 2) continue;
@@ -9043,7 +9090,7 @@ var qrcode = function() {
       for (const d of loadDict()) {
         if (d.rank >= level || (onlyKyoiku && !d.kyoiku)) continue;
         const text = conv(d.r);
-        if (state.words.some(w => w.text === text)) continue;
+        if (state.words.some(w => w.text === text) || isNgWord(text)) continue;
         const cs = chars(text);
         if (cs.length < 2 || cs.length > 6) continue;
         const hitT = cs.filter(ch => target.has(ch)).length;
@@ -10355,6 +10402,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
     }
 
     function renderDualTools() {
+      renderNgWords();
       ['A','B'].forEach(name=>{
         const doc=name==='A'?docA:docB, selected=bulkSelection[name];
         selected.forEach(id=>{if(!doc.words.some(w=>w.id===id))selected.delete(id);});
@@ -10379,12 +10427,26 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           const input=document.createElement('input');input.type='checkbox';input.checked=!w.auto || !!w.fixed;
           input.dataset.lockSide=name;input.dataset.lockWord=w.id;input.disabled=dualRefilling||dualBuilding;
           label.append(input,document.createTextNode(w.text+(!w.auto?'（登録語）':'を確定')));locks.appendChild(label);
+          const ng=document.createElement('button');ng.type='button';ng.className='sub small';
+          ng.textContent=isNgWord(w.text)?'NG設定済み':'NGにする';ng.dataset.ngWord=w.text;
+          ng.setAttribute('aria-label',w.text+'をNGにする');ng.disabled=dualBuilding||dualRefilling||isNgWord(w.text);
+          const group=document.createElement('span');group.className='ng-word-group';group.append(label,ng);locks.appendChild(group);
         });
       });
       $('#btnDualRefill').disabled=dualBuilding||dualRefilling||!docA.placed.length;
     }
 
     function bindDualTools() {
+      const add=()=>{addNgWords($('#dualNgInput').value.split(/[\s、,，・;；]+/u));$('#dualNgInput').value='';};
+      $('#btnDualNgAdd').addEventListener('click',add);
+      $('#dualNgInput').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&!e.isComposing){e.preventDefault();add();}});
+      $('#dualNgList').addEventListener('click',e=>{
+        const button=e.target.closest('[data-ng-remove]');if(!button)return;
+        snapshot();dual.ngWords=normalizeNgWords(dual.ngWords).filter(w=>w!==button.dataset.ngRemove);refresh();
+      });
+      $('#dualRefillPanel').addEventListener('click',e=>{
+        const button=e.target.closest('[data-ng-word]');if(button)addNgWords([button.dataset.ngWord]);
+      });
       ['A','B'].forEach(name=>{
         const doc=name==='A'?docA:docB;
         $('#bulk'+name).addEventListener('click',()=>{bulkMode[name]=!bulkMode[name];bulkSelection[name].clear();pending=null;refresh();});
@@ -10440,7 +10502,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           if(dual.mode===2&&(!registered[0].has(words[0][i])||!registered[1].has(words[1][i]))&&words[0][i]!==words[1][i])continue;
           if(dual.commonSame&&words[1-side].includes(d.text)&&words[1-side].indexOf(d.text)!==i)continue;
           const signature=JSON.stringify(words);
-          if(signature===diversity.current)continue;
+          if(signature===diversity.current||words.some(list=>list.some(isNgWord)))continue;
           const placed=pa.map((p,j)=>({...p,text:pairOf(words[0][j],words[1][j])}));
           if(commonPositionError(placed))continue;
           const marks=planRefillMarks(pa,words,docs.map(d=>d.keyword),docs.map(d=>d.marks),dual.sameMark);
@@ -10460,6 +10522,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
     async function refillDualShape() {
       if(dualRefilling||dualBuilding)return;
       const out=$('#dualRefillMsg');
+      const ngConflict=ngRequiredConflict();if(ngConflict){out.textContent=ngConflict;return;}
       if(rejectWordCount() || !wordCountFits(docA.placed.length)){
         out.textContent='この形は1問あたり'+docA.placed.length+'個です。指定数に合わせるには先に「同時に作る」で形を作り直してください。';return;
       }
@@ -10477,7 +10540,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         const own=new Set(ownWords(doc).map(w=>w.text));
         const otherOnly=new Set(ownWords(otherDoc).filter(w=>!own.has(w.text)).map(w=>w.text));
         return (dual.mode===1?doc.words.map(w=>w.text):withDocLight(doc,()=>dualDict(0).map(d=>d.text)))
-          .filter(t=>!otherOnly.has(t) && (t!==doc.keyword || doc.placed.some(p=>p.text===t)));
+          .filter(t=>!isNgWord(t) && !otherOnly.has(t) && (t!==doc.keyword || doc.placed.some(p=>p.text===t)));
       };
       const marked=doc=>{
         const cells=new Map();doc.placed.forEach(p=>wordCells(p).forEach(c=>{if(doc.marks[key(c.r,c.c)])cells.set(key(c.r,c.c),c.ch);}));return cells;
@@ -10486,6 +10549,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       const requiredB=new Set(ownWords(docB).map(w=>w.text));
       const sharedRequired=new Set([...requiredA].filter(t=>requiredB.has(t)));
       const validPair=(a,b)=>{
+        if(a.concat(b).some(isNgWord))return false;
         if(dual.mode===2)for(let i=0;i<a.length;i++){
           if((!requiredA.has(a[i])||!requiredB.has(b[i]))&&a[i]!==b[i])return false;
 
@@ -10546,6 +10610,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
                 requiredWords:[...required[follow]],shuffleRequiredSlots:true,moveRequiredWords:true,
                 wordPenalties:diversity.penalties[follow],placementPenalties:diversity.placements[follow],cellRequirements:requirements,
                 candidateAllowed:(text,i)=>{
+                  if(isNgWord(text))return false;
                   if(dual.mode===2&&!required[follow].has(text)&&text!==leading[i])return false;
                   if(commonPlacementMode()==='different'&&dual.commonDifferent==='all'&&sharedRequired.has(text)&&text===leading[i])return false;
                   return !dual.commonSame||!leading.includes(text)||leading.indexOf(text)===i;
@@ -10805,6 +10870,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
 
     // A completed solution is validated independently of heuristic scores.
     function validateHardDualConditions(placed, plan) {
+      if(placed.some(p=>isNgWord(pairA(p.text))||isNgWord(pairB(p.text))))return 'NGに設定した語が含まれています。';
       const missing=missingRegistered(placed);if(missing.length)return '必須語が不足しています：'+missing.join('・');
       const commonError=commonPositionError(placed);if(commonError)return commonError;
       if(!wordCountFits(placed.length))return '指定したワード数を満たしていません。';

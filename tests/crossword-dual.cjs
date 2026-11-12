@@ -9,7 +9,7 @@ function equivalentShape(a,b){
 }
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=42;seed++){
+for(let seed=1;seed<=49;seed++){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -164,6 +164,42 @@ for(let seed=1;seed<=42;seed++){
       flowBoards.push([structuredClone(docA),structuredClone(docB)]);
     }finally{tryLayout=original;applyBoth(backup);}
   }
+  if(seed===43){
+    const input=document.querySelector('#dualNgInput');input.value='パンコ、ぱんこ\nﾌﾞﾝｺ';document.querySelector('#btnDualNgAdd').click();
+    if(JSON.stringify(dual.ngWords)!==JSON.stringify(['ぱんこ','ぶんこ']))throw Error('NG input did not normalize/deduplicate kana');
+    if(!isNgWord('ﾊﾟﾝｺ')||isNgWord('ぱんこや'))throw Error('NG matching is not exact normalized word matching');
+    if(dualDict(0).some(d=>['ぱんこ','ぶんこ'].includes(toHira(d.text))))throw Error('NG dictionary word was offered');
+    docA.favDict.push({text:'パンコ',meta:'パン粉'});if(dualDict(0).some(d=>toHira(d.text)==='ぱんこ'))throw Error('favourite bypassed NG');
+    document.querySelector('[data-ng-remove="ぱんこ"]').click();
+    if(isNgWord('パンコ')||!dualDict(0).some(d=>toHira(d.text)==='ぱんこ'))throw Error('removing NG did not restore candidate');
+    addNgWords(['わきん']);const paired=docA.placed.map((p,i)=>({...p,text:pairOf(p.text,docB.placed[i].text)}));
+    if(!validateHardDualConditions(paired,null).includes('NG'))throw Error('final validator accepted banned word');
+  }
+  if(seed===44||seed===45||seed===47||seed===48){
+    if(seed===44)document.querySelector('[data-ng-word="わきん"]').click();
+    else addNgWords(seed===45?['ワキン','インコ','パンコ']:seed===47?['いんこ','わきん']:['ワキン']);
+    if(seed===47){docA.placed=[];docB.placed=[];await buildDualImpl();}
+    else if(seed===48){beforeShape=structuredClone(docA.placed);document.querySelector('#btnDualMore').click();while(dualBuilding)await tick();}
+    else{
+      const shape=geometry();for(let attempt=0;attempt<(seed===45?2:1);attempt++)await refillDualShape();
+      if(shape!==geometry())throw Error('NG refill changed geometry');
+    }
+    if([docA,docB].some(doc=>doc.placed.some(p=>isNgWord(p.text))))throw Error('generated/refilled board retained NG word');
+  }
+  if(seed===46){
+    addNgWords(['コマキ']);const before=JSON.stringify(serializeBoth());
+    await buildDualImpl();if(!document.querySelector('#dualResult').textContent.includes('NGと登録'))throw Error('NG-required conflict not reported');
+    await refillDualShape();if(!document.querySelector('#dualRefillMsg').textContent.includes('NGと登録'))throw Error('NG-required refill conflict not reported');
+    if(JSON.stringify(serializeBoth())!==before)throw Error('NG conflict discarded required words or modified board');
+  }
+  if(seed===49){
+    addNgWords(['パンコ','ワキン']);const saved=serializeBothFile(),payload=editableSharePayload();
+    dual.ngWords=[];applyBoth(saved);if(JSON.stringify(dual.ngWords)!==JSON.stringify(['ぱんこ','わきん']))throw Error('NG lost on file round trip');
+    dual.ngWords=[];applyBoth(validateEditableShare(payload));if(!isNgWord('ﾊﾟﾝｺ'))throw Error('NG lost on editable sharing');
+    document.querySelector('[data-ng-remove="ぱんこ"]').click();if(isNgWord('ぱんこ'))throw Error('NG removal failed');
+    undo();if(!isNgWord('ぱんこ'))throw Error('NG undo failed');
+    const old=serializeBothFile();delete old.dualOpts.ngWords;applyBoth(old);if(dual.ngWords.length)throw Error('old project inherited unrelated NG');
+  }
   const a=structuredClone(docA),b=structuredClone(docB);
   // Independent geometry checks, without the production completion validator.
   const check=doc=>{
@@ -186,10 +222,10 @@ for(let seed=1;seed<=42;seed++){
   };
   for(const boards of flowBoards)for(const doc of boards)if(check(doc)!==doc.keyword)throw Error('intermediate keyword mismatch');
   return {beforeShape,keywordFlow,sameGeometry,inputB:document.querySelector('#keywordInputB').value,autoB:docB.keywordAuto,inputs,seed,ms:Date.now()-start,result:document.querySelector('#dualResult').textContent,a:a.placed,b:b.placed,ka:a.keyword,kb:b.keyword,marksA:a.marks,marksB:b.marks,readA:a.placed.length?check(a):'',readB:b.placed.length?check(b):'',realB:dualDict(0).some(d=>d.text===b.keyword)};
- },{seed,fixture:((seed>=24&&seed<=29)||(seed>=36&&seed<=39)||seed===41)?JSON.parse(fs.readFileSync(path.join(__dirname,seed===36?'fixtures/dual-return-favor-seven.json':(seed===27||seed===37||seed===39)?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
+ },{seed,fixture:((seed>=24&&seed<=29)||(seed>=36&&seed<=39)||seed===41||seed>=43)?JSON.parse(fs.readFileSync(path.join(__dirname,seed===36?'fixtures/dual-return-favor-seven.json':(seed===27||seed===37||seed===39)?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
  console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
  if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
- if(seed===31||seed===32||seed===36||seed===37||seed===38)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
+ if(seed===31||seed===32||seed===36||seed===37||seed===38||seed===48)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
  if(seed===20||seed===21||seed===23){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}
  if(seed===21||seed===23){assert(result.sameGeometry);assert.equal(result.inputB,result.kb);}
  if(seed===22){assert.equal(result.keywordFlow[0],result.keywordFlow[1]);assert.equal(result.autoB,false);}

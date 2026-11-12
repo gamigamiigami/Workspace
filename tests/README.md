@@ -34,3 +34,8 @@ shape while retaining both fixed keywords, all registrations, the eight-word bou
 shared mark locations. Additional checks cover every allowed word count from 3 to 8,
 valid/invalid branch mutations, geometry-cache corruption and privacy, and actually
 solving a new custom registration using an imported geometry with no random layout call.
+
+NG-word regressions cover normalized bulk input, per-word buttons, removal, exact matching,
+dictionary/favorite exclusion, final validation, multi-word refills, required-word conflicts,
+fresh generation, different-shape generation, and file/share/undo/legacy round trips.
+The suite currently contains 49 cases.
