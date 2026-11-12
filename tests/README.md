@@ -27,3 +27,10 @@ available, including after a separate confirmed word changes from わきん to �
 Different-shape button checks exercise both DOM handlers, compare occupied-cell geometry
 independently (including translations, rotations and reflections), and verify that an
 impossible different-shape search preserves the entire project and reports failure.
+
+The fixed-keyword generation regressions use the previously exported seven/eight-word
+return-favor boards and eight-word thank-you board. They require a different occupied
+shape while retaining both fixed keywords, all registrations, the eight-word bound and
+shared mark locations. Additional checks cover every allowed word count from 3 to 8,
+valid/invalid branch mutations, geometry-cache corruption and privacy, and actually
+solving a new custom registration using an imported geometry with no random layout call.

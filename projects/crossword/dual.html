@@ -6489,6 +6489,7 @@ var qrcode = function() {
 
     async function buildDualImpl(options={}) {
       const out = $('#dualResult');
+      if(shapeMatches())rememberDualTemplate(docA.placed);
       const differentShape=!!options.differentShape&&docA.placed.length>0;
       const rejectShapes=new Set(differentShape?[dualShapeKey(docA.placed)]:[]);
       if (rejectWordCount()) return;
@@ -6499,6 +6500,7 @@ var qrcode = function() {
       const inputKeywordA=registeredKeyword(docA), inputKeywordB=registeredKeyword(docB);
       const avoidKeywords=[docA,docB].map(doc=>doc.keywordAuto&&doc.keyword?[doc.keyword]:[]);
       const changingKeyword=avoidKeywords.some(list=>list.length);
+      const harderShapeSearch=differentShape&&!!inputKeywordA&&!!inputKeywordB;
       const oneKeyword = !!inputKeywordA !== !!inputKeywordB;
       const autoKw = oneKeyword || wantAutoKeyword();
       const originalSignature = JSON.stringify(serializeBoth());
@@ -6550,7 +6552,7 @@ var qrcode = function() {
         ? kwA.map((ch, i) => pairOf(ch, kwB[i])) : [];
 
       const t0 = Date.now();
-      const BUDGET = dual.mode===3?(changingKeyword?25000:15000):9000;   // 全体でこれくらいまで（組文字は交差しにくいので、ふつうより長めに取る）
+      const BUDGET = dual.mode===3?(changingKeyword||harderShapeSearch?25000:15000):9000;   // 全体でこれくらいまで（組文字は交差しにくいので、ふつうより長めに取る）
       let best = null, bestPairs = null, bestKeywordPlan = null;
       let round = 0;
       showBusyText(out, 'A と B が両方成り立つ形をさがしています…');
@@ -6562,7 +6564,7 @@ var qrcode = function() {
       const coreByLen=new Map([...dictByLen].map(([n,words])=>[n,words.filter(d=>
         !Object.prototype.hasOwnProperty.call(WORD_PREFERENCE,toKata(d.text)))]).filter(([,words])=>words.length));
       const hasExpansion=[...coreByLen.values()].reduce((n,words)=>n+words.length,0)<dict.length;
-      let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,changingKeyword?14000:7000,
+      let seeded=await searchDualTemplates(dictByLen,maxLen,countBounds,changingKeyword||harderShapeSearch?14000:7000,
         (shapes,nodes)=>showBusyText(out,(changingKeyword?'別のキーワードで':'A・Bを同時に')+'組み立てています…（'+shapes+'種類の形・'+nodes+'通り）'),
         {avoidKeywords,rejectShapes});
       if(!seeded&&changingKeyword&&JSON.stringify(serializeBoth())===originalSignature){
@@ -6739,6 +6741,7 @@ var qrcode = function() {
       });
       docA.placed = placedA;
       docB.placed = placedB;
+      rememberDualTemplate(placedA);
       [docA,docB].forEach(doc=>{
         doc.colors={};doc.borders={};doc.hints=[];doc.selWordId=null;doc.selPlacedId=null;
       });
@@ -7284,6 +7287,7 @@ var qrcode = function() {
       renderDualOpts();
       setSide(d.side === 'B' ? 'B' : 'A');
       renderBalance();
+      if(shapeMatches())rememberDualTemplate(docA.placed);
       return true;
     }
 
@@ -10827,6 +10831,55 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       return '';
     }
 
+    // Empty, strict crossword geometry. These tuples contain no answer text.
+    function normalizeDualTemplate(raw){
+      if(!Array.isArray(raw)||!raw.length||raw.length>20)return null;
+      if(raw.some(p=>!Array.isArray(p)||p.length!==4||!p.slice(0,3).every(Number.isInteger)||p[2]<2||p[2]>GRID||!['across','down'].includes(p[3])))return null;
+      const minR=Math.min(...raw.map(p=>p[0])),minC=Math.min(...raw.map(p=>p[1]));
+      const slots=raw.map(([r,c,n,dir])=>({r:r-minR,c:c-minC,text:'□'.repeat(n),dir}));
+      const cellSets=slots.map(p=>new Set(wordCells(p).map(c=>key(c.r,c.c))));
+      for(let i=0;i<slots.length;i++){
+        const map=new Map(),dirs=new Map();
+        slots.forEach((p,j)=>{if(i===j)return;wordCells(p).forEach(c=>{const k=key(c.r,c.c);map.set(k,'□');dirs.set(k,(dirs.get(k)||0)|(p.dir==='across'?1:2));});});
+        const p=slots[i];if(canPlaceStrict(map,chars(p.text),p.r,p.c,p.dir,dirs)<0)return null;
+      }
+      const reached=new Set([0]),pending=[0];
+      while(pending.length){const i=pending.pop();for(let j=0;j<slots.length;j++)if(!reached.has(j)&&[...cellSets[i]].some(k=>cellSets[j].has(k))){reached.add(j);pending.push(j);}}
+      if(reached.size!==slots.length)return null;
+      return slots.map(p=>[p.r,p.c,p.text.length,p.dir]);
+    }
+
+    const DUAL_TEMPLATES_KEY='crossword-dual-geometries-v1';
+    function loadDualTemplates(){
+      try{
+        const saved=JSON.parse(localStorage.getItem(DUAL_TEMPLATES_KEY)||'[]');
+        return Array.isArray(saved)?saved.slice(-24).map(normalizeDualTemplate).filter(Boolean):[];
+      }catch(e){return [];}
+    }
+    function rememberDualTemplate(placed){
+      const shape=normalizeDualTemplate(placed.filter(p=>!p.auto).map(p=>[p.r,p.c,chars(p.text.includes(PSEP)?pairA(p.text):p.text).length,p.dir]));
+      if(!shape)return;
+      const identity=rows=>JSON.stringify(rows.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]||a[3].localeCompare(b[3])));
+      const id=identity(shape),saved=loadDualTemplates().filter(rows=>identity(rows)!==id);
+      try{localStorage.setItem(DUAL_TEMPLATES_KEY,JSON.stringify([...saved,shape].slice(-24)));}catch(e){/* The shape cache is optional. */}
+    }
+
+    function mutateDualTemplates(placed){
+      const base=normalizeDualTemplate(placed.filter(p=>!p.auto).map(p=>[p.r,p.c,chars(p.text.includes(PSEP)?pairA(p.text):p.text).length,p.dir]));
+      if(!base)return [];
+      const seen=new Set(),out=[];
+      // Grow/trim/move one branch, then refill BOTH sides rather than freezing
+      // the old words. Changes may affect any number of word assignments.
+      for(const delta of [1,-1,0])for(let i=0;i<base.length;i++)for(const shift of [0,-1,1]){
+        if(delta===0&&shift===0)continue;
+        const raw=base.map(p=>p.slice()),p=raw[i];p[2]+=delta;
+        p[p[3]==='down'?0:1]+=shift;
+        const shape=normalizeDualTemplate(raw);if(!shape)continue;
+        const id=JSON.stringify(shape);if(!seen.has(id)){seen.add(id);out.push(shape);}
+      }
+      return out;
+    }
+
     // ===== 空の形に A・B を同時に割り当てる制約探索 =====
     // Registered words remain mandatory. A free keyword is kept as a domain of
     // real dictionary words until registered placements narrow its possible marks.
@@ -10839,9 +10892,12 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       const lens=docs.map(d=>ownWords(d).map(w=>chars(w.text).length));
       const metadata=new Map(dict.map(d=>[d.text,d.meta]));
       const byLength=vocab.map(v=>{const m=new Map();v.forEach(text=>{const cs=chars(text);if(!m.has(cs.length))m.set(cs.length,[]);m.get(cs.length).push({text,cs});});return m;});
+      const fixedPair=dual.sameMark&&kw.every(Boolean);
       const keywordSide=kw[0]?0:kw[1]?1:-1;
       const keywordChoices=keywordSide<0||!dual.sameMark?null:kw[1-keywordSide]?[chars(kw[1-keywordSide])]:dict.filter(d=>d.len===chars(kw[keywordSide]).length&&d.text!==kw[keywordSide]&&!(options.avoidKeywords?.[1-keywordSide]||[]).includes(d.text)).map(d=>chars(d.text));
-      let rounds=0,nodes=0,lastYield=Date.now();
+      const learnedTemplates=loadDualTemplates().reverse();
+      const neighbours=options.rejectShapes?.size?mutateDualTemplates(docA.placed):[];
+      let rounds=0,nodes=0,lastYield=Date.now(),randomShapeRound=0;
       while(Date.now()<deadline){
         // A small branching shape is a fast starting point, not a saved answer.
         // Its slots have no words, letters or marks. Other lengths and shapes are
@@ -10852,14 +10908,36 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           [[2,1,4,'across'],[2,1,4,'down'],[2,3,3,'down'],
             [4,3,3,'across'],[3,5,3,'down'],[5,0,3,'across'],[0,2,3,'down']],
           [[2,0,4,'across'],[2,2,4,'down'],[4,1,3,'across'],
-            [1,0,3,'down'],[0,3,3,'down'],[0,3,3,'across'],[0,5,2,'down']]
+            [1,0,3,'down'],[0,3,3,'down'],[0,3,3,'across'],[0,5,2,'down']],
+          [[2,5,3,'across'],[0,5,4,'down'],[1,3,3,'across'],
+            [1,3,3,'down'],[3,0,4,'across'],[3,2,3,'down'],[5,0,3,'across']],
+          [[0,1,3,'across'],[0,2,3,'down'],[2,0,3,'across'],[2,1,3,'down'],
+            [4,1,4,'across'],[3,4,3,'down'],[5,4,3,'across'],[4,6,3,'down']],
+          [[1,1,4,'across'],[1,1,3,'down'],[0,4,3,'down'],[3,0,4,'across'],
+            [3,0,3,'down'],[3,3,3,'down'],[5,3,3,'across'],[3,5,3,'down']]
         ];
+        if(fixedPair)catalogue.sort((a,b)=>b.length-a.length);
+        catalogue.push(...learnedTemplates);
+        const eligible=rows=>wordCountFits(rows.length)
+          &&(!maxLen||rows.every(([r,c,n,dir])=>r+(dir==='down'?n:1)<=maxLen&&c+(dir==='across'?n:1)<=maxLen))
+          &&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=rows.filter(p=>p[2]===n).length))
+          &&!options.rejectShapes?.has(dualShapeKey(rows.map(([r,c,n,dir])=>({r,c,dir,text:'□'.repeat(n)}))));
+        const seenTemplates=new Set();
+        const distinct=catalogue.filter(rows=>{
+          const id=JSON.stringify(rows.slice().sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]||a[3].localeCompare(b[3])));
+          if(seenTemplates.has(id)||!eligible(rows))return false;seenTemplates.add(id);return true;
+        });
+        catalogue.splice(0,catalogue.length,...distinct);
+        if(neighbours.length){
+          const starting=catalogue.splice(0);
+          for(let i=0;i<Math.max(starting.length,neighbours.length);i++){if(starting[i])catalogue.push(starting[i]);if(neighbours[i]&&eligible(neighbours[i]))catalogue.push(neighbours[i]);}
+        }
         const alternative=options.avoidKeywords?.some(list=>list.length)?1:0;
-        const branching=catalogue[(Math.floor(rounds/3)+alternative)%catalogue.length]
+        const branching=(catalogue[((rounds<catalogue.length?rounds:Math.floor(rounds/3))+alternative)%catalogue.length]||[])
           .map(([r,c,n,dir])=>({r,c,dir,text:'□'.repeat(n)}));
         const branchCells=branching.flatMap(wordCells),branchWidth=Math.max(...branchCells.map(c=>c.c))+1,branchHeight=Math.max(...branchCells.map(c=>c.r))+1;
         let template,slots;
-        const useBranching=rounds%3===0&&wordCountFits(branching.length)
+        const useBranching=(rounds<catalogue.length||rounds%3===0)&&wordCountFits(branching.length)
           &&(!maxLen||Math.max(branchWidth,branchHeight)<=maxLen)
           &&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length));
         if(options.slots){
@@ -10877,7 +10955,9 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             for(let i=0;i<count;i++)lengths.push(n);
           }
           if(lengths.length>bounds.max)return null;
-          const target=Math.min(bounds.max,Math.max(lengths.length+2,bounds.min)+rounds%3);
+          const minimum=Math.max(lengths.length,bounds.min);
+          const target=fixedPair&&bounds.max<=12?bounds.max-(randomShapeRound++%Math.max(1,bounds.max-minimum+1))
+            :Math.min(bounds.max,Math.max(lengths.length+2,bounds.min)+rounds%(fixedPair?4:3));
           if(target>20)return null; // Leave large boards to the established pool search.
           const helperLengths=[...dictByLen.keys()].filter(n=>n<=Math.min(maxLen||5,5));
           while(lengths.length<target){
@@ -10887,7 +10967,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           if(!lengths.length)return null;
           // Reuse useful length distributions without reusing their letters or
           // crossings. Moving registrations often needs a fourth matching slot.
-          if(rounds%3===1&&wordCountFits(branching.length)&&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length))){
+          if(!fixedPair&&rounds%3===1&&wordCountFits(branching.length)&&lens.every(list=>[...new Set(list)].every(n=>list.filter(x=>x===n).length<=branching.filter(p=>p.text.length===n).length))){
             lengths.splice(0,lengths.length,...branching.map(p=>p.text.length));
           }
           const items=lengths.map((n,i)=>({text:'slot'+i,cs:Array(n).fill('□')}));
@@ -10905,6 +10985,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         const indexes=vars.map(v=>v.keys.map((_,j)=>{const idx=new Map();v.domain.forEach(w=>{const ch=w.cs[j];if(!idx.has(ch))idx.set(ch,[]);idx.get(ch).push(w);});return idx;}));
         const cellOwners=new Map();vars.forEach((v,i)=>v.keys.forEach((k,j)=>{const id=v.s+':'+k;if(!cellOwners.has(id))cellOwners.set(id,[]);cellOwners.get(id).push({i,j});}));
         const assigned=Array(vars.length).fill(null),maps=[new Map(),new Map()],used=[new Set(),new Set()];
+        const fixedLetters=fixedPair?kw.map(chars):null,chosenMarks=new Map(),takenMarks=new Set();
         const shapeDeadline=Math.min(deadline,Date.now()+(useBranching?(options.avoidKeywords?.some(list=>list.length)?6000:1400):600));
         let result=null;
         async function search(count,choicesKw,keywordLocked=false){
@@ -10938,7 +11019,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             const fits=[];available.forEach((vs,i)=>{if(vars[i].s===s){const w=vs.find(w=>w.text===text);if(w)fits.push({i,w});}});
             if(!fits.length)return false;if(!forced||fits.length<forced.length)forced=fits;
           }
-          if(choicesKw&&count>=required[0].size+required[1].size-1){
+          if(!fixedPair&&choicesKw&&count>=required[0].size+required[1].size-1){
             const possible=[new Map(),new Map()];
             for(let s=0;s<2;s++)for(const k of allKeys){
               if(maps[s].has(k)){possible[s].set(k,new Set([maps[s].get(k)]));continue;}
@@ -10957,10 +11038,33 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             choicesKw=choicesKw.filter(cs=>cs.every((ch,i)=>allowed.get(chars(kw[keywordSide])[i]).has(ch)));
             if(!choicesKw.length)return false;
           }
+          // Fixed keywords are constraints during placement, not a final test.
+          // Branch on a mark before a word when its cell domain is scarcer.
+          if(fixedPair){
+            const supports=(side,k,ch)=>maps[side].has(k)?maps[side].get(k)===ch
+              :(cellOwners.get(side+':'+k)||[]).every(({i,j})=>available.get(i)?.some(w=>w.cs[j]===ch));
+            let mark=null;
+            for(let i=0;i<fixedLetters[0].length;i++)if(!chosenMarks.has(i)){
+              const cells=allKeys.filter(k=>!takenMarks.has(k)&&supports(0,k,fixedLetters[0][i])&&supports(1,k,fixedLetters[1][i]));
+              if(!cells.length)return false;
+              if(!mark||cells.length<mark.cells.length)mark={i,cells};
+            }
+            if(mark&&mark.cells.length<(forced?forced.length:best.length)){
+              for(const k of shuffleArr(mark.cells)){
+                if(Date.now()>shapeDeadline)break;
+                const oldMaps=maps.slice();maps[0]=new Map(maps[0]);maps[1]=new Map(maps[1]);
+                maps[0].set(k,fixedLetters[0][mark.i]);maps[1].set(k,fixedLetters[1][mark.i]);
+                chosenMarks.set(mark.i,k);takenMarks.add(k);
+                if(await search(count,choicesKw,keywordLocked))return true;
+                maps[0]=oldMaps[0];maps[1]=oldMaps[1];chosenMarks.delete(mark.i);takenMarks.delete(k);
+              }
+              return false;
+            }
+          }
           // Narrow the free keyword from currently possible cell pairs. Then
           // branch on distinct mark cells and propagate their letters into both
           // word domains; do not guess one keyword before placing registrations.
-          if(!forced&&choicesKw&&!keywordLocked){
+          if(!fixedPair&&!forced&&choicesKw&&!keywordLocked){
             const knownChars=chars(kw[keywordSide]);
             const supports=(s,k,ch)=>maps[s].has(k)?maps[s].get(k)===ch:(cellOwners.get(s+':'+k)||[]).every(({i,j})=>assigned[i]?assigned[i].cs[j]===ch:available.get(i)?.some(w=>w.cs[j]===ch));
             const candidates=choicesKw.map(cs=>{const matches=knownChars.map((ch,i)=>allKeys.filter(k=>supports(keywordSide,k,ch)&&supports(1-keywordSide,k,cs[i])));return {cs,matches,cost:matches.reduce((n,ks)=>n*Math.max(1,ks.length),1)};})

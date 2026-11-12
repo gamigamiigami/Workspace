@@ -9,7 +9,7 @@ function equivalentShape(a,b){
 }
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=33;seed++){
+for(let seed=1;seed<=42;seed++){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -18,6 +18,7 @@ for(let seed=1;seed<=33;seed++){
   dual.mode=3;dual.commonSame=false;dual.commonPlacement='free';dual.sameMark=true;dual.wordCount={mode:'max',n:7};
   if(seed===11){[docA.words,docB.words]=[docB.words,docA.words];[docA.keyword,docB.keyword]=[docB.keyword,docA.keyword];}
   if(seed===12)docB.keyword='こうきのう';
+  if(seed===34||seed===35){docB.keyword=seed===34?'おんがえし':'ありがとう';dual.wordCount={mode:'max',n:8};}
   if(seed===13){dual.commonPlacement='different';dual.commonDifferent='all';}
   if(seed===14)dual.wordCount={mode:'exact',n:7};
   if(seed===15)docA.maxSize=docB.maxSize=7;
@@ -46,9 +47,9 @@ for(let seed=1;seed<=33;seed++){
     }
     if(dualShapeKey(base.map((p,i)=>({...p,r:0,c:i})))===shape)throw Error('different occupied shapes considered equal');
   }
-  if(seed===31||seed===32||seed===33){
+  if(seed===31||seed===32||seed===33||seed===36||seed===37||seed===38){
     beforeShape=structuredClone(docA.placed);const before=JSON.stringify(serializeBoth());
-    document.querySelector(seed===31?'#btnDualMore':'#btnRegenerate').click();
+    document.querySelector(seed===31||seed===36||seed===38?'#btnDualMore':'#btnRegenerate').click();
     while(dualBuilding)await tick();
     if(seed===33){
       if(JSON.stringify(serializeBoth())!==before)throw Error('failed different-shape search mutated the project');
@@ -125,6 +126,44 @@ for(let seed=1;seed<=33;seed++){
     const simulated=[docA,docB].map((doc,side)=>({...structuredClone(doc),placed:doc.placed.map((p,i)=>({...p,text:(side?candidate.b:candidate.a)[i]})),marks:candidate.marks[side]}));
     flowBoards.push(simulated);
   }
+  if(seed===39){
+    const saved=loadDualTemplates();if(!saved.length)throw Error('imported geometry not learned');
+    const data=localStorage.getItem(DUAL_TEMPLATES_KEY);
+    if(data.includes('こまき')||data.includes('こまでおれ')||data.includes('おんがえし'))throw Error('shape bank stored answer text');
+    localStorage.setItem(DUAL_TEMPLATES_KEY,'invalid json');
+    if(loadDualTemplates().length)throw Error('corrupt shape cache accepted');
+    localStorage.setItem(DUAL_TEMPLATES_KEY,JSON.stringify([null,[],[[0,0,100000,'across']]]));
+    if(loadDualTemplates().length)throw Error('invalid shape cache accepted');
+    localStorage.setItem(DUAL_TEMPLATES_KEY,data);
+  }
+  if(seed===40){
+    const backup=serializeBoth(),original=tryLayout,tried=new Set();
+    try{
+      docA.keyword='12345';docB.keyword='67890';docA.keywordAuto=docB.keywordAuto=false;dual.wordCount={mode:'range',n:3,max:8};
+      tryLayout=(items,...args)=>{tried.add(items.length);return original(items,...args);};
+      const by=new Map();dualDict(0).forEach(d=>{if(!by.has(d.len))by.set(d.len,[]);by.get(d.len).push(d);});
+      await searchDualTemplates(by,0,wordCountBounds(),2000);
+      for(let n=3;n<=8;n++)if(!tried.has(n))throw Error('allowed word count never searched: '+n);
+    }finally{tryLayout=original;applyBoth(backup);}
+  }
+  if(seed===41){
+    if(normalizeDualTemplate([[0,0,3,'across'],[5,0,3,'across']]))throw Error('disconnected shape accepted');
+    if(normalizeDualTemplate([[0,0,3,'across'],[0,1,3,'across']]))throw Error('overlapping shape accepted');
+    const neighbours=mutateDualTemplates(docA.placed);
+    if(!neighbours.length||!neighbours.every(normalizeDualTemplate))throw Error('invalid branch mutations');
+  }
+  if(seed===42){
+    const backup=serializeBoth(),original=tryLayout;let randomCalls=0;
+    try{
+      rememberDualTemplate([{r:0,c:0,text:'あいうえおか',dir:'across'},{r:0,c:2,text:'うきく',dir:'down'}]);
+      [docA,docB].forEach((doc,side)=>{doc.words=['あいうえおか','うきく'].map((text,i)=>({id:'learned'+side+i,text}));doc.placed=[];doc.keyword='あう';doc.keywordAuto=false;doc.marks={};});
+      dual.mode=3;dual.commonSame=true;dual.commonPlacement='same';dual.wordCount={mode:'exact',n:2};
+      tryLayout=(...args)=>{randomCalls++;return original(...args);};
+      await buildDualImpl();
+      if(docA.placed.length!==2||randomCalls!==0)throw Error('learned custom geometry was not reused as an empty template');
+      flowBoards.push([structuredClone(docA),structuredClone(docB)]);
+    }finally{tryLayout=original;applyBoth(backup);}
+  }
   const a=structuredClone(docA),b=structuredClone(docB);
   // Independent geometry checks, without the production completion validator.
   const check=doc=>{
@@ -147,10 +186,10 @@ for(let seed=1;seed<=33;seed++){
   };
   for(const boards of flowBoards)for(const doc of boards)if(check(doc)!==doc.keyword)throw Error('intermediate keyword mismatch');
   return {beforeShape,keywordFlow,sameGeometry,inputB:document.querySelector('#keywordInputB').value,autoB:docB.keywordAuto,inputs,seed,ms:Date.now()-start,result:document.querySelector('#dualResult').textContent,a:a.placed,b:b.placed,ka:a.keyword,kb:b.keyword,marksA:a.marks,marksB:b.marks,readA:a.placed.length?check(a):'',readB:b.placed.length?check(b):'',realB:dualDict(0).some(d=>d.text===b.keyword)};
- },{seed,fixture:seed>=24&&seed<=29?JSON.parse(fs.readFileSync(path.join(__dirname,seed===27?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
+ },{seed,fixture:((seed>=24&&seed<=29)||(seed>=36&&seed<=39)||seed===41)?JSON.parse(fs.readFileSync(path.join(__dirname,seed===36?'fixtures/dual-return-favor-seven.json':(seed===27||seed===37||seed===39)?'fixtures/dual-return-favor.json':'fixtures/dual-thank-you.json'),'utf8')):null});
  console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
  if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
- if(seed===31||seed===32)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
+ if(seed===31||seed===32||seed===36||seed===37||seed===38)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
  if(seed===20||seed===21||seed===23){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}
  if(seed===21||seed===23){assert(result.sameGeometry);assert.equal(result.inputB,result.kb);}
  if(seed===22){assert.equal(result.keywordFlow[0],result.keywordFlow[1]);assert.equal(result.autoB,false);}

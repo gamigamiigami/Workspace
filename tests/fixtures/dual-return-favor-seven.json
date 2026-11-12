@@ -1,0 +1,261 @@
+{
+  "version": 2,
+  "dual": true,
+  "workId": null,
+  "folder": "",
+  "shapeId": null,
+  "side": "A",
+  "dualOpts": {
+    "mode": 3,
+    "wordCount": {
+      "mode": "max",
+      "n": 8
+    },
+    "sameMark": true,
+    "commonSame": false,
+    "commonPlacement": "free",
+    "commonDifferent": "one",
+    "commonClues": {}
+  },
+  "A": {
+    "version": 1,
+    "title": "こまでおれ × おんがえし",
+    "words": [
+      {
+        "id": "a0",
+        "text": "こども"
+      },
+      {
+        "id": "a1",
+        "text": "れんこん",
+        "auto": true
+      },
+      {
+        "id": "a2",
+        "text": "おでん",
+        "auto": true
+      },
+      {
+        "id": "a3",
+        "text": "おうじ"
+      },
+      {
+        "id": "a4",
+        "text": "しまあじ",
+        "auto": true
+      },
+      {
+        "id": "a5",
+        "text": "あおき",
+        "auto": true
+      },
+      {
+        "id": "a6",
+        "text": "こまき"
+      }
+    ],
+    "keyword": "こまでおれ",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "こども": "子供/子ども/小人",
+      "れんこん": "蓮根",
+      "おでん": "おでん",
+      "おうじ": "王子/皇子/往時",
+      "しまあじ": "シマアジ",
+      "あおき": "アオキ/青木",
+      "こまき": ""
+    },
+    "placed": [
+      {
+        "id": "a0",
+        "text": "こども",
+        "r": 2,
+        "c": 5,
+        "dir": "across"
+      },
+      {
+        "id": "a1",
+        "text": "れんこん",
+        "r": 0,
+        "c": 5,
+        "dir": "down"
+      },
+      {
+        "id": "a2",
+        "text": "おでん",
+        "r": 1,
+        "c": 3,
+        "dir": "across"
+      },
+      {
+        "id": "a3",
+        "text": "おうじ",
+        "r": 1,
+        "c": 3,
+        "dir": "down"
+      },
+      {
+        "id": "a4",
+        "text": "しまあじ",
+        "r": 3,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "a5",
+        "text": "あおき",
+        "r": 3,
+        "c": 2,
+        "dir": "down"
+      },
+      {
+        "id": "a6",
+        "text": "こまき",
+        "r": 5,
+        "c": 0,
+        "dir": "across"
+      }
+    ],
+    "marks": {
+      "2,5": "A",
+      "3,1": "B",
+      "1,4": "C",
+      "4,2": "D",
+      "0,5": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "B": {
+    "version": 1,
+    "title": "こまでおれ × おんがえし",
+    "words": [
+      {
+        "id": "b0",
+        "text": "おうじ"
+      },
+      {
+        "id": "b1",
+        "text": "しんおう",
+        "auto": true
+      },
+      {
+        "id": "b2",
+        "text": "こがん",
+        "auto": true
+      },
+      {
+        "id": "b3",
+        "text": "こまき"
+      },
+      {
+        "id": "b4",
+        "text": "ふんいき",
+        "auto": true
+      },
+      {
+        "id": "b5",
+        "text": "いえる",
+        "auto": true
+      },
+      {
+        "id": "b6",
+        "text": "のえる"
+      }
+    ],
+    "keyword": "おんがえし",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "おうじ": "王子/皇子/往時",
+      "しんおう": "震央",
+      "こがん": "湖岸",
+      "こまき": "",
+      "ふんいき": "雰囲気",
+      "いえる": "言える/癒える",
+      "のえる": ""
+    },
+    "placed": [
+      {
+        "id": "b0",
+        "text": "おうじ",
+        "r": 2,
+        "c": 5,
+        "dir": "across"
+      },
+      {
+        "id": "b1",
+        "text": "しんおう",
+        "r": 0,
+        "c": 5,
+        "dir": "down"
+      },
+      {
+        "id": "b2",
+        "text": "こがん",
+        "r": 1,
+        "c": 3,
+        "dir": "across"
+      },
+      {
+        "id": "b3",
+        "text": "こまき",
+        "r": 1,
+        "c": 3,
+        "dir": "down"
+      },
+      {
+        "id": "b4",
+        "text": "ふんいき",
+        "r": 3,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "b5",
+        "text": "いえる",
+        "r": 3,
+        "c": 2,
+        "dir": "down"
+      },
+      {
+        "id": "b6",
+        "text": "のえる",
+        "r": 5,
+        "c": 0,
+        "dir": "across"
+      }
+    ],
+    "marks": {
+      "2,5": "A",
+      "3,1": "B",
+      "1,4": "C",
+      "4,2": "D",
+      "0,5": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "favDict": []
+}
