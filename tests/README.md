@@ -20,3 +20,6 @@ The two exported eight-word fixtures also verify fixed-keyword refills over mult
 confirmed helper retention, and joint search that rejects the current board. Crossings,
 unintended adjacency, connectivity, both keyword readings and identical geometry are
 checked independently for every intermediate refill result.
+
+History saturation regressions ensure that all previously seen local replacements remain
+available, including after a separate confirmed word changes from わきん to れきし.

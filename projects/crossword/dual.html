@@ -10410,12 +10410,16 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           const words=old.map(ps=>ps.map(p=>p.text));words[side][i]=d.text;
           if(dual.mode===2&&(!registered[0].has(words[0][i])||!registered[1].has(words[1][i]))&&words[0][i]!==words[1][i])continue;
           if(dual.commonSame&&words[1-side].includes(d.text)&&words[1-side].indexOf(d.text)!==i)continue;
-          if(diversity.signatures.has(JSON.stringify(words)))continue;
+          const signature=JSON.stringify(words);
+          if(signature===diversity.current)continue;
           const placed=pa.map((p,j)=>({...p,text:pairOf(words[0][j],words[1][j])}));
           if(commonPositionError(placed))continue;
           const marks=planRefillMarks(pa,words,docs.map(d=>d.keyword),docs.map(d=>d.marks),dual.sameMark);
           if(!marks)continue;
-          const score=(diversity.penalties[side].get(d.text)||0)*10000+d.rank-(d.noun?50:0);
+          // Familiar/recent boards remain valid alternatives. History changes
+          // their priority, never the crossword's actual constraints.
+          const score=(diversity.signatures.has(signature)?1000000:0)
+            +(diversity.penalties[side].get(d.text)||0)*10000+d.rank-(d.noun?50:0);
           candidates.push({a:words[0],b:words[1],marks,metadata:[side,d.text,d.meta],score});
         }
         if(Date.now()>=deadline)break;
@@ -10479,7 +10483,7 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           const found=await searchDualTemplates(byLength,sizes.length?Math.min(...sizes):0,wordCountBounds(),6000,
             (shapes,nodes)=>{out.textContent='形と確定したキーワードを保って、A・Bを同時に探しています…（'+nodes+'通り）';},
             {slots:pa,avoidKeywords:docs.map(doc=>doc.keywordAuto?[doc.keyword]:[]),
-              rejectBoards:diversity.signatures,wordPenalties:diversity.penalties,placementPenalties:diversity.placements,
+              rejectBoards:new Set([diversity.current]),wordPenalties:diversity.penalties,placementPenalties:diversity.placements,
               preferredBoards:[pa.map(p=>p.text),pb.map(p=>p.text)]});
           if(found){
             result={a:found.res.placed.map(p=>pairA(p.text)),b:found.res.placed.map(p=>pairB(p.text)),

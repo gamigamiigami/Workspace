@@ -3,7 +3,7 @@ const path=require('node:path');
 const fixtureCount=seed=>seed>=24?8:7;
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=27;seed++){
+for(let seed=1;seed<=29;seed++){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -75,6 +75,24 @@ for(let seed=1;seed<=27;seed++){
     if(!found)throw Error('joint solver missed fixed-keyword alternative');
     if(JSON.stringify(found.res.placed.map(p=>pairA(p.text)))===JSON.stringify(boards[0])&&JSON.stringify(found.res.placed.map(p=>pairB(p.text)))===JSON.stringify(boards[1]))throw Error('joint solver repeated original');
     if(found.plan.a!=='こまでおれ'||found.plan.b!=='ありがとう')throw Error('joint solver changed fixed keywords');
+  }
+  if(seed===28||seed===29){
+    const slot=docA.placed.findIndex(p=>p.text==='いんこ');
+    docA.placed[slot].text='ぶんこ';docA.words=docA.words.filter(w=>w.text!=='いんこ');docA.words.push({id:'bunko',text:'ぶんこ',auto:true});
+    if(seed===29){
+      docA.placed.find(p=>p.text==='わきん').text='れきし';
+      docA.words=docA.words.filter(w=>w.text!=='わきん');docA.words.push({id:'rekishi',text:'れきし',auto:true});
+    }
+    [docA,docB].forEach(doc=>doc.words.forEach(w=>{if(w.auto&&w.text!=='ぶんこ')w.fixed=true;}));
+    const boards=[docA.placed.map(p=>p.text),docB.placed.map(p=>p.text)];
+    const diversity=refillDiversity('full-history-'+seed,boards);
+    const validAlternatives=['ぱんこ','いんこ','はんこ','めんこ','どんこ'];
+    for(const text of validAlternatives){const past=boards.map(list=>list.slice());past[0][slot]=text;diversity.remember(past);diversity.signatures.add(JSON.stringify(past));}
+    const candidate=await findLocalDualRefill(docA.placed,docB.placed,diversity,3000);
+    if(!candidate||!validAlternatives.includes(candidate.a[slot]))throw Error('history hid a valid word replacement');
+    if(seed===29&&!candidate.a.includes('れきし'))throw Error('unrelated confirmed replacement changed');
+    const simulated=[docA,docB].map((doc,side)=>({...structuredClone(doc),placed:doc.placed.map((p,i)=>({...p,text:(side?candidate.b:candidate.a)[i]})),marks:candidate.marks[side]}));
+    flowBoards.push(simulated);
   }
   const a=structuredClone(docA),b=structuredClone(docB);
   // Independent geometry checks, without the production completion validator.
