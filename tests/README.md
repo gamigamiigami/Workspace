@@ -38,9 +38,17 @@ solving a new custom registration using an imported geometry with no random layo
 NG-word regressions cover normalized bulk input, per-word buttons, removal, exact matching,
 dictionary/favorite exclusion, final validation, multi-word refills, required-word conflicts,
 fresh generation, different-shape generation, and file/share/undo/legacy round trips.
-The suite currently contains 52 cases.
+The suite currently contains 55 cases.
 
 Additional regressions generate a different eight-word board with all four reported NG
 words excluded using the normal vocabulary. They also verify that vocabulary expansion
 requires an explicit click, preserves project data, and that an exhausted fixed template
 is searched once with accurate distinct-shape/branch counts.
+
+Verb regressions cover legacy and supplemental POS tags, kana normalization, homophone
+nouns, favorite-dictionary bypasses, final validation, explicit verb registrations, and
+replacing a legacy automatic verb on the same geometry. Every completed test board also
+rejects unregistered verbs and automatically chosen verb keywords. The historical
+free-keyword fixture now explicitly confirms its verb; if noun-only alternatives cannot
+be found, it must report that and preserve the entire project.
+Use `CROSSWORD_CASES=23,53,54,55` to run selected cases while debugging.

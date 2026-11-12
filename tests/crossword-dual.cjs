@@ -9,7 +9,7 @@ function equivalentShape(a,b){
 }
 const html=fs.readFileSync(path.join(__dirname,'../projects/crossword/dual.html'),'utf8');
 (async()=>{const browser=await chromium.launch({...(process.env.CHROMIUM_PATH?{executablePath:process.env.CHROMIUM_PATH}:{}),headless:true,args:['--no-sandbox']});
-for(let seed=1;seed<=52;seed++){
+for(const seed of process.env.CROSSWORD_CASES?process.env.CROSSWORD_CASES.split(',').map(Number):Array.from({length:55},(_,i)=>i+1)){
  const page=await browser.newPage({viewport:{width:768,height:1024}});page.on('pageerror',e=>{throw e});
  await page.route('http://localhost:8123/**',r=>r.fulfill({contentType:'text/html',body:html}));await page.goto('http://localhost:8123/');
  const result=await page.evaluate(async({seed,fixture})=>{
@@ -70,18 +70,21 @@ for(let seed=1;seed<=52;seed++){
   }
   if(seed===23){
     // A known generated shape with multiple feasible five-letter keywords.
-    // The initial keyword is free, while all six registered words stay required.
+    // The initial keyword is free. The legacy verb is explicitly confirmed.
     const slots=[[2,0,'across'],[2,2,'down'],[4,1,'across'],[1,0,'down'],[0,3,'down'],[0,3,'across'],[0,5,'down']];
     const boards=[['あわゆき','ゆどうふ','おうじ','であい','こまき','こども','もれ'],['まけこし','こごえる','のえる','こまき','おとし','おうじ','じこ']];
     [docA,docB].forEach((doc,s)=>{
       doc.placed=boards[s].map((text,i)=>({id:'fixture'+s+i,text,r:slots[i][0],c:slots[i][1],dir:slots[i][2]}));
       doc.words=doc.words.filter(w=>!w.auto);
-      for(const text of boards[s])if(!doc.words.some(w=>w.text===text))doc.words.push({id:text,text,auto:true});
+      for(const text of boards[s])if(!doc.words.some(w=>w.text===text))doc.words.push({id:text,text,auto:true,...(text==='こごえる'?{fixed:true}:{})});
     });
-    docB.keyword='おとこのこ';docB.keywordAuto=true;applyDualMarks();keywordFlow[0]=docB.keyword;
+    docB.keyword='おとこのこ';docB.keywordAuto=true;applyDualMarks();syncWordFields();keywordFlow[0]=docB.keyword;
   }
   if(seed===21||seed===23){
-    const shape=geometry();await refillDualShape();sameGeometry=shape===geometry();keywordFlow.push(docB.keyword);
+    const shape=geometry(),before=JSON.stringify(serializeBoth());await refillDualShape();sameGeometry=shape===geometry();keywordFlow.push(docB.keyword);
+    if(seed===23&&keywordFlow[0]===keywordFlow[1]){
+      if(!document.querySelector('#dualRefillMsg').textContent.includes('見つかりません')||JSON.stringify(serializeBoth())!==before)throw Error('legacy verb board reported invalid success or was damaged');
+    }
   }
   if(seed===22){
     const input=document.querySelector('[data-fixed-keyword="B"]');input.checked=true;input.dispatchEvent(new Event('change',{bubbles:true}));
@@ -199,6 +202,38 @@ for(let seed=1;seed<=52;seed++){
     document.querySelector('#btnDualMore').click();while(dualBuilding)await tick();
     if([docA,docB].some(doc=>doc.placed.some(p=>isNgWord(p.text))))throw Error('four-NG generation retained banned word');
   }
+  if(seed===53){
+    for(const text of ['はしる','タベル','ﾖﾑ','できる','あらがう','とがる'])if(!isVerbWord(text))throw Error('verb was not classified: '+text);
+    for(const text of ['かえる','くるま','ホテル','さくら','しる'])if(isVerbWord(text))throw Error('noun/homophone was rejected: '+text);
+    for(const level of ['3000','10000']){
+      document.querySelector('#findLevel').value=level;
+      if(dualDict(0).some(d=>isVerbWord(d.text)))throw Error('verb in generated vocabulary');
+    }
+    docA.favDict.push({text:'はしる',meta:'走る'});
+    if(dualDict(0).some(d=>toHira(d.text)==='はしる'))throw Error('favorite bypassed verb filter');
+    const paired=docA.placed.map((p,i)=>({...p,text:pairOf(p.text,docB.placed[i].text)}));
+    paired[1].text=pairOf('はしる',pairB(paired[1].text));
+    if(!validateHardDualConditions(paired,null).includes('動詞の終止形'))throw Error('final validator accepted automatic verb');
+  }
+  if(seed===54){
+    const backup=serializeBoth();
+    try{
+      for(const [side,doc] of [docA,docB].entries()){
+        doc.words=['はしる','しろ'].map((text,i)=>({id:'explicit'+side+i,text}));doc.placed=[];doc.keyword='はし';doc.keywordAuto=false;doc.marks={};
+      }
+      dual.mode=1;dual.commonSame=true;dual.commonPlacement='same';dual.wordCount={mode:'exact',n:2};
+      await buildDual();
+      if(!docA.placed.some(p=>p.text==='はしる')||!docB.placed.some(p=>p.text==='はしる'))throw Error('explicit registered verb was dropped');
+      const paired=docA.placed.map((p,i)=>({...p,text:pairOf(p.text,docB.placed[i].text)}));
+      if(validateHardDualConditions(paired,{a:docA.keyword,b:docB.keyword,marksA:docA.marks,marksB:docB.marks}))throw Error('explicit registered verb rejected');
+    }finally{applyBoth(backup);}
+  }
+  if(seed===55){
+    const old=docA.words.find(w=>w.text==='わきん');old.text='できる';
+    docA.placed.find(p=>p.text==='わきん').text='できる';
+    const shape=geometry();await refillDualShape();
+    if(shape!==geometry()||[docA,docB].some(doc=>doc.placed.some(p=>isUnregisteredVerb(p.text,doc))))throw Error('refill retained automatic verb');
+  }
   if(seed===52){
     const backup=serializeBoth();let counts=null;
     try{
@@ -229,6 +264,11 @@ for(let seed=1;seed<=52;seed++){
   const a=structuredClone(docA),b=structuredClone(docB);
   // Independent geometry checks, without the production completion validator.
   const check=doc=>{
+    const explicit=new Set(doc.words.filter(w=>!w.auto||w.fixed).map(w=>normalizeNgWord(w.text)));
+    // Case 39 only imports an old project to inspect the geometry cache.
+    // Import must preserve old words; the exclusion starts at the next search.
+    if(seed!==39&&doc.placed.some(p=>isVerbWord(p.text)&&!explicit.has(normalizeNgWord(p.text))))throw Error('automatic verb leaked into completed board');
+    if(doc.keywordAuto&&isVerbWord(doc.keyword))throw Error('automatic keyword was a verb');
     const cells=new Map(),edges=[];const placed=doc.placed;
     for(let i=0;i<placed.length;i++){
       const p=placed[i];Array.from(p.text).forEach((ch,j)=>{
@@ -252,7 +292,7 @@ for(let seed=1;seed<=52;seed++){
  console.log(JSON.stringify({seed,ms:result.ms,words:result.a.length,kb:result.kb}));
  if(seed===19){assert.equal(result.a.length,0);assert.equal(result.b.length,0);await page.close();continue;}
  if(seed===31||seed===32||seed===36||seed===37||seed===38||seed===48||seed===50)assert(!equivalentShape(result.beforeShape,result.a),'different-shape button returned the same cell geometry');
- if(seed===20||seed===21||seed===23){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}
+ if(seed===20||seed===21){assert.notEqual(result.keywordFlow[0],result.keywordFlow[1]);assert(result.autoB);}if(seed===23)assert(result.autoB);
  if(seed===21||seed===23){assert(result.sameGeometry);assert.equal(result.inputB,result.kb);}
  if(seed===22){assert.equal(result.keywordFlow[0],result.keywordFlow[1]);assert.equal(result.autoB,false);}
  assert(result.a.length>=(seed===33?2:3)&&result.a.length<=(fixtureCount(result.seed)),result.result);assert.equal(result.a.length,result.b.length);
