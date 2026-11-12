@@ -15,3 +15,8 @@ the explicit keyword lock, and keyword input synchronization. A generated fixtur
 five-letter same-shape replacement with the reported registrations.
 Independent assertions check registration retention, connectivity, crossing letters, unintended adjacency,
 matching geometry, dictionary keywords and the letters actually read at shared marks.
+
+The two exported eight-word fixtures also verify fixed-keyword refills over multiple clicks,
+confirmed helper retention, and joint search that rejects the current board. Crossings,
+unintended adjacency, connectivity, both keyword readings and identical geometry are
+checked independently for every intermediate refill result.

@@ -10386,6 +10386,44 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
       $('#btnDualRefill').addEventListener('click',refillDualShape);
     }
 
+    // Try a small, readable edit before rebuilding both word assignments.
+    // Every candidate still passes strict crossword geometry and keyword checks.
+    async function findLocalDualRefill(pa,pb,diversity,budgetMs=1200){
+      if(dual.mode===1)return null;
+      const deadline=Date.now()+budgetMs,docs=[docA,docB],old=[pa,pb];
+      const dictionary=dualDict(0),byLength=new Map();
+      dictionary.forEach(d=>{if(!byLength.has(d.len))byLength.set(d.len,[]);byLength.get(d.len).push(d);});
+      const registered=docs.map(d=>new Set(ownWords(d).map(w=>w.text)));
+      const candidates=[];let lastYield=Date.now();
+      for(let side=0;side<2;side++)for(let i=0;i<old[side].length;i++){
+        const p=old[side][i];if(registered[side].has(p.text))continue;
+        const map=new Map(),dirs=new Map();
+        old[side].forEach((q,j)=>{if(j===i)return;wordCells(q).forEach(c=>{
+          const k=key(c.r,c.c);map.set(k,c.ch);dirs.set(k,(dirs.get(k)||0)|(q.dir==='across'?1:2));
+        });});
+        for(const d of byLength.get(chars(p.text).length)||[]){
+          if(Date.now()>=deadline)break;
+          if(Date.now()-lastYield>40){await tick();lastYield=Date.now();}
+          if(old[side].some(q=>q.text===d.text))continue;
+          if(registered[1-side].has(d.text)&&!registered[side].has(d.text))continue;
+          if(canPlaceStrict(map,chars(d.text),p.r,p.c,p.dir,dirs)<1)continue;
+          const words=old.map(ps=>ps.map(p=>p.text));words[side][i]=d.text;
+          if(dual.mode===2&&(!registered[0].has(words[0][i])||!registered[1].has(words[1][i]))&&words[0][i]!==words[1][i])continue;
+          if(dual.commonSame&&words[1-side].includes(d.text)&&words[1-side].indexOf(d.text)!==i)continue;
+          if(diversity.signatures.has(JSON.stringify(words)))continue;
+          const placed=pa.map((p,j)=>({...p,text:pairOf(words[0][j],words[1][j])}));
+          if(commonPositionError(placed))continue;
+          const marks=planRefillMarks(pa,words,docs.map(d=>d.keyword),docs.map(d=>d.marks),dual.sameMark);
+          if(!marks)continue;
+          const score=(diversity.penalties[side].get(d.text)||0)*10000+d.rank-(d.noun?50:0);
+          candidates.push({a:words[0],b:words[1],marks,metadata:[side,d.text,d.meta],score});
+        }
+        if(Date.now()>=deadline)break;
+      }
+      candidates.sort((a,b)=>a.score-b.score);
+      return candidates[0]||null;
+    }
+
     async function refillDualShape() {
       if(dualRefilling||dualBuilding)return;
       const out=$('#dualRefillMsg');
@@ -10429,22 +10467,25 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         const refillDeadline=Date.now()+9000;
         const freeKeyword=[docA,docB].some(doc=>doc.keywordAuto&&doc.keyword);
         let keywordSearchMissed=false;
-        if(freeKeyword&&dual.mode===3){
-          const dictionary=dualDict(0),byLength=new Map();
-          dictionary.forEach(d=>{if(!byLength.has(d.len))byLength.set(d.len,[]);byLength.get(d.len).push(d);});
-          const sizes=[docA.maxSize,docB.maxSize].filter(n=>n>0);
-          const found=await searchDualTemplates(byLength,sizes.length?Math.min(...sizes):0,wordCountBounds(),6000,
-            (shapes,nodes)=>{out.textContent='同じ形で別のキーワードを探しています…（'+nodes+'通り）';},
-            {slots:pa,avoidKeywords:[docA,docB].map(doc=>doc.keywordAuto?[doc.keyword]:[])});
-          if(found){
-            result={a:found.res.placed.map(p=>pairA(p.text)),b:found.res.placed.map(p=>pairB(p.text)),
-              marks:[found.plan.marksA,found.plan.marksB],keywords:[found.plan.a,found.plan.b]};
-          }else keywordSearchMissed=true;
-        }
         const vocabularyA=vocab(docA),vocabularyB=vocab(docB);
         const docs=[docA,docB],old=[pa,pb],required=[requiredA,requiredB],vocabularies=[vocabularyA,vocabularyB];
         const fixedCells=docs.map(doc=>doc.keyword?new Map():marked(doc));
         const diversity=refillDiversity(JSON.stringify(['dual',pa.map(p=>[p.r,p.c,p.dir,chars(p.text).length]),[...requiredA].sort(),[...requiredB].sort(),docA.keyword,docB.keyword,[...fixedCells[0]],[...fixedCells[1]],dual.mode,dual.sameMark,commonPlacementMode(),dual.commonDifferent,$('#findLevel').value,$('#findKyoiku').checked,$('#findKana').value]),[pa.map(p=>p.text),pb.map(p=>p.text)]);
+        if(!freeKeyword)result=await findLocalDualRefill(pa,pb,diversity);
+        if(!result&&dual.mode===3){
+          const dictionary=dualDict(0),byLength=new Map();
+          dictionary.forEach(d=>{if(!byLength.has(d.len))byLength.set(d.len,[]);byLength.get(d.len).push(d);});
+          const sizes=[docA.maxSize,docB.maxSize].filter(n=>n>0);
+          const found=await searchDualTemplates(byLength,sizes.length?Math.min(...sizes):0,wordCountBounds(),6000,
+            (shapes,nodes)=>{out.textContent='形と確定したキーワードを保って、A・Bを同時に探しています…（'+nodes+'通り）';},
+            {slots:pa,avoidKeywords:docs.map(doc=>doc.keywordAuto?[doc.keyword]:[]),
+              rejectBoards:diversity.signatures,wordPenalties:diversity.penalties,placementPenalties:diversity.placements,
+              preferredBoards:[pa.map(p=>p.text),pb.map(p=>p.text)]});
+          if(found){
+            result={a:found.res.placed.map(p=>pairA(p.text)),b:found.res.placed.map(p=>pairB(p.text)),
+              marks:[found.plan.marksA,found.plan.marksB],keywords:[found.plan.a,found.plan.b]};
+          }else keywordSearchMissed=freeKeyword;
+        }
         const deadline=refillDeadline;
         const first=Math.random()<.5?0:1;
         for(const lead of [first,1-first]){
@@ -10490,20 +10531,23 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           });
         }
         if(JSON.stringify(serializeBoth())!==before){out.textContent='編集中の変更があったため中止しました。もう一度押してください。';return;}
-        if(!result){out.textContent=keywordSearchMissed?'この形では、別のキーワードや語の組み合わせが今回の探索で見つかりませんでした。別のキーワードを優先して形から探すには「同時に作る」を押してください。':'今回の探索では別の配置・語の組み合わせが見つかりませんでした。過去の候補も含めて探索しています。もう一度試すか、条件を見直してください。';return;}
+        if(!result){out.textContent=keywordSearchMissed?'この形では、別のキーワードや語の組み合わせが今回の探索で見つかりませんでした。別のキーワードを優先して形から探すには「同時に作る」を押してください。':'同じ形・確定した語・キーワードを保った今回の探索では、別の組み合わせが見つかりませんでした。条件を保って形から探し直すには「同時に作る」を押してください。';return;}
         snapshot();diversity.remember([result.a,result.b]);let count=0;
+        const changes=[];
         [[docA,pa,result.a,result.marks[0]],[docB,pb,result.b,result.marks[1]]].forEach(([doc,old,texts,marks],index)=>{
           if(result.keywords)doc.keyword=result.keywords[index];
           doc.marks=marks;
-          doc.placed=old.map((p,i)=>{if(p.text!==texts[i])count++;return {...p,text:texts[i]};});
+          doc.placed=old.map((p,i)=>{if(p.text!==texts[i]){count++;changes.push((index===0?'A':'B')+'「'+p.text+'」→「'+texts[i]+'」');}return {...p,text:texts[i]};});
           doc.words=doc.words.filter(w=>!w.auto||w.fixed||texts.includes(w.text));
           texts.forEach(t=>{if(!doc.words.some(w=>w.text===t))doc.words.push({id:uid(),text:t,auto:true});});
           doc.selWordId=null;doc.selPlacedId=null;
         });
+        if(result.metadata){const [side,text,meta]=result.metadata;[docA,docB][side].meta[text]=meta||'';}
         syncWordFields();clueSig='';clearCycle();refresh();renderCompare();
         out.textContent=(count?'A・Bで'+count+'語を入れ替えました。':'語の配置を保って、キーワードを変更しました。')
           +(result.keywords?' キーワード：A「'+docA.keyword+'」／B「'+docB.keyword+'」。':
             keywordSearchMissed?' この形では別のキーワードが今回見つからなかったため、キーワードを保って語を入れ替えました。':'')
+          +(changes.length?' 変更：'+changes.join('、')+'。':'')
           +'もう一度押すと別の候補を探します。';
       } finally {dualRefilling=false;renderDualTools();}
     }
@@ -10824,7 +10868,10 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
         }
         rounds++;
         const cellKeys=slots.map(p=>wordCells(p).map(c=>key(c.r,c.c))),allKeys=[...new Set(cellKeys.flat())];
-        const vars=[0,1].flatMap(s=>slots.map((p,i)=>({s,i,keys:cellKeys[i],domain:shuffleArr(byLength[s].get(cellKeys[i].length)||[])})));
+        const vars=[0,1].flatMap(s=>slots.map((p,i)=>({s,i,keys:cellKeys[i],
+          domain:shuffleArr(byLength[s].get(cellKeys[i].length)||[]).sort((a,b)=>
+            (options.wordPenalties?.[s].get(a.text)||0)-(options.wordPenalties?.[s].get(b.text)||0)
+            ||(options.placementPenalties?.[s].get(JSON.stringify([a.text,i]))||0)-(options.placementPenalties?.[s].get(JSON.stringify([b.text,i]))||0))})));
         const indexes=vars.map(v=>v.keys.map((_,j)=>{const idx=new Map();v.domain.forEach(w=>{const ch=w.cs[j];if(!idx.has(ch))idx.set(ch,[]);idx.get(ch).push(w);});return idx;}));
         const cellOwners=new Map();vars.forEach((v,i)=>v.keys.forEach((k,j)=>{const id=v.s+':'+k;if(!cellOwners.has(id))cellOwners.set(id,[]);cellOwners.get(id).push({i,j});}));
         const assigned=Array(vars.length).fill(null),maps=[new Map(),new Map()],used=[new Set(),new Set()];
@@ -10839,6 +10886,8 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
           }
           if(count===vars.length){
             const placed=slots.map((p,i)=>({...p,text:pairOf(assigned[i].text,assigned[i+slots.length].text)}));
+            const signature=JSON.stringify([assigned.slice(0,slots.length).map(w=>w.text),assigned.slice(slots.length).map(w=>w.text)]);
+            if(options.rejectBoards?.has(signature))return false;
             const saved=keywordSearchTarget;let plan;
             try{keywordSearchTarget=keywordLocked?(keywordSide===0?{a:kw[0],b:keywordLocked}:{a:keywordLocked,b:kw[1]}):null;plan=planDualKeywords(placed,30);}finally{keywordSearchTarget=saved;}
             if(plan&&!validateHardDualConditions(placed,plan)){result={res:{...template,placed,failed:[],kwMiss:0},plan,pairs:placed.map(p=>({a:pairA(p.text),b:pairB(p.text),text:p.text,metaA:metadata.get(pairA(p.text))||'',metaB:metadata.get(pairB(p.text))||''}))};return true;}
@@ -10906,7 +10955,9 @@ async function findRefill(slots, vocabulary, fixedCells, options = {}) {
             }
             return false;
           }
-          const branches=forced?shuffleArr(forced):best.map(w=>({i:bestI,w}));
+          const branches=forced?shuffleArr(forced).sort((a,b)=>
+            Number(options.preferredBoards?.[vars[b.i].s]?.[vars[b.i].i]===b.w.text)-Number(options.preferredBoards?.[vars[a.i].s]?.[vars[a.i].i]===a.w.text))
+            :best.map(w=>({i:bestI,w}));
           for(const {i,w} of branches){
             if(Date.now()>shapeDeadline)break;
             const v=vars[i],s=v.s,old=maps[s];

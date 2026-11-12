@@ -1,0 +1,287 @@
+{
+  "version": 2,
+  "dual": true,
+  "workId": null,
+  "folder": "",
+  "shapeId": null,
+  "side": "A",
+  "dualOpts": {
+    "mode": 3,
+    "wordCount": {
+      "mode": "max",
+      "n": 8
+    },
+    "sameMark": true,
+    "commonSame": false,
+    "commonPlacement": "free",
+    "commonDifferent": "one",
+    "commonClues": {}
+  },
+  "A": {
+    "version": 1,
+    "title": "こまでおれ × おんがえし",
+    "words": [
+      {
+        "id": "a0",
+        "text": "しまうま",
+        "auto": true
+      },
+      {
+        "id": "a1",
+        "text": "しぇふ",
+        "auto": true
+      },
+      {
+        "id": "a2",
+        "text": "こまき"
+      },
+      {
+        "id": "a3",
+        "text": "おふれこ",
+        "auto": true
+      },
+      {
+        "id": "a4",
+        "text": "おうじ"
+      },
+      {
+        "id": "a5",
+        "text": "こども"
+      },
+      {
+        "id": "a6",
+        "text": "もでる",
+        "auto": true
+      },
+      {
+        "id": "a7",
+        "text": "こおる",
+        "auto": true
+      }
+    ],
+    "keyword": "こまでおれ",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "しまうま": "シマウマ",
+      "しぇふ": "シェフ",
+      "こまき": "",
+      "おふれこ": "オフレコ",
+      "おうじ": "王子/皇子/往時",
+      "こども": "子供/子ども/小人",
+      "もでる": "モデル",
+      "こおる": "凍る"
+    },
+    "placed": [
+      {
+        "id": "a0",
+        "text": "しまうま",
+        "r": 1,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "a1",
+        "text": "しぇふ",
+        "r": 1,
+        "c": 1,
+        "dir": "down"
+      },
+      {
+        "id": "a2",
+        "text": "こまき",
+        "r": 0,
+        "c": 4,
+        "dir": "down"
+      },
+      {
+        "id": "a3",
+        "text": "おふれこ",
+        "r": 3,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "a4",
+        "text": "おうじ",
+        "r": 3,
+        "c": 0,
+        "dir": "down"
+      },
+      {
+        "id": "a5",
+        "text": "こども",
+        "r": 3,
+        "c": 3,
+        "dir": "down"
+      },
+      {
+        "id": "a6",
+        "text": "もでる",
+        "r": 5,
+        "c": 3,
+        "dir": "across"
+      },
+      {
+        "id": "a7",
+        "text": "こおる",
+        "r": 3,
+        "c": 5,
+        "dir": "down"
+      }
+    ],
+    "marks": {
+      "0,4": "A",
+      "1,2": "B",
+      "5,4": "C",
+      "4,5": "D",
+      "3,2": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "B": {
+    "version": 1,
+    "title": "こまでおれ × おんがえし",
+    "words": [
+      {
+        "id": "b0",
+        "text": "えんそう",
+        "auto": true
+      },
+      {
+        "id": "b1",
+        "text": "えふで",
+        "auto": true
+      },
+      {
+        "id": "b2",
+        "text": "おうじ"
+      },
+      {
+        "id": "b3",
+        "text": "なでしこ",
+        "auto": true
+      },
+      {
+        "id": "b4",
+        "text": "なかま",
+        "auto": true
+      },
+      {
+        "id": "b5",
+        "text": "こまき"
+      },
+      {
+        "id": "b6",
+        "text": "きがる",
+        "auto": true
+      },
+      {
+        "id": "b7",
+        "text": "のえる"
+      }
+    ],
+    "keyword": "おんがえし",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "えんそう": "演奏",
+      "えふで": "絵筆",
+      "おうじ": "王子/皇子/往時",
+      "なでしこ": "撫子/ナデシコ",
+      "なかま": "仲間",
+      "こまき": "",
+      "きがる": "気軽/気がる",
+      "のえる": ""
+    },
+    "placed": [
+      {
+        "id": "b0",
+        "text": "えんそう",
+        "r": 1,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "b1",
+        "text": "えふで",
+        "r": 1,
+        "c": 1,
+        "dir": "down"
+      },
+      {
+        "id": "b2",
+        "text": "おうじ",
+        "r": 0,
+        "c": 4,
+        "dir": "down"
+      },
+      {
+        "id": "b3",
+        "text": "なでしこ",
+        "r": 3,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "b4",
+        "text": "なかま",
+        "r": 3,
+        "c": 0,
+        "dir": "down"
+      },
+      {
+        "id": "b5",
+        "text": "こまき",
+        "r": 3,
+        "c": 3,
+        "dir": "down"
+      },
+      {
+        "id": "b6",
+        "text": "きがる",
+        "r": 5,
+        "c": 3,
+        "dir": "across"
+      },
+      {
+        "id": "b7",
+        "text": "のえる",
+        "r": 3,
+        "c": 5,
+        "dir": "down"
+      }
+    ],
+    "marks": {
+      "0,4": "A",
+      "1,2": "B",
+      "5,4": "C",
+      "4,5": "D",
+      "3,2": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "favDict": []
+}

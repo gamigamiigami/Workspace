@@ -1,0 +1,287 @@
+{
+  "version": 2,
+  "dual": true,
+  "workId": null,
+  "folder": "",
+  "shapeId": null,
+  "side": "A",
+  "dualOpts": {
+    "mode": 3,
+    "wordCount": {
+      "mode": "max",
+      "n": 8
+    },
+    "sameMark": true,
+    "commonSame": false,
+    "commonPlacement": "free",
+    "commonDifferent": "one",
+    "commonClues": {}
+  },
+  "A": {
+    "version": 1,
+    "title": "こまでおれ × ありがとう",
+    "words": [
+      {
+        "id": "a0",
+        "text": "おうじ"
+      },
+      {
+        "id": "a1",
+        "text": "うんも",
+        "auto": true
+      },
+      {
+        "id": "a2",
+        "text": "こども"
+      },
+      {
+        "id": "a3",
+        "text": "どれす",
+        "auto": true
+      },
+      {
+        "id": "a4",
+        "text": "すいでん",
+        "auto": true
+      },
+      {
+        "id": "a5",
+        "text": "いんこ",
+        "auto": true
+      },
+      {
+        "id": "a6",
+        "text": "こまき"
+      },
+      {
+        "id": "a7",
+        "text": "わきん",
+        "auto": true
+      }
+    ],
+    "keyword": "こまでおれ",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "おうじ": "王子/皇子/往時",
+      "うんも": "雲母",
+      "こども": "子供/子ども/小人",
+      "どれす": "ドレス",
+      "すいでん": "水田",
+      "いんこ": "インコ/鸚哥",
+      "こまき": "",
+      "わきん": "和金"
+    },
+    "placed": [
+      {
+        "id": "a0",
+        "text": "おうじ",
+        "r": 0,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "a1",
+        "text": "うんも",
+        "r": 0,
+        "c": 2,
+        "dir": "down"
+      },
+      {
+        "id": "a2",
+        "text": "こども",
+        "r": 2,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "a3",
+        "text": "どれす",
+        "r": 2,
+        "c": 1,
+        "dir": "down"
+      },
+      {
+        "id": "a4",
+        "text": "すいでん",
+        "r": 4,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "a5",
+        "text": "いんこ",
+        "r": 3,
+        "c": 4,
+        "dir": "down"
+      },
+      {
+        "id": "a6",
+        "text": "こまき",
+        "r": 5,
+        "c": 4,
+        "dir": "across"
+      },
+      {
+        "id": "a7",
+        "text": "わきん",
+        "r": 4,
+        "c": 6,
+        "dir": "down"
+      }
+    ],
+    "marks": {
+      "2,0": "A",
+      "5,5": "B",
+      "4,3": "C",
+      "0,1": "D",
+      "3,1": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "B": {
+    "version": 1,
+    "title": "こまでおれ × ありがとう",
+    "words": [
+      {
+        "id": "b0",
+        "text": "ところ",
+        "auto": true
+      },
+      {
+        "id": "b1",
+        "text": "こまき"
+      },
+      {
+        "id": "b2",
+        "text": "あおき",
+        "auto": true
+      },
+      {
+        "id": "b3",
+        "text": "おうじ"
+      },
+      {
+        "id": "b4",
+        "text": "じゃがー",
+        "auto": true
+      },
+      {
+        "id": "b5",
+        "text": "けーき",
+        "auto": true
+      },
+      {
+        "id": "b6",
+        "text": "きりえ",
+        "auto": true
+      },
+      {
+        "id": "b7",
+        "text": "のえる"
+      }
+    ],
+    "keyword": "ありがとう",
+    "keywordAuto": false,
+    "used": [],
+    "meta": {
+      "ところ": "所/処/野老",
+      "こまき": "",
+      "あおき": "アオキ/青木",
+      "おうじ": "王子/皇子/往時",
+      "じゃがー": "ジャガー",
+      "けーき": "ケーキ",
+      "きりえ": "切り絵",
+      "のえる": ""
+    },
+    "placed": [
+      {
+        "id": "b0",
+        "text": "ところ",
+        "r": 0,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "b1",
+        "text": "こまき",
+        "r": 0,
+        "c": 2,
+        "dir": "down"
+      },
+      {
+        "id": "b2",
+        "text": "あおき",
+        "r": 2,
+        "c": 0,
+        "dir": "across"
+      },
+      {
+        "id": "b3",
+        "text": "おうじ",
+        "r": 2,
+        "c": 1,
+        "dir": "down"
+      },
+      {
+        "id": "b4",
+        "text": "じゃがー",
+        "r": 4,
+        "c": 1,
+        "dir": "across"
+      },
+      {
+        "id": "b5",
+        "text": "けーき",
+        "r": 3,
+        "c": 4,
+        "dir": "down"
+      },
+      {
+        "id": "b6",
+        "text": "きりえ",
+        "r": 5,
+        "c": 4,
+        "dir": "across"
+      },
+      {
+        "id": "b7",
+        "text": "のえる",
+        "r": 4,
+        "c": 6,
+        "dir": "down"
+      }
+    ],
+    "marks": {
+      "2,0": "A",
+      "5,5": "B",
+      "4,3": "C",
+      "0,1": "D",
+      "3,1": "E"
+    },
+    "colors": {},
+    "borders": {},
+    "clues": {},
+    "hideLetters": false,
+    "showNums": true,
+    "blackFill": false,
+    "maxSize": 0,
+    "puzzleType": "crossword",
+    "hintCount": 1,
+    "hints": [],
+    "shareId": null,
+    "shareToken": ""
+  },
+  "favDict": []
+}
