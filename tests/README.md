@@ -52,3 +52,18 @@ rejects unregistered verbs and automatically chosen verb keywords. The historica
 free-keyword fixture now explicitly confirms its verb; if noun-only alternatives cannot
 be found, it must report that and preserve the entire project.
 Use `CROSSWORD_CASES=23,53,54,55` to run selected cases while debugging.
+
+## Normal-mode NG checks
+
+```sh
+CHROMIUM_PATH=/usr/bin/chromium node tests/crossword-normal.cjs
+```
+
+The 13 cases cover bulk input and kana normalization, exact matching, dictionary and
+favorite/used-word suggestions, per-word NG buttons, multiple exclusions on fixed
+shapes, registered/confirmed conflicts, generation and regeneration, keyword-only and
+size-only builds, final validation, search-time control locking, files/sharing/undo,
+legacy files, new-project reset, NG-only unsaved changes, autosave reload, and the actual
+editable-link loader. Completed boards have independent crossing, adjacency,
+connectivity, registration and keyword-reading checks. `SCREENSHOT_PATH` captures
+the NG panel at a 768px tablet viewport.
